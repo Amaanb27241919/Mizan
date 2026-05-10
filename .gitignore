@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+dist-ssr/
+*.local
+
+# Environment — NEVER commit your API keys
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.gstack/
+
+# Sensitive runtime state — never commit
+.snaptrade-users.json
+.dev.log
+
+# PWA icons regenerated automatically on server boot
+public/icon-192.png
+public/icon-512.png

@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: mizan
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/snaptrade/status
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: PORT
+        value: "3000"
+      - key: VITE_SNAPTRADE_CLIENT_ID
+        sync: false
+      - key: VITE_SNAPTRADE_CONSUMER_KEY
+        sync: false
+      - key: VITE_FINNHUB_KEY
+        sync: false
+      - key: VITE_POLYGON_KEY
+        sync: false
+      - key: VITE_ANTHROPIC_KEY
+        sync: false

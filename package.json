@@ -1,0 +1,27 @@
+{
+  "name": "mizan",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MĪZAN — Shariah-compliant investment super-app",
+  "scripts": {
+    "dev": "node server.js",
+    "vite": "vite",
+    "build": "vite build",
+    "start": "NODE_ENV=production node server.js",
+    "preview": "vite preview",
+    "gen:icons": "node scripts/gen-pwa-icons.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.1"
+  }
+}
