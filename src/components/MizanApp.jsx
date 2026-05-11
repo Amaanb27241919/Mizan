@@ -1814,48 +1814,18 @@ function ActivityPanel({activities=[],accounts=[]}){
 // Sadaqah is a user-entered ledger persisted to mizan_sadaqah (synced).
 const NISAB_USD = 5765; // 87.48g gold @ ~$66/g — updated periodically.
 
-// Owner-only seed: restores the donation history that was hardcoded in the
-// pre-privacy-fix bundle. Only runs when the signed-in user's email matches
-// the configured VITE_OWNER_EMAIL, and only the first time (marker stored
-// in mizan_sadaqah_seeded). Future deletes won't re-seed.
-const OWNER_SADAQAH_SEED = [
-  {dt:"2022-04-29",org:"Islamic Foundation",amt:500, done:true},
-  {dt:"2023-12-11",org:"ISNS",              amt:2000,done:true},
-  {dt:"2024-04-08",org:"Masjid An-Noor",    amt:1000,done:true},
-  {dt:"2024-04-09",org:"Muhsen",            amt:250, done:true},
-  {dt:"2025-05-30",org:"Qalam",             amt:52,  done:true},
-  {dt:"2026-02-23",org:"ISNS",              amt:1000,done:true},
-  {dt:"2026-03-19",org:"Masjid Uthman",     amt:500, done:true},
-  {dt:"Pledge",    org:"Helping Hand",      amt:1300,done:false},
-  {dt:"Pledge",    org:"ISNS",              amt:2000,done:false},
-  {dt:"Pledge",    org:"Masjid Uthman",     amt:5000,done:false},
-];
-
 function ZakatSadaqah({accounts=[]}){
-  const{user}=useAuth();
+  // The previous owner-only seed has been removed — it leaked the owner's
+  // actual donation list into the JS bundle (any visitor could read it via
+  // DevTools → Sources, even though the seed only fired for the owner's
+  // email). Owner's existing donations are already persisted in Supabase
+  // user_state.mizan_sadaqah and will hydrate normally on every sign-in.
+  // If you need to restore from scratch, use the CSV Import button below.
   const[sadaqah,setSadaqah]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]");}catch{return[];}});
   const[form,setForm]=useState({dt:new Date().toISOString().slice(0,10),org:"",amt:"",done:true});
   const[importBusy,setImportBusy]=useState(false);
   const[importStatus,setImportStatus]=useState(null);
   const importRef=useRef(null);
-
-  // Owner one-time backfill — runs once after sign-in. Skips if the user
-  // already has any entries or the marker was set previously.
-  useEffect(()=>{
-    if(!user?.email)return;
-    const owner=(import.meta.env.VITE_OWNER_EMAIL||"").trim().toLowerCase();
-    if(!owner||user.email.toLowerCase()!==owner)return;
-    let seeded=false;try{seeded=localStorage.getItem("mizan_sadaqah_seeded")==="1";}catch{}
-    if(seeded||sadaqah.length>0)return;
-    const seedRows=OWNER_SADAQAH_SEED.map((r,i)=>({id:`seed-${i}`,...r}));
-    setSadaqah(seedRows);
-    try{
-      localStorage.setItem("mizan_sadaqah",JSON.stringify(seedRows));
-      localStorage.setItem("mizan_sadaqah_seeded","1");
-    }catch{}
-    persistUserState("mizan_sadaqah",seedRows);
-    persistUserState("mizan_sadaqah_seeded","1");
-  },[user?.email]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const manualAssets=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
   const acctTotal       = accounts.reduce((s,a)=>s+(a.balance||0),0);
