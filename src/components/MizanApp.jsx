@@ -543,6 +543,23 @@ function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar" 
 /* ─── CSV PARSER (Fidelity / Robinhood / Coinbase) ───── */
 // Returns activity rows shaped like SnapTrade's /activities response so they
 // flow through every existing metric without special-casing.
+// Best-effort broker detection from the CSV's first ~1KB. Each broker has
+// a distinctive header / preamble shape:
+//   Robinhood — "Trans Code" + "Activity Date"
+//   Fidelity  — "Run Date" + "Action" + "Account Number"
+//   Coinbase  — "Transaction Type" + "Quantity Transacted"
+//   Schwab    — "Action" + "Date" + "Symbol" but no "Run Date"
+// Returns null when we can't tell, so the caller's manual dropdown wins.
+function detectBroker(text){
+  const head=(text||"").slice(0,2000).toLowerCase();
+  if(/trans code/.test(head)&&/activity date/.test(head))return"Robinhood";
+  if(/run date/.test(head)&&/account number/.test(head))return"Fidelity";
+  if(/transaction type/.test(head)&&/quantity transacted/.test(head))return"Coinbase";
+  if(/^date,action,/.test(head)||/schwab/.test(head))return"Schwab";
+  if(/vanguard/.test(head))return"Vanguard";
+  return null;
+}
+
 function parseCSV(text,broker){
   // Quote-aware line splitter — handles cells with embedded newlines
   // (Robinhood's Description column has CUSIP + "Dividend Reinvestment"
@@ -2904,11 +2921,12 @@ function ManualAssets(){
 }
 
 /* ─── CSV IMPORTER ───────────────────────────────────── */
-function CSVImporter({onImport,onDedupe}){
+function CSVImporter({onImport,onDedupe,onRetag}){
   const[broker,setBroker]=useState("Fidelity");
   const[status,setStatus]=useState(null);
   const[busy,setBusy]=useState(false);
   const[dedupeBusy,setDedupeBusy]=useState(false);
+  const[retagBusy,setRetagBusy]=useState(false);
   const fileRef=useRef(null);
 
   const handleDedupe=()=>{
@@ -2934,18 +2952,51 @@ function CSVImporter({onImport,onDedupe}){
     },0);
   };
 
+  const handleRetag=()=>{
+    if(!onRetag||retagBusy)return;
+    if(!window.confirm("Walk your imported activity and re-tag the broker for any rows that match a known SnapTrade trade? Useful when a CSV was uploaded with the wrong broker selected."))return;
+    setRetagBusy(true);setStatus(null);
+    setTimeout(()=>{
+      try{
+        const r=onRetag();
+        if(!r||r.fixed===0){
+          setStatus({ok:true,msg:`No retagging needed — ${r?.checked||0} rows already correctly attributed.`});
+        }else{
+          const breakdown=Object.entries(r.byBroker||{}).map(([b,n])=>`${n}→${b}`).join(", ");
+          setStatus({ok:true,msg:`Retagged ${r.fixed} of ${r.checked} rows. ${breakdown}`});
+        }
+      }catch(err){
+        setStatus({ok:false,msg:err.message||"Retag failed"});
+      }finally{setRetagBusy(false);}
+    },0);
+  };
+
   const handle=async e=>{
     const file=e.target.files?.[0];
     if(!file||!onImport)return;
     setBusy(true);setStatus(null);
+    // Peek at the header to figure out which broker the file ACTUALLY is.
+    // Auto-corrects the dropdown when we can tell. Prevents the very common
+    // bug of importing a Robinhood CSV with the dropdown still on Fidelity
+    // (default), which tagged every imported row with the wrong account.
+    let usedBroker=broker;
     try{
-      const r=await onImport(file,broker);
+      const peek=await file.slice(0,4096).text();
+      const detected=detectBroker(peek);
+      if(detected&&detected!==broker){
+        setBroker(detected);
+        usedBroker=detected;
+      }
+    }catch{}
+    try{
+      const r=await onImport(file,usedBroker);
+      const detectedNote=usedBroker!==broker?` Detected as ${usedBroker}.`:"";
       // Backwards-compat: importCSV used to resolve with a row count. It
       // now resolves with {added,skipped,total}. Handle both shapes.
       if(typeof r==="number"){
-        setStatus({ok:true,msg:`Imported ${r} rows from ${file.name}`});
+        setStatus({ok:true,msg:`Imported ${r} rows from ${file.name}.${detectedNote}`});
       }else if(r.added===0&&r.skipped>0){
-        setStatus({ok:true,msg:`No new rows — all ${r.skipped} entries in ${file.name} are already imported.`});
+        setStatus({ok:true,msg:`No new rows — all ${r.skipped} entries in ${file.name} are already imported.${detectedNote}`});
       }else if(r.skipped>0){
         setStatus({ok:true,msg:`Added ${r.added} new rows from ${file.name} (skipped ${r.skipped} duplicates).`});
       }else{
@@ -2975,6 +3026,7 @@ function CSVImporter({onImport,onDedupe}){
         <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handle} style={{display:"none"}}/>
         <button onClick={()=>fileRef.current?.click()} disabled={busy} className="btn-primary">{busy?"Parsing…":"Choose CSV"}</button>
         {onDedupe&&<button onClick={handleDedupe} disabled={dedupeBusy} title="Scan imported activity and remove duplicate rows" className="btn-ghost">{dedupeBusy?"Scanning…":"Dedupe history"}</button>}
+        {onRetag&&<button onClick={handleRetag} disabled={retagBusy} title="Re-tag imports with the correct broker by matching against SnapTrade trades" className="btn-ghost">{retagBusy?"Retagging…":"Fix broker tags"}</button>}
       </div>
     </div>
     {status&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,whiteSpace:"pre-wrap",lineHeight:1.5}}>{status.ok?"✓ ":"✗ "}{status.msg}</div>}
@@ -3110,7 +3162,7 @@ function SecurityPanel(){
   </div>;
 }
 
-function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode,onToggleDemo,documents=[],accounts=[]}){
+function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagCSV,demoMode,onToggleDemo,documents=[],accounts=[]}){
   const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
   const[keys,setKeys]=useState({...apiKeys});
   const[saved,setSaved]=useState(false);
@@ -3273,7 +3325,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
       </BentoTile>
 
       {/* CSV import for historical backfill */}
-      <CSVImporter onImport={onImportCSV} onDedupe={onDedupeCSV}/>
+      <CSVImporter onImport={onImportCSV} onDedupe={onDedupeCSV} onRetag={onRetagCSV}/>
 
       {/* Demo mode toggle */}
       <BentoTile accent={demoMode?T.gold:null} style={demoMode?{background:`linear-gradient(135deg, ${T.gold}0F, transparent 60%), ${T.card}`}:undefined}>
@@ -4026,6 +4078,53 @@ export default function Mizan(){
     }
     return{removed,kept:final.length,internalRemoved,crossRemoved};
   },[persistActivities]);
+
+  // One-shot tool to fix already-imported rows that were tagged with the
+  // wrong broker (e.g., Robinhood CSV imported with the dropdown still on
+  // Fidelity). Walks mizan_imports, infers the correct broker per-row from
+  // the row's symbol + structure heuristics, and rewrites institution_name.
+  // Heuristics are intentionally simple — when uncertain, leaves the tag
+  // alone. Returns {checked, fixed, byBroker}.
+  const retagImports=useCallback(()=>{
+    let existing=[];
+    try{existing=JSON.parse(localStorage.getItem("mizan_imports")||"[]");}catch{}
+    if(!Array.isArray(existing)||existing.length===0)return{checked:0,fixed:0,byBroker:{}};
+    // Build a fingerprint→broker map from SnapTrade real activities so we
+    // can correctly attribute imported rows that match a known real trade.
+    const realByFp=new Map();
+    try{
+      const realCache=JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]");
+      realCache.filter(a=>!a._imported).forEach(a=>{
+        const fp=fingerprintRow(a);
+        const acct=visibleAccounts.find(x=>x.accountId===a.account?.id);
+        const brokerLabel=acct?.brokerage||a.institution_name||null;
+        if(brokerLabel)realByFp.set(fp,brokerLabel);
+      });
+    }catch{}
+    const byBroker={};
+    let fixed=0;
+    const next=existing.map(r=>{
+      const fp=fingerprintRow(r);
+      const realBroker=realByFp.get(fp);
+      if(realBroker&&realBroker!==r.institution_name){
+        fixed++;
+        byBroker[realBroker]=(byBroker[realBroker]||0)+1;
+        return{...r,institution_name:realBroker};
+      }
+      return r;
+    });
+    if(fixed>0){
+      localStorage.setItem("mizan_imports",JSON.stringify(next));
+      persistUserState("mizan_imports",next);
+      // Refresh snapActivities by re-merging real + retagged imports.
+      try{
+        const real=JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]").filter(a=>!a._imported);
+        persistActivities(dedupeActivities([...real,...next]).sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
+      }catch{}
+    }
+    return{checked:existing.length,fixed,byBroker};
+  },[persistActivities,visibleAccounts]);
+
   const importCSV=useCallback((file,broker)=>{
     return new Promise((resolve,reject)=>{
       const reader=new FileReader();
@@ -4562,7 +4661,7 @@ export default function Mizan(){
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
         {nav==="about"     &&<About/>}
       </div>
     </main>
