@@ -1543,13 +1543,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
 }
 
 /* ─── MARKETS ────────────────────────────────────────── */
-function Markets({live,news,onRefreshNews,loadingNews,snapAccounts=[],mapPosition,watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission}){
-  const[earnings,setEarnings]=useState([]);
-  useEffect(()=>{
-    apiFetch(`/api/finnhub/earnings`).then(r=>r.ok?r.json():null).then(d=>{
-      if(d?.earningsCalendar)setEarnings(d.earningsCalendar.slice(0,30));
-    }).catch(()=>{});
-  },[]);
+function Markets({live,snapAccounts=[],mapPosition,watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission}){
   // Build a unified holdings table from connected/demo accounts only.
   // We used to fall back to a hardcoded HOLDINGS fixture (the owner's
   // sample portfolio) which leaked the owner's positions to every signed-up
@@ -1568,7 +1562,6 @@ function Markets({live,news,onRefreshNews,loadingNews,snapAccounts=[],mapPositio
 
   return<div style={{display:"flex",flexDirection:"column",gap:20}}>
     <Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>
-    <div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:20,alignItems:"start"}}>
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>MARKET QUOTES</span>
@@ -1581,28 +1574,8 @@ function Markets({live,news,onRefreshNews,loadingNews,snapAccounts=[],mapPositio
         <Tbl cols={[
           {l:"Symbol", r_:r=><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>{r.tk}</span><span style={{fontFamily:FM,fontSize:9,color:r.sh_==="halal"?T.gain:r.sh_==="haram"?T.loss:T.muted}}>{r.sh_==="halal"?"✓":r.sh_==="haram"?"✗":"·"}</span></div>},
           {l:"Price",  r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:r.src!=="—"?T.textHi:T.text}}>{r.px?`$${r.px.toFixed(2)}`:"-"}</span>},
-          {l:"Change", r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:fc(r.pct)}}>{r.pct?fp(r.pct):"—"}</span>},
-          {l:"Pre-Mkt",r:true,r_:r=><span style={{fontFamily:FM,fontSize:10,color:fc(r.prePct)}}>{r.pre?`$${r.pre.toFixed(2)}`:"—"}</span>},
-          {l:"After-Hrs",r:true,r_:r=><span style={{fontFamily:FM,fontSize:10,color:fc(r.postPct)}}>{r.post?`$${r.post.toFixed(2)}`:"—"}</span>},
-          {l:"Hi",     r:true,r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.hi?`$${r.hi.toFixed(2)}`:"—"}</span>},
-          {l:"Lo",     r:true,r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.lo?`$${r.lo.toFixed(2)}`:"—"}</span>},
-          {l:"Source", r_:r=><span style={{fontFamily:FM,fontSize:9,color:T.dim}}>{r.src}</span>},
         ]} rows={rows}/>
       </div>
-    </div>
-
-    <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>INTELLIGENCE</span>
-        <button onClick={onRefreshNews} disabled={loadingNews} style={{fontFamily:FM,fontSize:9,color:T.muted,background:"transparent",border:"none",cursor:"pointer",letterSpacing:"0.06em"}}>{loadingNews?"…":"Refresh"}</button>
-      </div>
-      {news.length===0&&<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"20px",fontFamily:FM,fontSize:11,color:T.muted,textAlign:"center"}}>Click Refresh to load headlines</div>}
-      {news.map((n,i)=><div key={i} style={{background:T.card,border:`1px solid ${T.border}`,borderLeft:`2px solid ${n.s==="positive"?T.gain:n.s==="negative"?T.loss:T.border}`,borderRadius:12,padding:"11px 13px"}}>
-        <div style={{fontFamily:FU,fontSize:12,color:T.textHi,lineHeight:1.5,marginBottom:5}}>{n.h}</div>
-        <div style={{display:"flex",gap:8}}><span style={{fontFamily:FM,fontSize:9,color:T.muted}}>{n.src}</span><span style={{color:T.dim}}>·</span><span style={{fontFamily:FM,fontSize:9,color:T.muted}}>{n.t}</span></div>
-      </div>)}
-      <EarningsWidget earnings={earnings}/>
-    </div>
     </div>
   </div>;
 }
@@ -2959,9 +2932,7 @@ export default function Mizan(){
   const bcastChannelName="mizan:"+(authUser?.id||"anon");
   const[nav,setNav]=useState("overview");
   const[live,setLive]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_live_cache")||"[]");}catch{return[];}});
-  const[news,setNews]=useState([]);
   const[fetching,setFetch]=useState(false);
-  const[newsLoad,setNL]=useState(false);
   const[lastSync,setSync]=useState(null);
   const[showConn,setConn]=useState(false);
   // Hydrate from cache so refresh / new tab loads instantly with last-known state.
@@ -3000,7 +2971,6 @@ export default function Mizan(){
         if(m.type==="accounts")setSnapAccounts(m.payload);
         if(m.type==="activities")setSnapActivities(m.payload);
         if(m.type==="live")setLive(m.payload);
-        if(m.type==="news")setNews(m.payload);
       };
       return()=>bc.close();
     }catch{/* old browsers — non-fatal */}
@@ -3419,14 +3389,9 @@ export default function Mizan(){
         })(),
         fetchSnapHoldings(),
       ]);
-      let n=await fetchNewsF().catch(()=>[]);
-      if(!n.length)n=await fetchAINews().catch(()=>[]);
-      if(n.length){setNews(n);broadcast("news",n);}
       setSync(new Date());
     }finally{setFetch(false);}
   },[fetchSnapHoldings]);
-
-  const syncNews=useCallback(async()=>{setNL(true);try{let n=await fetchNewsF().catch(()=>[]);if(!n.length)n=await fetchAINews().catch(()=>[]);if(n.length)setNews(n);}finally{setNL(false);};},[]);
 
   // Force broker-side refresh — pushes a manualRefresh signal to SnapTrade
   // so balances + activity reflect what's on the brokerage UI right now.
@@ -3476,7 +3441,7 @@ export default function Mizan(){
     return()=>clearInterval(t);
   },[forceCooldownUntil]);
 
-  useEffect(()=>{setGlobalKeys(apiKeys);syncNews();fetchSnapHoldings();},[]);
+  useEffect(()=>{setGlobalKeys(apiKeys);fetchSnapHoldings();},[]);
   useEffect(()=>{fetchSnapHoldings();},[demoMode]);
 
   // Hydrate broker connections from SnapTrade so they survive a localStorage wipe.
@@ -3745,7 +3710,7 @@ export default function Mizan(){
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments}/>}
-        {nav==="markets"   &&<Markets   live={live} news={news} onRefreshNews={syncNews} loadingNews={newsLoad} snapAccounts={visibleAccounts} mapPosition={mapPosition} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
+        {nav==="markets"   &&<Markets   live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
