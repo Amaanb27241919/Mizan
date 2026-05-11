@@ -1,188 +1,207 @@
-# MĪZAN — Shariah-Compliant Investment Super-App
+# MĪZAN
 
-> The first fully automated halal trading platform — Shariah compliance screening, multi-broker aggregation, and algorithmic execution for Muslim retail investors.
+The Shariah-compliant financial super-app. Brokerages, banking, trading, and AI insights — unified, halal-screened, in one place.
+
+> 🚧 **Personal-use software, not financial or religious advice.** Consult a qualified scholar for personal jurisprudence.
 
 ---
 
-## ⚡ Deploy to Vercel in 15 Minutes
+## What it does
 
-### Step 1 — Prerequisites (5 min)
-- [ ] [GitHub account](https://github.com) — free
-- [ ] [Vercel account](https://vercel.com) — free, sign up with GitHub
-- [ ] [Node.js 18+](https://nodejs.org) installed on your machine
+| Section | Replaces | Highlights |
+|---|---|---|
+| 💳 **Finances** | Origin, Mint | Live net worth across every connected brokerage + manual assets (gold, real estate, business equity). Daily snapshots. Zakat calculation with per-asset eligibility. |
+| 📈 **Investments** | Zoya, Personal Capital | Unified portfolio via SnapTrade. Real-time Sharia screening across **7 frameworks** (AAOIFI, Dow Jones Islamic, S&P Shariah, FTSE Shariah, MSCI Islamic, SC Malaysia, IFSB). Tax-loss harvesting with halal replacement suggestions. |
+| ⚡ **Trading** | Robinhood, Schwab | Order ticket with preview/confirm flow. Pre/post-market quotes, browser-native price alerts, watchlist. Sharia pre-check on every order — spot equity only, no margin, no derivatives, no shorts. |
+| 🤖 **Backtest / FIRE** | Backtrader | Polygon historical bars + SMA-50/200 crossover engine. FIRE retirement projector with nominal vs. inflation-adjusted curves. |
+| 🧠 **Intelligence** | Yahoo Finance, Bloomberg | Sentiment-tagged news (Finnhub). Sharia-aware **AI advisor** (Anthropic Claude) with full portfolio context. Auto-notifications for non-compliance changes + dividend payments. |
 
-### Step 2 — Create GitHub Repository (3 min)
-1. Go to github.com → **New repository**
-2. Name it: `mizan`
-3. Set to **Private** (your financial data)
-4. Click **Create repository**
-5. On your computer, open Terminal and run:
+---
+
+## Stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | Vite + React 18, recharts, inline styles + CSS vars (auto-themed sunrise/sunset) |
+| Backend | Node 22 ESM, single catch-all Vercel serverless function (`api/[...path].mjs`) |
+| Local dev | Same handler reused as Node http server with Vite middleware (`server.js`) |
+| Auth | Supabase magic-link email |
+| Per-user state | Postgres via Supabase (RLS-enforced) |
+| Brokerages | SnapTrade (60+ brokers) |
+| Market data | Finnhub (real-time quotes + news), Polygon (historical OHLC) |
+| AI | Anthropic Claude Sonnet 4 |
+| Email | Resend SMTP (transactional) |
+| Hosting | Vercel (frontend + serverless), Supabase (auth + DB) |
+| PWA | Service worker + Web manifest — installable on iOS/Android/desktop |
+
+---
+
+## Local development
 
 ```bash
-# Clone your new empty repo
-git clone https://github.com/YOUR_USERNAME/mizan.git
-cd mizan
+git clone https://github.com/Amaanb27241919/Mizan.git
+cd Mizan
+npm install
+cp .env.example .env.local   # then edit with your keys
+npm run dev
+```
 
-# Copy all files from this folder into it
-# (drag and drop or cp -r /path/to/mizan-app/. .)
+One terminal. One port (`3000`). Vite middleware + API on the same Node server.
 
-# Push to GitHub
-git add .
-git commit -m "Initial MĪZAN deployment"
+### Required environment variables
+
+```dotenv
+# SnapTrade — sign up at snaptrade.com/developers (free sandbox)
+VITE_SNAPTRADE_CLIENT_ID=your-client-id
+VITE_SNAPTRADE_CONSUMER_KEY=your-consumer-key      # server-only
+
+# Market data (free tiers available)
+VITE_FINNHUB_KEY=your-finnhub-key
+VITE_POLYGON_KEY=your-polygon-key                  # promoted server-side
+VITE_ANTHROPIC_KEY=sk-ant-api03-...                # promoted server-side
+
+# Supabase — optional; leave blank for single-user pass-through mode
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=ey...
+SUPABASE_SERVICE_ROLE_KEY=ey...                    # server-only, bypasses RLS
+
+# Owner email — this user inherits any legacy mizan_primary SnapTrade connections
+OWNER_EMAIL=you@example.com
+```
+
+### Multi-user setup (Supabase)
+
+1. Create a Supabase project
+2. Settings → API → copy URL + anon key into `.env.local`
+3. Settings → API → Legacy tab → copy service_role JWT
+4. SQL Editor → paste `supabase/schema.sql` → Run
+5. Authentication → URL Configuration → Site URL + Redirect URLs to `http://localhost:3000` (add Vercel URL after deploy)
+6. Restart dev server — login screen appears
+
+Each authenticated user gets isolated state via Postgres + Row Level Security.
+
+### Custom SMTP (Resend)
+
+Supabase's default email throttles to 2 magic links / hour. For more, hook up Resend:
+
+1. Sign up at [resend.com](https://resend.com), verify a domain
+2. Generate an API key
+3. Supabase → Project Settings → Auth → SMTP Settings:
+   - Host: `smtp.resend.com` · Port: `465` · Username: `resend` · Password: API key
+   - Sender: `auth@your-verified-domain`
+
+---
+
+## Deployment
+
+### Vercel auto-deploys from `main`
+
+```bash
 git push origin main
 ```
 
-### Step 3 — Deploy to Vercel (3 min)
-1. Go to [vercel.com/new](https://vercel.com/new)
-2. Click **Import Git Repository**
-3. Select your `mizan` repo
-4. Framework preset: **Vite** (auto-detected)
-5. Click **Deploy**
-6. ✅ Your app is live at `mizan.vercel.app`
+That's it. Vercel detects the push, builds, deploys. Production URL stays the same — usually 30-60s for the bundle to swap.
 
-### Step 4 — Add Environment Variables (2 min)
-In Vercel dashboard → your project → **Settings → Environment Variables**:
+### First-time Vercel setup
 
-| Variable | Value | Priority |
+1. Import the GitHub repo via [vercel.com](https://vercel.com)
+2. Framework preset: **Other**
+3. Build command: `npm run build`
+4. Output directory: `dist`
+5. Add **all** env vars from `.env.local` to Vercel → Settings → Environment Variables (Production + Preview)
+6. Deploy
+
+After the first deploy, add your Vercel URL to **Supabase → Auth → URL Configuration → Redirect URLs**:
+- `https://your-vercel-url.vercel.app`
+- `https://your-vercel-url.vercel.app/**`
+
+### Updating environment variables
+
+Either:
+- **Dashboard**: Vercel → Settings → Environment Variables → edit → trigger redeploy
+- **CLI** (faster): `vercel env rm KEY production --yes && echo "value" | vercel env add KEY production`
+
+Env vars only take effect on the **next deploy** — Vercel doesn't hot-swap them into running functions.
+
+---
+
+## Architecture decisions
+
+### Single serverless function
+`api/[...path].mjs` catches everything under `/api/*` and dispatches to `lib/handlers.mjs`. Trade-offs:
+- ✅ 1 function (Vercel Hobby limit is 12)
+- ✅ Local dev (`server.js`) and Vercel use the **exact same route logic**
+- ❌ All routes share one cold start (~500ms first hit)
+
+### Per-user SnapTrade isolation
+Each Supabase user gets a SnapTrade `userId` of the form `mizan_<supabase-uuid>`, stored in the `user_snaptrade` Postgres table with RLS. The server resolves which `userSecret` to use per-request based on the JWT in the `Authorization` header.
+
+### Owner-claim
+`OWNER_EMAIL` lets one user inherit a pre-existing `mizan_primary` SnapTrade `userSecret` from `.snaptrade-users.json` on first sign-in. This preserves brokerage connections that existed before multi-user support shipped. For production deployments where the file isn't present, seed the owner's row manually:
+
+```sql
+INSERT INTO public.user_snaptrade (user_id, snaptrade_user_id, snaptrade_user_secret)
+SELECT id, 'mizan_primary', '<your-existing-userSecret>'
+  FROM auth.users WHERE email = '<your-email>'
+ON CONFLICT (user_id) DO UPDATE
+  SET snaptrade_user_id     = EXCLUDED.snaptrade_user_id,
+      snaptrade_user_secret = EXCLUDED.snaptrade_user_secret;
+```
+
+### Static pricing by default
+Auto-sync defaults OFF. Live prices fetch on the Sync All button or via the optional 10-minute auto-refresh. Prices cache to localStorage so reloads preserve last-known values without re-hitting Finnhub.
+
+### Demo mode
+A fictional ~$42M halal portfolio built into the bundle. Defaults **on** for new users (so they don't land on an empty app) and auto-hides from the header once a user has real broker connections. Re-enable from Settings → Connect Accounts.
+
+---
+
+## Free-tier ceilings
+
+| Service | Limit | Notes |
 |---|---|---|
-| `VITE_FINNHUB_KEY` | Your Finnhub key | ⭐ Do first |
-| `VITE_POLYGON_KEY` | Your Polygon key | Do second |
-| `VITE_ALPACA_KEY_ID` | Your Alpaca key ID | Later |
-| `VITE_ALPACA_SECRET` | Your Alpaca secret | Later |
-| `VITE_SNAPTRADE_CLIENT_ID` | Your SnapTrade client ID | Later |
-| `VITE_SNAPTRADE_CONSUMER_KEY` | Your SnapTrade key | Later |
-
-After adding variables → **Redeploy** (one click).
-
-### Step 5 — Custom Domain (Optional, $12/yr)
-1. Buy `getmizan.com` at [Namecheap](https://namecheap.com) (~$12/yr)
-2. Vercel → Settings → Domains → Add `getmizan.com`
-3. Follow DNS instructions (5 min)
+| Vercel Hobby | 100 GB-hours functions / mo | Cold start ~500ms |
+| Supabase | 500 MB DB, 50k MAU | Plenty for personal + a few friends |
+| SnapTrade | 5 users per developer | Upgrade if scaling |
+| Finnhub | 60 calls / min | Sector results cache in localStorage |
+| Polygon | 5 calls / min, 2yr history | Backtester respects |
+| Anthropic | Pay-as-you-go | ~$0.01 / advisor message |
+| Resend | 3,000 emails / mo | Way more than magic-link demand |
 
 ---
 
-## 🏃 Run Locally
-
-```bash
-# Install dependencies
-npm install
-
-# Create your local env file
-cp .env.example .env.local
-# Edit .env.local and add your API keys
-
-# Start development server
-npm run dev
-# Opens at http://localhost:3000
-
-# Build for production
-npm run build
-```
-
----
-
-## 🔑 API Keys — Get These Free Tonight
-
-### Stage 1: Finnhub (2 min — do this first)
-1. Go to [finnhub.io](https://finnhub.io)
-2. Click **Get free API key**
-3. Sign up with email
-4. Copy your API key
-5. Add to `.env.local` as `VITE_FINNHUB_KEY=your_key_here`
-
-**What you get:** Real-time stock quotes, pre/post market prices, company news, basic fundamentals for all your holdings.
-
-### Stage 2: Polygon.io (2 min)
-1. Go to [polygon.io](https://polygon.io)
-2. Click **Get started free**
-3. Sign up, verify email
-4. Go to Dashboard → API Keys → copy key
-5. Add as `VITE_POLYGON_KEY=your_key_here`
-
-**What you get:** 2 years of historical OHLCV data for real charts (15-min delayed on free tier).
-
-### Stage 3: Alpaca (10 min — for bot trading)
-1. Go to [alpaca.markets](https://alpaca.markets)
-2. Sign up for **Paper Trading** account (free forever)
-3. Dashboard → API Keys → Generate new key
-4. Add `VITE_ALPACA_KEY_ID` and `VITE_ALPACA_SECRET`
-
-**What you get:** The bot places real orders against real market prices using fake money. Test your strategy risk-free.
-
-### Stage 4: SnapTrade (for connecting your real brokerages)
-1. Go to [snaptrade.com/developers](https://snaptrade.com/developers)
-2. Sign up for developer account
-3. Create an app → get Client ID + Consumer Key
-4. Add `VITE_SNAPTRADE_CLIENT_ID` and `VITE_SNAPTRADE_CONSUMER_KEY`
-
-**What you get:** Connect Fidelity, Robinhood, Schwab, Empower 401k — real balances pull automatically.
-
----
-
-## 📱 Connecting Your Accounts (SnapTrade)
-
-Once SnapTrade keys are added:
-
-1. Click **+ CONNECT ACCOUNTS** in the top header
-2. Select your broker (Fidelity, Robinhood, Schwab, Empower)
-3. SnapTrade opens a secure popup → log into your broker directly
-4. MĪZAN **never sees your credentials** — OAuth only
-5. Your real holdings appear in Portfolio tab automatically
-
-**Supported brokers:** Fidelity, Robinhood, Charles Schwab, Empower (401k), E*Trade, Vanguard, Webull, Alpaca, Interactive Brokers, and 20+ more.
-
----
-
-## 🏗 Project Structure
+## Project structure
 
 ```
-mizan/
-├── src/
-│   ├── main.jsx              # React entry point
-│   ├── App.jsx               # Root wrapper
-│   └── components/
-│       └── MizanApp.jsx      # The entire app (2,900+ lines)
+.
+├── api/
+│   └── [...path].mjs        # Vercel catch-all serverless function
+├── lib/
+│   ├── handlers.mjs         # Shared route logic (used by api + server.js)
+│   ├── auth.jsx             # React auth context + useAuth hook
+│   ├── supabase.js          # Supabase browser client (graceful when env absent)
+│   └── apiFetch.js          # Wrapper that attaches Supabase JWT to /api calls
 ├── public/
-│   └── favicon.svg
-├── index.html                # HTML shell
-├── package.json
-├── vite.config.js
-├── vercel.json               # Vercel deployment config
-├── .env.example              # Template for your API keys
-└── .gitignore                # Keeps .env.local out of Git
+│   ├── manifest.webmanifest # PWA manifest
+│   └── sw.js                # Service worker (cache-first static, network-first API)
+├── scripts/
+│   └── gen-pwa-icons.mjs    # PNG generator (no deps, pure zlib + Buffer)
+├── src/
+│   ├── App.jsx              # AuthProvider + Gate
+│   ├── main.jsx
+│   └── components/
+│       ├── MizanApp.jsx     # The whole UI (~3500 lines)
+│       └── Login.jsx        # Magic-link sign-in card
+├── supabase/
+│   ├── schema.sql           # user_snaptrade, user_state, user_keys + RLS
+│   └── README.md            # Supabase setup notes
+├── server.js                # Node http server for local dev (uses lib/handlers.mjs)
+├── vercel.json              # Catch-all rewrite + security headers
+└── render.yaml              # Alternate Render deployment config
 ```
 
 ---
 
-## 🗓 Deployment Timeline
+## License
 
-| Timeline | What You Build | Cost |
-|---|---|---|
-| **Tonight** | Deploy to Vercel, add Finnhub key, real prices live | $0 |
-| **This week** | Add Polygon (charts), connect Robinhood/Fidelity via SnapTrade | $0 |
-| **Month 1** | Add Alpaca paper trading, bot places automated trades | $0 |
-| **Month 2** | Add Supabase auth, data persists between sessions | $0-25/mo |
-| **Month 3** | Add price alerts, Telegram notifications | $0-10/mo |
-| **Month 4** | Switch Alpaca to live trading, real money automation | $0 |
-| **Month 6** | First paying users, Stripe subscription | Revenue covers costs |
-
----
-
-## ⚖️ Legal Disclaimer
-
-MĪZAN is an educational and informational tool. It is not a registered investment advisor, broker-dealer, or financial planning service. All data and analysis is for informational purposes only and does not constitute investment advice. Past performance does not guarantee future results. Please consult a qualified financial advisor and a qualified Islamic finance scholar before making investment decisions.
-
----
-
-## 🕌 Sharia Compliance
-
-MĪZAN applies AAOIFI and DJIM screening standards:
-- **No Riba** — cash-only accounts, no margin or interest
-- **No Gharar** — no options, futures, or derivatives
-- **No Maisir** — systematic edge required, not speculation
-- **Debt screening** — Total Debt/Assets < 33%
-- **Revenue screening** — Haram income < 5% of revenue
-- **Purification** — mixed income flagged for charitable donation
-
-Sharia rulings are for guidance only. Consult your local scholar for personal rulings.
-# Mizan
+Private personal-use software. No public license granted. Contact owner before redistributing.
