@@ -3385,6 +3385,50 @@ export default function Mizan(){
 
   const syncNews=useCallback(async()=>{setNL(true);try{let n=await fetchNewsF().catch(()=>[]);if(!n.length)n=await fetchAINews().catch(()=>[]);if(n.length)setNews(n);}finally{setNL(false);};},[]);
 
+  // Force broker-side refresh — pushes a manualRefresh signal to SnapTrade
+  // so balances + activity reflect what's on the brokerage UI right now.
+  // SnapTrade caps this server-side (~few per hour per connection); we layer
+  // a client cooldown so the button can't spam-fail. After requesting,
+  // schedule a regular sync() ~25s later so the freshly-refreshed data
+  // makes it into the UI without the user pressing anything else.
+  const FORCE_REFRESH_COOLDOWN_MS = 5 * 60 * 1000;
+  const[forceBusy,setForceBusy]=useState(false);
+  const[forceCooldownUntil,setForceCooldownUntil]=useState(0);
+  const[forceMsg,setForceMsg]=useState(null);
+  const forceRefresh=useCallback(async()=>{
+    if(forceBusy||Date.now()<forceCooldownUntil)return;
+    setForceBusy(true);setForceMsg(null);
+    try{
+      const r=await apiFetch("/api/snaptrade/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+      const d=await r.json().catch(()=>({}));
+      if(r.ok){
+        setForceMsg({ok:true,msg:"Broker refresh requested — data updating…"});
+        setForceCooldownUntil(Date.now()+FORCE_REFRESH_COOLDOWN_MS);
+        // Pull the refreshed data ~25 s later so the user doesn't have to
+        // press Sync All themselves. SnapTrade typically returns updated
+        // figures within 15–30 s for live connections.
+        setTimeout(()=>{sync();},25*1000);
+      }else if(r.status===429){
+        setForceMsg({ok:false,msg:d?.error||"Refresh throttled by SnapTrade. Try again in ~1 hour."});
+        setForceCooldownUntil(Date.now()+60*60*1000);
+      }else{
+        setForceMsg({ok:false,msg:d?.error||`Refresh failed (${r.status}).`});
+      }
+    }catch(err){
+      setForceMsg({ok:false,msg:err.message||"Network error"});
+    }finally{
+      setForceBusy(false);
+      setTimeout(()=>setForceMsg(null),6000);
+    }
+  },[forceBusy,forceCooldownUntil,sync]);
+  // Tick once a second when in cooldown so the button label countdown stays fresh.
+  const[,forceTick]=useState(0);
+  useEffect(()=>{
+    if(forceCooldownUntil<=Date.now())return;
+    const t=setInterval(()=>forceTick(n=>n+1),1000);
+    return()=>clearInterval(t);
+  },[forceCooldownUntil]);
+
   useEffect(()=>{setGlobalKeys(apiKeys);syncNews();fetchSnapHoldings();},[]);
   useEffect(()=>{fetchSnapHoldings();},[demoMode]);
 
@@ -3624,8 +3668,20 @@ export default function Mizan(){
         {(!hasRealData||demoMode)&&<button onClick={toggleDemo} title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
         <button onClick={()=>setAuto(v=>!v)} title={`Auto-sync ${auto?"on":"off"}`} style={{fontFamily:FM,fontSize:9,color:auto?T.gain:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:auto?`${T.gain}14`:"transparent",border:`1px solid ${auto?T.gain+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{auto?"AUTO":"AUTO"}</button>
         <button onClick={()=>setConn(true)} style={{fontFamily:FM,fontSize:10,color:T.text,padding:"5px 12px",background:T.card,border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",letterSpacing:"0.04em"}}>+ Connect</button>
+        {snapAccounts.length>0&&(()=>{
+          const cooldownLeft=Math.max(0,forceCooldownUntil-Date.now());
+          const cooling=cooldownLeft>0;
+          const mins=Math.ceil(cooldownLeft/60000);
+          const disabled=forceBusy||cooling||fetching;
+          const label=forceBusy?"⟳…":cooling?`⟳ ${mins}m`:"⟳ Force";
+          const title=cooling
+            ?`Broker refresh on cooldown — try again in ${mins} min`
+            :"Push a refresh signal to SnapTrade so balances + activity catch up to what your brokerage shows.";
+          return<button onClick={forceRefresh} disabled={disabled} title={title} style={{fontFamily:FM,fontSize:10,letterSpacing:"0.04em",padding:"5px 11px",borderRadius:8,border:`1px solid ${cooling?T.border:T.gold+"40"}`,background:cooling?"transparent":`${T.gold}14`,color:disabled?T.muted:T.gold,cursor:disabled?"not-allowed":"pointer"}}>{label}</button>;
+        })()}
         <button onClick={sync} disabled={fetching} className="mz-status-sync" style={{fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",padding:"6px 14px",borderRadius:8,border:"none",cursor:fetching?"not-allowed":"pointer",background:fetching?T.dim:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,color:fetching?T.muted:"#fff",boxShadow:fetching?"none":`0 2px 8px ${T.blue}40`,transition:"all 0.15s"}}>{fetching?"Syncing…":"Sync All"}</button>
       </div>
+      {forceMsg&&<div style={{position:"absolute",top:46,right:12,background:T.card,border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:"7px 12px",borderRadius:8,fontFamily:FM,fontSize:11,boxShadow:T.shadow,zIndex:101,maxWidth:340}}>{forceMsg.msg}</div>}
     </header>
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
