@@ -1418,11 +1418,23 @@ function TaxPlanner({holdings=[],activities=[]}){
 }
 
 /* ─── DOCUMENTS PANEL ────────────────────────────────── */
-// Renders SnapTrade /documents — statements, 1099s, trade confirms — with
-// type/date/account filters and a click-to-download.
+// Two sections: SnapTrade-fetched docs (statements/1099s/confirms from
+// brokers) and User-uploaded files (CSV/PDF/DOCX/etc.) that we store
+// locally + sync to Supabase. Per-file cap 2 MB to keep user_state row
+// size reasonable; duplicates detected by name+size fingerprint.
+const USER_DOC_MAX_BYTES = 2 * 1024 * 1024;
+const USER_DOC_ACCEPT = ".csv,.pdf,.docx,.xls,.xlsx,.txt,.json,.png,.jpg,.jpeg,application/pdf,text/csv,text/plain";
+
 function DocumentsPanel({documents=[],accounts=[]}){
   const[type,setType]=useState("all");
   const[acctF,setAcctF]=useState("all");
+
+  // User-uploaded files. Stored as base64 data URLs so downloads work
+  // offline after sync. Mirrored to Supabase via TRACKED_KEYS.
+  const[userDocs,setUserDocs]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_user_docs")||"[]");}catch{return[];}});
+  const[uploadBusy,setUploadBusy]=useState(false);
+  const[uploadStatus,setUploadStatus]=useState(null);
+  const fileRef=useRef(null);
 
   const acctNameById=Object.fromEntries(accounts.map(a=>[a.accountId,`${a.brokerage} — ${a.accountName}`]));
   const types=[...new Set(documents.map(d=>(d.type||d.document_type||"OTHER").toUpperCase()))];
@@ -1436,41 +1448,164 @@ function DocumentsPanel({documents=[],accounts=[]}){
   }).sort((a,b)=>(b.date||b.created_at||"").localeCompare(a.date||a.created_at||""));
 
   const colorOf=t=>({"STATEMENT":T.blue,"TAX":T.gold,"1099":T.gold,"TRADE_CONFIRMATION":T.gain,"NOTICE":T.muted}[t]||T.muted);
+  const docFingerprint=d=>`${(d.name||"").toLowerCase()}|${d.size||0}`;
+  const persistUserDocs=arr=>{
+    setUserDocs(arr);
+    try{localStorage.setItem("mizan_user_docs",JSON.stringify(arr));}catch{}
+    persistUserState("mizan_user_docs",arr);
+  };
 
-  return<div style={{display:"flex",flexDirection:"column",gap:14}}>
-    <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:680}}>
-      Statements, 1099s, trade confirmations, and broker notices pulled from SnapTrade. Coverage and depth vary by broker — Robinhood + Fidelity expose statements + tax docs; Coinbase exports trade confirms.
-    </p>
-
-    <div className="mz-grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-      <KV label="Total documents" value={`${documents.length}`} sub={types.length?`${types.length} types`:"—"}/>
-      <KV label="Statements"      value={`${documents.filter(d=>/STATEMENT/i.test(d.type||d.document_type||"")).length}`} sub="Monthly + quarterly"/>
-      <KV label="Tax / 1099s"     value={`${documents.filter(d=>/TAX|1099/i.test(d.type||d.document_type||"")).length}`} sub="Year-end" subColor={T.gold}/>
-    </div>
-
-    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-      <button onClick={()=>setType("all")} style={{padding:"4px 12px",borderRadius:6,fontFamily:FM,fontSize:10,background:type==="all"?T.blue:"transparent",border:`1px solid ${type==="all"?T.blue:T.border}`,color:type==="all"?"#fff":T.muted,cursor:"pointer"}}>All</button>
-      {types.map(t=><button key={t} onClick={()=>setType(t)} style={{padding:"4px 12px",borderRadius:6,fontFamily:FM,fontSize:10,background:type===t?`${colorOf(t)}22`:"transparent",border:`1px solid ${type===t?colorOf(t):T.border}`,color:type===t?colorOf(t):T.muted,cursor:"pointer"}}>{t.replace(/_/g," ")}</button>)}
-      <select value={acctF} onChange={e=>setAcctF(e.target.value)} style={{marginLeft:"auto",background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"4px 10px",fontFamily:FM,fontSize:10,color:T.text,cursor:"pointer"}}>
-        <option value="all">All Accounts</option>
-        {accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName}</option>)}
-      </select>
-    </div>
-
-    {filtered.length===0
-      ?<div style={{background:T.card,border:`1px dashed ${T.border}`,borderRadius:12,padding:"32px",textAlign:"center",fontFamily:FM,fontSize:11,color:T.muted}}>
-        {documents.length===0?"No documents yet — SnapTrade syncs broker documents on a delay (Fidelity/Robinhood usually populate within 24 hours of connection).":"No documents match these filters."}
-      </div>
-      :<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-          <Tbl cols={[
-            {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.date||r.created_at||"—"}</span>},
-            {l:"Type",r_:r=>{const t=(r.type||r.document_type||"OTHER").toUpperCase();return<Tag label={t.replace(/_/g," ")} color={colorOf(t)}/>;}},
-            {l:"Name",r_:r=><span style={{fontFamily:FU,fontSize:12,color:T.text}}>{r.name||r.title||r.description||r.id||"—"}</span>},
-            {l:"Account",r_:r=>{const id=r.account?.id||r.accountId||r.account_id;return<span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{acctNameById[id]||r.institution_name||"—"}</span>;}},
-            {l:"",r:true,r_:r=>{const url=r.downloadUrl||r.download_url||r.url;return url?<a href={url} target="_blank" rel="noreferrer" style={{padding:"4px 12px",borderRadius:6,fontFamily:FM,fontSize:10,fontWeight:500,letterSpacing:"0.06em",background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,textDecoration:"none"}}>Download ↗</a>:<span style={{color:T.muted,fontSize:10}}>—</span>;}},
-          ]} rows={filtered}/>
-        </div>
+  const handleUpload=async e=>{
+    const files=Array.from(e.target.files||[]);
+    if(!files.length)return;
+    setUploadBusy(true);setUploadStatus(null);
+    const existing=new Set(userDocs.map(docFingerprint));
+    let added=0,skipped=0,oversized=0,failed=0;
+    const fresh=[];
+    for(const f of files){
+      if(f.size>USER_DOC_MAX_BYTES){oversized++;continue;}
+      const fp=`${f.name.toLowerCase()}|${f.size}`;
+      // We still allow re-upload (no hard reject) but tag it as duplicate
+      // so the user can keep multiple copies if they intentionally need to.
+      const isDup=existing.has(fp);
+      try{
+        const dataUrl=await new Promise((resolve,reject)=>{
+          const fr=new FileReader();
+          fr.onload=()=>resolve(fr.result);
+          fr.onerror=()=>reject(fr.error);
+          fr.readAsDataURL(f);
+        });
+        fresh.push({
+          id:`u-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+          name:f.name,
+          type:f.type||"application/octet-stream",
+          size:f.size,
+          lastModified:f.lastModified,
+          uploadedAt:new Date().toISOString(),
+          duplicate:isDup,
+          data:dataUrl,
+        });
+        if(isDup)skipped++;else{added++;existing.add(fp);}
+      }catch{failed++;}
     }
+    if(fresh.length>0)persistUserDocs([...fresh,...userDocs]);
+    const parts=[];
+    if(added>0)parts.push(`Added ${added} file${added===1?"":"s"}.`);
+    if(skipped>0)parts.push(`${skipped} duplicate${skipped===1?"":"s"} kept (flagged).`);
+    if(oversized>0)parts.push(`${oversized} skipped — over 2 MB limit.`);
+    if(failed>0)parts.push(`${failed} failed to read.`);
+    setUploadStatus({ok:added>0||skipped>0,msg:parts.join(" ")||"No files processed."});
+    setUploadBusy(false);
+    if(fileRef.current)fileRef.current.value="";
+    setTimeout(()=>setUploadStatus(null),5500);
+  };
+
+  const removeUserDoc=id=>{
+    if(!window.confirm("Delete this file? Cannot be undone."))return;
+    persistUserDocs(userDocs.filter(d=>d.id!==id));
+  };
+
+  const fmtSize=b=>{
+    if(b<1024)return`${b} B`;
+    if(b<1024*1024)return`${(b/1024).toFixed(1)} KB`;
+    return`${(b/1024/1024).toFixed(2)} MB`;
+  };
+  const fmtDate=s=>{try{return new Date(s).toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"});}catch{return s||"—";}};
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    {/* USER UPLOADS */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap",marginBottom:T.s4}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YOUR FILES</div>
+          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+            Upload CSVs, PDFs, DOCX, images — any file up to 2 MB. Stored privately to your account, synced across devices, with duplicate detection by name + size.
+          </p>
+        </div>
+        <div style={{display:"flex",gap:T.s2,alignItems:"center",flexShrink:0}}>
+          <input ref={fileRef} type="file" multiple accept={USER_DOC_ACCEPT} onChange={handleUpload} style={{display:"none"}}/>
+          <button onClick={()=>fileRef.current?.click()} disabled={uploadBusy} className="btn-primary">{uploadBusy?"Uploading…":"Upload Files"}</button>
+        </div>
+      </div>
+      {uploadStatus&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:uploadStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(uploadStatus.ok?T.gain:T.loss)+"30"}`,color:uploadStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{uploadStatus.ok?"✓ ":"✗ "}{uploadStatus.msg}</div>}
+      {userDocs.length===0
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+          No files yet. Click <strong style={{color:T.text}}>Upload Files</strong> to add CSVs, PDFs, or DOCX. Files sync to your account so they appear on every device you sign in from.
+        </div>
+        :<div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
+          <Tbl cols={[
+            {l:"Uploaded",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.uploadedAt)}</span>},
+            {l:"Name",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
+              <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>
+              {r.duplicate&&<Tag label="Duplicate" color={T.gold}/>}
+            </div>},
+            {l:"Type",r_:r=>{
+              const ext=(r.name.split(".").pop()||"").toUpperCase();
+              const c=ext==="CSV"?T.blue:ext==="PDF"?T.loss:ext==="DOCX"||ext==="DOC"?T.gain:T.muted;
+              return<Tag label={ext||"FILE"} color={c}/>;
+            }},
+            {l:"Size",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtSize(r.size)}</span>},
+            {l:"",r:true,r_:r=><div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
+              <a href={r.data} download={r.name} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,textDecoration:"none"}}>Download</a>
+              <button onClick={()=>removeUserDoc(r.id)} style={{padding:`4px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:11,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}>✕</button>
+            </div>},
+          ]} rows={userDocs}/>
+        </div>}
+    </BentoTile>
+
+    {/* SNAPTRADE-FETCHED DOCS */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap",marginBottom:T.s4}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FROM YOUR BROKERS</div>
+          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:600}}>
+            Statements, 1099s, trade confirmations, and broker notices pulled from SnapTrade. Coverage varies by broker — Fidelity + Robinhood expose statements + tax docs; Coinbase exports trade confirms.
+          </p>
+        </div>
+      </div>
+
+      <div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:T.s3,marginBottom:T.s4}}>
+        <BentoTile style={{padding:`${T.s3} ${T.s4}`,boxShadow:"none"}}>
+          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>TOTAL</div>
+          <div style={{fontFamily:FU,fontSize:20,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{documents.length}</div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>{types.length||0} types</div>
+        </BentoTile>
+        <BentoTile style={{padding:`${T.s3} ${T.s4}`,boxShadow:"none"}}>
+          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>STATEMENTS</div>
+          <div style={{fontFamily:FU,fontSize:20,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{documents.filter(d=>/STATEMENT/i.test(d.type||d.document_type||"")).length}</div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>Monthly + quarterly</div>
+        </BentoTile>
+        <BentoTile style={{padding:`${T.s3} ${T.s4}`,boxShadow:"none"}}>
+          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>TAX / 1099s</div>
+          <div style={{fontFamily:FU,fontSize:20,fontWeight:600,color:T.gold,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{documents.filter(d=>/TAX|1099/i.test(d.type||d.document_type||"")).length}</div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>Year-end</div>
+        </BentoTile>
+      </div>
+
+      <div style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center",marginBottom:T.s3}}>
+        <button onClick={()=>setType("all")} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,background:type==="all"?T.blue:"transparent",border:`1px solid ${type==="all"?T.blue:T.border}`,color:type==="all"?"#fff":T.muted,cursor:"pointer"}}>All</button>
+        {types.map(t=><button key={t} onClick={()=>setType(t)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,background:type===t?`${colorOf(t)}22`:"transparent",border:`1px solid ${type===t?colorOf(t):T.border}`,color:type===t?colorOf(t):T.muted,cursor:"pointer"}}>{t.replace(/_/g," ")}</button>)}
+        <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{marginLeft:"auto",width:"auto",fontSize:11,padding:`5px ${T.s3}`}}>
+          <option value="all">All Accounts</option>
+          {accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName}</option>)}
+        </select>
+      </div>
+
+      {filtered.length===0
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+          {documents.length===0?"No documents yet — SnapTrade syncs broker documents on a delay. Fidelity and Robinhood usually populate within 24 hours of connection.":"No documents match these filters."}
+        </div>
+        :<div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
+            <Tbl cols={[
+              {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.date||r.created_at||"—"}</span>},
+              {l:"Type",r_:r=>{const t=(r.type||r.document_type||"OTHER").toUpperCase();return<Tag label={t.replace(/_/g," ")} color={colorOf(t)}/>;}},
+              {l:"Name",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name||r.title||r.description||r.id||"—"}</span>},
+              {l:"Account",r_:r=>{const id=r.account?.id||r.accountId||r.account_id;return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{acctNameById[id]||r.institution_name||"—"}</span>;}},
+              {l:"",r:true,r_:r=>{const url=r.downloadUrl||r.download_url||r.url;return url?<a href={url} target="_blank" rel="noreferrer" style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,textDecoration:"none"}}>Download ↗</a>:<span style={{color:T.muted,fontSize:10}}>—</span>;}},
+            ]} rows={filtered}/>
+          </div>
+      }
+    </BentoTile>
   </div>;
 }
 
@@ -1590,74 +1725,195 @@ function ActivityPanel({activities=[],accounts=[]}){
 // Sadaqah is a user-entered ledger persisted to mizan_sadaqah (synced).
 const NISAB_USD = 5765; // 87.48g gold @ ~$66/g — updated periodically.
 
+// Owner-only seed: restores the donation history that was hardcoded in the
+// pre-privacy-fix bundle. Only runs when the signed-in user's email matches
+// the configured VITE_OWNER_EMAIL, and only the first time (marker stored
+// in mizan_sadaqah_seeded). Future deletes won't re-seed.
+const OWNER_SADAQAH_SEED = [
+  {dt:"2022-04-29",org:"Islamic Foundation",amt:500, done:true},
+  {dt:"2023-12-11",org:"ISNS",              amt:2000,done:true},
+  {dt:"2024-04-08",org:"Masjid An-Noor",    amt:1000,done:true},
+  {dt:"2024-04-09",org:"Muhsen",            amt:250, done:true},
+  {dt:"2025-05-30",org:"Qalam",             amt:52,  done:true},
+  {dt:"2026-02-23",org:"ISNS",              amt:1000,done:true},
+  {dt:"2026-03-19",org:"Masjid Uthman",     amt:500, done:true},
+  {dt:"Pledge",    org:"Helping Hand",      amt:1300,done:false},
+  {dt:"Pledge",    org:"ISNS",              amt:2000,done:false},
+  {dt:"Pledge",    org:"Masjid Uthman",     amt:5000,done:false},
+];
+
 function ZakatSadaqah({accounts=[]}){
+  const{user}=useAuth();
   const[sadaqah,setSadaqah]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]");}catch{return[];}});
   const[form,setForm]=useState({dt:new Date().toISOString().slice(0,10),org:"",amt:"",done:true});
+  const[importBusy,setImportBusy]=useState(false);
+  const[importStatus,setImportStatus]=useState(null);
+  const importRef=useRef(null);
+
+  // Owner one-time backfill — runs once after sign-in. Skips if the user
+  // already has any entries or the marker was set previously.
+  useEffect(()=>{
+    if(!user?.email)return;
+    const owner=(import.meta.env.VITE_OWNER_EMAIL||"").trim().toLowerCase();
+    if(!owner||user.email.toLowerCase()!==owner)return;
+    let seeded=false;try{seeded=localStorage.getItem("mizan_sadaqah_seeded")==="1";}catch{}
+    if(seeded||sadaqah.length>0)return;
+    const seedRows=OWNER_SADAQAH_SEED.map((r,i)=>({id:`seed-${i}`,...r}));
+    setSadaqah(seedRows);
+    try{
+      localStorage.setItem("mizan_sadaqah",JSON.stringify(seedRows));
+      localStorage.setItem("mizan_sadaqah_seeded","1");
+    }catch{}
+    persistUserState("mizan_sadaqah",seedRows);
+    persistUserState("mizan_sadaqah_seeded","1");
+  },[user?.email]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const manualAssets=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
-  const acctTotal   = accounts.reduce((s,a)=>s+(a.balance||0),0);
+  const acctTotal       = accounts.reduce((s,a)=>s+(a.balance||0),0);
   const zakatableManual = manualAssets.filter(a=>a.zakatable).reduce((s,a)=>s+(a.value||0),0);
-  const zakatable   = acctTotal+zakatableManual;
-  const zakatDue    = zakatable*0.025;
-  const aboveNisab  = zakatable >= NISAB_USD;
-  const given       = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
-  const pledged     = sadaqah.filter(s=>!s.done).reduce((a,b)=>a+(+b.amt||0),0);
+  const zakatable       = acctTotal+zakatableManual;
+  const zakatDue        = zakatable*0.025;
+  const aboveNisab      = zakatable >= NISAB_USD;
+  const given           = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
+  const pledged         = sadaqah.filter(s=>!s.done).reduce((a,b)=>a+(+b.amt||0),0);
+  const fmtUSD          = v=>`$${(+v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
   const persist=arr=>{setSadaqah(arr);localStorage.setItem("mizan_sadaqah",JSON.stringify(arr));persistUserState("mizan_sadaqah",arr);};
-  const add=e=>{e.preventDefault();if(!form.org||!form.amt)return;persist([...sadaqah,{id:`s-${Date.now()}`,...form,amt:+form.amt}]);setForm({...form,org:"",amt:""});};
-  const remove=id=>persist(sadaqah.filter(s=>s.id!==id));
+  const add=e=>{e.preventDefault();if(!form.org||!form.amt)return;persist([{id:`s-${Date.now()}`,...form,amt:+form.amt},...sadaqah]);setForm({...form,org:"",amt:""});};
+  const remove=id=>{
+    if(!window.confirm("Remove this donation entry?"))return;
+    persist(sadaqah.filter(s=>s.id!==id));
+  };
+
+  // CSV import: expects "Date, Organization, Amount, Status" header row,
+  // case-insensitive. Status of "given"|"done"|"paid"|"y"|"yes"|"true"
+  // means donated; anything else means pledged. Fingerprint-dedups.
+  const handleImport=async e=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    setImportBusy(true);setImportStatus(null);
+    try{
+      const text=await file.text();
+      const lines=text.split(/\r?\n/).filter(l=>l.trim());
+      if(lines.length<2)throw new Error("CSV needs a header row + at least one donation row.");
+      const split=l=>l.split(",").map(c=>c.trim().replace(/^"|"$/g,""));
+      const header=split(lines[0]).map(h=>h.toLowerCase());
+      const idx={
+        date:header.findIndex(h=>h.includes("date")),
+        org: header.findIndex(h=>h.includes("org")||h.includes("recipient")||h.includes("charity")),
+        amt: header.findIndex(h=>h.includes("amount")||h.includes("amt")||h.includes("total")),
+        stat:header.findIndex(h=>h.includes("status")||h.includes("paid")||h.includes("given")||h.includes("pledged")),
+      };
+      if(idx.date<0||idx.org<0||idx.amt<0)throw new Error("CSV must have Date, Organization, and Amount columns.");
+      const DONE=new Set(["given","done","paid","y","yes","true","1"]);
+      const seen=new Set(sadaqah.map(s=>`${s.dt}|${(s.org||"").toLowerCase()}|${+s.amt||0}`));
+      const fresh=[];let skipped=0;
+      lines.slice(1).forEach((l,i)=>{
+        const cells=split(l);
+        const dt=cells[idx.date]||"";
+        const org=cells[idx.org]||"";
+        const amtStr=(cells[idx.amt]||"").replace(/[$,]/g,"");
+        const amt=parseFloat(amtStr);
+        if(!org||!Number.isFinite(amt))return;
+        const stat=idx.stat>=0?(cells[idx.stat]||"").toLowerCase():"given";
+        const done=DONE.has(stat);
+        const fp=`${dt}|${org.toLowerCase()}|${amt}`;
+        if(seen.has(fp)){skipped++;return;}
+        seen.add(fp);
+        fresh.push({id:`s-${Date.now()}-${i}`,dt,org,amt,done});
+      });
+      if(fresh.length===0){setImportStatus({ok:true,msg:`No new rows — all ${skipped} entries were already in your history.`});}
+      else{
+        persist([...fresh,...sadaqah]);
+        setImportStatus({ok:true,msg:`Added ${fresh.length} donation${fresh.length===1?"":"s"}${skipped>0?` (skipped ${skipped} duplicate${skipped===1?"":"s"})`:""}.`});
+      }
+    }catch(err){
+      setImportStatus({ok:false,msg:err.message||"Import failed"});
+    }finally{
+      setImportBusy(false);
+      if(importRef.current)importRef.current.value="";
+      setTimeout(()=>setImportStatus(null),5500);
+    }
+  };
 
   const isEmpty=accounts.length===0&&manualAssets.length===0;
 
-  return<div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{background:T.card,border:`1px solid ${T.gold}28`,borderRadius:12,padding:20}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.14em",marginBottom:14}}>ZAKAT CALCULATION — {new Date().getFullYear()}</div>
-        {[
-          ["Brokerage accounts", `$${acctTotal.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`],
-          ["Manual zakatable",  `$${zakatableManual.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`],
-          ["Total zakatable",   `$${zakatable.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`, true],
-          ["Nisab threshold",   `$${NISAB_USD.toLocaleString()}`],
-          ["Zakat rate",        "2.5%"],
-        ].map(([l,v,b])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:12}}><span style={{color:T.muted}}>{l}</span><span style={{color:b?T.textHi:T.text,fontWeight:b?500:400}}>{v}</span></div>)}
-        <div style={{marginTop:14,padding:"12px",background:`${T.gold}0C`,borderRadius:8,border:`1px solid ${T.gold}18`}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:4}}>ZAKAT DUE THIS YEAR</div>
-          <div style={{fontFamily:FM,fontSize:24,fontWeight:500,color:aboveNisab?T.gold:T.muted}}>${zakatDue.toFixed(2)}</div>
-          <div style={{fontFamily:FM,fontSize:10,color:aboveNisab?T.gain:T.muted,marginTop:4}}>{aboveNisab?"Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"}</div>
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    {/* ─── ROW 1: Zakat Hero + Donation totals ─────── */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:T.s4}}>
+      <BentoTile accent={T.gold} style={{
+        background:`radial-gradient(circle at 100% 0%, ${T.gold}1F, transparent 55%), ${T.card}`,
+        padding:`${T.s6} ${T.s6}`,
+      }}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ZAKAT — {new Date().getFullYear()}</div>
+        <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(zakatDue)}</div>
+        <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"}</div>
+        <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
+          {[
+            ["Brokerage",fmtUSD(acctTotal)],
+            ["Manual zakatable",fmtUSD(zakatableManual)],
+            ["Total zakatable",fmtUSD(zakatable),true],
+            ["Nisab threshold",fmtUSD(NISAB_USD)],
+          ].map(([l,v,b])=><div key={l}>
+            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
+            <div style={{fontFamily:FU,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
+          </div>)}
         </div>
-        {isEmpty&&<div style={{marginTop:12,fontFamily:FU,fontSize:11,color:T.muted,lineHeight:1.6}}>Connect a brokerage or add manual assets to populate these figures.</div>}
+        {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55}}>Connect a brokerage or add manual assets to populate these figures.</div>}
+      </BentoTile>
+
+      <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+        <BentoTile accent={T.gain}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>GIVEN TOTAL</div>
+          <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(given)}</div>
+          <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>{sadaqah.filter(s=>s.done).length} donation{sadaqah.filter(s=>s.done).length===1?"":"s"}</div>
+        </BentoTile>
+        {pledged>0&&<BentoTile accent={T.gold}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PLEDGED</div>
+          <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(pledged)}</div>
+          <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1}}>{sadaqah.filter(s=>!s.done).length} outstanding</div>
+        </BentoTile>}
       </div>
-      <form onSubmit={add} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>LOG A DONATION</div>
-        <div style={{display:"grid",gridTemplateColumns:"120px 1fr 110px 100px auto",gap:8,alignItems:"center"}}>
-          <input type="date" value={form.dt} onChange={e=>setForm({...form,dt:e.target.value})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/>
-          <input placeholder="Organization" value={form.org} onChange={e=>setForm({...form,org:e.target.value})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/>
-          <input type="number" step="0.01" placeholder="Amount" value={form.amt} onChange={e=>setForm({...form,amt:e.target.value})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/>
-          <select value={form.done?"done":"pledged"} onChange={e=>setForm({...form,done:e.target.value==="done"})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}>
-            <option value="done">Given</option>
-            <option value="pledged">Pledged</option>
-          </select>
-          <button type="submit" style={{padding:"7px 14px",borderRadius:6,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:T.blue,border:"none",color:"#fff",cursor:"pointer"}}>Add</button>
+    </div>
+
+    {/* ─── ROW 2: Log entry + import ───────────────── */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>LOG A DONATION</div>
+        <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
+          <input ref={importRef} type="file" accept=".csv,text/csv" onChange={handleImport} style={{display:"none"}}/>
+          <button onClick={()=>importRef.current?.click()} disabled={importBusy} className="btn-ghost" title="Import a CSV with columns: Date, Organization, Amount, Status">{importBusy?"Importing…":"Import CSV"}</button>
         </div>
+      </div>
+      <form onSubmit={add} className="mz-form-row" style={{display:"grid",gridTemplateColumns:"140px 1fr 130px 110px auto",gap:T.s2,alignItems:"end"}}>
+        <input type="date" value={form.dt} onChange={e=>setForm({...form,dt:e.target.value})} className="field"/>
+        <input placeholder="Organization" value={form.org} onChange={e=>setForm({...form,org:e.target.value})} className="field"/>
+        <input type="number" step="0.01" placeholder="Amount" value={form.amt} onChange={e=>setForm({...form,amt:e.target.value})} className="field" style={{fontVariantNumeric:"tabular-nums"}}/>
+        <select value={form.done?"done":"pledged"} onChange={e=>setForm({...form,done:e.target.value==="done"})} className="field" style={{cursor:"pointer"}}>
+          <option value="done">Given</option>
+          <option value="pledged">Pledged</option>
+        </select>
+        <button type="submit" className="btn-primary">Add</button>
       </form>
-    </div>
-    <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>DONATION HISTORY — ${given.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-        {pledged>0&&<span style={{fontFamily:FM,fontSize:10,color:T.gold}}>+ ${pledged.toLocaleString()} pledged</span>}
+      {importStatus&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:importStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(importStatus.ok?T.gain:T.loss)+"30"}`,color:importStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{importStatus.ok?"✓ ":"✗ "}{importStatus.msg}</div>}
+    </BentoTile>
+
+    {/* ─── ROW 3: Donation history ─────────────────── */}
+    <BentoTile style={{padding:0,overflow:"hidden"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DONATION HISTORY</span>
+        <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(given)} given{pledged>0?` · ${fmtUSD(pledged)} pledged`:""}</span>
       </div>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-        {sadaqah.length===0
-          ?<div style={{padding:"30px 20px",textAlign:"center",fontFamily:FM,fontSize:11,color:T.muted}}>No donations logged yet. Add one with the form on the left.</div>
-          :<Tbl cols={[
-            {l:"Date",  r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.dt}</span>},
-            {l:"Organization",r_:r=><span style={{fontFamily:FU,fontSize:12,color:T.text}}>{r.org}</span>},
-            {l:"Amount",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.gold}}>${(+r.amt).toLocaleString()}</span>},
-            {l:"Status",r_:r=><Tag label={r.done?"Given":"Pledged"} color={r.done?T.gain:T.gold}/>},
-            {l:"",r_:r=><button onClick={()=>remove(r.id)} style={{padding:"3px 8px",borderRadius:6,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:9}}>✕</button>},
-          ]} rows={[...sadaqah].sort((a,b)=>(b.dt||"").localeCompare(a.dt||""))}/>}
-      </div>
-    </div>
+      {sadaqah.length===0
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No donations logged yet. Add one with the form above, or import a CSV.</div>
+        :<Tbl cols={[
+          {l:"Date",       r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.dt||"—"}</span>},
+          {l:"Organization",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.org}</span>},
+          {l:"Amount",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.gold,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.amt)}</span>},
+          {l:"Status",     r_:r=><Tag label={r.done?"Given":"Pledged"} color={r.done?T.gain:T.gold}/>},
+          {l:"",r:true,    r_:r=><button onClick={()=>remove(r.id)} title="Remove this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>},
+        ]} rows={[...sadaqah].sort((a,b)=>(b.dt||"").localeCompare(a.dt||""))}/>}
+    </BentoTile>
   </div>;
 }
 

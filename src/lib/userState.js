@@ -24,6 +24,8 @@ export const TRACKED_KEYS = [
   'mizan_brokers',                    // broker connection display state
   'mizan_keys',                       // user-entered API keys
   'mizan_sadaqah',                    // user-entered donation history
+  'mizan_user_docs',                  // user-uploaded files (csv/pdf/docx)
+  'mizan_sadaqah_seeded',             // one-time owner backfill marker
 ];
 
 // User-scoped *local caches* — not synced (regenerated on next sync), but
