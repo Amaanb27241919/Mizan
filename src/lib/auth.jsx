@@ -5,6 +5,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
+import { clearTrackedLocalState } from './userState';
 
 const SINGLE_USER = { id: 'single-user', email: 'local@mizan' };
 
@@ -37,7 +38,12 @@ export function AuthProvider({ children }) {
       });
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
-      (_event, nextSession) => {
+      (event, nextSession) => {
+        // Wipe local cache on sign-out events. The user.id-change check in
+        // hydrateUserState covers the sign-in side (clears if previous user
+        // was different) — but an explicit SIGNED_OUT event has no following
+        // hydrate call to do it, so we clear here.
+        if (event === 'SIGNED_OUT') clearTrackedLocalState();
         setSession(nextSession ?? null);
         setUser(nextSession?.user ?? null);
         setLoading(false);
@@ -61,6 +67,10 @@ export function AuthProvider({ children }) {
   };
 
   const signOut = async () => {
+    // Wipe per-user localStorage BEFORE killing the Supabase session.
+    // If we let Supabase fire onAuthStateChange first, a fast-mounting
+    // Login screen could briefly read the previous user's data.
+    clearTrackedLocalState();
     if (!isSupabaseConfigured || !supabase) {
       return { error: null };
     }

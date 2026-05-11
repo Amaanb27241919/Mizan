@@ -11,6 +11,7 @@
 
 import { supabase, isSupabaseConfigured } from './supabase';
 
+// Synced to Supabase user_state. Cross-device truth for user-generated state.
 export const TRACKED_KEYS = [
   'mizan_imports',                    // CSV-imported activity rows
   'mizan_watchlist',                  // watchlist + price alerts
@@ -23,6 +24,36 @@ export const TRACKED_KEYS = [
   'mizan_brokers',                    // broker connection display state
   'mizan_keys',                       // user-entered API keys
 ];
+
+// User-scoped *local caches* — not synced (regenerated on next sync), but
+// MUST be wiped when a different user signs in on this browser. Skipping
+// these caused the prior user's accounts/holdings/activities to render
+// for a new account — a privacy breach.
+const USER_SCOPED_CACHE_KEYS = [
+  'mizan_accounts_cache',     // SnapTrade /accounts response (holdings)
+  'mizan_activities_cache',   // SnapTrade /activities response
+  'mizan_documents_cache',    // SnapTrade /documents response
+  'mizan_live_cache',         // live price snapshot
+  'mizan_has_real_data',      // "has connections" flag (controls demo auto-hide)
+  'mizan_demo',               // demo mode toggle (per-user)
+  'mizan_auto',               // auto-sync toggle (per-user pref)
+];
+
+// Marker we set after a successful hydrate so we can detect when a *different*
+// user signs in on the same browser. Without this, the previous user's
+// localStorage data leaks into the new account.
+const CURRENT_USER_KEY = 'mizan_current_user_id';
+
+// Wipe every user-scoped key. Used on user-change and sign-out so one user's
+// data can never be rendered while a different user is authenticated.
+// Per-device prefs (theme, ticker-keyed caches like sectors/AAOIFI) are
+// intentionally preserved — they're not user-identifying.
+export function clearTrackedLocalState() {
+  [...TRACKED_KEYS, ...USER_SCOPED_CACHE_KEYS].forEach((k) => {
+    try { localStorage.removeItem(k); } catch { /* ignore */ }
+  });
+  try { localStorage.removeItem(CURRENT_USER_KEY); } catch { /* ignore */ }
+}
 
 // Best-effort fetch of all user_state rows. Returns a map { key → parsed value }.
 export async function fetchUserState(userId) {
@@ -45,7 +76,18 @@ export async function fetchUserState(userId) {
 
 // Write Postgres → localStorage. Run once after sign-in BEFORE the rest of the
 // app initializes (so component state hydrates from the correct local cache).
+//
+// CRITICAL: if the browser previously held a *different* user's data, we MUST
+// wipe every tracked key before writing the new user's remote state.
+// Otherwise the old user's CSV imports / manual assets / watchlist would
+// silently appear in the new user's UI — a privacy breach.
 export async function hydrateUserState(userId) {
+  if (!userId) return [];
+  let previousUserId = null;
+  try { previousUserId = localStorage.getItem(CURRENT_USER_KEY); } catch { /* ignore */ }
+  if (previousUserId !== userId) {
+    clearTrackedLocalState();
+  }
   const remote = await fetchUserState(userId);
   Object.entries(remote).forEach(([key, value]) => {
     try {
@@ -55,6 +97,7 @@ export async function hydrateUserState(userId) {
       // localStorage full — give up silently
     }
   });
+  try { localStorage.setItem(CURRENT_USER_KEY, userId); } catch { /* ignore */ }
   return Object.keys(remote);
 }
 

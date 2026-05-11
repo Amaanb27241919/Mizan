@@ -758,7 +758,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
     </div>
 
     {/* Top 3 accounts by balance + Zakat */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+    <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
       {acctCards.map(c=><KV key={c.label} label={c.label} value={c.value} sub={c.sub} subColor={c.subColor}/>)}
       <KV label="Zakat Due"  value={kf(tot*0.025)} sub="2.5% of net worth" subColor={T.gold} accent={T.gold}/>
     </div>
@@ -767,13 +767,13 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
     {/* Performance — derived from /activities */}
     <div>
       <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:12}}>PERFORMANCE{metrics.activityCount>0?<span style={{color:T.blue,marginLeft:8}}>● {metrics.activityCount} activities</span>:<span style={{color:T.muted,marginLeft:8}}>· Sync to populate</span>}</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+      <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
         <KV label="Total Return"     value={`${gain>=0?"+":""}${kf(Math.abs(gain))}`} sub={totCost>0?fp(gpc):"Unrealized"} subColor={fc(gain)}/>
         <KV label="YTD Contributions" value={kf(metrics.ytdContrib||0)}     sub={`This year`} subColor={T.gain}/>
         <KV label="All-Time Contrib." value={kf(metrics.allTimeContrib||0)} sub="Lifetime deposits"/>
         <KV label="YTD Dividends"     value={kf(metrics.ytdDividends||0)}   sub="Cash received" subColor={T.gold}/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginTop:10}}>
+      <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginTop:10}}>
         <KV label="All-Time Dividends" value={kf(metrics.allTimeDividends||0)} sub="Lifetime"/>
         <KV label="Fees Paid (YTD)"    value={kf(metrics.ytdFees||0)}           sub={`$${(metrics.allTimeFees||0).toFixed(0)} all-time`} subColor={T.loss}/>
         <KV label="YTD Withdrawals"    value={kf(metrics.ytdWithdrawals||0)}    sub="Out-flow" subColor={T.muted}/>
@@ -1044,7 +1044,7 @@ function AAOIFIScreener({holdings=[]}){
       <span style={{margin:"0 6px"}}>·</span><span style={{color:T.text}}>{STANDARDS[primary].notes}</span>
     </div>
 
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+    <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
       <KV label="Halal positions"      value={`${byStatus.halal.length}`}    sub={kf(byStatus.halal.reduce((s,h)=>s+mv(h),0))}    subColor={T.gain}/>
       <KV label="Review positions"     value={`${byStatus.review.length}`}   sub={kf(reviewValue)}                                  subColor={T.gold}/>
       <KV label="Non-Compliant"        value={`${byStatus.haram.length}`}    sub={`${kf(haramValue)} · ${haramPct.toFixed(1)}%`}      subColor={T.loss} accent={T.loss}/>
@@ -1144,7 +1144,7 @@ function TaxPlanner({holdings=[],activities=[]}){
       Surfaces unrealized losses you could harvest to offset taxable gains. Wash-sale rule: a position sold at a loss can't be repurchased within 30 days. Estimates assume your federal+state marginal rate.
     </div>
 
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+    <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
       <KV label="Harvestable Loss" value={kf(Math.abs(totalLoss))} sub={`${losers.length} positions`} subColor={T.gain}/>
       <KV label="Est. Tax Savings" value={kf(taxSavings)} sub={`@ ${((bracket+stateBracket)*100).toFixed(0)}% marginal`} subColor={T.gold} accent={T.gold}/>
       <KV label="YTD Realized" value={`${ytdRealized>=0?"+":""}${kf(Math.abs(ytdRealized))}`} sub={`${ytdSells.length} sells YTD`} subColor={fc(ytdRealized)}/>
@@ -1205,7 +1205,7 @@ function DocumentsPanel({documents=[],accounts=[]}){
       Statements, 1099s, trade confirmations, and broker notices pulled from SnapTrade. Coverage and depth vary by broker — Robinhood + Fidelity expose statements + tax docs; Coinbase exports trade confirms.
     </p>
 
-    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+    <div className="mz-grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
       <KV label="Total documents" value={`${documents.length}`} sub={types.length?`${types.length} types`:"—"}/>
       <KV label="Statements"      value={`${documents.filter(d=>/STATEMENT/i.test(d.type||d.document_type||"")).length}`} sub="Monthly + quarterly"/>
       <KV label="Tax / 1099s"     value={`${documents.filter(d=>/TAX|1099/i.test(d.type||d.document_type||"")).length}`} sub="Year-end" subColor={T.gold}/>
@@ -1282,7 +1282,7 @@ function ActivityPanel({activities=[],accounts=[]}){
   };
 
   return<div style={{display:"flex",flexDirection:"column",gap:14}}>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+    <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
       <KV label="Buys"      value={kf(totals.BUY)}      sub={`${rows.filter(r=>(r.type||"").toUpperCase()==="BUY").length} txns`}/>
       <KV label="Sells"     value={kf(totals.SELL)}     sub={`${rows.filter(r=>(r.type||"").toUpperCase()==="SELL").length} txns`}/>
       <KV label="Dividends" value={kf(totals.DIVIDEND)} sub="Cash received" subColor={T.gain}/>
@@ -1357,7 +1357,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={snapAccounts}/>}
 
     {sub==="holdings"&&<>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+      <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
         <KV label="Market Value" value={kf(tot)} sub={snapAccounts.length>0?"● Live from SnapTrade":live.length>0?"Live prices":""} subColor={T.gain}/>
         <KV label="Total Return" value={`${totGain>=0?"+":""}${kf(Math.abs(totGain))}`} sub={totCost>0?fp((totGain/totCost)*100):""} subColor={fc(totGain)}/>
         <KV label="Today" value={`${today>=0?"+":""} ${f$(Math.abs(today))}`} subColor={fc(today)}/>
@@ -1432,7 +1432,7 @@ function Markets({live,news,onRefreshNews,loadingNews,snapAccounts=[],mapPositio
 
   return<div style={{display:"flex",flexDirection:"column",gap:20}}>
     <Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:20,alignItems:"start"}}>
+    <div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:20,alignItems:"start"}}>
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>MARKET QUOTES</span>
@@ -1549,7 +1549,7 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
   const yearAtTarget=projection.find(p=>p.nominal>=fireTarget);
   const balanceAtRetirement=projection.find(p=>p.year===targetAge);
 
-  return<div style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
+  return<div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:18}}>
         <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:14}}>RETIREMENT PARAMETERS</div>
@@ -1683,7 +1683,7 @@ function BotDashboard({activities=[],accounts=[]}){
     <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:680}}>
       Live trading state. Once you place orders via the Order Ticket, fills flow into Activity and surface here as P&L, win rate, and current streak.
     </p>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+    <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
       <KV label="Total trades"   value={`${buys.length+sells.length}`} sub={`${buys.length} buys · ${sells.length} sells`}/>
       <KV label="Win rate"       value={sells.length?`${winRate.toFixed(0)}%`:"—"} sub={`${wins}W · ${losses}L`} subColor={winRate>=50?T.gain:T.loss}/>
       <KV label="Realized YTD"   value={`${realizedYTD>=0?"+":""}${kf(Math.abs(realizedYTD))}`} subColor={fc(realizedYTD)}/>
@@ -1747,7 +1747,7 @@ function HistoricalBacktest(){
     return{series,trades,stats:{trades:closed.length,wins,losses:closed.length-wins,winRate:closed.length?(wins/closed.length)*100:0,totalRet,buyHold,bars:bars.length}};
   },[bars]);
 
-  return<div style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
+  return<div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:18}}>
         <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:14}}>BACKTEST INPUTS</div>
@@ -1877,7 +1877,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
     {sub==="backtest"&&<HistoricalBacktest/>}
 
     {sub==="order"&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
-    {sub==="order"&&<div style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
+    {sub==="order"&&<div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:20,display:"flex",flexDirection:"column",gap:14}}>
         <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>ORDER TICKET</div>
         <div style={{display:"flex",background:T.surface,borderRadius:8,overflow:"hidden",border:`1px solid ${T.border}`}}>
@@ -1980,7 +1980,7 @@ Activity rows on file: ${activities.length}.`;
     "How do I exit non-compliant positions efficiently?",
   ];
 
-  return<div style={{display:"grid",gridTemplateColumns:"260px 1fr",gap:20,height:"calc(100vh - 160px)"}}>
+  return<div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"260px 1fr",gap:20,height:"calc(100vh - 160px)"}}>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14}}>
         <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>SUGGESTED QUESTIONS</div>
@@ -2039,11 +2039,11 @@ function ManualAssets(){
     <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:680}}>
       Track assets your brokerage accounts can't see — physical gold, real estate equity, private business stake, vehicles, collectibles. Toggle Zakat-eligibility per asset (e.g. primary residence excluded; investment property included).
     </p>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
+    <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
       <KV label="Manual assets total" value={kf(total)} sub={`${assets.length} entries`}/>
       <KV label="Zakatable share"      value={kf(zakatable)} sub={`Adds ${kf(zakatable*0.025)} to Zakat`} subColor={T.gold} accent={T.gold}/>
     </div>
-    <form onSubmit={add} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14,display:"grid",gridTemplateColumns:"140px 1fr 140px 110px auto",gap:10,alignItems:"center"}}>
+    <form onSubmit={add} className="mz-form-row" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14,display:"grid",gridTemplateColumns:"140px 1fr 140px 110px auto",gap:10,alignItems:"center"}}>
       <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}>
         {["Gold","Silver","Real Estate","Investment Property","Business Equity","Vehicle","Collectible","Other"].map(t=><option key={t}>{t}</option>)}
       </select>
@@ -2632,7 +2632,7 @@ function About(){
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:22}}>
         {standards.map(s=><span key={s} style={{padding:"4px 10px",background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:6,fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.04em"}}>{s}</span>)}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+      <div className="mz-grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
         {principles.map(([k,v])=><div key={k} style={{padding:"14px 16px",background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,minHeight:120}}>
           <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.gold,letterSpacing:"0.04em",marginBottom:6}}>{k}</div>
           <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55}}>{v}</div>
@@ -2643,7 +2643,7 @@ function About(){
     {/* INTEGRATIONS */}
     <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"28px 30px",boxShadow:T.shadow}}>
       <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.18em",fontWeight:600,marginBottom:18}}>DATA & INTEGRATIONS</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
+      <div className="mz-grid-5" style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
         {integrations.map(i=><div key={i.n} style={{padding:"14px 16px",background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,position:"relative",overflow:"hidden"}}>
           <div style={{position:"absolute",top:0,left:0,bottom:0,width:3,background:i.c}}/>
           <div style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi,marginBottom:4,marginLeft:6}}>{i.n}</div>
@@ -3176,7 +3176,7 @@ export default function Mizan(){
     <style>{`
       @import url('${GF}');
       *{box-sizing:border-box;margin:0;padding:0;}
-      body{background:${T.bg};}
+      html,body{background:${T.bg};-webkit-tap-highlight-color:transparent;}
       ::-webkit-scrollbar{width:8px;height:8px;background:transparent;}
       ::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px;}
       ::-webkit-scrollbar-thumb:hover{background:${T.borderHi};}
@@ -3188,11 +3188,39 @@ export default function Mizan(){
       .dock-off:hover{transform:translateY(-2px);background:${T.card}!important;color:${T.textHi}!important;}
       .dock-on:hover{transform:translateY(-2px) scale(1.02);}
       button:not(:disabled){transition:all 0.15s ease;}
+
+      /* Mobile / tablet responsive rules */
+      @media (max-width: 900px) {
+        .mz-hide-md{display:none!important;}
+        .mz-grid-5{grid-template-columns:repeat(2,1fr)!important;}
+        .mz-grid-4{grid-template-columns:repeat(2,1fr)!important;}
+        .mz-grid-3{grid-template-columns:repeat(2,1fr)!important;}
+        .mz-side-by-side{grid-template-columns:1fr!important;height:auto!important;}
+        .mz-table-scroll{overflow-x:auto!important;}
+        .mz-form-row{grid-template-columns:1fr 1fr!important;}
+        main{padding-left:16px!important;padding-right:16px!important;padding-bottom:120px!important;}
+      }
+      @media (max-width: 600px) {
+        .mz-hide-sm{display:none!important;}
+        .mz-grid-5{grid-template-columns:1fr!important;}
+        .mz-grid-4{grid-template-columns:1fr!important;}
+        .mz-grid-3{grid-template-columns:1fr!important;}
+        .mz-grid-2{grid-template-columns:1fr!important;}
+        .mz-form-row{grid-template-columns:1fr!important;}
+        .mz-dock{padding:4px!important;gap:2px!important;border-radius:14px!important;bottom:10px!important;left:8px!important;right:8px!important;transform:none!important;justify-content:space-around;}
+        .mz-dock button{padding:8px 6px!important;font-size:10px!important;border-radius:10px!important;flex:1;letter-spacing:0.02em!important;}
+        .mz-status{padding:0 12px!important;gap:8px!important;}
+        .mz-status-mid{display:none!important;}
+        .mz-status-right{gap:4px!important;}
+        .mz-status-right button{padding:5px 8px!important;font-size:9px!important;}
+        .mz-status-sync{padding:6px 10px!important;font-size:10px!important;}
+        .mz-page-content{padding-bottom:130px!important;}
+      }
     `}</style>
 
     {/* TOP BAR */}
     {/* STATUS BAR — slim, glanceable, single row. Brand left, info middle, actions right. */}
-    <header style={{height:44,background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",padding:"0 18px",gap:14,position:"sticky",top:0,zIndex:100,backdropFilter:"saturate(140%)"}}>
+    <header className="mz-status" style={{height:44,background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",padding:"0 18px",gap:14,position:"sticky",top:0,zIndex:100,backdropFilter:"saturate(140%)"}}>
       <div style={{display:"flex",alignItems:"center",gap:9,flexShrink:0}}>
         <svg width={16} height={16} viewBox="0 0 16 16" fill="none"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs><path d="M8 1L15 7L8 13L1 7Z" stroke="url(#lg)" strokeWidth={1.4} fill="none"/><circle cx="8" cy="7" r="1.8" fill={T.blue} opacity={0.85}/></svg>
         <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"0.08em"}}>MĪZAN</span>
@@ -3200,7 +3228,7 @@ export default function Mizan(){
       </div>
 
       {/* Center: live status — clock, market, data freshness */}
-      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:14,fontFamily:FM,fontSize:10}}>
+      <div className="mz-status-mid" style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:14,fontFamily:FM,fontSize:10}}>
         <div style={{display:"flex",alignItems:"center",gap:6}} title={`Local ${nyc.localDisplay} · NYC ${nyc.wd} ${nyc.time} ET · Market ${nyc.status}${nyc.countdown?` · ${nyc.nextEvent} in ${nyc.countdown}`:""}`}>
           <LiveDot on={hr>=4&&hr<20} pulse={hr>=9.5&&hr<16}/>
           <span style={{color:T.muted,fontSize:9}}>{nyc.wd}</span>
@@ -3224,12 +3252,12 @@ export default function Mizan(){
       </div>
 
       {/* Right: compact action toggles + sync */}
-      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+      <div className="mz-status-right" style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
         <button onClick={cycleTheme} title={`Theme: ${themeMode} (resolved: ${resolvedTheme}).`} style={{fontFamily:FM,fontSize:11,color:T.muted,padding:"5px 9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}>{themeMode==="auto"?(resolvedTheme==="dark"?"🌙":"☀"):themeMode==="dark"?"🌙":"☀"}</button>
         {(!hasRealData||demoMode)&&<button onClick={toggleDemo} title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
         <button onClick={()=>setAuto(v=>!v)} title={`Auto-sync ${auto?"on":"off"}`} style={{fontFamily:FM,fontSize:9,color:auto?T.gain:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:auto?`${T.gain}14`:"transparent",border:`1px solid ${auto?T.gain+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{auto?"AUTO":"AUTO"}</button>
         <button onClick={()=>setConn(true)} style={{fontFamily:FM,fontSize:10,color:T.text,padding:"5px 12px",background:T.card,border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",letterSpacing:"0.04em"}}>+ Connect</button>
-        <button onClick={sync} disabled={fetching} style={{fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",padding:"6px 14px",borderRadius:8,border:"none",cursor:fetching?"not-allowed":"pointer",background:fetching?T.dim:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,color:fetching?T.muted:"#fff",boxShadow:fetching?"none":`0 2px 8px ${T.blue}40`,transition:"all 0.15s"}}>{fetching?"Syncing…":"Sync All"}</button>
+        <button onClick={sync} disabled={fetching} className="mz-status-sync" style={{fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",padding:"6px 14px",borderRadius:8,border:"none",cursor:fetching?"not-allowed":"pointer",background:fetching?T.dim:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,color:fetching?T.muted:"#fff",boxShadow:fetching?"none":`0 2px 8px ${T.blue}40`,transition:"all 0.15s"}}>{fetching?"Syncing…":"Sync All"}</button>
       </div>
     </header>
 
@@ -3247,7 +3275,7 @@ export default function Mizan(){
 
     {/* DOCK — Mac-style floating nav at the bottom. Glass surface, rounded
         pill, lifted with shadow. Active item highlighted with accent gradient. */}
-    <nav style={{
+    <nav className="mz-dock" style={{
       position:"fixed",bottom:18,left:"50%",transform:"translateX(-50%)",
       display:"flex",alignItems:"center",gap:4,
       padding:"6px 8px",

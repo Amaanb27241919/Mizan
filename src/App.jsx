@@ -42,7 +42,11 @@ function Gate() {
     )
   }
   if (isSupabaseConfigured && !user) return <Login />
-  return <MizanApp />
+  // key={user.id} forces a full unmount/remount on user-change so every
+  // useState initializer that reads localStorage re-runs against the
+  // freshly-hydrated (or cleared) cache — prevents the previous user's
+  // imports, holdings, watchlist, etc. from rendering for a new account.
+  return <MizanApp key={user?.id || 'anonymous'} />
 }
 
 export default function App() {
