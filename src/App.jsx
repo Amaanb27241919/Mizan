@@ -5,12 +5,12 @@ import { AuthProvider, useAuth } from './lib/auth.jsx'
 import { hydrateUserState } from './lib/userState.js'
 
 function Gate() {
-  const { user, loading, isSupabaseConfigured } = useAuth()
+  const { user, loading, isSupabaseConfigured, recoveryMode } = useAuth()
   const [hydrated, setHydrated] = useState(false)
 
-  // Clean up the magic-link token hash from the URL once we have a session.
-  // Without this, the address bar stays cluttered with #access_token=... after
-  // the redirected tab finishes the OAuth/PKCE handshake.
+  // Clean up any stray auth hash from the URL once we have a session.
+  // Supabase password-reset links land with #access_token=... — strip it so
+  // the address bar stays clean.
   useEffect(() => {
     if (!user || user.id === 'single-user') return
     if (window.location.hash.includes('access_token=') || window.location.hash.includes('error=')) {
@@ -42,6 +42,11 @@ function Gate() {
     )
   }
   if (isSupabaseConfigured && !user) return <Login />
+  // Password-reset link from email lands here with a temporary session AND
+  // a PASSWORD_RECOVERY auth event — show the reset-password UI before the
+  // app, otherwise the user would silently land authenticated without ever
+  // setting their new password.
+  if (isSupabaseConfigured && recoveryMode) return <Login />
   // key={user.id} forces a full unmount/remount on user-change so every
   // useState initializer that reads localStorage re-runs against the
   // freshly-hydrated (or cleared) cache — prevents the previous user's

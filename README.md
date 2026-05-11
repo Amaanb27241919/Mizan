@@ -25,7 +25,7 @@ The Shariah-compliant financial super-app. Brokerages, banking, trading, and AI 
 | Frontend | Vite + React 18, recharts, inline styles + CSS vars (auto-themed sunrise/sunset) |
 | Backend | Node 22 ESM, single catch-all Vercel serverless function (`api/[...path].mjs`) |
 | Local dev | Same handler reused as Node http server with Vite middleware (`server.js`) |
-| Auth | Supabase magic-link email |
+| Auth | Supabase email + password (sign-in / sign-up / reset, all same-tab) |
 | Per-user state | Postgres via Supabase (RLS-enforced) |
 | Brokerages | SnapTrade (60+ brokers) |
 | Market data | Finnhub (real-time quotes + news), Polygon (historical OHLC) |
@@ -76,7 +76,8 @@ OWNER_EMAIL=you@example.com
 3. Settings → API → Legacy tab → copy service_role JWT
 4. SQL Editor → paste `supabase/schema.sql` → Run
 5. Authentication → URL Configuration → Site URL + Redirect URLs to `http://localhost:3000` (add Vercel URL after deploy)
-6. Restart dev server — login screen appears
+6. Authentication → Providers → Email → **disable "Confirm email"** so sign-up lands authenticated in the same tab (no email click-through). Password reset emails still work — that flow uses a recovery link.
+7. Restart dev server — login screen appears
 
 Each authenticated user gets isolated state via Postgres + Row Level Security.
 

@@ -1,5 +1,8 @@
 // Auth context for MIZAN.
-// - When Supabase is configured: real magic-link auth via Supabase.
+// - When Supabase is configured: email + password auth via Supabase.
+//   Sign-in / sign-up / password-reset all complete in the original tab
+//   (mirrors ARIA's auth UX — no magic-link click-through that opens a
+//   new tab post-confirmation).
 // - When not configured: single-user pass-through mode with a fake user
 //   so the rest of the app keeps working without credentials.
 
@@ -15,6 +18,9 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(isSupabaseConfigured ? null : SINGLE_USER);
   const [loading, setLoading] = useState(isSupabaseConfigured);
+  // True when Supabase emits PASSWORD_RECOVERY — the user clicked a reset
+  // link and we should show the "set new password" UI instead of the app.
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -44,6 +50,7 @@ export function AuthProvider({ children }) {
         // was different) — but an explicit SIGNED_OUT event has no following
         // hydrate call to do it, so we clear here.
         if (event === 'SIGNED_OUT') clearTrackedLocalState();
+        if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
         setSession(nextSession ?? null);
         setUser(nextSession?.user ?? null);
         setLoading(false);
@@ -56,15 +63,49 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const signInWithEmail = async (email) => {
+  // Password auth — same-tab UX, no email click-through on the hot path.
+  // Inspired by ARIA's flow: sign-in and sign-up both return a session
+  // immediately and the user lands authenticated in the same tab.
+  const signInWithPassword = async (email, password) => {
     if (!isSupabaseConfigured || !supabase) {
       return { data: null, error: new Error('Supabase not configured') };
     }
-    return supabase.auth.signInWithOtp({
+    return supabase.auth.signInWithPassword({ email, password });
+  };
+
+  const signUpWithPassword = async (email, password) => {
+    if (!isSupabaseConfigured || !supabase) {
+      return { data: null, error: new Error('Supabase not configured') };
+    }
+    return supabase.auth.signUp({
       email,
+      password,
       options: { emailRedirectTo: window.location.origin },
     });
   };
+
+  // Password reset: send email with a recovery link. The user clicks it,
+  // Supabase routes back here with a PASSWORD_RECOVERY auth event, and the
+  // Login screen renders its reset-password mode.
+  const sendPasswordReset = async (email) => {
+    if (!isSupabaseConfigured || !supabase) {
+      return { data: null, error: new Error('Supabase not configured') };
+    }
+    return supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+  };
+
+  const updatePassword = async (password) => {
+    if (!isSupabaseConfigured || !supabase) {
+      return { data: null, error: new Error('Supabase not configured') };
+    }
+    return supabase.auth.updateUser({ password });
+  };
+
+  // Legacy alias — old call sites can still call signInWithEmail but it
+  // now requires a password. Removed magic-link path entirely.
+  const signInWithEmail = signInWithPassword;
 
   const signOut = async () => {
     // Wipe per-user localStorage BEFORE killing the Supabase session.
@@ -77,11 +118,19 @@ export function AuthProvider({ children }) {
     return supabase.auth.signOut();
   };
 
+  const exitRecovery = () => setRecoveryMode(false);
+
   const value = {
     user,
     session,
     loading,
-    signInWithEmail,
+    recoveryMode,
+    exitRecovery,
+    signInWithEmail,        // legacy alias for signInWithPassword
+    signInWithPassword,
+    signUpWithPassword,
+    sendPasswordReset,
+    updatePassword,
     signOut,
     isSupabaseConfigured,
   };
