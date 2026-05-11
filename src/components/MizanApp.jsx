@@ -2657,59 +2657,152 @@ Activity rows on file: ${activities.length}.`;
 
   useEffect(()=>{scrollRef.current?.scrollTo(0,scrollRef.current.scrollHeight);},[msgs,busy]);
 
+  const totalNW=accounts.reduce((s,a)=>s+(a.balance||0),0);
+  const totalPos=accounts.reduce((s,a)=>s+(a.positions?.length||0),0);
+
+  // Suggested prompts presented as accent-colored bento cards. Each ties
+  // to a different topic so the user can scan by domain.
   const prompts=[
-    "What's my biggest concentration risk?",
-    "Recommend 3 Sharia-compliant ETFs to diversify",
-    "Should I tax-loss harvest any positions?",
-    "What's my projected Zakat for the year?",
-    "How do I exit non-compliant positions efficiently?",
+    {q:"What's my biggest concentration risk?",            cat:"Risk",       icon:"⚠",  color:T.loss},
+    {q:"Recommend 3 Sharia-compliant ETFs to diversify",   cat:"Allocation", icon:"◆",  color:T.blue},
+    {q:"Should I tax-loss harvest any positions?",         cat:"Tax",        icon:"$",  color:T.gold},
+    {q:"What's my projected Zakat for the year?",          cat:"Zakat",      icon:"⚖",  color:T.gold},
+    {q:"How do I exit non-compliant positions efficiently?",cat:"Compliance",icon:"✓",  color:T.gain},
+    {q:"Summarize my last 30 days of activity",            cat:"Activity",   icon:"≡",  color:T.blue},
   ];
 
-  return<div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"260px 1fr",gap:20,height:"calc(100vh - 160px)"}}>
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>SUGGESTED QUESTIONS</div>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {prompts.map(p=><button key={p} onClick={()=>send(p)} disabled={busy} style={{textAlign:"left",padding:"8px 10px",borderRadius:8,background:T.surface,border:`1px solid ${T.border}`,fontFamily:FU,fontSize:11,color:T.text,cursor:busy?"not-allowed":"pointer",lineHeight:1.4}}>{p}</button>)}
+  const clearChat=()=>{if(msgs.length===0)return;if(!window.confirm("Clear this conversation?"))return;setMsgs([]);};
+  const copyMsg=async text=>{try{await navigator.clipboard.writeText(text);}catch{}};
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    {/* ─── CONTEXT BAR ────────────────────────────── */}
+    <div style={{
+      display:"flex",alignItems:"center",justifyContent:"space-between",
+      padding:`${T.s3} ${T.s4}`,
+      background:`linear-gradient(135deg, ${T.blue}10, transparent 60%), ${T.surface}`,
+      border:`1px solid ${T.blue}30`,
+      borderRadius:T.rMd,
+      flexWrap:"wrap",gap:T.s2,
+    }}>
+      <div style={{display:"flex",alignItems:"center",gap:T.s3,flexWrap:"wrap"}}>
+        <div style={{
+          width:36,height:36,borderRadius:T.rMd,
+          background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
+          display:"flex",alignItems:"center",justifyContent:"center",
+          fontFamily:FU,fontSize:16,fontWeight:700,color:"#fff",letterSpacing:"-0.02em",
+          boxShadow:`0 4px 14px ${T.blue}55`,
+        }}>M</div>
+        <div>
+          <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>Mizan Advisor</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:2}}>Sharia-aware · powered by Claude</div>
         </div>
       </div>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14,fontFamily:FM,fontSize:9,color:T.muted,lineHeight:1.6}}>
-        Advisor sees: account balances, top 30 positions, YTD contribs/dividends, total activity count. Sharia screening: AAOIFI standard. Powered by Claude. Not financial advice.
+      <div style={{display:"flex",alignItems:"center",gap:T.s4,fontFamily:FM,fontSize:11,color:T.muted,flexWrap:"wrap"}}>
+        <span style={{display:"inline-flex",alignItems:"center",gap:T.s1}}>
+          <LiveDot on={totalNW>0} pulse={false}/>
+          Context: <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{accounts.length}</span> account{accounts.length===1?"":"s"} · <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{totalPos}</span> position{totalPos===1?"":"s"} · <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{kf(totalNW)}</span>
+        </span>
+        {msgs.length>0&&<button onClick={clearChat} className="btn-ghost" style={{fontSize:10,padding:`4px ${T.s3}`}}>Clear</button>}
       </div>
     </div>
 
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rLg,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"var(--sh-md)"}}>
-      <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:`${T.s5} ${T.s6}`,display:"flex",flexDirection:"column",gap:T.s3}}>
-        {msgs.length===0&&<div style={{color:T.muted,fontFamily:FU,fontSize:14,textAlign:"center",margin:"56px auto",maxWidth:380,lineHeight:1.6,letterSpacing:"-0.005em"}}>
-          Ask anything about your portfolio. The advisor has your real account context — try one of the suggested questions or type your own.
+    {/* ─── CHAT THREAD ────────────────────────────── */}
+    <BentoTile style={{padding:0,display:"flex",flexDirection:"column",minHeight:"60vh",maxHeight:"calc(100vh - 280px)"}}>
+      <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:`${T.s6} ${T.s6}`,display:"flex",flexDirection:"column",gap:T.s4}}>
+        {msgs.length===0&&<div style={{margin:"auto 0",display:"flex",flexDirection:"column",gap:T.s5}}>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s2}}>How can I help with your portfolio?</div>
+            <div style={{fontFamily:FU,fontSize:14,color:T.muted,maxWidth:480,margin:"0 auto",lineHeight:1.55}}>
+              The advisor has your real account context — balances, top positions, Sharia compliance, contributions, dividends, and activity. Ask anything, or pick one of the suggestions below.
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:T.s3,maxWidth:780,margin:"0 auto",width:"100%"}}>
+            {prompts.map(p=><button key={p.q} onClick={()=>send(p.q)} disabled={busy} style={{
+              textAlign:"left",
+              padding:`${T.s3} ${T.s4}`,
+              background:T.surface,
+              border:`1px solid ${T.border}`,
+              borderLeft:`3px solid ${p.color}`,
+              borderRadius:T.rMd,
+              fontFamily:FU,fontSize:13,color:T.text,cursor:busy?"not-allowed":"pointer",
+              lineHeight:1.5,letterSpacing:"-0.005em",
+              transition:"transform 0.15s, border-color 0.15s, box-shadow 0.2s",
+              display:"flex",flexDirection:"column",gap:T.s1,
+            }}
+            onMouseEnter={e=>{if(!busy){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="var(--sh-md)";e.currentTarget.style.borderColor=p.color+"55";}}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderLeftColor=p.color;e.currentTarget.style.borderTopColor=T.border;e.currentTarget.style.borderRightColor=T.border;e.currentTarget.style.borderBottomColor=T.border;}}>
+              <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
+                <span style={{
+                  width:22,height:22,borderRadius:T.rSm,
+                  background:`${p.color}18`,color:p.color,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontFamily:FM,fontSize:12,fontWeight:700,
+                }}>{p.icon}</span>
+                <span style={{fontFamily:FM,fontSize:9,color:p.color,letterSpacing:"0.16em",fontWeight:600,textTransform:"uppercase"}}>{p.cat}</span>
+              </div>
+              <span style={{color:T.textHi,fontWeight:500}}>{p.q}</span>
+            </button>)}
+          </div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.dim,textAlign:"center",letterSpacing:"0.04em"}}>Not financial advice. Always consult a licensed professional + qualified scholar.</div>
         </div>}
+
         {msgs.map((m,i)=>{
           const isUser=m.role==="user",isErr=m.role==="err";
-          return<div key={i} style={{display:"flex",justifyContent:isUser?"flex-end":"flex-start"}}>
+          return<div key={i} style={{display:"flex",gap:T.s3,alignItems:"flex-start",justifyContent:isUser?"flex-end":"flex-start"}}>
+            {!isUser&&<div style={{
+              width:32,height:32,borderRadius:T.rMd,flexShrink:0,
+              background:isErr?`${T.loss}22`:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontFamily:FU,fontSize:13,fontWeight:700,color:isErr?T.loss:"#fff",letterSpacing:"-0.02em",
+              boxShadow:isErr?"none":`0 2px 8px ${T.blue}40`,
+            }}>{isErr?"!":"M"}</div>}
             <div style={{
-              maxWidth:"82%",
-              padding:`10px ${T.s4}`,
+              maxWidth:"78%",
+              padding:`${T.s3} ${T.s4}`,
               borderRadius:T.rLg,
               background:isUser?`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`:isErr?T.lossBg:T.surface,
               border:isUser?"none":`1px solid ${isErr?T.loss+"40":T.border}`,
               color:isUser?"#fff":isErr?T.loss:T.text,
-              fontFamily:FU,fontSize:14,lineHeight:1.55,letterSpacing:"-0.005em",
+              fontFamily:FU,fontSize:14,lineHeight:1.6,letterSpacing:"-0.005em",
               whiteSpace:"pre-wrap",wordBreak:"break-word",
               boxShadow:isUser?`0 4px 14px ${T.blue}40`:"none",
-            }}>{m.text}</div>
+              position:"relative",
+            }}>
+              {m.text}
+              {!isUser&&!isErr&&<button onClick={()=>copyMsg(m.text)} title="Copy" style={{
+                position:"absolute",top:6,right:6,
+                padding:`2px ${T.s2}`,borderRadius:T.rSm,
+                background:T.card,border:`1px solid ${T.border}`,
+                color:T.muted,cursor:"pointer",
+                fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
+                opacity:0,transition:"opacity 0.15s",
+              }}
+              onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+              onMouseLeave={e=>e.currentTarget.style.opacity="0"}>COPY</button>}
+            </div>
+            {isUser&&<div style={{
+              width:32,height:32,borderRadius:T.rMd,flexShrink:0,
+              background:T.surface,border:`1px solid ${T.border}`,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontFamily:FU,fontSize:13,fontWeight:600,color:T.text,
+            }}>Y</div>}
           </div>;
         })}
-        {busy&&<div style={{display:"flex",alignItems:"center",gap:T.s2,color:T.muted,fontFamily:FM,fontSize:11}}>
-          <span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:T.gold,animation:"blink 1.2s infinite"}}/>
-          Thinking…
+
+        {busy&&<div style={{display:"flex",gap:T.s3,alignItems:"center"}}>
+          <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FU,fontSize:13,fontWeight:700,color:"#fff"}}>M</div>
+          <div style={{display:"flex",gap:T.s1,padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rLg}}>
+            {[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:T.muted,animation:`blink 1.4s infinite`,animationDelay:`${i*0.15}s`}}/>)}
+          </div>
         </div>}
       </div>
+
       <form onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:`1px solid ${T.border}`,padding:T.s3,display:"flex",gap:T.s2,background:T.surface}}>
         <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about your portfolio…" disabled={busy}
-          className="field" style={{flex:1,fontFamily:FU,fontSize:14}}/>
-        <button type="submit" disabled={busy||!input.trim()} className="btn-primary">{busy?"…":"Send"}</button>
+          className="field" style={{flex:1,fontFamily:FU,fontSize:14,padding:`10px ${T.s4}`}}/>
+        <button type="submit" disabled={busy||!input.trim()} className="btn-primary" style={{padding:`10px ${T.s5}`}}>{busy?"…":"Send"}</button>
       </form>
-    </div>
+    </BentoTile>
   </div>;
 }
 
