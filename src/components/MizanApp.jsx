@@ -2171,61 +2171,67 @@ function HistoricalBacktest(){
     return{series,trades,stats:{trades:closed.length,wins,losses:closed.length-wins,winRate:closed.length?(wins/closed.length)*100:0,totalRet,buyHold,bars:bars.length}};
   },[bars]);
 
-  return<div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:18}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:14}}>BACKTEST INPUTS</div>
-        <div style={{marginBottom:12}}><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:5}}>SYMBOL</div>
-          <input value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"7px 10px",fontFamily:FM,fontSize:13,color:T.blue,outline:"none"}}/></div>
-        <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-          <div><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:5}}>FROM</div>
-            <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/></div>
-          <div><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:5}}>TO</div>
-            <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/></div>
+  return<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
+    <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+      <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>BACKTEST INPUTS</div>
+        <div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>SYMBOL</div>
+          <input value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} className="field" style={{fontSize:16,fontWeight:600,color:T.blue,letterSpacing:"-0.01em"}}/>
         </div>
-        <div style={{padding:"10px 12px",background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:12,fontFamily:FU,fontSize:11,color:T.muted,lineHeight:1.5}}>
-          <strong style={{color:T.text}}>Strategy:</strong> SMA-50 / SMA-200 crossover. Buy when 50-day crosses above 200-day; sell on cross below. Free-tier Polygon caps at 2 years of daily bars.
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
+          <div><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>FROM</div>
+            <input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="field" style={{fontSize:12}}/></div>
+          <div><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>TO</div>
+            <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="field" style={{fontSize:12}}/></div>
         </div>
-        <button onClick={run} disabled={busy} style={{width:"100%",padding:"9px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",border:"none",background:busy?T.dim:T.blue,color:busy?T.muted:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"Fetching bars…":"Run Backtest"}</button>
-        {err&&<div style={{marginTop:10,padding:"8px 12px",background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:8,fontFamily:FM,fontSize:10,color:T.loss}}>✗ {err}</div>}
-      </div>
-      {bars.length>0&&<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14}}>
+        <div style={{padding:`${T.s3} ${T.s3}`,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`,fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+          <strong style={{color:T.text,fontWeight:600}}>Strategy:</strong> SMA-50 / SMA-200 crossover. Buy when 50-day crosses above 200-day; sell on cross below. Free-tier Polygon caps at 2 years of daily bars.
+        </div>
+        <button onClick={run} disabled={busy} className="btn-primary" style={{padding:`10px ${T.s4}`}}>{busy?"Fetching bars…":"Run Backtest"}</button>
+        {err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>}
+      </BentoTile>
+
+      {bars.length>0&&<BentoTile>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>RESULTS</div>
         {[
           ["Bars analyzed",stats.bars||0],
           ["Trades",stats.trades||0],
           ["Win rate",stats.trades?`${stats.winRate.toFixed(0)}% (${stats.wins}W/${stats.losses}L)`:"—"],
-          ["Strategy return",stats.trades?`${stats.totalRet.toFixed(1)}%`:"—"],
-          ["Buy & hold",`${(stats.buyHold||0).toFixed(1)}%`],
-          ["Edge vs B&H",stats.trades?`${(stats.totalRet-stats.buyHold).toFixed(1)}%`:"—"],
-        ].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:11}}>
-          <span style={{color:T.muted}}>{l}</span><span style={{color:T.textHi}}>{v}</span>
+          ["Strategy return",stats.trades?`${stats.totalRet.toFixed(1)}%`:"—",stats.trades?fc(stats.totalRet):null],
+          ["Buy & hold",`${(stats.buyHold||0).toFixed(1)}%`,fc(stats.buyHold||0)],
+          ["Edge vs B&H",stats.trades?`${(stats.totalRet-stats.buyHold).toFixed(1)}%`:"—",stats.trades?fc(stats.totalRet-stats.buyHold):null],
+        ].map(([l,v,clr])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:12}}>
+          <span style={{color:T.muted,letterSpacing:"0.04em"}}>{l}</span>
+          <span style={{color:clr||T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{v}</span>
         </div>)}
-      </div>}
+      </BentoTile>}
     </div>
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:18}}>
-      <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>{symbol} · CLOSE / SMA-50 / SMA-200</div>
+
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>{symbol} · CLOSE / SMA-50 / SMA-200</div>
       {bars.length===0
-        ?<div style={{height:300,display:"flex",alignItems:"center",justifyContent:"center",border:`1px dashed ${T.border}`,borderRadius:8,fontFamily:FM,fontSize:11,color:T.muted}}>Run a backtest to load bars from Polygon</div>
-        :<ResponsiveContainer width="100%" height={300}>
+        ?<div style={{height:320,display:"flex",alignItems:"center",justifyContent:"center",border:`1px dashed ${T.border}`,borderRadius:T.rMd,fontFamily:FU,fontSize:13,color:T.muted}}>Run a backtest to load bars from Polygon</div>
+        :<ResponsiveContainer width="100%" height={320}>
           <ComposedChart data={series} margin={{top:6,right:14,bottom:8,left:14}}>
             <CartesianGrid stroke={T.border} strokeDasharray="2 4" vertical={false}/>
-            <XAxis dataKey="date" tick={{fontFamily:FM,fontSize:9,fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false} minTickGap={60}/>
-            <YAxis tickFormatter={v=>`$${v.toFixed(0)}`} tick={{fontFamily:FM,fontSize:9,fill:T.muted}} axisLine={false} tickLine={false} width={60} domain={["auto","auto"]}/>
-            <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:8,fontFamily:FM,fontSize:11}} itemStyle={{color:T.textHi}} labelStyle={{color:T.muted}}/>
-            <Line type="monotone" dataKey="c" stroke={T.text} strokeWidth={1} dot={false} name="Close"/>
-            <Line type="monotone" dataKey="sma50" stroke={T.blue} strokeWidth={1.5} dot={false} name="SMA-50"/>
-            <Line type="monotone" dataKey="sma200" stroke={T.gold} strokeWidth={1.5} dot={false} name="SMA-200"/>
+            <XAxis dataKey="date" tick={{fontFamily:FM,fontSize:10,fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false} minTickGap={60}/>
+            <YAxis tickFormatter={v=>`$${v.toFixed(0)}`} tick={{fontFamily:FM,fontSize:10,fill:T.muted}} axisLine={false} tickLine={false} width={60} domain={["auto","auto"]}/>
+            <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)"}} itemStyle={{color:T.textHi}} labelStyle={{color:T.muted}}/>
+            <Line type="monotone" dataKey="c" stroke={T.text} strokeWidth={1.2} dot={false} name="Close"/>
+            <Line type="monotone" dataKey="sma50" stroke={T.blue} strokeWidth={1.8} dot={false} name="SMA-50"/>
+            <Line type="monotone" dataKey="sma200" stroke={T.gold} strokeWidth={1.8} dot={false} name="SMA-200"/>
           </ComposedChart>
         </ResponsiveContainer>}
-      {trades.length>0&&<div style={{marginTop:12,maxHeight:200,overflowY:"auto",background:T.surface,borderRadius:8,padding:8,fontFamily:FM,fontSize:10}}>
-        {trades.slice(-20).reverse().map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"3px 6px",borderBottom:`1px solid ${T.border}`}}>
-          <span style={{color:t.side==="BUY"?T.blue:T.gold}}>{t.side}</span>
-          <span style={{color:T.muted}}>{t.date}</span>
-          <span style={{color:T.text}}>${t.price.toFixed(2)}</span>
-          <span style={{color:t.return!=null?fc(t.return):T.muted}}>{t.return!=null?fp(t.return):"—"}</span>
+      {trades.length>0&&<div style={{marginTop:T.s3,maxHeight:220,overflowY:"auto",background:T.surface,borderRadius:T.rMd,padding:T.s2,border:`1px solid ${T.border}`,fontFamily:FM,fontSize:11}}>
+        {trades.slice(-20).reverse().map((t,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr auto auto",gap:T.s3,padding:`5px ${T.s2}`,borderBottom:`1px solid ${T.border}`,alignItems:"center"}}>
+          <Tag label={t.side} color={t.side==="BUY"?T.gain:T.loss}/>
+          <span style={{color:T.muted,letterSpacing:"0.04em"}}>{t.date}</span>
+          <span style={{color:T.textHi,fontWeight:500,fontVariantNumeric:"tabular-nums"}}>${t.price.toFixed(2)}</span>
+          <span style={{color:t.return!=null?fc(t.return):T.muted,fontWeight:500,fontVariantNumeric:"tabular-nums",minWidth:50,textAlign:"right"}}>{t.return!=null?fp(t.return):"—"}</span>
         </div>)}
       </div>}
-    </div>
+    </BentoTile>
   </div>;
 }
 
@@ -2295,49 +2301,108 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
 
   const ORDERS=[["Market","Execute immediately at market price",true],["Limit","Execute at specified price or better",true],["Stop-Loss","Sells when price drops to stop level",true],["Stop-Limit","Stop triggers limit — price floor control",true],["Trailing Stop","Dynamic stop — locks in gains as price rises",true],["Short Sell","Selling unowned shares · Maisir — prohibited",false],["Options","Derivative contracts · Gharar — prohibited",false],["Margin","Borrowed capital with interest · Riba — prohibited",false]];
 
-  return<div style={{display:"flex",flexDirection:"column",gap:20}}>
+  const estTotal=parseFloat(qty||0)*parseFloat(lpx||0);
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     <TabBar tabs={[["order","Order Ticket"],["backtest","Backtest"],["fire","Retirement / FIRE"],["sharia","Sharia Principles"]]} active={sub} onChange={setSub}/>
     {sub==="fire"&&<FireCalculator currentNW={currentNW} ytdContrib={ytdContrib}/>}
     {sub==="backtest"&&<HistoricalBacktest/>}
 
     {sub==="order"&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
-    {sub==="order"&&<div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:20,display:"flex",flexDirection:"column",gap:14}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>ORDER TICKET</div>
-        <div style={{display:"flex",background:T.surface,borderRadius:8,overflow:"hidden",border:`1px solid ${T.border}`}}>
-          {["buy","sell"].map(s=><button key={s} onClick={()=>setSide(s)} style={{flex:1,padding:"9px",fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.08em",textTransform:"uppercase",border:"none",cursor:"pointer",background:side===s?(s==="buy"?`${T.gain}22`:`${T.loss}22`):"transparent",color:side===s?(s==="buy"?T.gain:T.loss):T.muted}}>{s}</button>)}
+    {sub==="order"&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
+      {/* ─── Order Ticket bento ────────────────────────── */}
+      <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ORDER TICKET</div>
+        <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
+          {["buy","sell"].map(s=><button key={s} onClick={()=>setSide(s)} style={{
+            flex:1,padding:"10px",fontFamily:FU,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
+            textTransform:"capitalize",border:"none",cursor:"pointer",borderRadius:T.rSm,
+            background:side===s?(s==="buy"?T.gain:T.loss):"transparent",
+            color:side===s?"#fff":T.muted,
+            transition:"all 0.15s",
+            boxShadow:side===s?`0 2px 8px ${(s==="buy"?T.gain:T.loss)}55`:"none",
+          }}>{s}</button>)}
         </div>
         <div>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.12em",marginBottom:5}}>ACCOUNT</div>
-          <select value={acctId} onChange={e=>setAcctId(e.target.value)} style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px 12px",fontFamily:FM,fontSize:11,color:T.text,outline:"none",cursor:"pointer"}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>ACCOUNT</div>
+          <select value={acctId} onChange={e=>setAcctId(e.target.value)} className="field">
             {accounts.length===0?<option value="">No accounts connected</option>:accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName} ({kf(a.balance||0)})</option>)}
           </select>
         </div>
-        {[["SYMBOL",sym,setSym,"text"],["QUANTITY",qty,setQty,"number"],["LIMIT PRICE",lpx,setLpx,"number"]].map(([l,v,set,type])=><div key={l}><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.12em",marginBottom:5}}>{l}</div><input type={type} value={v} onChange={e=>set(type==="text"?e.target.value.toUpperCase():e.target.value)} style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px 12px",fontFamily:FM,fontSize:type==="text"?14:12,color:type==="text"?T.blue:T.text,outline:"none",boxSizing:"border-box"}}/></div>)}
-        <div style={{background:T.surface,borderRadius:8,padding:"10px 12px",border:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between"}}>
-          <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>Estimated Total</span>
-          <span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>{f$(parseFloat(qty||0)*parseFloat(lpx||0))}</span>
+        {[["SYMBOL",sym,setSym,"text"],["QUANTITY",qty,setQty,"number"],["LIMIT PRICE",lpx,setLpx,"number"]].map(([l,v,set,type])=>
+          <div key={l}>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{l}</div>
+            <input type={type} value={v} onChange={e=>set(type==="text"?e.target.value.toUpperCase():e.target.value)}
+              className="field" style={{fontSize:type==="text"?16:14,fontWeight:type==="text"?600:500,color:type==="text"?T.blue:T.text,letterSpacing:type==="text"?"-0.01em":"0",fontVariantNumeric:"tabular-nums"}}/>
+          </div>)}
+        <div style={{background:T.surface,borderRadius:T.rMd,padding:`${T.s3} ${T.s4}`,border:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+          <span style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.04em"}}>Estimated Total</span>
+          <span style={{fontFamily:FU,fontSize:16,fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{f$(estTotal)}</span>
         </div>
-        <div style={{background:T.gainBg,border:`1px solid ${T.gain}20`,borderRadius:8,padding:"8px 12px"}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.1em",marginBottom:2}}>SHARIA PRE-CHECK</div>
-          <div style={{fontFamily:FU,fontSize:11,color:T.text}}>{sym} — screening against AAOIFI criteria</div>
+        <div style={{background:`linear-gradient(135deg, ${T.gain}12, transparent 70%), ${T.surface}`,border:`1px solid ${T.gain}28`,borderRadius:T.rMd,padding:`${T.s2} ${T.s3}`}}>
+          <div style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>● SHARIA PRE-CHECK</div>
+          <div style={{fontFamily:FU,fontSize:12,color:T.text,letterSpacing:"-0.005em"}}>{sym} — screening against AAOIFI criteria</div>
         </div>
-        <button onClick={submit} disabled={orderBusy||!acctId} style={{padding:"11px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.08em",border:"none",cursor:orderBusy||!acctId?"not-allowed":"pointer",background:done?`${T.gain}22`:orderBusy?T.dim:side==="buy"?T.blue:T.loss,color:done?T.gain:orderBusy?T.muted:"#fff",transition:"all 0.2s",textTransform:"uppercase"}}>
+        <button onClick={submit} disabled={orderBusy||!acctId} style={{
+          padding:`12px ${T.s4}`,borderRadius:T.rMd,
+          fontFamily:FU,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
+          border:"none",cursor:orderBusy||!acctId?"not-allowed":"pointer",
+          background:done?`${T.gain}22`:orderBusy?T.dim:`linear-gradient(135deg, ${side==="buy"?T.gain:T.loss}, ${side==="buy"?"#0A8A65":"#D85555"})`,
+          color:done?T.gain:orderBusy?T.muted:"#fff",
+          transition:"all 0.2s",
+          boxShadow:done||orderBusy?"none":`0 4px 14px ${(side==="buy"?T.gain:T.loss)}55`,
+        }}>
           {done?"Order Placed ✓":orderBusy?"Loading…":`Preview ${side==="buy"?"Buy":"Sell"} ${sym}`}
         </button>
-        {orderErr&&<div style={{padding:"8px 12px",background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:8,fontFamily:FM,fontSize:10,color:T.loss,whiteSpace:"pre-wrap"}}>✗ {orderErr}</div>}
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:4}}>ORDER TYPES</div>
-        {ORDERS.map(([nm,desc,ok])=><div key={nm} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"10px 14px",display:"flex",gap:12,alignItems:"flex-start"}}>
-          <div style={{width:14,height:14,borderRadius:6,flexShrink:0,marginTop:2,background:ok?`${T.gain}18`:`${T.loss}18`,border:`1px solid ${ok?T.gain:T.loss}35`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:9,color:ok?T.gain:T.loss,fontWeight:500}}>{ok?"✓":"✕"}</div>
-          <div><div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:ok?T.text:T.muted,marginBottom:2}}>{nm}</div><div style={{fontFamily:FU,fontSize:11,color:T.muted,lineHeight:1.5}}>{desc}</div></div>
-        </div>)}
-      </div>
+        {orderErr&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss,whiteSpace:"pre-wrap",lineHeight:1.4}}>✗ {orderErr}</div>}
+      </BentoTile>
+
+      {/* ─── Order Types card grid ─────────────────────── */}
+      <BentoTile>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ORDER TYPES</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:T.s2}}>
+          {ORDERS.map(([nm,desc,ok])=><div key={nm} style={{
+            background:T.surface,
+            border:`1px solid ${T.border}`,
+            borderLeft:`3px solid ${ok?T.gain:T.loss}`,
+            borderRadius:T.rMd,
+            padding:`${T.s3} ${T.s4}`,
+            display:"flex",gap:T.s3,alignItems:"flex-start",
+            opacity:ok?1:0.7,
+          }}>
+            <div style={{
+              width:18,height:18,borderRadius:T.rSm,flexShrink:0,marginTop:2,
+              background:ok?`${T.gain}22`:`${T.loss}22`,
+              border:`1px solid ${ok?T.gain:T.loss}40`,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontFamily:FM,fontSize:10,color:ok?T.gain:T.loss,fontWeight:700,
+            }}>{ok?"✓":"✕"}</div>
+            <div>
+              <div style={{fontFamily:FU,fontSize:13,fontWeight:600,color:ok?T.textHi:T.muted,letterSpacing:"-0.005em",marginBottom:T.s1}}>{nm}</div>
+              <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{desc}</div>
+            </div>
+          </div>)}
+        </div>
+      </BentoTile>
     </div>}
 
-    {sub==="sharia"&&<div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      {[{t:"No Riba (Interest)",ok:true,d:"Cash-only accounts. No margin, no overnight interest charges. Never borrows capital to trade."},{t:"No Gharar (Uncertainty)",ok:true,d:"Spot equity only. No options, futures, CFDs, or leveraged ETFs."},{t:"No Maisir (Gambling)",ok:true,d:"Systematic edge required. Positive expectancy confirmed before any capital is deployed."},{t:"Debt Screening",ok:true,d:"Total Debt / Total Assets must be below 33% per AAOIFI standard."},{t:"Revenue Test",ok:true,d:"Haram revenue must be below 5% of total revenue. Purification calculated for mixed income."},{t:"No Short Selling",ok:false,d:"You cannot sell what you don't own. Long positions only — no inverse or bear positions."},{t:"No Derivatives",ok:false,d:"Options and futures contracts are prohibited under Gharar (excessive uncertainty)."},{t:"No Margin",ok:false,d:"Borrowed capital with interest charges is Riba — absolutely prohibited."}].map(r=><div key={r.t} style={{background:T.card,border:`1px solid ${T.border}`,borderLeft:`3px solid ${r.ok?T.gain:T.loss}`,borderRadius:12,padding:"13px 16px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:7}}><span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:r.ok?T.textHi:T.muted}}>{r.t}</span><Tag label={r.ok?"Required":"Prohibited"} color={r.ok?T.gain:T.loss}/></div><p style={{fontFamily:FU,fontSize:12,color:T.muted,margin:0,lineHeight:1.6}}>{r.d}</p></div>)}
+    {sub==="sharia"&&<div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:T.s3}}>
+      {[
+        {t:"No Riba (Interest)",ok:true,d:"Cash-only accounts. No margin, no overnight interest charges. Never borrows capital to trade."},
+        {t:"No Gharar (Uncertainty)",ok:true,d:"Spot equity only. No options, futures, CFDs, or leveraged ETFs."},
+        {t:"No Maisir (Gambling)",ok:true,d:"Systematic edge required. Positive expectancy confirmed before any capital is deployed."},
+        {t:"Debt Screening",ok:true,d:"Total Debt / Total Assets must be below 33% per AAOIFI standard."},
+        {t:"Revenue Test",ok:true,d:"Haram revenue must be below 5% of total revenue. Purification calculated for mixed income."},
+        {t:"No Short Selling",ok:false,d:"You cannot sell what you don't own. Long positions only — no inverse or bear positions."},
+        {t:"No Derivatives",ok:false,d:"Options and futures contracts are prohibited under Gharar (excessive uncertainty)."},
+        {t:"No Margin",ok:false,d:"Borrowed capital with interest charges is Riba — absolutely prohibited."},
+      ].map(r=><BentoTile key={r.t} style={{borderLeft:`3px solid ${r.ok?T.gain:T.loss}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s2,marginBottom:T.s2}}>
+          <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:r.ok?T.textHi:T.muted,letterSpacing:"-0.01em"}}>{r.t}</span>
+          <Tag label={r.ok?"Required":"Prohibited"} color={r.ok?T.gain:T.loss}/>
+        </div>
+        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,letterSpacing:"-0.005em"}}>{r.d}</p>
+      </BentoTile>)}
     </div>}
   </div>;
 }
