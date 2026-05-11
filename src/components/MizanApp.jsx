@@ -1443,8 +1443,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
     .sort((a,b)=>sort==="mv"?mv(b)-mv(a):sort==="gp"?gp(b)-gp(a):a.tk.localeCompare(b.tk));
 
   return<div style={{display:"flex",flexDirection:"column",gap:20}}>
-    <TabBar tabs={[["holdings","Holdings"],["activity","Activity"],["tax","Tax Planning"],["zakat","Zakat & Sadaqah"],["docs","Documents"],["etfs","ETFs & Funds"],["screener","Sharia Screener"]]} active={sub} onChange={setSub}/>
-    {sub==="docs"&&<DocumentsPanel documents={documents} accounts={snapAccounts}/>}
+    <TabBar tabs={[["holdings","Holdings"],["activity","Activity"],["tax","Tax Planning"],["zakat","Zakat & Sadaqah"],["etfs","ETFs & Funds"],["screener","Sharia Screener"]]} active={sub} onChange={setSub}/>
 
     {sub==="holdings"&&<>
       <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
@@ -2367,7 +2366,7 @@ function SecurityPanel(){
   </div>;
 }
 
-function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode,onToggleDemo}){
+function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode,onToggleDemo,documents=[],accounts=[]}){
   const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
   const[keys,setKeys]=useState({...apiKeys});
   const[saved,setSaved]=useState(false);
@@ -2425,6 +2424,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
         ["brokers","Connect Accounts"],
         ["security","Security"],
         ["assets","Manual Assets"],
+        ["docs","Documents"],
       ]}
       active={sub}
       onChange={setSub}
@@ -2495,6 +2495,8 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
     </>}
 
     {sub==="security"&&<SecurityPanel/>}
+
+    {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
   </div>;
 }
 
@@ -2937,7 +2939,10 @@ export default function Mizan(){
   });
   const[hasRealData,setHasRealData]=useState(()=>{try{return localStorage.getItem("mizan_has_real_data")==="1";}catch{return false;}});
   const[disabledAccts,setDisabledAccts]=useState(()=>{try{return new Set(JSON.parse(localStorage.getItem("mizan_disabled_accts")||"[]"));}catch{return new Set();}});
-  const[auto,setAuto2]=useState(()=>{try{return localStorage.getItem("mizan_auto")==="1";}catch{return false;}}); // default OFF — prices stay static unless user opts in
+  // Auto-sync defaults ON now (every 90 s) so figures match the user's
+  // brokerage accounts in close to real time. Toggle off in the status bar
+  // if Finnhub/SnapTrade quotas become a concern.
+  const[auto,setAuto2]=useState(()=>{try{const v=localStorage.getItem("mizan_auto");return v===null?true:v==="1";}catch{return true;}});
   const autoRef=useRef(null);
   const bcastRef=useRef(null);
 
@@ -3399,7 +3404,20 @@ export default function Mizan(){
       if(merged.length!==saved.length)localStorage.setItem("mizan_brokers",JSON.stringify(merged));
     }).catch(()=>{});
   },[]);
-  useEffect(()=>{if(auto){autoRef.current=setInterval(sync,10*60*1000);return()=>clearInterval(autoRef.current);}else clearInterval(autoRef.current);},[auto,sync]); // 10 min when auto is ON
+  // 90-second cadence when auto is ON. Each tick fires the same sync() used
+  // by the manual button: live prices (Finnhub proxy), SnapTrade /accounts +
+  // /activities, and news. Stays under the per-user rate limit (~3 req/min
+  // vs the 120 req/min cap). NOTE: SnapTrade's own broker poll is the upper
+  // bound on cash/balance freshness; for instant refresh, a future "Force
+  // sync" button could call /connections/:authId/refresh (throttled by
+  // SnapTrade to a few hits per hour per connection).
+  useEffect(()=>{
+    if(auto){
+      autoRef.current=setInterval(sync,90*1000);
+      return()=>clearInterval(autoRef.current);
+    }
+    clearInterval(autoRef.current);
+  },[auto,sync]);
 
   // ── Theme: auto (sunrise/sunset) | dark | light ──────────
   const[themeMode,setThemeMode]=useState(()=>{try{return localStorage.getItem("mizan_theme_mode")||"auto";}catch{return"auto";}});
@@ -3617,7 +3635,7 @@ export default function Mizan(){
         {nav==="markets"   &&<Markets   live={live} news={news} onRefreshNews={syncNews} loadingNews={newsLoad} snapAccounts={visibleAccounts} mapPosition={mapPosition} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} demoMode={demoMode} onToggleDemo={toggleDemo}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
         {nav==="about"     &&<About/>}
       </div>
     </main>
