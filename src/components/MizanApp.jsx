@@ -315,38 +315,49 @@ const C1M=C1Y.slice(-22);const C1W=C1Y.slice(-7);const CYTD=C1Y.slice(-90);
 let _gk={};
 function setGlobalKeys(k){_gk={...k};}
 
+// All Anthropic traffic now flows through /api/advisor so the browser
+// never holds an ANTHROPIC_KEY. The server attaches the key from env
+// vars, applies rate limits, and logs usage.
 const ai=async(prompt,max=6000)=>{
-  const r=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:max,
+  const r=await apiFetch("/api/advisor",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      model:"claude-sonnet-4-20250514",
+      max_tokens:max,
+      // web_search lets the price/news fallbacks pull live data via the
+      // server. The /api/advisor proxy only forwards documented tool types.
       tools:[{type:"web_search_20250305",name:"web_search"}],
-      messages:[{role:"user",content:prompt}]})
+      messages:[{role:"user",content:prompt}],
+    }),
   });
   const d=await r.json();
-  if(d.error)throw new Error(d.error.message);
-  return d.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+  if(!r.ok||d.error)throw new Error(d.error||`advisor ${r.status}`);
+  const blocks=Array.isArray(d.content)?d.content:[];
+  return blocks.filter(b=>b.type==="text").map(b=>b.text).join("");
 };
 const tryJ=t=>{try{const m=t.match(/\[[\s\S]*\]/);return m?JSON.parse(m[0]):null;}catch{return null;}};
 
+// Server-proxied. The browser never holds a vendor key; the proxy uses the
+// server's FINNHUB_KEY env var and is per-user JWT-scoped + rate limited.
 async function fetchFinnhub(tickers){
-  if(!_gk.finnhub)return[];
-  const res=await Promise.allSettled(tickers.slice(0,25).map(async tk=>{
-    const r=await fetch(`https://finnhub.io/api/v1/quote?symbol=${tk}&token=${_gk.finnhub}`);
+  if(!Array.isArray(tickers)||tickers.length===0)return[];
+  try{
+    const r=await apiFetch(`/api/finnhub/quote?symbols=${encodeURIComponent(tickers.slice(0,25).join(","))}`);
+    if(!r.ok)return[];
     const d=await r.json();
-    if(!d?.c||d.c===0)return null;
-    return{tk,price:d.c,chg:d.d,pct:d.dp,hi:d.h,lo:d.l,src:"Finnhub"};
-  }));
-  return res.filter(r=>r.status==="fulfilled"&&r.value).map(r=>r.value);
+    return Array.isArray(d?.quotes)?d.quotes:[];
+  }catch{return[];}
 }
 
 async function fetchNewsF(){
-  if(!_gk.finnhub)return[];
   try{
-    const r=await fetch(`https://finnhub.io/api/v1/news?category=general&token=${_gk.finnhub}`);
+    const r=await apiFetch("/api/finnhub/news");
+    if(!r.ok)return[];
     const d=await r.json();
-    return(Array.isArray(d)?d:[]).slice(0,10).map(n=>({
-      h:n.headline,src:n.source,url:n.url,s:"neutral",
-      t:new Date((n.datetime||Date.now()/1000)*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})
+    return(d?.news||[]).map(n=>({
+      ...n,
+      t:new Date((n.datetime||Date.now()/1000)*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),
     }));
   }catch{return[];}
 }
@@ -3147,20 +3158,23 @@ export default function Mizan(){
             const tks=cached.flatMap(a=>(a.positions||[]).map(p=>(p?.symbol?.symbol||p?.symbol||"")));
             allTickers=[...new Set([...tickers,...tks.filter(t=>typeof t==="string"&&t)])];
           }catch{}
-          let prices=apiKeys.finnhub?.length>8?await fetchFinnhub(allTickers).catch(()=>[]):[];
+          // Server proxy uses env-var FINNHUB_KEY regardless of any
+          // user-supplied key, so we can always try it. fetchAIPrices is
+          // the Anthropic-driven fallback (also routed through /api/advisor).
+          let prices=await fetchFinnhub(allTickers).catch(()=>[]);
           if(!prices.length)prices=await fetchAIPrices(allTickers).catch(()=>[]);
           if(prices.length){setLive(prices);try{localStorage.setItem("mizan_live_cache",JSON.stringify(prices));}catch{}broadcast("live",prices);}
         })(),
         fetchSnapHoldings(),
       ]);
-      let n=apiKeys.finnhub?.length>8?await fetchNewsF().catch(()=>[]):[];
+      let n=await fetchNewsF().catch(()=>[]);
       if(!n.length)n=await fetchAINews().catch(()=>[]);
       if(n.length){setNews(n);broadcast("news",n);}
       setSync(new Date());
     }finally{setFetch(false);}
-  },[apiKeys.finnhub,fetchSnapHoldings]);
+  },[fetchSnapHoldings]);
 
-  const syncNews=useCallback(async()=>{setNL(true);try{const n=apiKeys.finnhub?.length>8?await fetchNewsF().catch(()=>[]):await fetchAINews().catch(()=>[]);if(n.length)setNews(n);}finally{setNL(false);};},[apiKeys.finnhub]);
+  const syncNews=useCallback(async()=>{setNL(true);try{let n=await fetchNewsF().catch(()=>[]);if(!n.length)n=await fetchAINews().catch(()=>[]);if(n.length)setNews(n);}finally{setNL(false);};},[]);
 
   useEffect(()=>{setGlobalKeys(apiKeys);syncNews();fetchSnapHoldings();},[]);
   useEffect(()=>{fetchSnapHoldings();},[demoMode]);
@@ -3398,7 +3412,7 @@ export default function Mizan(){
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments}/>}
         {nav==="markets"   &&<Markets   live={live} news={news} onRefreshNews={syncNews} loadingNews={newsLoad} snapAccounts={visibleAccounts} mapPosition={mapPosition} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
-        {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={apiKeys.anthropic?.length>20}/>}
+        {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} demoMode={demoMode} onToggleDemo={toggleDemo}/>}
         {nav==="about"     &&<About/>}
       </div>
