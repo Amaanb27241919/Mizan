@@ -8,6 +8,16 @@ function Gate() {
   const { user, loading, isSupabaseConfigured } = useAuth()
   const [hydrated, setHydrated] = useState(false)
 
+  // Clean up the magic-link token hash from the URL once we have a session.
+  // Without this, the address bar stays cluttered with #access_token=... after
+  // the redirected tab finishes the OAuth/PKCE handshake.
+  useEffect(() => {
+    if (!user || user.id === 'single-user') return
+    if (window.location.hash.includes('access_token=') || window.location.hash.includes('error=')) {
+      window.history.replaceState({}, '', window.location.pathname + window.location.search)
+    }
+  }, [user?.id])
+
   // Pull per-user state from Postgres into localStorage BEFORE MizanApp mounts,
   // so its component state initializers (which read localStorage synchronously)
   // see the user's actual data instead of a blank slate from another device.

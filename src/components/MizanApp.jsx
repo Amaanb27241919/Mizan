@@ -547,11 +547,11 @@ function SectorBreakdown({holdings=[],total=0}){
 }
 
 /* ─── OVERVIEW ───────────────────────────────────────── */
-function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav}){
+function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner}){
   const[range,setRange]=useState("All");
   const liveSrc=snapAccounts.length>0
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
-    : HOLDINGS;
+    : [];
   const merged=liveSrc.map(h=>{const l=live.find(q=>q.tk===h.tk);return l?{...h,px:l.price||h.px,_p:l.pct||0}:h;});
   // Total value = account balance sum (cash + equity) when SnapTrade is connected;
   // otherwise fall back to summing position market values from fixtures.
@@ -689,7 +689,23 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
     return series;
   },[activities,netWorthHistory,totBucket,range]);
 
+  // Empty-state welcome card — shows for fresh users with no real broker
+  // connections and demo mode off. Replaces the previous behavior where new
+  // users saw a hardcoded sample portfolio.
+  const isEmpty=snapAccounts.length===0&&merged.length===0;
+
   return<div style={{display:"flex",flexDirection:"column",gap:20}}>
+    {isEmpty&&<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"28px 32px",boxShadow:T.shadow,textAlign:"center"}}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",marginBottom:10}}>WELCOME TO MĪZAN</div>
+      <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,marginBottom:8}}>Connect your first brokerage</div>
+      <div style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.6,maxWidth:520,margin:"0 auto 22px"}}>
+        Link Fidelity, Robinhood, Schwab, Coinbase, or any of 60+ brokers via SnapTrade. Your real holdings, activity, and Sharia screening will appear here.
+      </div>
+      <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+        <button onClick={onConnect} style={{padding:"10px 22px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,border:"none",color:"#fff",cursor:"pointer",boxShadow:`0 4px 14px ${T.blue}55`}}>+ Connect Account</button>
+        <button onClick={onToggleDemoFromBanner} style={{padding:"10px 22px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>Try Demo Mode →</button>
+      </div>
+    </div>}
     {haramV>0&&<div style={{padding:"9px 16px",background:T.lossBg,border:`1px solid ${T.loss}25`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <span style={{fontFamily:FM,fontSize:11,color:T.loss}}>{haram.map(h=>h.tk).join(", ")} — Non-compliant · {f$(haramV)}</span>
       <button onClick={()=>onNav("portfolio")} style={{fontFamily:FM,fontSize:9,color:T.loss,background:"transparent",border:`1px solid ${T.loss}40`,borderRadius:6,padding:"3px 10px",cursor:"pointer",letterSpacing:"0.08em"}}>EXIT PLAN →</button>
@@ -1322,7 +1338,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
 
   const baseHoldings=snapAccounts.length>0
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
-    : HOLDINGS;
+    : [];
   const merged=baseHoldings.map(h=>{const l=live.find(q=>q.tk===h.tk);return l?{...h,px:l.price||h.px,_p:l.pct||0,_live:true}:h;});
 
   const tot=merged.reduce((s,h)=>s+mv(h),0);
@@ -1405,7 +1421,7 @@ function Markets({live,news,onRefreshNews,loadingNews,snapAccounts=[],mapPositio
   // always appended.
   const liveSrc=snapAccounts.length>0
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition?.(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
-    : HOLDINGS;
+    : [];
   const tickers=[...new Set([...liveSrc.map(h=>h.tk),"AAPL","MSFT","NVDA","TSLA","AMZN"])];
   const rows=tickers.map(tk=>{
     const l=live.find(q=>q.tk===tk);const h=liveSrc.find(x=>x.tk===tk);
@@ -3219,7 +3235,7 @@ export default function Mizan(){
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
       <div className="page">
-        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav}/>}
+        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments}/>}
         {nav==="markets"   &&<Markets   live={live} news={news} onRefreshNews={syncNews} loadingNews={newsLoad} snapAccounts={visibleAccounts} mapPosition={mapPosition} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
