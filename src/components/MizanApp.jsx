@@ -21,6 +21,11 @@ const T = {
   muted:"var(--mz-muted)", dim:"var(--mz-dim)",
   // Surface effects (theme-variable)
   shadow:"var(--mz-shadow)", glass:"var(--mz-glass)",
+  // Token shortcuts (resolve to CSS vars set in THEME_CSS).
+  s1:"var(--s-1)", s2:"var(--s-2)", s3:"var(--s-3)", s4:"var(--s-4)",
+  s5:"var(--s-5)", s6:"var(--s-6)", s8:"var(--s-8)", s10:"var(--s-10)",
+  s12:"var(--s-12)",
+  rSm:"var(--r-sm)", rMd:"var(--r-md)", rLg:"var(--r-lg)",
 };
 const THEME_CSS = `
   :root, :root[data-theme="dark"] {
@@ -43,10 +48,26 @@ const THEME_CSS = `
     --mz-glass: rgba(255,255,255,0.78);
     color-scheme: light;
   }
+  /* Spacing scale — 4 px base. Reach for these instead of magic numbers
+     when laying out new surfaces; existing inline styles can adopt them
+     incrementally. */
+  :root {
+    --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+    --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+    --s-12: 48px;
+    --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
+    --sh-sm: 0 1px 2px rgba(0,0,0,0.08);
+    --sh-md: 0 4px 14px rgba(0,0,0,0.18);
+    --sh-lg: 0 12px 36px rgba(0,0,0,0.32);
+  }
 `;
-const FU = "'Plus Jakarta Sans','Trebuchet MS',sans-serif";
-const FM = "'DM Mono','Fira Code',monospace";
-const GF = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap";
+// SF Pro Display + SF Mono are first-party on macOS / iOS; on other
+// platforms fall back to the platform UI stack (Segoe UI on Windows,
+// Roboto on Android, system sans elsewhere). Avoid the Google-Fonts
+// preconnect entirely — CSP no longer needs to allow it for fonts.
+const FU = "'SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+const FM = "'SF Mono',ui-monospace,'JetBrains Mono','Menlo','Monaco',monospace";
+const GF = ""; // unused — kept as an export shim in case other code references it.
 
 /* ─── DATA ───────────────────────────────────────────── */
 const HOLDINGS = [
@@ -380,9 +401,31 @@ const kf=v=>v>=1e9?`$${(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(1)}M`:`$
 
 function LiveDot({on,pulse}){return<span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",flexShrink:0,background:on?T.gain:T.muted,boxShadow:on?`0 0 8px ${T.gain}80`:"none",animation:pulse?"blink 2s ease-in-out infinite":"none"}}/>;}
 
-function Tag({label,color}){return<span style={{display:"inline-block",padding:"2px 8px",borderRadius:6,fontSize:10,fontFamily:FM,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:color||T.muted,background:`${color||T.muted}14`,border:`1px solid ${color||T.muted}28`}}>{label}</span>;}
+function Tag({label,color}){
+  const c=color||T.muted;
+  return<span style={{
+    display:"inline-flex",alignItems:"center",gap:T.s1,
+    padding:`2px ${T.s2}`,borderRadius:999,
+    fontSize:10,fontFamily:FM,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
+    color:c,background:`${c}18`,border:`1px solid ${c}30`,
+    whiteSpace:"nowrap",
+  }}>{label}</span>;
+}
 
-function KV({label,value,sub,subColor,accent}){return<div style={{background:T.card,border:`1px solid ${accent?accent+"30":T.border}`,borderRadius:12,padding:"14px 18px"}}><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:7}}>{label}</div><div style={{fontFamily:FM,fontSize:17,fontWeight:500,color:T.textHi,lineHeight:1}}>{value}</div>{sub&&<div style={{fontFamily:FM,fontSize:11,color:subColor||T.muted,marginTop:5}}>{sub}</div>}</div>;}
+// Stat card. Numbers use SF Pro Display tabular figures so values stay
+// in vertical alignment across columns. Hover lift via inline CSS in the
+// global <style> block (.kv-card class).
+function KV({label,value,sub,subColor,accent}){return<div className="kv-card" style={{
+  background:T.card,
+  border:`1px solid ${accent?accent+"30":T.border}`,
+  borderRadius:T.rLg,
+  padding:`${T.s4} ${T.s5}`,
+  transition:"border-color 0.2s, transform 0.18s, box-shadow 0.2s",
+}}>
+  <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",textTransform:"uppercase",fontWeight:500,marginBottom:T.s2}}>{label}</div>
+  <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,lineHeight:1.05,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{value}</div>
+  {sub&&<div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:subColor||T.muted,marginTop:T.s2,letterSpacing:"0.02em"}}>{sub}</div>}
+</div>;}
 
 function Sk({vals,color,w=72,h=22}){if(!vals?.length)return null;const mn=Math.min(...vals),mx=Math.max(...vals)+.01;const pts=vals.map((v,i)=>({x:(i/(vals.length-1))*(w-2)+1,y:h-2-((v-mn)/(mx-mn))*(h-4)+1}));const d=pts.map((p,i)=>`${i===0?"M":"L"} ${p.x} ${p.y}`).join(" ");return<svg width={w} height={h} style={{display:"block",flexShrink:0}}><path d={d} fill="none" stroke={color||T.blue} strokeWidth={1.5} strokeLinecap="round"/></svg>;}
 
@@ -3582,11 +3625,10 @@ export default function Mizan(){
 
   const NAV=[{id:"overview",l:"Overview"},{id:"portfolio",l:"Portfolio"},{id:"markets",l:"Markets"},{id:"trade",l:"Trade & Bot"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"},{id:"about",l:"About"}];
 
-  return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU}}>
+  return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     <style>{`
-      @import url('${GF}');
       *{box-sizing:border-box;margin:0;padding:0;}
-      html,body{background:${T.bg};-webkit-tap-highlight-color:transparent;}
+      html,body{background:${T.bg};-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
       ::-webkit-scrollbar{width:8px;height:8px;background:transparent;}
       ::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px;}
       ::-webkit-scrollbar-thumb:hover{background:${T.borderHi};}
@@ -3598,6 +3640,19 @@ export default function Mizan(){
       .dock-off:hover{transform:translateY(-2px);background:${T.card}!important;color:${T.textHi}!important;}
       .dock-on:hover{transform:translateY(-2px) scale(1.02);}
       button:not(:disabled){transition:all 0.15s ease;}
+
+      /* Design-system primitives. Used by KV stat cards, buttons, inputs. */
+      .kv-card:hover{border-color:${T.borderHi}!important;transform:translateY(-1px);box-shadow:var(--sh-md);}
+      .btn-primary{background:linear-gradient(135deg,${T.blue},${T.blueDim});color:#fff;border:none;font-family:${FM};font-size:11px;font-weight:600;letter-spacing:0.04em;padding:8px 16px;border-radius:var(--r-md);cursor:pointer;box-shadow:0 2px 10px ${T.blue}50;transition:transform 0.15s,box-shadow 0.2s;}
+      .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 14px ${T.blue}66;}
+      .btn-primary:active:not(:disabled){transform:translateY(0);box-shadow:0 1px 6px ${T.blue}40;}
+      .btn-primary:disabled{opacity:0.55;cursor:not-allowed;box-shadow:none;}
+      .btn-ghost{background:transparent;color:${T.text};border:1px solid ${T.border};font-family:${FM};font-size:11px;font-weight:500;letter-spacing:0.04em;padding:7px 14px;border-radius:var(--r-md);cursor:pointer;transition:border-color 0.15s,background 0.15s,color 0.15s;}
+      .btn-ghost:hover:not(:disabled){border-color:${T.borderHi};background:${T.surface};color:${T.textHi};}
+      .btn-danger{background:transparent;color:${T.loss};border:1px solid ${T.loss}40;font-family:${FM};font-size:11px;font-weight:500;letter-spacing:0.04em;padding:7px 14px;border-radius:var(--r-md);cursor:pointer;transition:all 0.15s;}
+      .btn-danger:hover:not(:disabled){background:${T.loss}10;border-color:${T.loss}80;}
+      .field{background:${T.surface};border:1px solid ${T.border};border-radius:var(--r-md);padding:9px 12px;font-family:${FM};font-size:12px;color:${T.text};outline:none;width:100%;box-sizing:border-box;transition:border-color 0.15s,box-shadow 0.15s;}
+      .field:focus{border-color:${T.blue};box-shadow:0 0 0 3px ${T.blue}22;}
 
       /* TabBar — keep horizontal scrolling but hide the scrollbar so it
          doesn't look broken on iPhone Safari. Tabs stay reachable via swipe. */
@@ -3635,11 +3690,11 @@ export default function Mizan(){
 
     {/* TOP BAR */}
     {/* STATUS BAR — slim, glanceable, single row. Brand left, info middle, actions right. */}
-    <header className="mz-status" style={{height:44,background:T.surface,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",padding:"0 18px",gap:14,position:"sticky",top:0,zIndex:100,backdropFilter:"saturate(140%)"}}>
-      <div style={{display:"flex",alignItems:"center",gap:9,flexShrink:0}}>
-        <svg width={16} height={16} viewBox="0 0 16 16" fill="none"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs><path d="M8 1L15 7L8 13L1 7Z" stroke="url(#lg)" strokeWidth={1.4} fill="none"/><circle cx="8" cy="7" r="1.8" fill={T.blue} opacity={0.85}/></svg>
-        <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"0.08em"}}>MĪZAN</span>
-        <span style={{fontFamily:FM,fontSize:8,color:T.blue,letterSpacing:"0.16em",background:`${T.blue}14`,border:`1px solid ${T.blue}30`,padding:"2px 6px",borderRadius:6}}>HALAL</span>
+    <header className="mz-status" style={{height:48,background:T.glass,backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",padding:`0 ${T.s5}`,gap:T.s4,position:"sticky",top:0,zIndex:100}}>
+      <div style={{display:"flex",alignItems:"center",gap:T.s2,flexShrink:0}}>
+        <svg width={18} height={18} viewBox="0 0 16 16" fill="none"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs><path d="M8 1L15 7L8 13L1 7Z" stroke="url(#lg)" strokeWidth={1.5} fill="none"/><circle cx="8" cy="7" r="2" fill={T.blue} opacity={0.9}/></svg>
+        <span style={{fontFamily:FU,fontSize:15,fontWeight:700,color:T.textHi,letterSpacing:"0.04em"}}>MĪZAN</span>
+        <span style={{fontFamily:FM,fontSize:8,fontWeight:600,color:T.blue,letterSpacing:"0.18em",background:`${T.blue}18`,border:`1px solid ${T.blue}30`,padding:"3px 7px",borderRadius:999}}>HALAL</span>
       </div>
 
       {/* Center: live status — clock, market, data freshness */}
@@ -3671,21 +3726,19 @@ export default function Mizan(){
         <button onClick={cycleTheme} title={`Theme: ${themeMode} (resolved: ${resolvedTheme}).`} style={{fontFamily:FM,fontSize:11,color:T.muted,padding:"5px 9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}>{themeMode==="auto"?(resolvedTheme==="dark"?"🌙":"☀"):themeMode==="dark"?"🌙":"☀"}</button>
         {(!hasRealData||demoMode)&&<button onClick={toggleDemo} title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
         <button onClick={()=>setAuto(v=>!v)} title={`Auto-sync ${auto?"on":"off"}`} style={{fontFamily:FM,fontSize:9,color:auto?T.gain:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:auto?`${T.gain}14`:"transparent",border:`1px solid ${auto?T.gain+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{auto?"AUTO":"AUTO"}</button>
-        <button onClick={()=>setConn(true)} style={{fontFamily:FM,fontSize:10,color:T.text,padding:"5px 12px",background:T.card,border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",letterSpacing:"0.04em"}}>+ Connect</button>
+        <button onClick={()=>setConn(true)} className="btn-ghost">+ Connect</button>
         {snapAccounts.length>0&&(()=>{
           const cooldownLeft=Math.max(0,forceCooldownUntil-Date.now());
           const cooling=cooldownLeft>0;
           const mins=Math.ceil(cooldownLeft/60000);
           const disabled=forceBusy||cooling||fetching;
           const label=forceBusy?"⟳…":cooling?`⟳ ${mins}m`:"⟳ Force";
-          const title=cooling
-            ?`Broker refresh on cooldown — try again in ${mins} min`
-            :"Push a refresh signal to SnapTrade so balances + activity catch up to what your brokerage shows.";
-          return<button onClick={forceRefresh} disabled={disabled} title={title} style={{fontFamily:FM,fontSize:10,letterSpacing:"0.04em",padding:"5px 11px",borderRadius:8,border:`1px solid ${cooling?T.border:T.gold+"40"}`,background:cooling?"transparent":`${T.gold}14`,color:disabled?T.muted:T.gold,cursor:disabled?"not-allowed":"pointer"}}>{label}</button>;
+          const title=cooling?`Broker refresh on cooldown — try again in ${mins} min`:"Push a refresh signal to SnapTrade so balances + activity catch up to what your brokerage shows.";
+          return<button onClick={forceRefresh} disabled={disabled} title={title} style={{fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.04em",padding:`7px ${T.s3}`,borderRadius:T.rMd,border:`1px solid ${cooling?T.border:T.gold+"40"}`,background:cooling?"transparent":`${T.gold}14`,color:disabled?T.muted:T.gold,cursor:disabled?"not-allowed":"pointer",transition:"all 0.15s"}}>{label}</button>;
         })()}
-        <button onClick={sync} disabled={fetching} className="mz-status-sync" style={{fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",padding:"6px 14px",borderRadius:8,border:"none",cursor:fetching?"not-allowed":"pointer",background:fetching?T.dim:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,color:fetching?T.muted:"#fff",boxShadow:fetching?"none":`0 2px 8px ${T.blue}40`,transition:"all 0.15s"}}>{fetching?"Syncing…":"Sync All"}</button>
+        <button onClick={sync} disabled={fetching} className="btn-primary mz-status-sync">{fetching?"Syncing…":"Sync All"}</button>
       </div>
-      {forceMsg&&<div style={{position:"absolute",top:46,right:12,background:T.card,border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:"7px 12px",borderRadius:8,fontFamily:FM,fontSize:11,boxShadow:T.shadow,zIndex:101,maxWidth:340}}>{forceMsg.msg}</div>}
+      {forceMsg&&<div style={{position:"absolute",top:50,right:T.s3,background:T.card,border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)",zIndex:101,maxWidth:340}}>{forceMsg.msg}</div>}
     </header>
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
@@ -3703,30 +3756,30 @@ export default function Mizan(){
     {/* DOCK — Mac-style floating nav at the bottom. Glass surface, rounded
         pill, lifted with shadow. Active item highlighted with accent gradient. */}
     <nav className="mz-dock" style={{
-      position:"fixed",bottom:18,left:"50%",transform:"translateX(-50%)",
-      display:"flex",alignItems:"center",gap:4,
-      padding:"6px 8px",
+      position:"fixed",bottom:T.s5,left:"50%",transform:"translateX(-50%)",
+      display:"flex",alignItems:"center",gap:T.s1,
+      padding:`${T.s1} ${T.s2}`,
       background:T.glass,
-      backdropFilter:"blur(24px) saturate(180%)",
-      WebkitBackdropFilter:"blur(24px) saturate(180%)",
+      backdropFilter:"blur(28px) saturate(180%)",
+      WebkitBackdropFilter:"blur(28px) saturate(180%)",
       border:`1px solid ${T.borderHi}`,
-      borderRadius:18,
-      boxShadow:T.shadow,
+      borderRadius:999,
+      boxShadow:"var(--sh-lg)",
       zIndex:90,
     }}>
       {NAV.map(n=>{
         const active=nav===n.id;
         return<button key={n.id} onClick={()=>setNav(n.id)} className={active?"dock-on":"dock-off"} style={{
-          padding:"10px 18px",
+          padding:`10px ${T.s4}`,
           background:active?`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`:"transparent",
           border:"none",
-          borderRadius:12,
+          borderRadius:999,
           color:active?"#fff":T.text,
-          fontFamily:FM,fontSize:11,fontWeight:active?600:500,
-          letterSpacing:"0.04em",
+          fontFamily:FU,fontSize:12,fontWeight:active?600:500,
+          letterSpacing:"-0.005em",
           cursor:"pointer",
           transition:"all 0.18s cubic-bezier(.34,1.56,.64,1)",
-          boxShadow:active?`0 4px 14px ${T.blue}55`:"none",
+          boxShadow:active?`0 6px 18px ${T.blue}60`:"none",
         }}>{n.l}</button>;
       })}
     </nav>
