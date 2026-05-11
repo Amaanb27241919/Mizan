@@ -3918,9 +3918,21 @@ export default function Mizan(){
   // plus new ones — only the duplicates are skipped, new rows still land.
   // Activity fingerprint — used by import-time dedup AND by the merge in
   // fetchSnapHoldings so SnapTrade activities and CSV imports of the same
-  // underlying transaction collapse to a single row. We round numbers to
-  // 2 dp so float noise (123.4500001 vs 123.45) doesn't break matching,
-  // and normalize symbol/broker so case + whitespace differences match.
+  // underlying transaction collapse to a single row.
+  //
+  // Lenient on purpose. Two CSV exports of the same Robinhood trade can
+  // differ in:
+  //   - broker label ("Robinhood" vs "ROBINHOOD") — dropped
+  //   - transaction type ("Buy" vs "BTOO" vs "BUY") — dropped (Robinhood
+  //     has churned trans-code formats over the years)
+  //   - price precision ($150.234 vs $150.23) — dropped (less stable than
+  //     amount, which is rounded to cents at the broker)
+  // Kept:
+  //   - date (YYYY-MM-DD)            — required
+  //   - symbol (uppercased, trimmed) — required
+  //   - units, signed, 2 dp          — preserves direction
+  //   - amount, signed, 2 dp         — preserves direction (so a BUY and
+  //                                    SELL of the same lot don't collapse)
   const fingerprintRow=r=>{
     const n=v=>{
       const f=parseFloat(v);
@@ -3928,12 +3940,9 @@ export default function Mizan(){
     };
     const sym=r.symbol?.symbol||r.symbol||"";
     return[
-      (r.institution_name||"").trim().toUpperCase(),
       (r.trade_date||r.settlement_date||"").slice(0,10),
-      (r.type||"").toUpperCase(),
       (typeof sym==="string"?sym:"").trim().toUpperCase(),
       n(r.units),
-      n(r.price),
       n(r.amount),
     ].join("|");
   };
