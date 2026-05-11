@@ -2661,6 +2661,11 @@ function About(){
 }
 
 export default function Mizan(){
+  // Scope cross-tab broadcasts to the authenticated user so a separate tab
+  // signed in as a different user can't receive (or send) state intended
+  // for this one. Falls back to "anon" in single-user pass-through mode.
+  const{user:authUser}=useAuth();
+  const bcastChannelName="mizan:"+(authUser?.id||"anon");
   const[nav,setNav]=useState("overview");
   const[live,setLive]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_live_cache")||"[]");}catch{return[];}});
   const[news,setNews]=useState([]);
@@ -2694,7 +2699,7 @@ export default function Mizan(){
   // pick up the new state without re-fetching themselves.
   useEffect(()=>{
     try{
-      const bc=new BroadcastChannel("mizan");
+      const bc=new BroadcastChannel(bcastChannelName);
       bcastRef.current=bc;
       bc.onmessage=e=>{
         const m=e.data||{};
@@ -2705,7 +2710,7 @@ export default function Mizan(){
       };
       return()=>bc.close();
     }catch{/* old browsers — non-fatal */}
-  },[]);
+  },[bcastChannelName]);
   const broadcast=(type,payload)=>{try{bcastRef.current?.postMessage({type,payload});}catch{}};
 
   // Wrap the auto setter so we can persist toggle state to localStorage.

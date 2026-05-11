@@ -22,7 +22,8 @@ export default async function handler(req, res) {
        .setHeader("Content-Type", "application/json")
        .send(JSON.stringify(result.body));
   } catch (err) {
-    res.status(500).json({ error: err.message || "Internal error" });
+    const status = Number.isInteger(err?.status) ? err.status : 500;
+    res.status(status).json({ error: err.message || "Internal error" });
   }
 }
 

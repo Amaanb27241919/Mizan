@@ -228,7 +228,8 @@ const server = http.createServer(async (req, res) => {
     catch (err) {
       logLine(`api error: ${err.stack || err}`);
       console.error("  ✗", err.message);
-      res.writeHead(500, { "Content-Type": "application/json" });
+      const status = Number.isInteger(err?.status) ? err.status : 500;
+      res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: err.message }));
     }
     return;
