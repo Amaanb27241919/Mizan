@@ -9,6 +9,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
 import { clearTrackedLocalState } from './userState';
+import { recordAudit } from './apiFetch';
 
 const SINGLE_USER = { id: 'single-user', email: 'local@mizan' };
 
@@ -51,6 +52,11 @@ export function AuthProvider({ children }) {
         // hydrate call to do it, so we clear here.
         if (event === 'SIGNED_OUT') clearTrackedLocalState();
         if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+        // Audit trail — server reads user_id from JWT so we can call this
+        // before the React state updates settle.
+        if (event === 'SIGNED_IN') recordAudit('auth.sign_in');
+        if (event === 'PASSWORD_RECOVERY') recordAudit('auth.password_changed');
+        // SIGNED_OUT has no JWT to attach, so it's logged from signOut() below.
         setSession(nextSession ?? null);
         setUser(nextSession?.user ?? null);
         setLoading(false);
@@ -108,6 +114,8 @@ export function AuthProvider({ children }) {
   const signInWithEmail = signInWithPassword;
 
   const signOut = async () => {
+    // Audit BEFORE killing the session so the JWT is still attached.
+    recordAudit('auth.sign_out');
     // Wipe per-user localStorage BEFORE killing the Supabase session.
     // If we let Supabase fire onAuthStateChange first, a fast-mounting
     // Login screen could briefly read the previous user's data.

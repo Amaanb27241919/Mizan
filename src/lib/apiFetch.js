@@ -20,3 +20,15 @@ export async function apiFetch(input, init = {}) {
   }
   return fetch(input, { ...init, headers });
 }
+
+// Fire-and-forget client-side audit. Server uses the JWT to derive user_id —
+// callers can't forge it. Safe to call without awaiting.
+export function recordAudit(action, { target, metadata } = {}) {
+  try {
+    apiFetch("/api/audit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, target, metadata }),
+    }).catch(() => { /* swallow — audit is best-effort */ });
+  } catch { /* swallow */ }
+}

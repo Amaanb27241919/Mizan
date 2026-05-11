@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useAuth } from "../lib/auth.jsx";
-import { apiFetch } from "../lib/apiFetch.js";
+import { apiFetch, recordAudit } from "../lib/apiFetch.js";
 import { persistUserState } from "../lib/userState.js";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
@@ -2166,7 +2166,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
   // the server (env vars), not in user-entered fields. Default the sub-tab
   // to brokers for everyone else.
   const[sub,setSub]=useState(isRoot?"keys":"brokers");
-  const save=()=>{setApiKeys(keys);setGlobalKeys(keys);try{localStorage.setItem("mizan_keys",JSON.stringify(keys));}catch{}persistUserState("mizan_keys",keys);setSaved(true);setTimeout(()=>setSaved(false),2500);};
+  const save=()=>{setApiKeys(keys);setGlobalKeys(keys);try{localStorage.setItem("mizan_keys",JSON.stringify(keys));}catch{}persistUserState("mizan_keys",keys);recordAudit("settings.api_keys_saved",{metadata:{keysPresent:Object.keys(keys).filter(k=>(keys[k]||"").length>0)}});setSaved(true);setTimeout(()=>setSaved(false),2500);};
   const has=k=>(keys[k]||"").length>8;
 
   const APIS=[

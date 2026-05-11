@@ -94,3 +94,34 @@ CREATE POLICY "user_keys_update_own"
 CREATE POLICY "user_keys_delete_own"
   ON public.user_keys FOR DELETE
   USING (auth.uid() = user_id);
+
+-- ──────────────────────────────────────────────────────────
+-- audit_log
+-- Append-only record of sensitive actions. Read by the user themselves
+-- (their own activity) and by admins (all rows, via service-role on the
+-- server). Inserts only happen server-side using the service-role key,
+-- so users can't fabricate entries.
+-- ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.audit_log (
+  id         bigserial PRIMARY KEY,
+  user_id    uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  action     text NOT NULL,            -- e.g. "auth.sign_in", "broker.disconnect"
+  target     text,                     -- subject of the action (account id, broker slug, etc.)
+  metadata   jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ip         inet,
+  user_agent text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS audit_log_user_id_created_at_idx
+  ON public.audit_log (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS audit_log_action_created_at_idx
+  ON public.audit_log (action, created_at DESC);
+
+ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
+
+-- Users can read their OWN audit trail; no inserts/updates/deletes from
+-- the client. The server bypasses RLS via the service-role key for writes.
+CREATE POLICY "audit_log_select_own"
+  ON public.audit_log FOR SELECT
+  USING (auth.uid() = user_id);
