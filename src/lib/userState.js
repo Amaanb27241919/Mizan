@@ -23,6 +23,7 @@ export const TRACKED_KEYS = [
   'mizan_seen_dividends_initialized', // first-run flag for dividend alerts
   'mizan_brokers',                    // broker connection display state
   'mizan_keys',                       // user-entered API keys
+  'mizan_sadaqah',                    // user-entered donation history
 ];
 
 // User-scoped *local caches* — not synced (regenerated on next sync), but

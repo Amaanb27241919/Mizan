@@ -1341,6 +1341,84 @@ function ActivityPanel({activities=[],accounts=[]}){
   </div>;
 }
 
+/* ─── ZAKAT + SADAQAH ────────────────────────────────── */
+// Real per-user Zakat calc. Replaces the hardcoded panel that previously
+// rendered the owner's figures to every user. Sums real brokerage balances
+// + zakatable manual assets, applies 2.5%, and shows nisab threshold.
+// Sadaqah is a user-entered ledger persisted to mizan_sadaqah (synced).
+const NISAB_USD = 5765; // 87.48g gold @ ~$66/g — updated periodically.
+
+function ZakatSadaqah({accounts=[]}){
+  const[sadaqah,setSadaqah]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]");}catch{return[];}});
+  const[form,setForm]=useState({dt:new Date().toISOString().slice(0,10),org:"",amt:"",done:true});
+
+  const manualAssets=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
+  const acctTotal   = accounts.reduce((s,a)=>s+(a.balance||0),0);
+  const zakatableManual = manualAssets.filter(a=>a.zakatable).reduce((s,a)=>s+(a.value||0),0);
+  const zakatable   = acctTotal+zakatableManual;
+  const zakatDue    = zakatable*0.025;
+  const aboveNisab  = zakatable >= NISAB_USD;
+  const given       = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
+  const pledged     = sadaqah.filter(s=>!s.done).reduce((a,b)=>a+(+b.amt||0),0);
+
+  const persist=arr=>{setSadaqah(arr);localStorage.setItem("mizan_sadaqah",JSON.stringify(arr));persistUserState("mizan_sadaqah",arr);};
+  const add=e=>{e.preventDefault();if(!form.org||!form.amt)return;persist([...sadaqah,{id:`s-${Date.now()}`,...form,amt:+form.amt}]);setForm({...form,org:"",amt:""});};
+  const remove=id=>persist(sadaqah.filter(s=>s.id!==id));
+
+  const isEmpty=accounts.length===0&&manualAssets.length===0;
+
+  return<div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{background:T.card,border:`1px solid ${T.gold}28`,borderRadius:12,padding:20}}>
+        <div style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.14em",marginBottom:14}}>ZAKAT CALCULATION — {new Date().getFullYear()}</div>
+        {[
+          ["Brokerage accounts", `$${acctTotal.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`],
+          ["Manual zakatable",  `$${zakatableManual.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`],
+          ["Total zakatable",   `$${zakatable.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`, true],
+          ["Nisab threshold",   `$${NISAB_USD.toLocaleString()}`],
+          ["Zakat rate",        "2.5%"],
+        ].map(([l,v,b])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:12}}><span style={{color:T.muted}}>{l}</span><span style={{color:b?T.textHi:T.text,fontWeight:b?500:400}}>{v}</span></div>)}
+        <div style={{marginTop:14,padding:"12px",background:`${T.gold}0C`,borderRadius:8,border:`1px solid ${T.gold}18`}}>
+          <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:4}}>ZAKAT DUE THIS YEAR</div>
+          <div style={{fontFamily:FM,fontSize:24,fontWeight:500,color:aboveNisab?T.gold:T.muted}}>${zakatDue.toFixed(2)}</div>
+          <div style={{fontFamily:FM,fontSize:10,color:aboveNisab?T.gain:T.muted,marginTop:4}}>{aboveNisab?"Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"}</div>
+        </div>
+        {isEmpty&&<div style={{marginTop:12,fontFamily:FU,fontSize:11,color:T.muted,lineHeight:1.6}}>Connect a brokerage or add manual assets to populate these figures.</div>}
+      </div>
+      <form onSubmit={add} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14}}>
+        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>LOG A DONATION</div>
+        <div style={{display:"grid",gridTemplateColumns:"120px 1fr 110px 100px auto",gap:8,alignItems:"center"}}>
+          <input type="date" value={form.dt} onChange={e=>setForm({...form,dt:e.target.value})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/>
+          <input placeholder="Organization" value={form.org} onChange={e=>setForm({...form,org:e.target.value})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/>
+          <input type="number" step="0.01" placeholder="Amount" value={form.amt} onChange={e=>setForm({...form,amt:e.target.value})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/>
+          <select value={form.done?"done":"pledged"} onChange={e=>setForm({...form,done:e.target.value==="done"})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}>
+            <option value="done">Given</option>
+            <option value="pledged">Pledged</option>
+          </select>
+          <button type="submit" style={{padding:"7px 14px",borderRadius:6,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:T.blue,border:"none",color:"#fff",cursor:"pointer"}}>Add</button>
+        </div>
+      </form>
+    </div>
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>DONATION HISTORY — ${given.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+        {pledged>0&&<span style={{fontFamily:FM,fontSize:10,color:T.gold}}>+ ${pledged.toLocaleString()} pledged</span>}
+      </div>
+      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+        {sadaqah.length===0
+          ?<div style={{padding:"30px 20px",textAlign:"center",fontFamily:FM,fontSize:11,color:T.muted}}>No donations logged yet. Add one with the form on the left.</div>
+          :<Tbl cols={[
+            {l:"Date",  r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.dt}</span>},
+            {l:"Organization",r_:r=><span style={{fontFamily:FU,fontSize:12,color:T.text}}>{r.org}</span>},
+            {l:"Amount",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.gold}}>${(+r.amt).toLocaleString()}</span>},
+            {l:"Status",r_:r=><Tag label={r.done?"Given":"Pledged"} color={r.done?T.gain:T.gold}/>},
+            {l:"",r_:r=><button onClick={()=>remove(r.id)} style={{padding:"3px 8px",borderRadius:6,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:9}}>✕</button>},
+          ]} rows={[...sadaqah].sort((a,b)=>(b.dt||"").localeCompare(a.dt||""))}/>}
+      </div>
+    </div>
+  </div>;
+}
+
 /* ─── PORTFOLIO ──────────────────────────────────────── */
 function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}){
   const[sub,setSub]=useState("holdings");
@@ -1365,7 +1443,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
     .sort((a,b)=>sort==="mv"?mv(b)-mv(a):sort==="gp"?gp(b)-gp(a):a.tk.localeCompare(b.tk));
 
   return<div style={{display:"flex",flexDirection:"column",gap:20}}>
-    <TabBar tabs={[["holdings","Holdings"],["activity","Activity"],["tax","Tax Planning"],["docs","Documents"],["etfs","ETFs & Funds"],["screener","Sharia Screener"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["holdings","Holdings"],["activity","Activity"],["tax","Tax Planning"],["zakat","Zakat & Sadaqah"],["docs","Documents"],["etfs","ETFs & Funds"],["screener","Sharia Screener"]]} active={sub} onChange={setSub}/>
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={snapAccounts}/>}
 
     {sub==="holdings"&&<>
@@ -1402,6 +1480,8 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
     {sub==="activity"&&<ActivityPanel activities={activities} accounts={snapAccounts}/>}
 
     {sub==="tax"&&<TaxPlanner holdings={merged} activities={activities}/>}
+
+    {sub==="zakat"&&<ZakatSadaqah accounts={snapAccounts}/>}
 
     {sub==="etfs"&&<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
       <Tbl cols={[
