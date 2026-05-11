@@ -1918,7 +1918,7 @@ function ZakatSadaqah({accounts=[]}){
 }
 
 /* ─── PORTFOLIO ──────────────────────────────────────── */
-function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}){
+function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission}){
   const[sub,setSub]=useState("holdings");
   const[acct,setAcct]=useState("all");
   const[screen,setScreen]=useState("all");
@@ -1957,7 +1957,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
   })();
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["holdings","Holdings"],["activity","Activity"],["tax","Tax Planning"],["zakat","Zakat & Sadaqah"],["etfs","ETFs & Funds"],["screener","Sharia Screener"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["holdings","Holdings"],["watchlist","Watchlist"],["activity","Activity"],["tax","Tax Planning"],["zakat","Zakat & Sadaqah"],["etfs","ETFs & Funds"],["screener","Sharia Screener"]]} active={sub} onChange={setSub}/>
 
     {sub==="holdings"&&<>
       {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}
@@ -2056,6 +2056,8 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
       </BentoTile>
     </>}
 
+    {sub==="watchlist"&&<Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>}
+
     {sub==="activity"&&<ActivityPanel activities={activities} accounts={snapAccounts}/>}
 
     {sub==="tax"&&<TaxPlanner holdings={merged} activities={activities}/>}
@@ -2076,68 +2078,6 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
     </BentoTile>}
 
     {sub==="screener"&&<AAOIFIScreener holdings={merged}/>}
-  </div>;
-}
-
-/* ─── MARKETS ────────────────────────────────────────── */
-function Markets({live,snapAccounts=[],mapPosition,watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission}){
-  const liveSrc=snapAccounts.length>0
-    ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition?.(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
-    : [];
-  const tickers=[...new Set([...liveSrc.map(h=>h.tk),"AAPL","MSFT","NVDA","TSLA","AMZN"])];
-  const rows=tickers.map(tk=>{
-    const l=live.find(q=>q.tk===tk);const h=liveSrc.find(x=>x.tk===tk);
-    return{tk,px:l?.price||h?.px||0,chg:l?.chg||0,pct:l?.pct||0,
-      hi:l?.hi||0,lo:l?.lo||0,sh_:h?.sh_||"review",src:l?.src||"—"};
-  });
-
-  // Top movers: 3 biggest gainers + 3 biggest losers from the union of
-  // holdings + watchlist tickers (whatever has a live price).
-  const moverPool=rows.filter(r=>r.pct).slice();
-  moverPool.sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct));
-  const movers=moverPool.slice(0,6);
-
-  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    {/* ─── BENTO ROW 1: Top Movers (3 fr) ──────────── */}
-    {movers.length>0&&<BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TOP MOVERS</span>
-        <span style={{display:"flex",alignItems:"center",gap:T.s1,fontFamily:FM,fontSize:10,color:live.length>0?T.gain:T.muted}}>
-          <LiveDot on={live.length>0} pulse={live.length>0}/>{live.length>0?`Finnhub · ${live.length} tickers`:"Sync to load"}
-        </span>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:T.s3}}>
-        {movers.map(r=><div key={r.tk} style={{
-          padding:`${T.s3} ${T.s4}`,
-          background:T.surface,
-          border:`1px solid ${T.border}`,
-          borderLeft:`3px solid ${r.pct>=0?T.gain:T.loss}`,
-          borderRadius:T.rMd,
-        }}>
-          <div style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</div>
-          <div style={{fontFamily:FU,fontSize:17,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums",marginTop:T.s1}}>${r.px.toFixed(2)}</div>
-          <div style={{fontFamily:FM,fontSize:11,fontWeight:600,color:fc(r.pct),marginTop:T.s1}}>{r.pct>=0?"+":""}{r.pct.toFixed(2)}%</div>
-        </div>)}
-      </div>
-    </BentoTile>}
-
-    {/* ─── BENTO ROW 2: Watchlist (hero) ─────────────── */}
-    <Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>
-
-    {/* ─── BENTO ROW 3: All market quotes ──────────── */}
-    <BentoTile style={{padding:0,overflow:"hidden"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>MARKET QUOTES</span>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{rows.length} symbols</span>
-      </div>
-      <Tbl cols={[
-        {l:"Symbol", r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-          <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</span>
-          <span style={{fontFamily:FM,fontSize:10,color:r.sh_==="halal"?T.gain:r.sh_==="haram"?T.loss:T.muted}}>{r.sh_==="halal"?"✓":r.sh_==="haram"?"✗":"·"}</span>
-        </div>},
-        {l:"Price",  r:true,r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:r.src!=="—"?T.textHi:T.muted,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{r.px?`$${r.px.toFixed(2)}`:"—"}</span>},
-      ]} rows={rows}/>
-    </BentoTile>
   </div>;
 }
 
@@ -3582,7 +3522,17 @@ export default function Mizan(){
   // for this one. Falls back to "anon" in single-user pass-through mode.
   const{user:authUser}=useAuth();
   const bcastChannelName="mizan:"+(authUser?.id||"anon");
-  const[nav,setNav]=useState("overview");
+  // Persist active tab per-device so a reload lands you where you left off.
+  // Per-device, not per-user — different devices may want different defaults.
+  const[nav,setNavState]=useState(()=>{
+    try{
+      const v=localStorage.getItem("mizan_nav");
+      // Guard against a stale value that no longer maps to a real tab.
+      const valid=new Set(["overview","portfolio","trade","advisor","settings","about"]);
+      return v&&valid.has(v)?v:"overview";
+    }catch{return"overview";}
+  });
+  const setNav=v=>{setNavState(v);try{localStorage.setItem("mizan_nav",v);}catch{}};
   const[live,setLive]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_live_cache")||"[]");}catch{return[];}});
   const[fetching,setFetch]=useState(false);
   const[lastSync,setSync]=useState(null);
@@ -4282,7 +4232,7 @@ export default function Mizan(){
   const hr=nyc.minutes/60;
   const sessionLabel=nyc.status,sessionColor=nyc.color;
 
-  const NAV=[{id:"overview",l:"Overview"},{id:"portfolio",l:"Portfolio"},{id:"markets",l:"Markets"},{id:"trade",l:"Trade & Bot"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"},{id:"about",l:"About"}];
+  const NAV=[{id:"overview",l:"Overview"},{id:"portfolio",l:"Portfolio"},{id:"trade",l:"Trade & Bot"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"},{id:"about",l:"About"}];
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     <style>{`
@@ -4406,8 +4356,7 @@ export default function Mizan(){
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo}/>}
-        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments}/>}
-        {nav==="markets"   &&<Markets   live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
+        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
