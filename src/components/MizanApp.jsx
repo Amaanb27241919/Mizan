@@ -376,7 +376,7 @@ function TT2({active,payload}){if(!active||!payload?.length)return null;return<d
 
 function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr>{cols.map(c=><th key={c.l} style={{padding:"8px 14px",textAlign:c.r?"right":"left",fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",borderBottom:`1px solid ${T.border}`,fontWeight:500,whiteSpace:"nowrap"}}>{c.l}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={i} onClick={()=>onRow?.(r,i)} className="trow" style={{borderBottom:`1px solid ${T.border}`,cursor:onRow?"pointer":"default"}}>{cols.map(c=><td key={c.l} style={{padding:"11px 14px",textAlign:c.r?"right":"left",...(c.s?.(r)||{})}}>{c.r_?c.r_(r):r[c.k]}</td>)}</tr>)}</tbody></table></div>;}
 
-function TabBar({tabs,active,onChange,accent}){return<div style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:20}}>{tabs.map(([id,l])=><button key={id} onClick={()=>onChange(id)} style={{padding:"10px 20px",background:"none",border:"none",borderBottom:`2px solid ${active===id?(accent||T.blue):"transparent"}`,color:active===id?T.textHi:T.muted,fontFamily:FM,fontSize:11,letterSpacing:"0.04em",cursor:"pointer",marginBottom:-1,transition:"color 0.12s"}}>{l}</button>)}</div>;}
+function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar" style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:20,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>{tabs.map(([id,l])=><button key={id} onClick={()=>onChange(id)} style={{padding:"10px 20px",background:"none",border:"none",borderBottom:`2px solid ${active===id?(accent||T.blue):"transparent"}`,color:active===id?T.textHi:T.muted,fontFamily:FM,fontSize:11,letterSpacing:"0.04em",cursor:"pointer",marginBottom:-1,transition:"color 0.12s",whiteSpace:"nowrap",flexShrink:0}}>{l}</button>)}</div>;}
 
 /* ─── CSV PARSER (Fidelity / Robinhood / Coinbase) ───── */
 // Returns activity rows shaped like SnapTrade's /activities response so they
@@ -1481,9 +1481,9 @@ function Watchlist({live=[],watchlist=[],onAdd,onRemove,onSetAlert,onAlertPermis
   const notifPerm=typeof Notification!=="undefined"?Notification.permission:"unsupported";
 
   return<div>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
       <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>WATCHLIST{watchlist.length>0?<span style={{color:T.muted,marginLeft:8}}>· {watchlist.length} symbols</span>:""}</span>
-      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         {notifPerm!=="granted"&&<button onClick={onAlertPermission} style={{padding:"4px 10px",borderRadius:6,fontFamily:FM,fontSize:9,letterSpacing:"0.08em",background:`${T.gold}18`,border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>{notifPerm==="denied"?"Alerts blocked":"Enable alerts"}</button>}
         <form onSubmit={submit} style={{display:"flex",gap:6}}>
           <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())} placeholder="Add ticker"
@@ -2074,11 +2074,31 @@ function ManualAssets(){
 }
 
 /* ─── CSV IMPORTER ───────────────────────────────────── */
-function CSVImporter({onImport}){
+function CSVImporter({onImport,onDedupe}){
   const[broker,setBroker]=useState("Fidelity");
   const[status,setStatus]=useState(null);
   const[busy,setBusy]=useState(false);
+  const[dedupeBusy,setDedupeBusy]=useState(false);
   const fileRef=useRef(null);
+
+  const handleDedupe=()=>{
+    if(!onDedupe||dedupeBusy)return;
+    if(!window.confirm("Scan all imported activity for duplicate rows and remove them? This won't touch SnapTrade data — only your CSV imports."))return;
+    setDedupeBusy(true);setStatus(null);
+    // setTimeout lets the busy state paint before the (synchronous) sweep.
+    setTimeout(()=>{
+      try{
+        const r=onDedupe();
+        if(!r||r.removed===0){
+          setStatus({ok:true,msg:"No duplicate rows found — your history is already clean."});
+        }else{
+          setStatus({ok:true,msg:`Removed ${r.removed} duplicate row${r.removed===1?"":"s"}. ${r.kept} unique entries kept.`});
+        }
+      }catch(err){
+        setStatus({ok:false,msg:err.message||"Dedupe failed"});
+      }finally{setDedupeBusy(false);}
+    },0);
+  };
 
   const handle=async e=>{
     const file=e.target.files?.[0];
@@ -2113,20 +2133,21 @@ function CSVImporter({onImport}){
           SnapTrade only backfills 1–2 years for some brokers. Export your full activity CSV from Fidelity / Robinhood / Coinbase and import it here for complete YTD + lifetime contribution numbers.
         </p>
       </div>
-      <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
         <select value={broker} onChange={e=>setBroker(e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer"}}>
           <option>Fidelity</option><option>Robinhood</option><option>Coinbase</option>
           <option>Schwab</option><option>Vanguard</option><option>Other</option>
         </select>
         <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handle} style={{display:"none"}}/>
         <button onClick={()=>fileRef.current?.click()} disabled={busy} style={{padding:"7px 16px",borderRadius:6,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:busy?T.dim:T.blue,border:"none",color:busy?T.muted:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"Parsing…":"Choose CSV"}</button>
+        {onDedupe&&<button onClick={handleDedupe} disabled={dedupeBusy} title="Scan imported activity and remove duplicate rows" style={{padding:"7px 14px",borderRadius:6,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:dedupeBusy?T.muted:T.text,cursor:dedupeBusy?"not-allowed":"pointer"}}>{dedupeBusy?"Scanning…":"Dedupe history"}</button>}
       </div>
     </div>
     {status&&<div style={{marginTop:10,padding:"9px 12px",borderRadius:8,fontFamily:FM,fontSize:11,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,whiteSpace:"pre-wrap",lineHeight:1.5}}>{status.ok?"✓ ":"✗ "}{status.msg}</div>}
   </div>;
 }
 
-function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,demoMode,onToggleDemo}){
+function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode,onToggleDemo}){
   const{user,signOut,isSupabaseConfigured}=useAuth();
   const[keys,setKeys]=useState({...apiKeys});
   const[saved,setSaved]=useState(false);
@@ -2223,7 +2244,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,demoMode,onToggleDem
       </div>
 
       {/* CSV import for historical backfill */}
-      <CSVImporter onImport={onImportCSV}/>
+      <CSVImporter onImport={onImportCSV} onDedupe={onDedupeCSV}/>
 
       {/* Demo-mode toggle — re-enable the fictional 8-figure book for previews / screenshots */}
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"15px 18px",marginTop:14,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
@@ -2898,6 +2919,43 @@ export default function Mizan(){
     r.price??"",
     r.amount??"",
   ].join("|");
+
+  // One-shot cleanup for users who double-uploaded the same CSV before
+  // import-time dedup shipped. Walks existing imports, keeps the first
+  // occurrence of each fingerprint, syncs the cleaned list to Supabase,
+  // and reconciles snapActivities so totals refresh immediately.
+  const dedupeImports=useCallback(()=>{
+    let existing=[];
+    try{existing=JSON.parse(localStorage.getItem("mizan_imports")||"[]");}catch{}
+    if(!Array.isArray(existing)||existing.length===0)return{removed:0,kept:0};
+    const seen=new Set();
+    const unique=[];
+    for(const r of existing){
+      const fp=fingerprintRow(r);
+      if(seen.has(fp))continue;
+      seen.add(fp);
+      unique.push(r);
+    }
+    const removed=existing.length-unique.length;
+    if(removed===0)return{removed:0,kept:unique.length};
+    localStorage.setItem("mizan_imports",JSON.stringify(unique));
+    persistUserState("mizan_imports",unique);
+    // Rebuild snapActivities so the duplicates also drop out of every
+    // performance/contribution metric the live state feeds.
+    const uniqueIds=new Set(unique.map(r=>r.id));
+    setSnapActivities(prev=>{
+      // Keep non-imported activities (those don't carry _imported and live
+      // only in this state, not in mizan_imports). Filter imported entries
+      // to the de-duped set.
+      const kept=prev.filter(r=>!r._imported||uniqueIds.has(r.id));
+      // Some imported rows might be present in `unique` but missing from
+      // `prev` (rare — only if state diverged). Add them back.
+      const presentIds=new Set(kept.map(r=>r.id));
+      const additions=unique.filter(r=>!presentIds.has(r.id));
+      return [...kept,...additions].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||""));
+    });
+    return{removed,kept:unique.length};
+  },[]);
   const importCSV=useCallback((file,broker)=>{
     return new Promise((resolve,reject)=>{
       const reader=new FileReader();
@@ -3237,6 +3295,11 @@ export default function Mizan(){
       .dock-on:hover{transform:translateY(-2px) scale(1.02);}
       button:not(:disabled){transition:all 0.15s ease;}
 
+      /* TabBar — keep horizontal scrolling but hide the scrollbar so it
+         doesn't look broken on iPhone Safari. Tabs stay reachable via swipe. */
+      .mz-tabbar { scrollbar-width: none; -ms-overflow-style: none; }
+      .mz-tabbar::-webkit-scrollbar { display: none; }
+
       /* Mobile / tablet responsive rules */
       @media (max-width: 900px) {
         .mz-hide-md{display:none!important;}
@@ -3316,7 +3379,7 @@ export default function Mizan(){
         {nav==="markets"   &&<Markets   live={live} news={news} onRefreshNews={syncNews} loadingNews={newsLoad} snapAccounts={visibleAccounts} mapPosition={mapPosition} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={apiKeys.anthropic?.length>20}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} demoMode={demoMode} onToggleDemo={toggleDemo}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} demoMode={demoMode} onToggleDemo={toggleDemo}/>}
         {nav==="about"     &&<About/>}
       </div>
     </main>
