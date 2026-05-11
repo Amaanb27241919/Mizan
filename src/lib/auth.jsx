@@ -120,10 +120,26 @@ export function AuthProvider({ children }) {
 
   const exitRecovery = () => setRecoveryMode(false);
 
+  // Role detection. A user is "root" (glass-break / global admin) if EITHER
+  // their email matches the VITE_OWNER_EMAIL build-time constant, OR Supabase
+  // has stamped them with `app_metadata.role === 'root'` (server-side, can
+  // only be set via service-role key — users can't promote themselves).
+  // `user_metadata` is intentionally NOT consulted: that's user-writable.
+  const ownerEmail = (import.meta.env.VITE_OWNER_EMAIL || '').trim().toLowerCase();
+  const userEmail  = (user?.email || '').toLowerCase();
+  const metadataRole = user?.app_metadata?.role || null;
+  const isRoot = (
+    user?.id === 'single-user'                          // local pass-through mode
+    || (ownerEmail && userEmail === ownerEmail)         // configured owner email
+    || metadataRole === 'root'                          // Supabase-stamped role
+    || metadataRole === 'admin'
+  );
+
   const value = {
     user,
     session,
     loading,
+    isRoot,
     recoveryMode,
     exitRecovery,
     signInWithEmail,        // legacy alias for signInWithPassword

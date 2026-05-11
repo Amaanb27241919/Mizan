@@ -108,17 +108,20 @@ const ETF_LIST=[
   {tk:"AMAPX",nm:"Amana Participation",        cat:"Mutual Fund",  exp:"0.89%",div:"~3.8%", freq:"Monthly",  min:"$2,500",avail:false},
 ];
 
+// Generic broker catalog. NO `mine:true` flags or owner-specific descriptions
+// — every user sees the same neutral list, and `Connected` status is derived
+// from their own SnapTrade `mizan_brokers` localStorage entry.
 const BROKERS=[
-  {id:"FIDELITY", nm:"Fidelity",     mine:true,  desc:"Roth IRA & Taxable"},
-  {id:"ROBINHOOD",nm:"Robinhood",    mine:true,  desc:"Taxable brokerage"},
-  {id:"SCHWAB",   nm:"Schwab",       mine:true,  desc:"Opening 5/15/2026"},
-  {id:"EMPOWER",  nm:"Empower",      mine:true,  desc:"GMF 401(k)"},
-  {id:"COINBASE", nm:"Coinbase",     mine:true,  desc:"Crypto wallet"},
-  {id:"CHASE",    nm:"Chase",        mine:true,  desc:"J.P. Morgan Self-Directed"},
-  {id:"ETRADE",   nm:"E*Trade",      mine:false, desc:"Commission-free"},
-  {id:"VANGUARD", nm:"Vanguard",     mine:false, desc:"Index funds"},
-  {id:"ALPACA",   nm:"Alpaca",       mine:false, desc:"Algo trading"},
-  {id:"WEBULL",   nm:"Webull",       mine:false, desc:"Fractional shares"},
+  {id:"FIDELITY", nm:"Fidelity",     desc:"Brokerage & retirement"},
+  {id:"ROBINHOOD",nm:"Robinhood",    desc:"Commission-free brokerage"},
+  {id:"SCHWAB",   nm:"Schwab",       desc:"Brokerage & retirement"},
+  {id:"EMPOWER",  nm:"Empower",      desc:"401(k) & retirement"},
+  {id:"COINBASE", nm:"Coinbase",     desc:"Crypto wallet"},
+  {id:"CHASE",    nm:"Chase",        desc:"J.P. Morgan Self-Directed"},
+  {id:"ETRADE",   nm:"E*Trade",      desc:"Commission-free"},
+  {id:"VANGUARD", nm:"Vanguard",     desc:"Index funds"},
+  {id:"ALPACA",   nm:"Alpaca",       desc:"Algo trading"},
+  {id:"WEBULL",   nm:"Webull",       desc:"Fractional shares"},
 ];
 
 /* ─── DEMO ACCOUNTS (real tickers, real brokers, expanded book) ─── */
@@ -574,31 +577,26 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
   const totalCash=snapAccounts.reduce((s,a)=>s+(a.cash||0),0);
   // Cards show every connected account (disabled ones dimmed); numbers above
   // are calculated from the parent-filtered `snapAccounts` only.
+  // NO fallback to ACCOUNTS constant — that's the owner's data and would
+  // leak to every other user who signed up.
   const cardSource=allAccounts.length>0?allAccounts:snapAccounts;
-  const acctsForCards=cardSource.length>0
-    ? cardSource.map(a=>({
-        id:a.accountId, nm:`${a.brokerage} — ${a.accountName}`, val:a.balance||0, cash:a.cash||0,
-        type:a.brokerage, authId:a.authorizationId,
-        disabled:disabledAccts.has(a.accountId),
-        color:a.brokerageSlug==="FIDELITY"?T.blue:a.brokerageSlug==="ROBINHOOD"?T.gain
-              :a.brokerageSlug==="EMPOWER"?"#7C3AED":a.brokerageSlug==="COINBASE"?T.gold
-              :a.brokerageSlug==="CHASE"?"#0F4C81":T.muted,
-      }))
-    : ACCOUNTS;
+  const acctsForCards=cardSource.map(a=>({
+    id:a.accountId, nm:`${a.brokerage} — ${a.accountName}`, val:a.balance||0, cash:a.cash||0,
+    type:a.brokerage, authId:a.authorizationId,
+    disabled:disabledAccts.has(a.accountId),
+    color:a.brokerageSlug==="FIDELITY"?T.blue:a.brokerageSlug==="ROBINHOOD"?T.gain
+          :a.brokerageSlug==="EMPOWER"?"#7C3AED":a.brokerageSlug==="COINBASE"?T.gold
+          :a.brokerageSlug==="CHASE"?"#0F4C81":T.muted,
+  }));
   // Stat cards: top 3 accounts by balance, dynamically pulled from real data.
+  // Empty array when no real connections — caller renders the Welcome
+  // banner instead of fallback cards with owner-specific account names.
   const topAccts=[...snapAccounts].sort((a,b)=>(b.balance||0)-(a.balance||0)).slice(0,3);
-  const fallbackCards=[
-    {label:"Roth IRA",  value:"$15,372", sub:"2026 — Maxed", subColor:T.gain},
-    {label:"Robinhood", value:"$12,816", sub:"Taxable"},
-    {label:"401(k)",    value:"$480",    sub:"GMF · Empower"},
-  ];
-  const acctCards=topAccts.length>0
-    ? topAccts.map(a=>({
-        label:a.brokerage,
-        value:kf(a.balance||0),
-        sub:`${a.accountName} · ${a.positions.length} pos`,
-      }))
-    : fallbackCards;
+  const acctCards=topAccts.map(a=>({
+    label:a.brokerage,
+    value:kf(a.balance||0),
+    sub:`${a.accountName} · ${a.positions.length} pos`,
+  }));
   // Chart seeded off current `tot` so demo + live both render an accurate
   // ending value. `tot` is rounded to a stable bucket so tiny live-price
   // wiggles don't reshuffle the curve every render.
@@ -1419,9 +1417,11 @@ function Markets({live,news,onRefreshNews,loadingNews,snapAccounts=[],mapPositio
       if(d?.earningsCalendar)setEarnings(d.earningsCalendar.slice(0,30));
     }).catch(()=>{});
   },[]);
-  // Build a unified holdings table from connected/demo accounts when present,
-  // otherwise fall back to the hardcoded HOLDINGS fixture. Watchlist ETFs are
-  // always appended.
+  // Build a unified holdings table from connected/demo accounts only.
+  // We used to fall back to a hardcoded HOLDINGS fixture (the owner's
+  // sample portfolio) which leaked the owner's positions to every signed-up
+  // user. New users now see an empty quotes table until they connect a
+  // broker or add tickers to the watchlist.
   const liveSrc=snapAccounts.length>0
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition?.(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
     : [];
@@ -2148,10 +2148,13 @@ function CSVImporter({onImport,onDedupe}){
 }
 
 function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode,onToggleDemo}){
-  const{user,signOut,isSupabaseConfigured}=useAuth();
+  const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
   const[keys,setKeys]=useState({...apiKeys});
   const[saved,setSaved]=useState(false);
-  const[sub,setSub]=useState("keys");
+  // Non-root accounts never see the API Keys page — those keys belong on
+  // the server (env vars), not in user-entered fields. Default the sub-tab
+  // to brokers for everyone else.
+  const[sub,setSub]=useState(isRoot?"keys":"brokers");
   const save=()=>{setApiKeys(keys);setGlobalKeys(keys);try{localStorage.setItem("mizan_keys",JSON.stringify(keys));}catch{}persistUserState("mizan_keys",keys);setSaved(true);setTimeout(()=>setSaved(false),2500);};
   const has=k=>(keys[k]||"").length>8;
 
@@ -2173,9 +2176,13 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
     {f:"Paper trading bot",         req:["alpacaId","alpacaSecret"]},
   ];
 
-  const TOTAL_GIVEN=SADAQAH.filter(s=>s.done).reduce((a,b)=>a+b.amt,0);
-  const PLEDGED=SADAQAH.filter(s=>!s.done).reduce((a,b)=>a+b.amt,0);
-  const ZAKAT=(ACCOUNTS.reduce((a,b)=>a+b.val,0)+1455.43)*0.025;
+  // Zakat panel — placeholder until a real per-user Zakat calc lands.
+  // The previous version rendered the OWNER's actual donation history and
+  // zakat numbers from module-level constants, which leaked to every user.
+  // Hide the panel for everyone until it's wired to real user data.
+  const TOTAL_GIVEN=0;
+  const PLEDGED=0;
+  const ZAKAT=0;
 
   return<div style={{display:"flex",flexDirection:"column",gap:20}}>
     {/* Account row — current user + sign out (or single-user mode badge). */}
@@ -2191,10 +2198,20 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
       {!isSupabaseConfigured&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.08em"}}>Set VITE_SUPABASE_URL to enable accounts</span>}
     </div>
 
-    <TabBar tabs={[["keys","API Keys"],["brokers","Connect Accounts"],["assets","Manual Assets"],["zakat","Sadaqah & Zakat"]]} active={sub} onChange={setSub}/>
+    <TabBar
+      tabs={[
+        // API Keys section is admin-only. End-users use server-side keys.
+        ...(isRoot?[["keys","API Keys"]]:[]),
+        ["brokers","Connect Accounts"],
+        ["assets","Manual Assets"],
+        ["zakat","Sadaqah & Zakat"],
+      ]}
+      active={sub}
+      onChange={setSub}
+    />
     {sub==="assets"&&<ManualAssets/>}
 
-    {sub==="keys"&&<>
+    {sub==="keys"&&isRoot&&<>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:20}}>
         <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:480}}>Add keys in order. Finnhub activates real prices immediately. Keys save to localStorage — no re-entry needed.</p>
         <button onClick={save} style={{padding:"9px 24px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.08em",flexShrink:0,background:saved?`${T.gain}18`:T.blue,border:`1px solid ${saved?T.gain:T.blue}`,color:saved?T.gain:"#fff",cursor:"pointer",transition:"all 0.2s"}}>{saved?"Saved ✓":"Save Keys"}</button>
@@ -2235,7 +2252,6 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
           return<div key={b.id} style={{background:T.card,border:`1px solid ${conn?T.blue+"40":T.border}`,borderRadius:12,padding:"13px 16px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
               <span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:conn?T.blue:T.textHi}}>{b.nm}</span>
-              {b.mine&&<Tag label="Mine" color={T.blue}/>}
             </div>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:8}}>{b.desc}</div>
             <Tag label={conn?"Connected":"Not Connected"} color={conn?T.gain:T.muted}/>
@@ -2258,29 +2274,11 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
       </div>
     </>}
 
-    {sub==="zakat"&&<div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
-      <div style={{display:"flex",flexDirection:"column",gap:12}}>
-        <div style={{background:T.card,border:`1px solid ${T.gold}28`,borderRadius:12,padding:20}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.14em",marginBottom:14}}>ZAKAT CALCULATION — 2026</div>
-          {[["Investment accounts",`$${ACCOUNTS.reduce((a,b)=>a+b.val,0).toLocaleString("en-US",{minimumFractionDigits:2})}`],["Halal crypto",`$${(1455.43-106.69).toFixed(2)}`],["Total zakatable","$30,237.58",true],["Nisab threshold","$5,765"],["Zakat rate","2.5%"]].map(([l,v,b])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:12}}><span style={{color:T.muted}}>{l}</span><span style={{color:b?T.textHi:T.text,fontWeight:b?500:400}}>{v}</span></div>)}
-          <div style={{marginTop:14,padding:"12px",background:`${T.gold}0C`,borderRadius:8,border:`1px solid ${T.gold}18`}}><div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:4}}>ZAKAT DUE THIS YEAR</div><div style={{fontFamily:FM,fontSize:24,fontWeight:500,color:T.gold}}>${ZAKAT.toFixed(2)}</div></div>
-        </div>
-        <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:16}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:12}}>PLEDGES — ${PLEDGED.toLocaleString()}</div>
-          {SADAQAH.filter(s=>!s.done).map((d,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:12}}><span style={{color:T.text}}>{d.org}</span><span style={{color:T.gold}}>${d.amt.toLocaleString()}</span></div>)}
-        </div>
-      </div>
-      <div>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:12}}>DONATION HISTORY — ${TOTAL_GIVEN.toLocaleString("en-US",{minimumFractionDigits:2})}</div>
-        <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-          <Tbl cols={[
-            {l:"Date",  r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.dt}</span>},
-            {l:"Organization",r_:r=><span style={{fontFamily:FU,fontSize:12,color:T.text}}>{r.org}</span>},
-            {l:"Amount",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.gold}}>${r.amt.toLocaleString()}</span>},
-            {l:"Status",r_:r=><Tag label={r.done?"Done":"Pledged"} color={r.done?T.gain:T.loss}/>},
-          ]} rows={[...SADAQAH].reverse()}/>
-        </div>
-      </div>
+    {sub==="zakat"&&<div style={{background:T.card,border:`1px dashed ${T.border}`,borderRadius:14,padding:"36px 28px",textAlign:"center"}}>
+      <div style={{fontFamily:FM,fontSize:11,color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:10}}>ZAKAT — COMING SOON</div>
+      <p style={{fontFamily:FU,fontSize:13,color:T.muted,maxWidth:480,margin:"0 auto",lineHeight:1.6}}>
+        Per-user Zakat calculation + donation tracking is being rebuilt to read from your connected accounts. The previous panel rendered placeholder figures and has been temporarily hidden.
+      </p>
     </div>}
   </div>;
 }
@@ -2305,8 +2303,9 @@ function ConnectModal({onClose,snapId}){
       .catch(() => {});
   }, []);
 
-  // Merge: SnapTrade list is authoritative for IDs/names; BROKERS gives our
-  // human-friendly descriptions and "mine" tags for known accounts.
+  // Merge: SnapTrade list is authoritative for IDs/names; BROKERS gives
+  // human-friendly descriptions for popular brands. No `mine` flag — that
+  // implied account ownership by hardcoding owner-specific brokers.
   const mergedBrokers = useMemo(() => {
     const localById = Object.fromEntries(BROKERS.map(b => [b.id, b]));
     const localBySlug = Object.fromEntries(BROKERS.map(b => [b.id.toUpperCase(), b]));
@@ -2317,14 +2316,12 @@ function ConnectModal({onClose,snapId}){
           return {
             id: b.slug || slug,
             nm: b.name || b.display_name || slug,
-            mine: local?.mine || false,
             desc: local?.desc || b.description || b.display_name || "",
             url: b.url, logo: b.logo,
             disabled: b.enabled === false,
           };
         }).sort((a,b)=>{
-          // Connected/mine first, then enabled, then alphabetical
-          if (a.mine !== b.mine) return a.mine ? -1 : 1;
+          // Enabled first, then alphabetical
           if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
           return a.nm.localeCompare(b.nm);
         })
@@ -3111,7 +3108,30 @@ export default function Mizan(){
     }catch{return def;}
   });
 
-  const tickers=[...new Set(HOLDINGS.map(h=>h.tk))];
+  // Tickers we routinely refresh prices for. Built from the user's real
+  // SnapTrade positions + their watchlist + their CSV-imported activity
+  // symbols. Falls back to a small market-bellwether set ONLY when the
+  // user has no connections at all, so first-load Markets still has
+  // something to render. NEVER seeded from the owner's HOLDINGS sample.
+  const tickers=useMemo(()=>{
+    const set=new Set();
+    try{
+      const cached=JSON.parse(localStorage.getItem("mizan_accounts_cache")||"[]");
+      cached.forEach(a=>(a.positions||[]).forEach(p=>{
+        const t=p?.symbol?.symbol||p?.symbol;
+        if(typeof t==="string"&&t)set.add(t);
+      }));
+    }catch{}
+    try{
+      const wl=JSON.parse(localStorage.getItem("mizan_watchlist")||"[]");
+      wl.forEach(w=>w?.symbol&&set.add(w.symbol));
+    }catch{}
+    if(set.size===0){
+      // Generic market bellwethers — not user data.
+      ["SPY","QQQ","AAPL","MSFT","NVDA"].forEach(t=>set.add(t));
+    }
+    return[...set];
+  },[]);
   const isLive=live.length>0;
 
   const sync=useCallback(async()=>{
