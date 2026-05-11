@@ -355,7 +355,7 @@ async function fetchAINews(){
 }
 
 /* ─── MICRO COMPONENTS ───────────────────────────────── */
-const f$=(v,d=2)=>v!=null&&!isNaN(v)?`$${Math.abs(+v).toFixed(d)}`:"-";
+const f$=(v,d=2)=>v!=null&&!isNaN(v)?`$${Math.abs(+v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d})}`:"-";
 const fp=v=>v!=null&&!isNaN(v)?`${+v>0?"+":""}${(+v).toFixed(2)}%`:"-";
 const fc=v=>!v||isNaN(v)?T.muted:+v>0?T.gain:+v<0?T.loss:T.muted;
 const kf=v=>v>=1e9?`$${(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(1)}M`:`$${v.toLocaleString()}`;
@@ -2096,7 +2096,7 @@ function CSVImporter({onImport}){
   </div>;
 }
 
-function Settings({apiKeys,setApiKeys,onConnect,onImportCSV}){
+function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,demoMode,onToggleDemo}){
   const{user,signOut,isSupabaseConfigured}=useAuth();
   const[keys,setKeys]=useState({...apiKeys});
   const[saved,setSaved]=useState(false);
@@ -2194,6 +2194,17 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV}){
 
       {/* CSV import for historical backfill */}
       <CSVImporter onImport={onImportCSV}/>
+
+      {/* Demo-mode toggle — re-enable the fictional 8-figure book for previews / screenshots */}
+      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"15px 18px",marginTop:14,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi,marginBottom:4}}>Demo Mode</div>
+          <p style={{fontFamily:FU,fontSize:11,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+            Replaces your live data with a fictional ~$42M halal portfolio across 8 brokers — useful for screenshots, sharing with friends, or previewing MIZAN before connecting brokers. Toggle off to return to your real connections.
+          </p>
+        </div>
+        <button onClick={onToggleDemo} style={{padding:"7px 16px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,color:demoMode?T.gold:T.text,cursor:"pointer",flexShrink:0}}>{demoMode?"Demo: ON":"Demo: OFF"}</button>
+      </div>
     </>}
 
     {sub==="zakat"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
@@ -2644,7 +2655,19 @@ export default function Mizan(){
   const[snapAccounts,setSnapAccounts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_accounts_cache")||"[]");}catch{return[];}});
   const[snapActivities,setSnapActivities]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]");}catch{return[];}});
   const[snapDocuments,setSnapDocuments]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_documents_cache")||"[]");}catch{return[];}});
-  const[demoMode,setDemoMode]=useState(()=>{try{return localStorage.getItem("mizan_demo")==="1";}catch{return false;}});
+  // Demo defaults to ON for users with no real connections (so they don't land
+  // on an empty app), OFF for users who have connected brokers. Explicit user
+  // toggle (mizan_demo = "0" or "1") always wins.
+  const[demoMode,setDemoMode]=useState(()=>{
+    try{
+      const explicit=localStorage.getItem("mizan_demo");
+      if(explicit==="0")return false;
+      if(explicit==="1")return true;
+      const hasReal=localStorage.getItem("mizan_has_real_data")==="1";
+      return!hasReal;
+    }catch{return false;}
+  });
+  const[hasRealData,setHasRealData]=useState(()=>{try{return localStorage.getItem("mizan_has_real_data")==="1";}catch{return false;}});
   const[disabledAccts,setDisabledAccts]=useState(()=>{try{return new Set(JSON.parse(localStorage.getItem("mizan_disabled_accts")||"[]"));}catch{return new Set();}});
   const[auto,setAuto2]=useState(()=>{try{return localStorage.getItem("mizan_auto")==="1";}catch{return false;}}); // default OFF — prices stay static unless user opts in
   const autoRef=useRef(null);
@@ -2781,7 +2804,17 @@ export default function Mizan(){
     }
     try{
       const r=await apiFetch("/api/snaptrade/all");
-      if(r.ok){const d=await r.json();persistAccounts(Array.isArray(d.accounts)?d.accounts:[]);}
+      if(r.ok){
+        const d=await r.json();
+        const accts=Array.isArray(d.accounts)?d.accounts:[];
+        persistAccounts(accts);
+        // Flag that this user has real broker connections — used to auto-hide
+        // the demo toggle once they've connected at least one account.
+        if(accts.length>0&&!hasRealData){
+          setHasRealData(true);
+          try{localStorage.setItem("mizan_has_real_data","1");}catch{}
+        }
+      }
     }catch{/* backend down — ignore */}
     try{
       const r2=await apiFetch("/api/snaptrade/activities");
@@ -3088,12 +3121,14 @@ export default function Mizan(){
     const time=`${get("hour")}:${get("minute")}:${get("second")} ${get("dayPeriod")}`;
     const wd=get("weekday");
 
-    // User's local time + timezone abbreviation (resolved from browser locale)
+    // User's local time + timezone abbreviation (resolved from browser locale).
+    // Keep literals (the colon + space + AM/PM separator) — only strip the
+    // timeZoneName part and re-append it cleanly at the end.
     const localFmt=new Intl.DateTimeFormat([],{hour:"numeric",minute:"2-digit",hour12:true,timeZoneName:"short"});
     const localParts=localFmt.formatToParts(clockNow);
-    const localTime=localParts.filter(p=>p.type!=="literal"&&p.type!=="timeZoneName").map(p=>p.value).join("").replace(/^(\d):/, "$1:");
+    const localTime=localParts.filter(p=>p.type!=="timeZoneName").map(p=>p.value).join("").trim().replace(/\s+$/,"").replace(/,\s*$/,"");
     const localTZ=localParts.find(p=>p.type==="timeZoneName")?.value||"";
-    const localDisplay=`${localTime.replace(/\s+/g," ").trim()} ${localTZ}`.trim();
+    const localDisplay=localTZ?`${localTime} ${localTZ}`:localTime;
     // Pull NYC h+m as numbers for status logic
     const hmFmt=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hour12:false});
     const hm=hmFmt.format(clockNow);
@@ -3169,7 +3204,7 @@ export default function Mizan(){
       {/* Right: compact action toggles + sync */}
       <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
         <button onClick={cycleTheme} title={`Theme: ${themeMode} (resolved: ${resolvedTheme}).`} style={{fontFamily:FM,fontSize:11,color:T.muted,padding:"5px 9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}>{themeMode==="auto"?(resolvedTheme==="dark"?"🌙":"☀"):themeMode==="dark"?"🌙":"☀"}</button>
-        <button onClick={toggleDemo} style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{demoMode?"DEMO":"DEMO"}</button>
+        {(!hasRealData||demoMode)&&<button onClick={toggleDemo} title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
         <button onClick={()=>setAuto(v=>!v)} title={`Auto-sync ${auto?"on":"off"}`} style={{fontFamily:FM,fontSize:9,color:auto?T.gain:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:auto?`${T.gain}14`:"transparent",border:`1px solid ${auto?T.gain+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{auto?"AUTO":"AUTO"}</button>
         <button onClick={()=>setConn(true)} style={{fontFamily:FM,fontSize:10,color:T.text,padding:"5px 12px",background:T.card,border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",letterSpacing:"0.04em"}}>+ Connect</button>
         <button onClick={sync} disabled={fetching} style={{fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",padding:"6px 14px",borderRadius:8,border:"none",cursor:fetching?"not-allowed":"pointer",background:fetching?T.dim:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,color:fetching?T.muted:"#fff",boxShadow:fetching?"none":`0 2px 8px ${T.blue}40`,transition:"all 0.15s"}}>{fetching?"Syncing…":"Sync All"}</button>
@@ -3183,7 +3218,7 @@ export default function Mizan(){
         {nav==="markets"   &&<Markets   live={live} news={news} onRefreshNews={syncNews} loadingNews={newsLoad} snapAccounts={visibleAccounts} mapPosition={mapPosition} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={apiKeys.anthropic?.length>20}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} demoMode={demoMode} onToggleDemo={toggleDemo}/>}
         {nav==="about"     &&<About/>}
       </div>
     </main>

@@ -41,3 +41,4 @@ yarn-error.log*
 # PWA icons regenerated automatically on server boot
 public/icon-192.png
 public/icon-512.png
+.vercel
