@@ -659,6 +659,18 @@ function parseCSV(text,broker){
     const units=num(get(r,"quantity","shares","amount of shares","quantity transacted"));
     const price=num(get(r,"price","price per share","average price","price at transaction"));
     const rawAmt=num(get(r,"amount","amount ($)","amount usd","net amount","transaction amount","total","subtotal"));
+
+    // Capture per-row account info when the CSV exposes it. Fidelity's
+    // multi-account export carries "Account" + "Account Number" columns
+    // (e.g., "ROTH IRA" / "259683091"); without this every row got tagged
+    // just "Fidelity" and the Activity table couldn't tell ROTH from
+    // Taxable from Individual. Robinhood + Coinbase exports are single-
+    // account so account remains empty there.
+    const acctName=get(r,"account","account name","account type");
+    const acctNumber=get(r,"account number","account #","number");
+    const acctLabel=acctName?acctName.trim():"";
+    const institutionLabel=acctLabel?`${broker} — ${acctLabel}`:broker;
+
     let amount;
     if(signMode==="auto"){
       // ACH/JNLC: positive amount = DEPOSIT, negative = WITHDRAWAL
@@ -672,7 +684,7 @@ function parseCSV(text,broker){
     // Reclassify ACH negatives as WITHDRAWAL so totals add up correctly
     const finalType=(signMode==="auto"&&rawAmt<0)?"WITHDRAWAL":type;
     rows.push({
-      id:`csv-${broker}-${i}-${date}`,
+      id:`csv-${broker}-${acctLabel||"main"}-${i}-${date}`,
       trade_date:date,
       type:finalType,
       symbol:symbol?{symbol}:null,
@@ -680,8 +692,11 @@ function parseCSV(text,broker){
       price:price||null,
       amount,
       currency:{code:"USD"},
-      account:null,
-      institution_name:broker,
+      // When we have account info, fake a SnapTrade-shaped account object
+      // so ActivityPanel's acctNameById lookup can match if the same
+      // account is also connected via SnapTrade.
+      account:acctLabel?{id:acctNumber||acctLabel,name:acctLabel}:null,
+      institution_name:institutionLabel,
       _imported:true,
     });
   }
