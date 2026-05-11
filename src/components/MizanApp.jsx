@@ -427,7 +427,79 @@ function KV({label,value,sub,subColor,accent}){return<div className="kv-card" st
   {sub&&<div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:subColor||T.muted,marginTop:T.s2,letterSpacing:"0.02em"}}>{sub}</div>}
 </div>;}
 
-function Sk({vals,color,w=72,h=22}){if(!vals?.length)return null;const mn=Math.min(...vals),mx=Math.max(...vals)+.01;const pts=vals.map((v,i)=>({x:(i/(vals.length-1))*(w-2)+1,y:h-2-((v-mn)/(mx-mn))*(h-4)+1}));const d=pts.map((p,i)=>`${i===0?"M":"L"} ${p.x} ${p.y}`).join(" ");return<svg width={w} height={h} style={{display:"block",flexShrink:0}}><path d={d} fill="none" stroke={color||T.blue} strokeWidth={1.5} strokeLinecap="round"/></svg>;}
+function Sk({vals,color,w=72,h=22,fill}){
+  if(!vals?.length)return null;
+  const mn=Math.min(...vals),mx=Math.max(...vals)+.01;
+  const pts=vals.map((v,i)=>({x:(i/(vals.length-1))*(w-2)+1,y:h-2-((v-mn)/(mx-mn))*(h-4)+1}));
+  const d=pts.map((p,i)=>`${i===0?"M":"L"} ${p.x} ${p.y}`).join(" ");
+  const c=color||T.blue;
+  const areaD=fill?`${d} L ${w-1} ${h-1} L 1 ${h-1} Z`:null;
+  const gid=`spark-${c.replace("#","")}`;
+  return<svg width={w} height={h} style={{display:"block",flexShrink:0,overflow:"visible"}}>
+    {fill&&<defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stopColor={c} stopOpacity={0.35}/>
+      <stop offset="100%" stopColor={c} stopOpacity={0}/>
+    </linearGradient></defs>}
+    {fill&&<path d={areaD} fill={`url(#${gid})`}/>}
+    <path d={d} fill="none" stroke={c} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>;
+}
+
+// Donut chart for allocation breakdowns. Slices come in as
+// [{label, value, color}]. Renders SVG arcs with a center hole + label.
+function Donut({slices,size=180,thickness=22,centerLabel,centerValue}){
+  const total=slices.reduce((s,x)=>s+(x.value||0),0)||1;
+  const r=size/2-thickness/2;
+  const cx=size/2,cy=size/2;
+  let acc=0;
+  const arc=(start,end)=>{
+    const a0=(start-90)*Math.PI/180,a1=(end-90)*Math.PI/180;
+    const x0=cx+r*Math.cos(a0),y0=cy+r*Math.sin(a0);
+    const x1=cx+r*Math.cos(a1),y1=cy+r*Math.sin(a1);
+    const large=end-start>180?1:0;
+    return`M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1}`;
+  };
+  return<div style={{position:"relative",width:size,height:size}}>
+    <svg width={size} height={size} style={{display:"block",overflow:"visible"}}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={T.dim} strokeWidth={thickness}/>
+      {slices.map((s,i)=>{
+        const pct=(s.value||0)/total;
+        const start=acc*360;const end=(acc+pct)*360;
+        acc+=pct;
+        if(pct<=0)return null;
+        // Handle full-circle edge case (single non-zero slice = 100%)
+        if(pct>=0.999)return<circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={thickness}/>;
+        return<path key={i} d={arc(start,end)} fill="none" stroke={s.color} strokeWidth={thickness} strokeLinecap="butt"/>;
+      })}
+    </svg>
+    {(centerLabel||centerValue)&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",pointerEvents:"none"}}>
+      {centerLabel&&<div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:500,marginBottom:2}}>{centerLabel}</div>}
+      {centerValue&&<div style={{fontFamily:FU,fontSize:20,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{centerValue}</div>}
+    </div>}
+  </div>;
+}
+
+// Bento tile wrapper. Adds glass surface, hover lift, optional gradient
+// background, and flexible grid-area placement via `span`.
+function BentoTile({children,span="auto",accent,gradient,glass,style,onClick}){
+  const baseStyle={
+    background:gradient||(glass?T.glass:T.card),
+    border:`1px solid ${accent?accent+"40":T.border}`,
+    borderRadius:T.rLg,
+    padding:`${T.s5} ${T.s5}`,
+    boxShadow:"var(--sh-md)",
+    backdropFilter:glass?"blur(16px) saturate(160%)":undefined,
+    WebkitBackdropFilter:glass?"blur(16px) saturate(160%)":undefined,
+    gridColumn:span.col||undefined,
+    gridRow:span.row||undefined,
+    transition:"transform 0.18s, box-shadow 0.2s, border-color 0.2s",
+    cursor:onClick?"pointer":"default",
+    position:"relative",
+    overflow:"hidden",
+    ...(style||{}),
+  };
+  return<div className="bento-tile" onClick={onClick} style={baseStyle}>{children}</div>;
+}
 
 function TT2({active,payload}){if(!active||!payload?.length)return null;return<div style={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:8,padding:"6px 12px",fontFamily:FM,fontSize:11,color:T.textHi}}>${payload[0]?.value?.toLocaleString?.("en-US",{minimumFractionDigits:2})}</div>;}
 
@@ -782,147 +854,224 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
   // users saw a hardcoded sample portfolio.
   const isEmpty=snapAccounts.length===0&&merged.length===0;
 
-  return<div style={{display:"flex",flexDirection:"column",gap:20}}>
-    {isEmpty&&<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"28px 32px",boxShadow:T.shadow,textAlign:"center"}}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",marginBottom:10}}>WELCOME TO MĪZAN</div>
-      <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,marginBottom:8}}>Connect your first brokerage</div>
-      <div style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.6,maxWidth:520,margin:"0 auto 22px"}}>
+  // Allocation slices: equity vs cash vs (future: real estate, gold, etc.).
+  // Built from positions grouped by Sharia-compliance status, plus cash.
+  const allocSlices=(()=>{
+    const halal=merged.filter(h=>h.sh_==="halal").reduce((s,h)=>s+mv(h),0);
+    const review=merged.filter(h=>h.sh_==="review").reduce((s,h)=>s+mv(h),0);
+    const haramTot=merged.filter(h=>h.sh_==="haram").reduce((s,h)=>s+mv(h),0);
+    return[
+      {label:"Halal",        value:halal,    color:T.gain},
+      {label:"Review",       value:review,   color:T.gold},
+      {label:"Non-compliant",value:haramTot, color:T.loss},
+      {label:"Cash",         value:totalCash,color:T.blue},
+    ].filter(s=>s.value>0);
+  })();
+
+  // Today's spark — last 20 chart points if available, otherwise synthetic.
+  const heroSpark=chart.length>0
+    ? chart.slice(-20).map(p=>p.value)
+    : Array.from({length:20},(_,i)=>tot*(0.95+i*0.0025));
+  const halalPct=tot>0?((tot-haramV)/tot)*100:100;
+  const fmtUSD=v=>`$${(+v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+
+  return<div className="bento" style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    {/* Welcome state */}
+    {isEmpty&&<BentoTile glass style={{textAlign:"center",padding:`${T.s10} ${T.s8}`}}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.22em",fontWeight:600,marginBottom:T.s3}}>WELCOME TO MĪZAN</div>
+      <div style={{fontFamily:FU,fontSize:30,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s2}}>Connect your first brokerage</div>
+      <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:540,margin:`0 auto ${T.s6}`}}>
         Link Fidelity, Robinhood, Schwab, Coinbase, or any of 60+ brokers via SnapTrade. Your real holdings, activity, and Sharia screening will appear here.
       </div>
-      <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
-        <button onClick={onConnect} style={{padding:"10px 22px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,border:"none",color:"#fff",cursor:"pointer",boxShadow:`0 4px 14px ${T.blue}55`}}>+ Connect Account</button>
-        <button onClick={onToggleDemoFromBanner} style={{padding:"10px 22px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>Try Demo Mode →</button>
+      <div style={{display:"flex",gap:T.s2,justifyContent:"center",flexWrap:"wrap"}}>
+        <button onClick={onConnect} className="btn-primary" style={{fontSize:13,padding:`12px ${T.s5}`}}>+ Connect Account</button>
+        <button onClick={onToggleDemoFromBanner} className="btn-ghost" style={{fontSize:13,padding:`11px ${T.s5}`,color:T.gold,borderColor:T.gold+"40"}}>Try Demo Mode →</button>
       </div>
-    </div>}
-    {haramV>0&&<div style={{padding:"9px 16px",background:T.lossBg,border:`1px solid ${T.loss}25`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-      <span style={{fontFamily:FM,fontSize:11,color:T.loss}}>{haram.map(h=>h.tk).join(", ")} — Non-compliant · {f$(haramV)}</span>
-      <button onClick={()=>onNav("portfolio")} style={{fontFamily:FM,fontSize:9,color:T.loss,background:"transparent",border:`1px solid ${T.loss}40`,borderRadius:6,padding:"3px 10px",cursor:"pointer",letterSpacing:"0.08em"}}>EXIT PLAN →</button>
+    </BentoTile>}
+
+    {/* Compliance alert ribbon */}
+    {haramV>0&&<div style={{padding:`${T.s2} ${T.s4}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:T.s2}}>
+      <span style={{fontFamily:FM,fontSize:12,color:T.loss}}>{haram.map(h=>h.tk).join(", ")} — Non-compliant · {f$(haramV)}</span>
+      <button onClick={()=>onNav("portfolio")} style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.loss,background:"transparent",border:`1px solid ${T.loss}40`,borderRadius:T.rMd,padding:`4px ${T.s3}`,cursor:"pointer",letterSpacing:"0.08em"}}>EXIT PLAN →</button>
     </div>}
 
-    {/* Value card */}
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"22px 26px"}}>
-      <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>TOTAL PORTFOLIO VALUE{snapAccounts.length>0&&<span style={{color:T.blue,marginLeft:8}}>● LIVE FROM SNAPTRADE</span>}</div>
-      <div style={{display:"flex",alignItems:"baseline",gap:14,marginBottom:6,flexWrap:"wrap"}}>
-        <div style={{fontFamily:FM,fontSize:34,fontWeight:500,color:T.textHi,letterSpacing:"-0.02em"}}>{kf(tot)}</div>
-        <Tag label={`${gain>=0?"+":""}${kf(Math.abs(gain))}`} color={gain>=0?T.gain:T.loss}/>
-        <Tag label={fp(gpc)} color={gpc>=0?T.gain:T.loss}/>
-      </div>
-      <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginBottom:18,display:"flex",gap:14}}>
-        <span>Today&nbsp;<span style={{color:fc(today)}}>{today>=0?"+":""}{f$(Math.abs(today))}</span></span>
-        <span>·</span>
-        <span style={{display:"flex",gap:5,alignItems:"center"}}>
-          <LiveDot on={live.length>0}/>&nbsp;{live.length>0?`${live.length} tickers`:"Mock data"}
-        </span>
-      </div>
-      <div style={{display:"flex",gap:5,marginBottom:10,alignItems:"center"}}>
-        {["1Y","3Y","5Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:"3px 10px",borderRadius:6,fontFamily:FM,fontSize:9,letterSpacing:"0.06em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer"}}>{r}</button>)}
-        <div style={{marginLeft:"auto",display:"flex",gap:14,fontFamily:FM,fontSize:9,color:T.muted}}>
-          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:2,background:T.blue,display:"inline-block"}}/>Portfolio value</span>
-          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:2,background:T.gold,display:"inline-block"}}/>Cumulative contributions</span>
+    {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:T.s4}}>
+      {/* HERO — Portfolio value with gradient + sparkline */}
+      <BentoTile style={{
+        background:`radial-gradient(circle at 0% 0%, ${T.blue}1F, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gold}14, transparent 50%), ${T.card}`,
+        borderColor:T.blue+"30",
+        padding:`${T.s6} ${T.s6}`,
+        minHeight:240,
+      }}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600}}>TOTAL PORTFOLIO VALUE
+            {snapAccounts.length>0&&<span style={{color:T.gain,marginLeft:T.s2,display:"inline-flex",alignItems:"center",gap:5}}><LiveDot on pulse/>LIVE</span>}
+          </div>
+          <div style={{display:"flex",gap:T.s1}}>
+            {["1Y","3Y","5Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{r}</button>)}
+          </div>
         </div>
+        <div style={{display:"flex",alignItems:"baseline",gap:T.s3,marginBottom:T.s1,flexWrap:"wrap"}}>
+          <div style={{fontFamily:FU,fontSize:46,fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(tot)}</div>
+        </div>
+        <div style={{display:"flex",gap:T.s4,marginTop:T.s2,fontFamily:FM,fontSize:12,color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:T.s1}}>
+            <span style={{color:gain>=0?T.gain:T.loss,fontWeight:600}}>{gain>=0?"+":""}{kf(Math.abs(gain))}</span>
+            <span style={{color:gpc>=0?T.gain:T.loss}}>({fp(gpc)})</span>
+            all-time
+          </span>
+          <span style={{color:T.dim}}>·</span>
+          <span>Today <span style={{color:fc(today),fontWeight:600}}>{today>=0?"+":""}{f$(Math.abs(today))}</span></span>
+        </div>
+        <div style={{marginTop:T.s4,height:120}}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chart} margin={{top:6,right:6,bottom:0,left:0}}>
+              <defs><linearGradient id="hero-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.blue} stopOpacity={0.35}/><stop offset="100%" stopColor={T.blue} stopOpacity={0}/></linearGradient></defs>
+              <XAxis dataKey="ts" type="number" domain={["dataMin","dataMax"]} scale="time" hide/>
+              <YAxis hide domain={["dataMin","auto"]}/>
+              <Tooltip
+                labelFormatter={ts=>new Date(ts).toLocaleDateString("en-US",{year:"numeric",month:"short"})}
+                formatter={(v,name)=>[fmtUSD(v),name==="value"?"Portfolio":"Contributions"]}
+                contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)"}}
+                itemStyle={{color:T.textHi}} labelStyle={{color:T.muted,fontSize:10}}/>
+              <Area type="monotone" dataKey="value" stroke={T.blue} strokeWidth={2} fill="url(#hero-g)" dot={false}/>
+              <Line type="monotone" dataKey="contrib" stroke={T.gold} strokeWidth={1.5} dot={false} strokeDasharray="3 3"/>
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </BentoTile>
+
+      {/* Side stack: Zakat + Compliance + Cash */}
+      <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+        <BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKAT DUE</div>
+          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(tot*0.025)}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>2.5% of net worth</div>
+        </BentoTile>
+        <BentoTile>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANCE</div>
+          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:halalPct>=95?T.gain:halalPct>=70?T.gold:T.loss,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{halalPct.toFixed(1)}%</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{merged.filter(h=>h.sh_==="halal").length} of {merged.length} halal</div>
+        </BentoTile>
+        {totalCash>0&&<BentoTile>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CASH ON HAND</div>
+          <div style={{fontFamily:FU,fontSize:24,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalCash)}</div>
+        </BentoTile>}
       </div>
-      <ResponsiveContainer width="100%" height={220}>
-        <ComposedChart data={chart} margin={{top:6,right:14,bottom:8,left:14}}>
-          <defs><linearGradient id="og" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={T.blue} stopOpacity={0.22}/><stop offset="95%" stopColor={T.blue} stopOpacity={0}/></linearGradient></defs>
-          <CartesianGrid stroke={T.border} strokeDasharray="2 4" vertical={false}/>
-          <XAxis dataKey="ts" type="number" domain={["dataMin","dataMax"]} scale="time"
-            tickFormatter={ts=>new Date(ts).getFullYear()}
-            tick={{fontFamily:FM,fontSize:9,fill:T.muted}}
-            axisLine={{stroke:T.border}} tickLine={false}
-            minTickGap={40}/>
-          <YAxis tickFormatter={v=>kf(v)}
-            tick={{fontFamily:FM,fontSize:9,fill:T.muted}}
-            axisLine={false} tickLine={false}
-            width={56}/>
-          <Tooltip
-            labelFormatter={ts=>new Date(ts).toLocaleDateString("en-US",{year:"numeric",month:"short"})}
-            formatter={(v,name)=>[kf(v),name==="value"?"Portfolio":"Contributions"]}
-            contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:8,fontFamily:FM,fontSize:11}}
-            itemStyle={{color:T.textHi}} labelStyle={{color:T.muted,fontSize:10}}/>
-          <Area type="monotone" dataKey="value" stroke={T.blue} strokeWidth={1.5} fill="url(#og)" dot={false}/>
-          <Line type="monotone" dataKey="contrib" stroke={T.gold} strokeWidth={1.5} dot={false} strokeDasharray="3 3"/>
-        </ComposedChart>
-      </ResponsiveContainer>
     </div>
 
-    {/* Top 3 accounts by balance + Zakat */}
-    <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-      {acctCards.map(c=><KV key={c.label} label={c.label} value={c.value} sub={c.sub} subColor={c.subColor}/>)}
-      <KV label="Zakat Due"  value={kf(tot*0.025)} sub="2.5% of net worth" subColor={T.gold} accent={T.gold}/>
-    </div>
-    {totalCash>0&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em"}}>● Cash on hand: <span style={{color:T.text}}>{kf(totalCash)}</span></div>}
-
-    {/* Performance — derived from /activities */}
-    <div>
-      <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:12}}>PERFORMANCE{metrics.activityCount>0?<span style={{color:T.blue,marginLeft:8}}>● {metrics.activityCount} activities</span>:<span style={{color:T.muted,marginLeft:8}}>· Sync to populate</span>}</div>
-      <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <KV label="Total Return"     value={`${gain>=0?"+":""}${kf(Math.abs(gain))}`} sub={totCost>0?fp(gpc):"Unrealized"} subColor={fc(gain)}/>
-        <KV label="YTD Contributions" value={kf(metrics.ytdContrib||0)}     sub={`This year`} subColor={T.gain}/>
-        <KV label="All-Time Contrib." value={kf(metrics.allTimeContrib||0)} sub="Lifetime deposits"/>
-        <KV label="YTD Dividends"     value={kf(metrics.ytdDividends||0)}   sub="Cash received" subColor={T.gold}/>
-      </div>
-      <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginTop:10}}>
-        <KV label="All-Time Dividends" value={kf(metrics.allTimeDividends||0)} sub="Lifetime"/>
-        <KV label="Fees Paid (YTD)"    value={kf(metrics.ytdFees||0)}           sub={`$${(metrics.allTimeFees||0).toFixed(0)} all-time`} subColor={T.loss}/>
-        <KV label="YTD Withdrawals"    value={kf(metrics.ytdWithdrawals||0)}    sub="Out-flow" subColor={T.muted}/>
-        <KV label="Net YTD Inflow"     value={kf((metrics.ytdContrib||0)-(metrics.ytdWithdrawals||0))} sub="Deposits − withdrawals" subColor={T.gain}/>
-      </div>
-    </div>
-
-    {/* Sector breakdown — by symbol type for now (Stock / ETF / Fund / Crypto) */}
-    <SectorBreakdown holdings={merged} total={equityValue}/>
-
-    {/* Top holdings */}
-    <div>
-      <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:14}}>TOP HOLDINGS{snapAccounts.length>0&&<span style={{color:T.blue,marginLeft:8}}>● REAL POSITIONS</span>}</div>
-      {top.map(h=>{
-        const gpct=gp(h),pof=tot>0?mv(h)/tot*100:0;
-        return<div key={h.tk+(h.ac_||"")} style={{display:"flex",alignItems:"center",gap:14,padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
-          <div style={{width:52}}>
-            <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>{h.tk}</div>
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginTop:1}}>{h.br}</div>
+    {/* ─── BENTO ROW 2: Allocation donut + Performance metrics ─── */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:T.s4}}>
+      <BentoTile>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ALLOCATION</div>
+        {allocSlices.length>0?<div style={{display:"flex",gap:T.s5,alignItems:"center",flexWrap:"wrap"}}>
+          <Donut slices={allocSlices} size={170} thickness={20} centerLabel="Total" centerValue={kf(allocSlices.reduce((s,x)=>s+x.value,0))}/>
+          <div style={{display:"flex",flexDirection:"column",gap:T.s2,flex:1,minWidth:140}}>
+            {allocSlices.map(s=>{
+              const t=allocSlices.reduce((a,b)=>a+b.value,0);
+              const pct=t>0?(s.value/t*100):0;
+              return<div key={s.label} style={{display:"flex",alignItems:"center",gap:T.s2}}>
+                <span style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/>
+                <span style={{fontFamily:FU,fontSize:13,color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
+                <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(1)}%</span>
+              </div>;
+            })}
           </div>
-          <div style={{flex:1}}>
-            <div style={{height:2,background:T.dim,borderRadius:1,overflow:"hidden"}}>
-              <div style={{height:"100%",width:`${Math.min(pof*4,100)}%`,background:h.sh_==="haram"?T.loss:T.blue,borderRadius:1}}/>
+        </div>:<div style={{fontFamily:FU,fontSize:13,color:T.muted,padding:`${T.s5} 0`,textAlign:"center"}}>Connect a brokerage to see your allocation.</div>}
+      </BentoTile>
+
+      <BentoTile>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>PERFORMANCE</span>
+          {metrics.activityCount>0&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.06em"}}>● {metrics.activityCount} activities</span>}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",gap:T.s4}}>
+          {[
+            {label:"Total Return",  value:`${gain>=0?"+":""}${kf(Math.abs(gain))}`,sub:totCost>0?fp(gpc):"Unrealized",subColor:fc(gain)},
+            {label:"YTD Contrib.",  value:kf(metrics.ytdContrib||0),                sub:"This year",                    subColor:T.gain},
+            {label:"All-Time",       value:kf(metrics.allTimeContrib||0),            sub:"Lifetime deposits"},
+            {label:"YTD Dividends", value:kf(metrics.ytdDividends||0),               sub:"Cash received",                subColor:T.gold},
+            {label:"Fees (YTD)",    value:kf(metrics.ytdFees||0),                    sub:`$${(metrics.allTimeFees||0).toFixed(0)} all-time`,subColor:T.loss},
+            {label:"Net Inflow",    value:kf((metrics.ytdContrib||0)-(metrics.ytdWithdrawals||0)),sub:"Deposits − withdrawals",subColor:T.gain},
+          ].map(s=><div key={s.label}>
+            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1,textTransform:"uppercase"}}>{s.label}</div>
+            <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.value}</div>
+            {s.sub&&<div style={{fontFamily:FM,fontSize:10,fontWeight:500,color:s.subColor||T.muted,marginTop:T.s1}}>{s.sub}</div>}
+          </div>)}
+        </div>
+      </BentoTile>
+    </div>
+
+    {/* ─── BENTO ROW 3: Top Holdings ────────────────── */}
+    {top.length>0&&<BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TOP HOLDINGS</span>
+        {snapAccounts.length>0&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.06em"}}>● REAL POSITIONS</span>}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+        {top.map(h=>{
+          const gpct=gp(h),pof=tot>0?mv(h)/tot*100:0;
+          return<div key={h.tk+(h.ac_||"")} style={{display:"flex",alignItems:"center",gap:T.s4,padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
+            <div style={{width:56}}>
+              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{h.tk}</div>
+              <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2,letterSpacing:"0.02em"}}>{h.br}</div>
             </div>
-          </div>
-          <div style={{width:80,textAlign:"right"}}>
-            <div style={{fontFamily:FM,fontSize:12,color:T.textHi}}>{f$(mv(h))}</div>
-            <div style={{fontFamily:FM,fontSize:10,color:fc(gpct)}}>{fp(gpct)}</div>
-          </div>
-          <Sk vals={Array.from({length:20},()=>mv(h)*(1+(Math.random()-.48)*.02))} color={fc(gpct)} w={64} h={20}/>
-        </div>;
-      })}
-    </div>
-
-    {/* Accounts */}
-    <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>ACCOUNTS{disabledAccts.size>0&&<span style={{color:T.muted,marginLeft:8}}>· {disabledAccts.size} hidden from totals</span>}</span>
+            <div style={{flex:1,minWidth:50}}>
+              <div style={{height:4,background:T.dim,borderRadius:2,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${Math.min(pof*4,100)}%`,background:`linear-gradient(90deg, ${h.sh_==="haram"?T.loss:T.blue}, ${h.sh_==="haram"?T.loss:T.blueDim})`,borderRadius:2,transition:"width 0.4s"}}/>
+              </div>
+              <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginTop:T.s1,letterSpacing:"0.04em"}}>{pof.toFixed(1)}% of book</div>
+            </div>
+            <div style={{width:90,textAlign:"right"}}>
+              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{f$(mv(h))}</div>
+              <div style={{fontFamily:FM,fontSize:10,fontWeight:500,color:fc(gpct),marginTop:2}}>{fp(gpct)}</div>
+            </div>
+            <Sk vals={Array.from({length:24},()=>mv(h)*(1+(Math.random()-.48)*.02))} color={fc(gpct)} w={80} h={28} fill/>
+          </div>;
+        })}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:8}}>
+    </BentoTile>}
+
+    {/* ─── BENTO ROW 4: Accounts ────────────────────── */}
+    {acctsForCards.length>0&&<BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ACCOUNTS{disabledAccts.size>0&&<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {disabledAccts.size} hidden</span>}</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:T.s2}}>
         {acctsForCards.map(a=>{
           const dim=a.disabled;
-          return<div key={a.id} style={{background:T.card,border:`1px solid ${dim?T.border:T.border}`,borderRadius:12,padding:"13px 16px",position:"relative",opacity:dim?0.42:1}}>
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.12em",marginBottom:5,textDecoration:dim?"line-through":"none"}}>{(a.type||"").toUpperCase()}</div>
-            <div style={{fontFamily:FM,fontSize:15,fontWeight:500,color:T.textHi,textDecoration:dim?"line-through":"none"}}>${(a.val||0).toLocaleString("en-US",{minimumFractionDigits:2})}</div>
-            {a.cash>0&&<div style={{fontFamily:FM,fontSize:9,color:T.muted,marginTop:2}}>${a.cash.toLocaleString("en-US",{minimumFractionDigits:2})} cash</div>}
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginTop:3}}>{a.nm}</div>
-            {a.note&&<div style={{fontFamily:FM,fontSize:9,color:T.gold,marginTop:2}}>{a.note}</div>}
-            <div style={{position:"absolute",top:8,right:8,display:"flex",gap:4}}>
+          return<div key={a.id} style={{
+            background:dim?"transparent":T.surface,
+            border:`1px solid ${dim?T.border:T.border}`,
+            borderLeft:`3px solid ${a.color}`,
+            borderRadius:T.rMd,
+            padding:`${T.s3} ${T.s4}`,
+            position:"relative",
+            opacity:dim?0.4:1,
+            transition:"all 0.18s",
+          }}>
+            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1,textDecoration:dim?"line-through":"none"}}>{(a.type||"").toUpperCase()}</div>
+            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",textDecoration:dim?"line-through":"none"}}>{fmtUSD(a.val||0)}</div>
+            {a.cash>0&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>{fmtUSD(a.cash)} cash</div>}
+            <div style={{fontFamily:FU,fontSize:11,color:T.muted,marginTop:T.s1,letterSpacing:"-0.005em"}}>{a.nm}</div>
+            {a.note&&<div style={{fontFamily:FM,fontSize:10,color:T.gold,marginTop:T.s1,fontWeight:500}}>{a.note}</div>}
+            <div style={{position:"absolute",top:T.s2,right:T.s2,display:"flex",gap:4}}>
               {onToggleAcct&&<button onClick={()=>onToggleAcct(a.id)} title={dim?"Include in totals":"Hide from totals"}
-                style={{padding:"2px 7px",borderRadius:6,fontFamily:FM,fontSize:8,letterSpacing:"0.08em",
+                style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
                   background:dim?"transparent":`${T.muted}14`,border:`1px solid ${dim?T.gain+"40":T.border}`,
                   color:dim?T.gain:T.muted,cursor:"pointer"}}>{dim?"ON":"OFF"}</button>}
-              {onDisconnectAcct&&<button onClick={()=>onDisconnectAcct(a.id,a.authId,a.nm)} title="Permanently disconnect (removes brokerage authorization at SnapTrade)"
-                style={{padding:"2px 7px",borderRadius:6,fontFamily:FM,fontSize:8,letterSpacing:"0.08em",
+              {onDisconnectAcct&&<button onClick={()=>onDisconnectAcct(a.id,a.authId,a.nm)} title="Permanently disconnect"
+                style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,
                   background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}>✕</button>}
             </div>
           </div>;
         })}
       </div>
-    </div>
+    </BentoTile>}
+
+    {/* Sector breakdown — keep as a standalone card */}
+    <SectorBreakdown holdings={merged} total={equityValue}/>
   </div>;
 }
 
@@ -3653,6 +3802,9 @@ export default function Mizan(){
 
       /* Design-system primitives. Used by KV stat cards, buttons, inputs. */
       .kv-card:hover{border-color:${T.borderHi}!important;transform:translateY(-1px);box-shadow:var(--sh-md);}
+      .bento-tile{position:relative;}
+      .bento-tile:hover{border-color:${T.borderHi}!important;box-shadow:var(--sh-lg);}
+      @media (max-width: 900px) { .bento-row { grid-template-columns: 1fr !important; } }
       .btn-primary{background:linear-gradient(135deg,${T.blue},${T.blueDim});color:#fff;border:none;font-family:${FM};font-size:11px;font-weight:600;letter-spacing:0.04em;padding:8px 16px;border-radius:var(--r-md);cursor:pointer;box-shadow:0 2px 10px ${T.blue}50;transition:transform 0.15s,box-shadow 0.2s;}
       .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 14px ${T.blue}66;}
       .btn-primary:active:not(:disabled){transform:translateY(0);box-shadow:0 1px 6px ${T.blue}40;}
