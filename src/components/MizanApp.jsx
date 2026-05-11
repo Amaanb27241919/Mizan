@@ -544,7 +544,29 @@ function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar" 
 // Returns activity rows shaped like SnapTrade's /activities response so they
 // flow through every existing metric without special-casing.
 function parseCSV(text,broker){
-  const lines=text.split(/\r?\n/).filter(l=>l.trim().length>0);
+  // Quote-aware line splitter — handles cells with embedded newlines
+  // (Robinhood's Description column has CUSIP + "Dividend Reinvestment"
+  // on separate lines inside quoted cells). text.split(/\r?\n/) was
+  // fragmenting these rows into 3 partial lines each, which broke
+  // import + dedup. This walks the stream char-by-char, only treating
+  // a newline as a row boundary when we're not inside an open quote.
+  const splitLogicalRows=t=>{
+    const rows=[];let cur="";let inQ=false;
+    for(let i=0;i<t.length;i++){
+      const c=t[i];
+      if(c==='"'){inQ=!inQ;cur+=c;continue;}
+      if(!inQ&&(c==="\n"||c==="\r")){
+        if(cur.trim().length>0)rows.push(cur);
+        cur="";
+        if(c==="\r"&&t[i+1]==="\n")i++;
+        continue;
+      }
+      cur+=c;
+    }
+    if(cur.trim().length>0)rows.push(cur);
+    return rows;
+  };
+  const lines=splitLogicalRows(text);
   if(lines.length<2)throw new Error(`File has only ${lines.length} non-empty lines.`);
   // Find header line — brokers often prefix with junk metadata
   let headerIdx=lines.findIndex(l=>/(Run Date|Activity Date|Trade Date|Date|Trans Code|Action|Type)/i.test(l)&&l.split(",").length>=4);
