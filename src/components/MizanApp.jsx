@@ -2491,7 +2491,11 @@ function CSVImporter({onImport,onDedupe}){
         if(!r||r.removed===0){
           setStatus({ok:true,msg:"No duplicate rows found — your history is already clean."});
         }else{
-          setStatus({ok:true,msg:`Removed ${r.removed} duplicate row${r.removed===1?"":"s"}. ${r.kept} unique entries kept.`});
+          const parts=[`Removed ${r.removed} duplicate row${r.removed===1?"":"s"}.`];
+          if(r.internalRemoved>0)parts.push(`${r.internalRemoved} were within your CSV imports.`);
+          if(r.crossRemoved>0)parts.push(`${r.crossRemoved} already existed in SnapTrade.`);
+          parts.push(`${r.kept} unique entries kept.`);
+          setStatus({ok:true,msg:parts.join(" ")});
         }
       }catch(err){
         setStatus({ok:false,msg:err.message||"Dedupe failed"});
@@ -3380,7 +3384,7 @@ export default function Mizan(){
     try{imported=JSON.parse(localStorage.getItem("mizan_imports")||"[]");}catch{}
     if(demoMode){
       persistAccounts(DEMO_ACCOUNTS);
-      persistActivities([...DEMO_ACTIVITIES,...imported].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
+      persistActivities(dedupeActivities([...DEMO_ACTIVITIES,...imported]).sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
       return;
     }
     try{
@@ -3402,11 +3406,13 @@ export default function Mizan(){
       if(r2.ok){
         const d2=await r2.json();
         const real=Array.isArray(d2.activities)?d2.activities:[];
-        persistActivities([...real,...imported].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
+        // SnapTrade real first so any CSV import row that fingerprint-matches
+        // a real transaction is dropped (the broker is the source of truth).
+        persistActivities(dedupeActivities([...real,...imported]).sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
       }else{
-        persistActivities(imported);
+        persistActivities(dedupeActivities(imported));
       }
-    }catch{persistActivities(imported);}
+    }catch{persistActivities(dedupeActivities(imported));}
     try{
       const r3=await apiFetch("/api/snaptrade/documents");
       if(r3.ok){
@@ -3433,52 +3439,85 @@ export default function Mizan(){
   // common "user re-uploads the same export" case without rejecting a
   // legitimately-updated export that simply contains the same older rows
   // plus new ones — only the duplicates are skipped, new rows still land.
-  const fingerprintRow=r=>[
-    r.institution_name||"",
-    r.trade_date||"",
-    r.type||"",
-    r.symbol?.symbol||"",
-    r.units??"",
-    r.price??"",
-    r.amount??"",
-  ].join("|");
+  // Activity fingerprint — used by import-time dedup AND by the merge in
+  // fetchSnapHoldings so SnapTrade activities and CSV imports of the same
+  // underlying transaction collapse to a single row. We round numbers to
+  // 2 dp so float noise (123.4500001 vs 123.45) doesn't break matching,
+  // and normalize symbol/broker so case + whitespace differences match.
+  const fingerprintRow=r=>{
+    const n=v=>{
+      const f=parseFloat(v);
+      return Number.isFinite(f)?f.toFixed(2):"";
+    };
+    const sym=r.symbol?.symbol||r.symbol||"";
+    return[
+      (r.institution_name||"").trim().toUpperCase(),
+      (r.trade_date||r.settlement_date||"").slice(0,10),
+      (r.type||"").toUpperCase(),
+      (typeof sym==="string"?sym:"").trim().toUpperCase(),
+      n(r.units),
+      n(r.price),
+      n(r.amount),
+    ].join("|");
+  };
 
-  // One-shot cleanup for users who double-uploaded the same CSV before
-  // import-time dedup shipped. Walks existing imports, keeps the first
-  // occurrence of each fingerprint, syncs the cleaned list to Supabase,
-  // and reconciles snapActivities so totals refresh immediately.
+  // Drop activities that fingerprint-match earlier ones. Earlier rows win —
+  // callers control priority by ordering (e.g. SnapTrade real first,
+  // CSV imports second so imports lose when overlapping a real activity).
+  const dedupeActivities=arr=>{
+    const seen=new Set();
+    const out=[];
+    for(const r of arr){
+      const fp=fingerprintRow(r);
+      if(seen.has(fp))continue;
+      seen.add(fp);
+      out.push(r);
+    }
+    return out;
+  };
+
+  // Dedupe button — runs two passes:
+  //   1) Remove duplicate rows within mizan_imports (same fingerprint).
+  //   2) Remove imported rows that already exist as real SnapTrade activities
+  //      (broker is source of truth — the CSV row is redundant). Without this
+  //      pass, the next auto-sync would re-merge real + imports and visually
+  //      reintroduce duplicates even though mizan_imports itself was clean.
+  // Then reconcile snapActivities so totals refresh immediately.
   const dedupeImports=useCallback(()=>{
     let existing=[];
     try{existing=JSON.parse(localStorage.getItem("mizan_imports")||"[]");}catch{}
     if(!Array.isArray(existing)||existing.length===0)return{removed:0,kept:0};
-    const seen=new Set();
-    const unique=[];
-    for(const r of existing){
-      const fp=fingerprintRow(r);
-      if(seen.has(fp))continue;
-      seen.add(fp);
-      unique.push(r);
+
+    // Pass 1: internal dedup
+    const internalDedup=dedupeActivities(existing);
+    const internalRemoved=existing.length-internalDedup.length;
+
+    // Pass 2: drop imports that match SnapTrade real activities.
+    const realFingerprints=new Set();
+    try{
+      const cached=JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]");
+      cached.filter(a=>!a._imported).forEach(a=>realFingerprints.add(fingerprintRow(a)));
+    }catch{}
+    const final=internalDedup.filter(r=>!realFingerprints.has(fingerprintRow(r)));
+    const crossRemoved=internalDedup.length-final.length;
+    const removed=internalRemoved+crossRemoved;
+
+    if(removed===0)return{removed:0,kept:final.length};
+    localStorage.setItem("mizan_imports",JSON.stringify(final));
+    persistUserState("mizan_imports",final);
+
+    // Rebuild snapActivities so the next render sees the cleaned data.
+    // Easiest: re-merge from cache + cleaned imports via the same dedupe
+    // path fetchSnapHoldings would use.
+    try{
+      const real=JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]").filter(a=>!a._imported);
+      const next=dedupeActivities([...real,...final]).sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||""));
+      persistActivities(next);
+    }catch{
+      persistActivities(dedupeActivities(final));
     }
-    const removed=existing.length-unique.length;
-    if(removed===0)return{removed:0,kept:unique.length};
-    localStorage.setItem("mizan_imports",JSON.stringify(unique));
-    persistUserState("mizan_imports",unique);
-    // Rebuild snapActivities so the duplicates also drop out of every
-    // performance/contribution metric the live state feeds.
-    const uniqueIds=new Set(unique.map(r=>r.id));
-    setSnapActivities(prev=>{
-      // Keep non-imported activities (those don't carry _imported and live
-      // only in this state, not in mizan_imports). Filter imported entries
-      // to the de-duped set.
-      const kept=prev.filter(r=>!r._imported||uniqueIds.has(r.id));
-      // Some imported rows might be present in `unique` but missing from
-      // `prev` (rare — only if state diverged). Add them back.
-      const presentIds=new Set(kept.map(r=>r.id));
-      const additions=unique.filter(r=>!presentIds.has(r.id));
-      return [...kept,...additions].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||""));
-    });
-    return{removed,kept:unique.length};
-  },[]);
+    return{removed,kept:final.length,internalRemoved,crossRemoved};
+  },[persistActivities]);
   const importCSV=useCallback((file,broker)=>{
     return new Promise((resolve,reject)=>{
       const reader=new FileReader();
@@ -3488,7 +3527,14 @@ export default function Mizan(){
           const rows=parseCSV(text,broker);
           if(!rows.length){reject(new Error("No rows parsed — check the CSV format"));return;}
           const existing=JSON.parse(localStorage.getItem("mizan_imports")||"[]");
+          // Seen set spans BOTH existing CSV imports AND SnapTrade real
+          // activities — so a user can't accidentally import a row the
+          // broker already provides.
           const seen=new Set(existing.map(fingerprintRow));
+          try{
+            const realCache=JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]");
+            realCache.filter(a=>!a._imported).forEach(a=>seen.add(fingerprintRow(a)));
+          }catch{}
           const fresh=[];
           let skipped=0;
           for(const r of rows){
@@ -3506,7 +3552,7 @@ export default function Mizan(){
           const merged=[...existing,...fresh];
           localStorage.setItem("mizan_imports",JSON.stringify(merged));persistUserState("mizan_imports",merged);
           // Push into the live state so Overview updates immediately.
-          setSnapActivities(prev=>[...prev,...fresh].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
+          setSnapActivities(prev=>dedupeActivities([...prev,...fresh]).sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
           resolve({added:fresh.length,skipped,total:rows.length});
         }catch(err){reject(err);}
       };
