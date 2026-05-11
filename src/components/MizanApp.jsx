@@ -1825,11 +1825,6 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[]}
 
 /* ─── MARKETS ────────────────────────────────────────── */
 function Markets({live,snapAccounts=[],mapPosition,watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission}){
-  // Build a unified holdings table from connected/demo accounts only.
-  // We used to fall back to a hardcoded HOLDINGS fixture (the owner's
-  // sample portfolio) which leaked the owner's positions to every signed-up
-  // user. New users now see an empty quotes table until they connect a
-  // broker or add tickers to the watchlist.
   const liveSrc=snapAccounts.length>0
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition?.(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
     : [];
@@ -1837,63 +1832,102 @@ function Markets({live,snapAccounts=[],mapPosition,watchlist=[],onAddWatch,onRem
   const rows=tickers.map(tk=>{
     const l=live.find(q=>q.tk===tk);const h=liveSrc.find(x=>x.tk===tk);
     return{tk,px:l?.price||h?.px||0,chg:l?.chg||0,pct:l?.pct||0,
-      hi:l?.hi||0,lo:l?.lo||0,pre:l?.prePrice,prePct:l?.prePct,
-      post:l?.postPrice,postPct:l?.postPct,sh_:h?.sh_||"review",src:l?.src||"—"};
+      hi:l?.hi||0,lo:l?.lo||0,sh_:h?.sh_||"review",src:l?.src||"—"};
   });
 
-  return<div style={{display:"flex",flexDirection:"column",gap:20}}>
+  // Top movers: 3 biggest gainers + 3 biggest losers from the union of
+  // holdings + watchlist tickers (whatever has a live price).
+  const moverPool=rows.filter(r=>r.pct).slice();
+  moverPool.sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct));
+  const movers=moverPool.slice(0,6);
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    {/* ─── BENTO ROW 1: Top Movers (3 fr) ──────────── */}
+    {movers.length>0&&<BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TOP MOVERS</span>
+        <span style={{display:"flex",alignItems:"center",gap:T.s1,fontFamily:FM,fontSize:10,color:live.length>0?T.gain:T.muted}}>
+          <LiveDot on={live.length>0} pulse={live.length>0}/>{live.length>0?`Finnhub · ${live.length} tickers`:"Sync to load"}
+        </span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:T.s3}}>
+        {movers.map(r=><div key={r.tk} style={{
+          padding:`${T.s3} ${T.s4}`,
+          background:T.surface,
+          border:`1px solid ${T.border}`,
+          borderLeft:`3px solid ${r.pct>=0?T.gain:T.loss}`,
+          borderRadius:T.rMd,
+        }}>
+          <div style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</div>
+          <div style={{fontFamily:FU,fontSize:17,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums",marginTop:T.s1}}>${r.px.toFixed(2)}</div>
+          <div style={{fontFamily:FM,fontSize:11,fontWeight:600,color:fc(r.pct),marginTop:T.s1}}>{r.pct>=0?"+":""}{r.pct.toFixed(2)}%</div>
+        </div>)}
+      </div>
+    </BentoTile>}
+
+    {/* ─── BENTO ROW 2: Watchlist (hero) ─────────────── */}
     <Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>
-    <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>MARKET QUOTES</span>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <LiveDot on={live.length>0} pulse={live.length>0}/>
-          <span style={{fontFamily:FM,fontSize:9,color:live.length>0?T.gain:T.muted}}>{live.length>0?`Finnhub · ${live.length} tickers`:"Sync to load"}</span>
-        </div>
+
+    {/* ─── BENTO ROW 3: All market quotes ──────────── */}
+    <BentoTile style={{padding:0,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>MARKET QUOTES</span>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{rows.length} symbols</span>
       </div>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-        <Tbl cols={[
-          {l:"Symbol", r_:r=><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>{r.tk}</span><span style={{fontFamily:FM,fontSize:9,color:r.sh_==="halal"?T.gain:r.sh_==="haram"?T.loss:T.muted}}>{r.sh_==="halal"?"✓":r.sh_==="haram"?"✗":"·"}</span></div>},
-          {l:"Price",  r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:r.src!=="—"?T.textHi:T.text}}>{r.px?`$${r.px.toFixed(2)}`:"-"}</span>},
-        ]} rows={rows}/>
-      </div>
-    </div>
+      <Tbl cols={[
+        {l:"Symbol", r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
+          <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</span>
+          <span style={{fontFamily:FM,fontSize:10,color:r.sh_==="halal"?T.gain:r.sh_==="haram"?T.loss:T.muted}}>{r.sh_==="halal"?"✓":r.sh_==="haram"?"✗":"·"}</span>
+        </div>},
+        {l:"Price",  r:true,r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:r.src!=="—"?T.textHi:T.muted,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{r.px?`$${r.px.toFixed(2)}`:"—"}</span>},
+      ]} rows={rows}/>
+    </BentoTile>
   </div>;
 }
 
 /* ─── WATCHLIST ──────────────────────────────────────── */
+// Watchlist renders as a BentoTile, with sparklines per row when we have
+// live data. Empty state is a dashed BentoTile that doubles as the add form.
 function Watchlist({live=[],watchlist=[],onAdd,onRemove,onSetAlert,onAlertPermission}){
   const[input,setInput]=useState("");
   const submit=(e)=>{e.preventDefault();if(!input.trim())return;onAdd(input);setInput("");};
   const notifPerm=typeof Notification!=="undefined"?Notification.permission:"unsupported";
 
-  return<div>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
-      <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em"}}>WATCHLIST{watchlist.length>0?<span style={{color:T.muted,marginLeft:8}}>· {watchlist.length} symbols</span>:""}</span>
-      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        {notifPerm!=="granted"&&<button onClick={onAlertPermission} style={{padding:"4px 10px",borderRadius:6,fontFamily:FM,fontSize:9,letterSpacing:"0.08em",background:`${T.gold}18`,border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>{notifPerm==="denied"?"Alerts blocked":"Enable alerts"}</button>}
-        <form onSubmit={submit} style={{display:"flex",gap:6}}>
+  return<BentoTile>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
+      <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>WATCHLIST{watchlist.length>0?<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {watchlist.length} symbols</span>:""}</span>
+      <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
+        {notifPerm!=="granted"&&<button onClick={onAlertPermission} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:`${T.gold}18`,border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>{notifPerm==="denied"?"Alerts blocked":"Enable alerts"}</button>}
+        <form onSubmit={submit} style={{display:"flex",gap:T.s2}}>
           <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())} placeholder="Add ticker"
-            style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"5px 10px",fontFamily:FM,fontSize:11,color:T.text,width:110,outline:"none"}}/>
-          <button type="submit" style={{padding:"5px 14px",borderRadius:6,fontFamily:FM,fontSize:10,fontWeight:500,letterSpacing:"0.06em",background:T.blue,border:"none",color:"#fff",cursor:"pointer"}}>+ Add</button>
+            className="field" style={{width:120,fontSize:12,padding:`6px ${T.s3}`}}/>
+          <button type="submit" className="btn-primary" style={{fontSize:11,padding:`6px ${T.s4}`}}>+ Add</button>
         </form>
       </div>
     </div>
     {watchlist.length===0
-      ?<div style={{background:T.card,border:`1px dashed ${T.border}`,borderRadius:12,padding:"22px",textAlign:"center",fontFamily:FM,fontSize:11,color:T.muted}}>No symbols yet. Add a ticker above to track price + set alerts.</div>
-      :<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+      ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+          No symbols yet. Add a ticker above to track price + set alerts.
+        </div>
+      :<div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
-            {l:"Symbol",r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>{r.symbol}</span>},
-            {l:"Price",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;return<span style={{fontFamily:FM,fontSize:12,color:px?T.textHi:T.muted}}>{px?f$(px):"—"}</span>;}},
-            {l:"Change",r:true,r_:r=>{const p=live.find(l=>l.tk===r.symbol)?.pct;return<span style={{fontFamily:FM,fontSize:11,color:fc(p)}}>{p?fp(p):"—"}</span>;}},
-            {l:"Added @",r:true,r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.addPrice?f$(r.addPrice):"—"}</span>},
-            {l:"Vs Add %",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;if(!px||!r.addPrice)return<span style={{color:T.muted}}>—</span>;const pct=((px-r.addPrice)/r.addPrice)*100;return<span style={{fontFamily:FM,fontSize:11,color:fc(pct)}}>{fp(pct)}</span>;}},
-            {l:"Alert ↑",r_:r=><input type="number" placeholder="—" defaultValue={r.alertAbove||""} onBlur={e=>onSetAlert(r.symbol,"alertAbove",e.target.value)} style={{width:80,background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"3px 7px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/>},
-            {l:"Alert ↓",r_:r=><input type="number" placeholder="—" defaultValue={r.alertBelow||""} onBlur={e=>onSetAlert(r.symbol,"alertBelow",e.target.value)} style={{width:80,background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"3px 7px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/>},
-            {l:"",r_:r=><button onClick={()=>onRemove(r.symbol)} style={{padding:"3px 8px",borderRadius:6,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:9}}>✕</button>},
+            {l:"Symbol",r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.symbol}</span>},
+            {l:"Price",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;return<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:px?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{px?f$(px):"—"}</span>;}},
+            {l:"Change",r:true,r_:r=>{const p=live.find(l=>l.tk===r.symbol)?.pct;return<span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:fc(p),fontVariantNumeric:"tabular-nums"}}>{p?fp(p):"—"}</span>;}},
+            {l:"Trend",r_:r=>{
+              const px=live.find(l=>l.tk===r.symbol)?.price;
+              if(!px)return<span style={{color:T.muted,fontSize:10}}>—</span>;
+              const p=live.find(l=>l.tk===r.symbol)?.pct||0;
+              return<Sk vals={Array.from({length:18},(_,i)=>px*(1-((p/100)*(1-i/17))))} color={fc(p)} w={70} h={22} fill/>;
+            }},
+            {l:"Added @",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.addPrice?f$(r.addPrice):"—"}</span>},
+            {l:"Vs Add",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;if(!px||!r.addPrice)return<span style={{color:T.muted}}>—</span>;const pct=((px-r.addPrice)/r.addPrice)*100;return<span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:fc(pct),fontVariantNumeric:"tabular-nums"}}>{fp(pct)}</span>;}},
+            {l:"Alert ↑",r_:r=><input type="number" placeholder="—" defaultValue={r.alertAbove||""} onBlur={e=>onSetAlert(r.symbol,"alertAbove",e.target.value)} className="field" style={{width:78,fontSize:11,padding:`4px ${T.s2}`}}/>},
+            {l:"Alert ↓",r_:r=><input type="number" placeholder="—" defaultValue={r.alertBelow||""} onBlur={e=>onSetAlert(r.symbol,"alertBelow",e.target.value)} className="field" style={{width:78,fontSize:11,padding:`4px ${T.s2}`}}/>},
+            {l:"",r_:r=><button onClick={()=>onRemove(r.symbol)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>},
           ]} rows={watchlist}/>
         </div>}
-  </div>;
+  </BentoTile>;
 }
 
 /* ─── EARNINGS WIDGET ────────────────────────────────── */
