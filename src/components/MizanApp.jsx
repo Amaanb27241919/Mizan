@@ -3402,7 +3402,11 @@ export default function Mizan(){
       const r=await apiFetch("/api/snaptrade/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
       const d=await r.json().catch(()=>({}));
       if(r.ok){
-        setForceMsg({ok:true,msg:"Broker refresh requested — data updating…"});
+        const q=d?.queued??0,t=d?.total??0,th=d?.throttled??0;
+        let msg=`Broker refresh queued (${q}/${t}). Data updating…`;
+        if(th>0)msg+=` ${th} connection${th===1?"":"s"} throttled by SnapTrade.`;
+        if(t===0)msg="No active connections to refresh.";
+        setForceMsg({ok:true,msg});
         setForceCooldownUntil(Date.now()+FORCE_REFRESH_COOLDOWN_MS);
         // Pull the refreshed data ~25 s later so the user doesn't have to
         // press Sync All themselves. SnapTrade typically returns updated
