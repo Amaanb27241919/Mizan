@@ -1296,38 +1296,58 @@ function AAOIFIScreener({holdings=[]}){
   // For now, surface the haram + review values as "purification candidates".
   const haramPct=totalEquity>0?(haramValue/totalEquity)*100:0;
 
-  return<div style={{display:"flex",flexDirection:"column",gap:14}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
-      <div style={{maxWidth:680}}>
-        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.7}}>
-          Live Sharia screening across multiple frameworks. Pick a primary standard for the row badges; every standard runs in the background so you see a per-position pass count. Data: Finnhub fundamentals.
-        </p>
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    {/* ─── Intro + framework selector ───────────── */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
+        <div style={{maxWidth:680}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SHARIA COMPLIANCE</div>
+          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+            Live screening across {Object.keys(STANDARDS).length} frameworks. Pick a primary standard for row badges; every standard runs in the background so you see a per-position pass count. Data: Finnhub fundamentals.
+          </p>
+        </div>
+        <div style={{display:"flex",gap:T.s2,alignItems:"center",flexShrink:0}}>
+          <select value={primary} onChange={e=>setStandard(e.target.value)} className="field" style={{width:"auto",fontSize:12,cursor:"pointer"}}>
+            {Object.entries(STANDARDS).map(([k,s])=><option key={k} value={k}>{s.name}</option>)}
+          </select>
+          <button onClick={()=>runScreen(true)} disabled={busy||!_gk.finnhub} className="btn-primary" title={!_gk.finnhub?"Server uses its own Finnhub key — should always be available":undefined}>{busy?"Screening…":"Re-screen"}</button>
+        </div>
       </div>
-      <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        <select value={primary} onChange={e=>setStandard(e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer"}}>
-          {Object.entries(STANDARDS).map(([k,s])=><option key={k} value={k}>{s.name}</option>)}
-        </select>
-        <button onClick={()=>runScreen(true)} disabled={busy||!_gk.finnhub} style={{padding:"7px 16px",borderRadius:6,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:busy?T.dim:T.blue,border:"none",color:busy?T.muted:"#fff",cursor:busy||!_gk.finnhub?"not-allowed":"pointer"}}>{busy?"Screening…":!_gk.finnhub?"Add Finnhub key":"Re-screen"}</button>
+      <div style={{marginTop:T.s3,padding:`${T.s2} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.6,letterSpacing:"0.02em"}}>
+        <span style={{color:T.gold,fontWeight:600}}>{STANDARDS[primary].name}</span>
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>{STANDARDS[primary].region}
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Debt/{STANDARDS[primary].denominator==="totalAssets"?"Assets":"MC"} &lt; {STANDARDS[primary].debtMax}%
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Cash &lt; {STANDARDS[primary].cashMax}%
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>A/R &lt; {STANDARDS[primary].recvMax}%
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Non-perm &lt; {STANDARDS[primary].nonPermMax}%
       </div>
-    </div>
-    <div style={{fontFamily:FM,fontSize:10,color:T.muted,padding:"8px 12px",background:T.card,border:`1px solid ${T.border}`,borderRadius:3}}>
-      <span style={{color:T.textHi,fontWeight:500}}>{STANDARDS[primary].name}</span>
-      <span style={{margin:"0 6px"}}>·</span>{STANDARDS[primary].region}
-      <span style={{margin:"0 6px"}}>·</span>Debt/{STANDARDS[primary].denominator==="totalAssets"?"Assets":"MC"} &lt; {STANDARDS[primary].debtMax}%
-      <span style={{margin:"0 6px"}}>·</span>Cash &lt; {STANDARDS[primary].cashMax}%
-      <span style={{margin:"0 6px"}}>·</span>A/R &lt; {STANDARDS[primary].recvMax}%
-      <span style={{margin:"0 6px"}}>·</span>Non-perm income &lt; {STANDARDS[primary].nonPermMax}%
-      <span style={{margin:"0 6px"}}>·</span><span style={{color:T.text}}>{STANDARDS[primary].notes}</span>
+    </BentoTile>
+
+    {/* ─── Status stat tiles ────────────────────── */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:T.s3}}>
+      <BentoTile accent={T.gain}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>HALAL POSITIONS</div>
+        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{byStatus.halal.length}</div>
+        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{kf(byStatus.halal.reduce((s,h)=>s+mv(h),0))}</div>
+      </BentoTile>
+      <BentoTile accent={T.gold}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>REVIEW POSITIONS</div>
+        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{byStatus.review.length}</div>
+        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{kf(reviewValue)}</div>
+      </BentoTile>
+      <BentoTile accent={T.loss} style={{background:`linear-gradient(135deg, ${T.loss}10, transparent 60%), ${T.card}`}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NON-COMPLIANT</div>
+        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{byStatus.haram.length}</div>
+        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.loss,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{kf(haramValue)} · {haramPct.toFixed(1)}%</div>
+      </BentoTile>
+      <BentoTile accent={T.gold}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PURIFICATION EST.</div>
+        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(haramValue*0.025+reviewValue*0.005)}</div>
+        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1}}>2.5% haram + 0.5% review</div>
+      </BentoTile>
     </div>
 
-    <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-      <KV label="Halal positions"      value={`${byStatus.halal.length}`}    sub={kf(byStatus.halal.reduce((s,h)=>s+mv(h),0))}    subColor={T.gain}/>
-      <KV label="Review positions"     value={`${byStatus.review.length}`}   sub={kf(reviewValue)}                                  subColor={T.gold}/>
-      <KV label="Non-Compliant"        value={`${byStatus.haram.length}`}    sub={`${kf(haramValue)} · ${haramPct.toFixed(1)}%`}      subColor={T.loss} accent={T.loss}/>
-      <KV label="Purification est."    value={kf(haramValue*0.025+reviewValue*0.005)} sub="2.5% haram + 0.5% review" subColor={T.gold} accent={T.gold}/>
-    </div>
-
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+    <BentoTile style={{padding:0,overflow:"hidden"}}>
       <Tbl cols={[
         {l:"Symbol",r_:r=><div><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r._screen.status==="haram"?T.loss:T.textHi}}>{r.tk}</div><div style={{fontFamily:FM,fontSize:9,color:T.muted}}>{r._screen.industry||r.ty||"—"}</div></div>},
         {l:"Mkt Value",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.textHi}}>{f$(mv(r))}</span>},
@@ -1340,43 +1360,44 @@ function AAOIFIScreener({holdings=[]}){
         {l:"Primary",r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return<Tag label={v.pass===true?"✓":v.pass===false?"✗":"…"} color={v.pass===true?T.gain:v.pass===false?T.loss:T.muted}/>;}},
         {l:"Action",r_:r=>r._screen.status==="haram"?<Tag label="Exit + purify" color={T.loss}/>:r._screen.status==="review"?<Tag label="Verify" color={T.gold}/>:r._screen.status==="halal"?<Tag label="Hold" color={T.gain}/>:<Tag label="—" color={T.muted}/>},
       ]} rows={[...enriched].sort((a,b)=>{const o={haram:0,review:1,unknown:2,halal:3};return(o[a._screen.status]??9)-(o[b._screen.status]??9);})}/>
-    </div>
+    </BentoTile>
 
-    <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>STANDARDS RUN AGAINST EACH HOLDING</div>
-        {Object.entries(STANDARDS).map(([k,s])=><div key={k} style={{padding:"7px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FU,fontSize:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-            <span style={{color:T.text,fontWeight:500}}>{s.name}</span>
-            <span style={{color:T.muted,fontFamily:FM,fontSize:10}}>{s.region}</span>
-          </div>
-          <div style={{color:T.muted,fontSize:11,lineHeight:1.5,fontFamily:FM}}>
-            <span style={{color:T.text}}>Debt/{s.denominator==="totalAssets"?"Assets":"MC"} &lt; {s.debtMax}%</span>
-            <span style={{margin:"0 6px"}}>·</span>
-            <span style={{color:T.text}}>Cash &lt; {s.cashMax}%</span>
-            <span style={{margin:"0 6px"}}>·</span>
-            <span style={{color:T.text}}>A/R &lt; {s.recvMax}%</span>
-            <span style={{margin:"0 6px"}}>·</span>
-            <span style={{color:T.text}}>Income &lt; {s.nonPermMax}%</span>
-          </div>
-          <div style={{color:T.muted,fontSize:10,lineHeight:1.5,marginTop:3}}>{s.notes}</div>
-        </div>)}
-        <div style={{padding:"8px 0 0",fontFamily:FU,fontSize:11,color:T.muted,lineHeight:1.5}}>
-          <strong style={{color:T.text}}>Universal:</strong> Sector exclusion across all standards (banking, alcohol, tobacco, gambling, weapons, conventional insurance, adult entertainment, pork). IFRS provides accounting framework; not a screening standard itself.
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s4}}>
+      <BentoTile>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STANDARDS</div>
+        <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+          {Object.entries(STANDARDS).map(([k,s])=><div key={k} style={{
+            padding:`${T.s2} ${T.s3}`,
+            background:T.surface,
+            border:`1px solid ${T.border}`,
+            borderLeft:`3px solid ${k===primary?T.gold:T.border}`,
+            borderRadius:T.rMd,
+          }}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s1}}>
+              <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{s.name}</span>
+              <span style={{fontFamily:FM,fontSize:10,fontWeight:500,color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
+            </div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
+              Debt &lt; {s.debtMax}% · Cash &lt; {s.cashMax}% · A/R &lt; {s.recvMax}% · Non-perm &lt; {s.nonPermMax}%
+            </div>
+          </div>)}
         </div>
-      </div>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>PURIFICATION GUIDE</div>
-        <p style={{fontFamily:FU,fontSize:12,color:T.muted,margin:0,lineHeight:1.6}}>
-          Income from non-compliant or mixed-revenue companies must be purified — the impure portion is donated to charity (Sadaqah), without expectation of reward. The estimate at the top is a conservative proxy; for precision, multiply each holding's dividend by the company's non-permissible-income ratio (rarely disclosed publicly).
+        <div style={{marginTop:T.s3,fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+          <strong style={{color:T.text,fontWeight:600}}>Universal:</strong> Sector exclusion across all standards (banking, alcohol, tobacco, gambling, weapons, conventional insurance, adult entertainment, pork).
+        </div>
+      </BentoTile>
+      <BentoTile accent={T.gold}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PURIFICATION GUIDE</div>
+        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,letterSpacing:"-0.005em"}}>
+          Income from non-compliant or mixed-revenue companies must be purified — the impure portion is donated to charity (Sadaqah), without expectation of reward. The estimate above is a conservative proxy; for precision, multiply each holding's dividend by the company's non-permissible-income ratio.
         </p>
-        <div style={{marginTop:12,padding:"10px 12px",background:`${T.gold}0C`,borderRadius:8,border:`1px solid ${T.gold}25`}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:4}}>EXIT GUIDANCE</div>
-          <div style={{fontFamily:FU,fontSize:12,color:T.text,lineHeight:1.6}}>
+        <div style={{marginTop:T.s4,padding:`${T.s3} ${T.s4}`,background:`linear-gradient(135deg, ${T.gold}10, transparent 70%), ${T.surface}`,borderRadius:T.rMd,border:`1px solid ${T.gold}30`}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>EXIT GUIDANCE</div>
+          <div style={{fontFamily:FU,fontSize:13,color:T.text,lineHeight:1.55,letterSpacing:"-0.005em"}}>
             For Non-Compliant positions: sell at the next reasonable opportunity, donate any gains realized after purification to charity, and replace with a Sharia-screened equivalent (SPUS / HLAL / UMMA / SPSK).
           </div>
         </div>
-      </div>
+      </BentoTile>
     </div>
   </div>;
 }
@@ -1415,43 +1436,72 @@ function TaxPlanner({holdings=[],activities=[]}){
   const days30ISO=days30.toISOString().slice(0,10);
   const recentSells=new Set(activities.filter(a=>(a.type||"").toUpperCase()==="SELL"&&(a.trade_date||"")>=days30ISO).map(a=>a.symbol?.symbol||a.symbol));
 
-  return<div style={{display:"flex",flexDirection:"column",gap:14}}>
-    <div style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.7,maxWidth:680}}>
-      Surfaces unrealized losses you could harvest to offset taxable gains. Wash-sale rule: a position sold at a loss can't be repurchased within 30 days. Estimates assume your federal+state marginal rate.
-    </div>
-
-    <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-      <KV label="Harvestable Loss" value={kf(Math.abs(totalLoss))} sub={`${losers.length} positions`} subColor={T.gain}/>
-      <KV label="Est. Tax Savings" value={kf(taxSavings)} sub={`@ ${((bracket+stateBracket)*100).toFixed(0)}% marginal`} subColor={T.gold} accent={T.gold}/>
-      <KV label="YTD Realized" value={`${ytdRealized>=0?"+":""}${kf(Math.abs(ytdRealized))}`} sub={`${ytdSells.length} sells YTD`} subColor={fc(ytdRealized)}/>
-      <KV label="Est. Tax Owed" value={kf(estTax)} sub="On YTD gains + divs" subColor={T.loss}/>
-    </div>
-
-    <div style={{display:"flex",gap:10,alignItems:"center",fontFamily:FM,fontSize:11,color:T.muted}}>
-      <span>Federal bracket:</span>
-      <select value={bracket} onChange={e=>setBracket(+e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"4px 10px",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer"}}>
-        {[0.10,0.12,0.22,0.24,0.32,0.35,0.37].map(b=><option key={b} value={b}>{(b*100).toFixed(0)}%</option>)}
-      </select>
-      <span>State:</span>
-      <select value={stateBracket} onChange={e=>setStateBracket(+e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"4px 10px",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer"}}>
-        {[0,0.03,0.05,0.07,0.09,0.13].map(b=><option key={b} value={b}>{(b*100).toFixed(0)}%</option>)}
-      </select>
-    </div>
-
-    {losers.length===0
-      ?<div style={{background:T.card,border:`1px dashed ${T.border}`,borderRadius:12,padding:"32px",textAlign:"center",fontFamily:FM,fontSize:11,color:T.muted}}>No unrealized losses across visible accounts. Nothing to harvest.</div>
-      :<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-          <Tbl cols={[
-            {l:"Symbol",r_:r=><div><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.sh_==="haram"?T.loss:T.textHi}}>{r.tk}</div><div style={{fontFamily:FM,fontSize:9,color:T.muted}}>{r.ac_}</div></div>},
-            {l:"Shares",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text}}>{r.sh.toFixed(3)}</span>},
-            {l:"Avg Cost",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{f$(r.ac)}</span>},
-            {l:"Current",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text}}>{f$(r.px)}</span>},
-            {l:"Loss $",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.loss}}>{f$(Math.abs(r._loss))}</span>},
-            {l:"Loss %",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.loss}}>{fp(r._lossPct)}</span>},
-            {l:"Wash Risk",r_:r=>recentSells.has(r.tk)?<Tag label="< 30d sold" color={T.loss}/>:<Tag label="Clear" color={T.gain}/>},
-            {l:"Replace With",r_:r=><span style={{fontFamily:FM,fontSize:11,color:r.sh_==="haram"?T.loss:T.gold}}>{r._replacement}</span>},
-          ]} rows={losers}/>
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    {/* ─── Hero + bracket selectors ────────────────── */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:T.s4}}>
+      <BentoTile accent={T.gold} style={{background:`radial-gradient(circle at 0% 0%, ${T.gold}15, transparent 55%), ${T.card}`}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>HARVESTABLE LOSS</div>
+        <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{kf(Math.abs(totalLoss))}</div>
+        <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{losers.length} position{losers.length===1?"":"s"} below cost</div>
+        <div style={{marginTop:T.s4,padding:`${T.s3} ${T.s4}`,background:`${T.gold}10`,border:`1px solid ${T.gold}25`,borderRadius:T.rMd}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>ESTIMATED TAX SAVINGS</div>
+          <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.gold,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(taxSavings)}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>@ {((bracket+stateBracket)*100).toFixed(0)}% combined marginal rate</div>
         </div>
+      </BentoTile>
+
+      <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+        <BentoTile accent={fc(ytdRealized)}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YTD REALIZED</div>
+          <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:fc(ytdRealized),letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{ytdRealized>=0?"+":""}{kf(Math.abs(ytdRealized))}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{ytdSells.length} sells YTD</div>
+        </BentoTile>
+        <BentoTile accent={T.loss}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>EST. TAX OWED</div>
+          <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(estTax)}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.loss,marginTop:T.s1}}>On gains + divs</div>
+        </BentoTile>
+      </div>
+    </div>
+
+    {/* ─── Bracket controls + intro ────────────────── */}
+    <BentoTile>
+      <div style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.55,maxWidth:680,marginBottom:T.s3,letterSpacing:"-0.005em"}}>
+        Surfaces unrealized losses you could harvest to offset taxable gains. Wash-sale rule: a position sold at a loss can't be repurchased within 30 days. Estimates assume your combined federal + state marginal rate.
+      </div>
+      <div style={{display:"flex",gap:T.s3,alignItems:"center",fontFamily:FM,fontSize:11,color:T.muted,flexWrap:"wrap"}}>
+        <span style={{letterSpacing:"0.04em"}}>FEDERAL</span>
+        <select value={bracket} onChange={e=>setBracket(+e.target.value)} className="field" style={{width:"auto",fontSize:11,padding:`5px ${T.s3}`,cursor:"pointer"}}>
+          {[0.10,0.12,0.22,0.24,0.32,0.35,0.37].map(b=><option key={b} value={b}>{(b*100).toFixed(0)}%</option>)}
+        </select>
+        <span style={{letterSpacing:"0.04em"}}>STATE</span>
+        <select value={stateBracket} onChange={e=>setStateBracket(+e.target.value)} className="field" style={{width:"auto",fontSize:11,padding:`5px ${T.s3}`,cursor:"pointer"}}>
+          {[0,0.03,0.05,0.07,0.09,0.13].map(b=><option key={b} value={b}>{(b*100).toFixed(0)}%</option>)}
+        </select>
+      </div>
+    </BentoTile>
+
+    {/* ─── Losers table ────────────────────────────── */}
+    {losers.length===0
+      ?<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
+        <div style={{fontFamily:FU,fontSize:14,fontWeight:500,color:T.muted}}>No unrealized losses across visible accounts.</div>
+        <div style={{fontFamily:FU,fontSize:12,color:T.muted,marginTop:T.s1}}>Nothing to harvest right now.</div>
+      </BentoTile>
+      :<BentoTile style={{padding:0,overflow:"hidden"}}>
+          <Tbl cols={[
+            {l:"Symbol",r_:r=><div>
+              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:r.sh_==="haram"?T.loss:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</div>
+              <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{r.ac_}</div>
+            </div>},
+            {l:"Shares",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.sh.toFixed(3)}</span>},
+            {l:"Avg Cost",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{f$(r.ac)}</span>},
+            {l:"Current",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}>{f$(r.px)}</span>},
+            {l:"Loss $",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.loss,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(Math.abs(r._loss))}</span>},
+            {l:"Loss %",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.loss,fontVariantNumeric:"tabular-nums"}}>{fp(r._lossPct)}</span>},
+            {l:"Wash Risk",r_:r=>recentSells.has(r.tk)?<Tag label="< 30d sold" color={T.loss}/>:<Tag label="Clear" color={T.gain}/>},
+            {l:"Replace With",r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:r.sh_==="haram"?T.loss:T.gold}}>{r._replacement}</span>},
+          ]} rows={losers}/>
+        </BentoTile>
     }
   </div>;
 }
@@ -2208,10 +2258,10 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
   const yearAtTarget=projection.find(p=>p.nominal>=fireTarget);
   const balanceAtRetirement=projection.find(p=>p.year===targetAge);
 
-  return<div className="mz-side-by-side" style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
-    <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:18}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:14}}>RETIREMENT PARAMETERS</div>
+  return<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
+    <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+      <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>RETIREMENT PARAMETERS</div>
         {[
           {l:"Current Age",v:age,set:setAge,min:18,max:75,step:1,fmt:v=>v},
           {l:"Target Retirement Age",v:targetAge,set:setTargetAge,min:30,max:80,step:1,fmt:v=>v},
@@ -2219,53 +2269,55 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
           {l:"Expected Annual Return",v:ret,set:setRet,min:0.02,max:0.15,step:0.005,fmt:v=>`${(v*100).toFixed(1)}%`},
           {l:"Inflation Assumption",v:inflation,set:setInflation,min:0,max:0.08,step:0.005,fmt:v=>`${(v*100).toFixed(1)}%`},
           {l:"Safe Withdrawal Rate",v:withdrawRate,set:setWithdrawRate,min:0.02,max:0.06,step:0.005,fmt:v=>`${(v*100).toFixed(1)}%`},
-        ].map(s=><div key={s.l} style={{marginBottom:14}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:10,marginBottom:5}}>
-            <span style={{color:T.muted}}>{s.l}</span>
-            <span style={{color:T.textHi,fontWeight:500}}>{s.fmt(s.v)}</span>
+        ].map(s=><div key={s.l}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:T.s1}}>
+            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>{s.l.toUpperCase()}</span>
+            <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{s.fmt(s.v)}</span>
           </div>
-          <input type="range" min={s.min} max={s.max} step={s.step} value={s.v} onChange={e=>s.set(+e.target.value)} style={{width:"100%",accentColor:T.blue,cursor:"pointer"}}/>
+          <input type="range" min={s.min} max={s.max} step={s.step} value={s.v} onChange={e=>s.set(+e.target.value)} style={{width:"100%",accentColor:T.blue,cursor:"pointer",height:4}}/>
         </div>)}
-        <div style={{marginTop:6,padding:"10px 12px",background:T.gainBg,border:`1px solid ${T.gain}25`,borderRadius:3}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:4}}>FIRE NUMBER</div>
-          <div style={{fontFamily:FM,fontSize:18,fontWeight:500,color:T.gain}}>{kf(fireTarget)}</div>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginTop:3}}>To support {kf(targetSpend)} / yr at {(withdrawRate*100).toFixed(1)}%</div>
+        <div style={{padding:`${T.s3} ${T.s4}`,background:`linear-gradient(135deg, ${T.gain}12, transparent 70%), ${T.gainBg}`,border:`1px solid ${T.gain}30`,borderRadius:T.rMd,marginTop:T.s2}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>FIRE NUMBER</div>
+          <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.gain,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(fireTarget)}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>Supports {kf(targetSpend)}/yr at {(withdrawRate*100).toFixed(1)}%</div>
         </div>
-      </div>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14}}>
+      </BentoTile>
+
+      <BentoTile>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PROJECTION</div>
         {[
-          ["Years to FIRE",yearAtTarget?`${yearAtTarget.year-age} yrs`:"Not reached"],
+          ["Years to FIRE",yearAtTarget?`${yearAtTarget.year-age} yrs`:"Not reached",yearAtTarget?T.gain:T.muted],
           ["FIRE at age",yearAtTarget?yearAtTarget.year:"—"],
           ["Balance at target",balanceAtRetirement?kf(balanceAtRetirement.nominal):"—"],
           ["Today's $ at target",balanceAtRetirement?kf(balanceAtRetirement.real):"—"],
-        ].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:11}}>
-          <span style={{color:T.muted}}>{l}</span>
-          <span style={{color:T.textHi}}>{v}</span>
+        ].map(([l,v,clr])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:12}}>
+          <span style={{color:T.muted,letterSpacing:"0.04em"}}>{l}</span>
+          <span style={{color:clr||T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{v}</span>
         </div>)}
-      </div>
+      </BentoTile>
     </div>
 
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:18}}>
-      <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>NET WORTH PROJECTION (Nominal vs Inflation-Adjusted)</div>
-      <ResponsiveContainer width="100%" height={300}>
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>NET WORTH PROJECTION · Nominal vs Inflation-Adjusted</div>
+      <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={projection} margin={{top:10,right:14,bottom:8,left:14}}>
-          <defs><linearGradient id="fireG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={T.blue} stopOpacity={0.22}/><stop offset="95%" stopColor={T.blue} stopOpacity={0}/></linearGradient></defs>
+          <defs><linearGradient id="fireG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={T.blue} stopOpacity={0.32}/><stop offset="95%" stopColor={T.blue} stopOpacity={0}/></linearGradient></defs>
           <CartesianGrid stroke={T.border} strokeDasharray="2 4" vertical={false}/>
-          <XAxis dataKey="year" tick={{fontFamily:FM,fontSize:9,fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false}/>
-          <YAxis tickFormatter={v=>kf(v)} tick={{fontFamily:FM,fontSize:9,fill:T.muted}} axisLine={false} tickLine={false} width={60}/>
+          <XAxis dataKey="year" tick={{fontFamily:FM,fontSize:10,fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false}/>
+          <YAxis tickFormatter={v=>kf(v)} tick={{fontFamily:FM,fontSize:10,fill:T.muted}} axisLine={false} tickLine={false} width={60}/>
           <Tooltip
             formatter={(v,name)=>[kf(v),name==="nominal"?"Nominal":"Real (today's $)"]}
-            contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:8,fontFamily:FM,fontSize:11}}
+            contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)"}}
             itemStyle={{color:T.textHi}} labelStyle={{color:T.muted}}/>
-          <Area type="monotone" dataKey="nominal" stroke={T.blue} strokeWidth={1.5} fill="url(#fireG)" dot={false}/>
-          <Line type="monotone" dataKey="real" stroke={T.gold} strokeWidth={1.5} strokeDasharray="3 3" dot={false}/>
+          <Area type="monotone" dataKey="nominal" stroke={T.blue} strokeWidth={2} fill="url(#fireG)" dot={false}/>
+          <Line type="monotone" dataKey="real" stroke={T.gold} strokeWidth={1.8} strokeDasharray="3 3" dot={false}/>
         </ComposedChart>
       </ResponsiveContainer>
-      <div style={{display:"flex",gap:14,fontFamily:FM,fontSize:10,color:T.muted,marginTop:8}}>
-        <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:T.blue,display:"inline-block"}}/>Nominal balance</span>
-        <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:10,height:2,background:T.gold,display:"inline-block"}}/>Inflation-adjusted (today's $)</span>
+      <div style={{display:"flex",gap:T.s4,fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s3,flexWrap:"wrap"}}>
+        <span style={{display:"flex",alignItems:"center",gap:T.s1}}><span style={{width:12,height:2,background:T.blue,display:"inline-block",borderRadius:1}}/>Nominal balance</span>
+        <span style={{display:"flex",alignItems:"center",gap:T.s1}}><span style={{width:12,height:2,background:T.gold,display:"inline-block",borderRadius:1}}/>Inflation-adjusted (today's $)</span>
       </div>
-    </div>
+    </BentoTile>
   </div>;
 }
 
@@ -3687,75 +3739,95 @@ function About(){
     {n:"Supabase",d:"Auth + per-user state",c:"#3ECF8E"},
   ];
 
-  return <div style={{display:"flex",flexDirection:"column",gap:28,maxWidth:1080,margin:"0 auto",paddingBottom:40}}>
-    {/* HERO */}
-    <div style={{textAlign:"center",padding:"32px 0 8px"}}>
-      <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:18}}>
-        <svg width={42} height={42} viewBox="0 0 16 16" fill="none">
+  return <div style={{display:"flex",flexDirection:"column",gap:T.s5,maxWidth:1080,margin:"0 auto",paddingBottom:T.s10}}>
+    {/* ─── HERO ─────────────────────────────────────────── */}
+    <BentoTile style={{
+      background:`radial-gradient(circle at 0% 0%, ${T.blue}18, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gold}12, transparent 50%), ${T.card}`,
+      borderColor:T.blue+"30",
+      padding:`${T.s10} ${T.s8}`,
+      textAlign:"center",
+    }}>
+      <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:T.s3,marginBottom:T.s4}}>
+        <svg width={48} height={48} viewBox="0 0 16 16" fill="none">
           <defs><linearGradient id="abLg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs>
-          <path d="M8 1L15 7L8 13L1 7Z" stroke="url(#abLg)" strokeWidth={1.2} fill="none"/>
-          <circle cx="8" cy="7" r="1.8" fill={T.blue} opacity={0.9}/>
+          <path d="M8 1L15 7L8 13L1 7Z" stroke="url(#abLg)" strokeWidth={1.4} fill="none"/>
+          <circle cx="8" cy="7" r="2" fill={T.blue} opacity={0.9}/>
         </svg>
-        <span style={{fontFamily:FM,fontSize:36,fontWeight:600,color:T.textHi,letterSpacing:"0.16em"}}>MĪZAN</span>
+        <span style={{fontFamily:FU,fontSize:44,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>MĪZAN</span>
       </div>
-      <div style={{fontFamily:FU,fontSize:20,color:T.text,lineHeight:1.55,maxWidth:680,margin:"0 auto 6px",fontWeight:400}}>
+      <div style={{fontFamily:FU,fontSize:24,fontWeight:600,color:T.textHi,lineHeight:1.3,maxWidth:680,margin:`0 auto ${T.s2}`,letterSpacing:"-0.02em"}}>
         The Shariah-compliant financial super-app.
       </div>
-      <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.65,maxWidth:640,margin:"0 auto"}}>
+      <div style={{fontFamily:FU,fontSize:15,color:T.muted,lineHeight:1.6,maxWidth:600,margin:"0 auto"}}>
         Brokerages, banking, trading, and AI insights — unified, halal-screened, in one place.
       </div>
-    </div>
+    </BentoTile>
 
-    {/* 4 FEATURE CARDS — equal-height 2×2 */}
-    <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14}}>
-      {sections.map(s=><div key={s.t} style={{
-        background:T.card, border:`1px solid ${T.border}`, borderRadius:14,
-        padding:"24px 26px", boxShadow:T.shadow, display:"flex", flexDirection:"column",
-        position:"relative", overflow:"hidden",
+    {/* ─── 4 FEATURE BENTO CARDS ──────────────────────── */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:T.s4}}>
+      {sections.map(s=><BentoTile key={s.t} accent={s.accent} style={{
+        background:`linear-gradient(135deg, ${s.accent}0F, transparent 60%), ${T.card}`,
+        display:"flex",flexDirection:"column",gap:T.s2,
       }}>
-        <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg, ${s.accent}, transparent)`}}/>
-        <div style={{display:"flex",alignItems:"baseline",gap:12,marginBottom:10}}>
-          <span style={{fontSize:22}}>{s.icon}</span>
-          <span style={{fontFamily:FM,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"0.06em"}}>{s.t.toUpperCase()}</span>
+        <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
+          <span style={{fontSize:28,lineHeight:1}}>{s.icon}</span>
+          <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:s.accent,letterSpacing:"0.18em"}}>{s.t.toUpperCase()}</span>
         </div>
-        <div style={{fontFamily:FU,fontSize:13.5,color:T.text,lineHeight:1.65,flex:1}}>{s.d}</div>
-      </div>)}
+        <div style={{fontFamily:FU,fontSize:14,color:T.text,lineHeight:1.6,letterSpacing:"-0.005em"}}>{s.d}</div>
+      </BentoTile>)}
     </div>
 
-    {/* SHARIAH FOUNDATIONS */}
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"28px 30px",boxShadow:T.shadow}}>
-      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:6,flexWrap:"wrap",gap:8}}>
-        <div style={{fontFamily:FM,fontSize:11,color:T.gold,letterSpacing:"0.18em",fontWeight:600}}>SHARIAH FOUNDATIONS</div>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>{standards.length} STANDARDS</div>
+    {/* ─── SHARIAH FOUNDATIONS ──────────────────────── */}
+    <BentoTile accent={T.gold} style={{background:`radial-gradient(circle at 100% 0%, ${T.gold}10, transparent 55%), ${T.card}`}}>
+      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:T.s2,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:11,color:T.gold,letterSpacing:"0.18em",fontWeight:600}}>SHARIAH FOUNDATIONS</span>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>{standards.length} STANDARDS</span>
       </div>
-      <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.65,maxWidth:760,marginBottom:20}}>
+      <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:760,marginBottom:T.s4,letterSpacing:"-0.005em"}}>
         Built around six Islamic finance principles. Not annotations on a generic finance app — they shape what's displayed, what's allowed at the order layer, and how AI recommendations are generated.
       </div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:22}}>
-        {standards.map(s=><span key={s} style={{padding:"4px 10px",background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:6,fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.04em"}}>{s}</span>)}
+      <div style={{display:"flex",flexWrap:"wrap",gap:T.s1,marginBottom:T.s4}}>
+        {standards.map(s=><span key={s} style={{
+          padding:`5px ${T.s3}`,
+          background:`${T.gold}15`,
+          border:`1px solid ${T.gold}35`,
+          borderRadius:999,
+          fontFamily:FM,fontSize:10,fontWeight:600,color:T.gold,letterSpacing:"0.06em",
+        }}>{s}</span>)}
       </div>
-      <div className="mz-grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-        {principles.map(([k,v])=><div key={k} style={{padding:"14px 16px",background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,minHeight:120}}>
-          <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.gold,letterSpacing:"0.04em",marginBottom:6}}>{k}</div>
-          <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55}}>{v}</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s2}}>
+        {principles.map(([k,v])=><div key={k} style={{
+          padding:`${T.s3} ${T.s4}`,
+          background:T.surface,
+          borderRadius:T.rMd,
+          border:`1px solid ${T.border}`,
+          borderLeft:`3px solid ${T.gold}`,
+        }}>
+          <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.gold,letterSpacing:"-0.01em",marginBottom:T.s1}}>{k}</div>
+          <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{v}</div>
         </div>)}
       </div>
-    </div>
+    </BentoTile>
 
-    {/* INTEGRATIONS */}
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"28px 30px",boxShadow:T.shadow}}>
-      <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.18em",fontWeight:600,marginBottom:18}}>DATA & INTEGRATIONS</div>
-      <div className="mz-grid-5" style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
-        {integrations.map(i=><div key={i.n} style={{padding:"14px 16px",background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,position:"relative",overflow:"hidden"}}>
-          <div style={{position:"absolute",top:0,left:0,bottom:0,width:3,background:i.c}}/>
-          <div style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi,marginBottom:4,marginLeft:6}}>{i.n}</div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginLeft:6}}>{i.d}</div>
+    {/* ─── INTEGRATIONS ─────────────────────────────── */}
+    <BentoTile accent={T.blue}>
+      <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s4}}>DATA & INTEGRATIONS</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:T.s2}}>
+        {integrations.map(i=><div key={i.n} style={{
+          padding:`${T.s3} ${T.s4}`,
+          background:T.surface,
+          borderRadius:T.rMd,
+          border:`1px solid ${T.border}`,
+          borderLeft:`3px solid ${i.c}`,
+        }}>
+          <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{i.n}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted}}>{i.d}</div>
         </div>)}
       </div>
-    </div>
+    </BentoTile>
 
-    {/* DISCLAIMER */}
-    <div style={{textAlign:"center",fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",padding:"8px 0 24px",lineHeight:1.8}}>
+    {/* ─── DISCLAIMER ─────────────────────────────── */}
+    <div style={{textAlign:"center",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",padding:`${T.s4} 0 ${T.s6}`,lineHeight:1.8,fontWeight:500}}>
       MĪZAN · NOT FINANCIAL OR RELIGIOUS ADVICE<br/>
       CONSULT A QUALIFIED SCHOLAR FOR PERSONAL JURISPRUDENCE
     </div>
