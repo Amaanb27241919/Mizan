@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useAuth } from "../lib/auth.jsx";
 import { apiFetch } from "../lib/apiFetch.js";
+import { persistUserState } from "../lib/userState.js";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
 // PE/VC/fintech palette: warmer dark base, modern emerald, refined royal,
@@ -971,7 +972,7 @@ function AAOIFIScreener({holdings=[]}){
       const baseline=JSON.parse(localStorage.getItem("mizan_screening_baseline")||"null");
       if(!baseline){
         // First-ever screen: silent baseline init, no spam.
-        localStorage.setItem("mizan_screening_baseline",JSON.stringify(final));
+        localStorage.setItem("mizan_screening_baseline",JSON.stringify(final));persistUserState("mizan_screening_baseline",final);
       }else if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
         const updated={...baseline};
         let fired=0;
@@ -985,7 +986,7 @@ function AAOIFIScreener({holdings=[]}){
             updated[tk]=res; fired++;
           }
         });
-        if(fired>0)localStorage.setItem("mizan_screening_baseline",JSON.stringify(updated));
+        if(fired>0){localStorage.setItem("mizan_screening_baseline",JSON.stringify(updated));persistUserState("mizan_screening_baseline",updated);}
       }
     }catch{}
   };
@@ -2006,7 +2007,7 @@ function ManualAssets(){
   const[assets,setAssets]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}});
   const[form,setForm]=useState({type:"Gold",name:"",value:"",zakatable:true,notes:""});
 
-  const persist=arr=>{setAssets(arr);try{localStorage.setItem("mizan_manual_assets",JSON.stringify(arr));}catch{}};
+  const persist=arr=>{setAssets(arr);try{localStorage.setItem("mizan_manual_assets",JSON.stringify(arr));}catch{}persistUserState("mizan_manual_assets",arr);};
   const add=(e)=>{
     e.preventDefault();
     if(!form.name||!form.value)return;
@@ -2101,7 +2102,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,demoMode,onToggleDem
   const[keys,setKeys]=useState({...apiKeys});
   const[saved,setSaved]=useState(false);
   const[sub,setSub]=useState("keys");
-  const save=()=>{setApiKeys(keys);setGlobalKeys(keys);try{localStorage.setItem("mizan_keys",JSON.stringify(keys));}catch{}setSaved(true);setTimeout(()=>setSaved(false),2500);};
+  const save=()=>{setApiKeys(keys);setGlobalKeys(keys);try{localStorage.setItem("mizan_keys",JSON.stringify(keys));}catch{}persistUserState("mizan_keys",keys);setSaved(true);setTimeout(()=>setSaved(false),2500);};
   const has=k=>(keys[k]||"").length>8;
 
   const APIS=[
@@ -2293,7 +2294,7 @@ function ConnectModal({onClose,snapId}){
         if (sel) {
           const u = [...conn.filter(b=>b.id!==sel.id),
             {...sel, status:"connected", authId:d.authorizationId, at:new Date().toISOString()}];
-          localStorage.setItem("mizan_brokers", JSON.stringify(u));
+          localStorage.setItem("mizan_brokers", JSON.stringify(u));persistUserState("mizan_brokers",u);
           setConn(u);
         }
         setStep("done");
@@ -2702,7 +2703,7 @@ export default function Mizan(){
     setDisabledAccts(prev=>{
       const next=new Set(prev);
       next.has(id)?next.delete(id):next.add(id);
-      try{localStorage.setItem("mizan_disabled_accts",JSON.stringify([...next]));}catch{}
+      try{localStorage.setItem("mizan_disabled_accts",JSON.stringify([...next]));}catch{}persistUserState("mizan_disabled_accts",[...next]);
       return next;
     });
   };
@@ -2724,7 +2725,9 @@ export default function Mizan(){
       const next={date:today,total:+balanceSum.toFixed(2),cash:+cashSum.toFixed(2),accounts:visibleAccounts.length};
       const without=hist.filter(h=>h.date!==today);
       const updated=[...without,next].sort((a,b)=>a.date.localeCompare(b.date));
-      localStorage.setItem("mizan_networth_history",JSON.stringify(updated.slice(-3650))); // 10 years cap
+      const trimmed=updated.slice(-3650);
+      localStorage.setItem("mizan_networth_history",JSON.stringify(trimmed)); // 10 years cap
+      persistUserState("mizan_networth_history",trimmed);
     }catch{}
   },[visibleAccounts]);
 
@@ -2856,7 +2859,7 @@ export default function Mizan(){
           if(!rows.length){reject(new Error("No rows parsed — check the CSV format"));return;}
           const existing=JSON.parse(localStorage.getItem("mizan_imports")||"[]");
           const merged=[...existing,...rows];
-          localStorage.setItem("mizan_imports",JSON.stringify(merged));
+          localStorage.setItem("mizan_imports",JSON.stringify(merged));persistUserState("mizan_imports",merged);
           // Push into the live state so Overview updates immediately.
           setSnapActivities(prev=>[...prev,...rows].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
           resolve(rows.length);
@@ -2869,7 +2872,7 @@ export default function Mizan(){
 
   // Watchlist + browser-native price alerts.
   const[watchlist,setWatchlist]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_watchlist")||"[]");}catch{return[];}});
-  const persistWatchlist=next=>{setWatchlist(next);try{localStorage.setItem("mizan_watchlist",JSON.stringify(next));}catch{}};
+  const persistWatchlist=next=>{setWatchlist(next);try{localStorage.setItem("mizan_watchlist",JSON.stringify(next));}catch{}persistUserState("mizan_watchlist",next);};
   const addToWatchlist=(sym)=>{
     const tk=(sym||"").trim().toUpperCase();
     if(!tk||watchlist.some(w=>w.symbol===tk))return;
@@ -2900,8 +2903,11 @@ export default function Mizan(){
       // Silent seed — every existing dividend is already "seen".
       const all=new Set(dividends.map(d=>d.id));
       try{
-        localStorage.setItem("mizan_seen_dividends",JSON.stringify([...all]));
+        const allArr=[...all];
+        localStorage.setItem("mizan_seen_dividends",JSON.stringify(allArr));
         localStorage.setItem("mizan_seen_dividends_initialized","1");
+        persistUserState("mizan_seen_dividends",allArr);
+        persistUserState("mizan_seen_dividends_initialized","1");
       }catch{}
       return;
     }
@@ -2918,7 +2924,7 @@ export default function Mizan(){
       try{new Notification(`${fresh.length-5} more dividends`,{body:"Open MIZAN → Activity to review",icon:"/icon-192.png"});}catch{}
       fresh.slice(5).forEach(d=>seenIds.add(d.id));
     }
-    try{localStorage.setItem("mizan_seen_dividends",JSON.stringify([...seenIds]));}catch{}
+    try{const seenArr=[...seenIds];localStorage.setItem("mizan_seen_dividends",JSON.stringify(seenArr));persistUserState("mizan_seen_dividends",seenArr);}catch{}
   },[snapActivities]);
 
   // Alert checker — fires browser notifications when targets are crossed.
