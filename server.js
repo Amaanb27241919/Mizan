@@ -169,7 +169,7 @@ async function handleApi(req, res, url) {
     body: parsed,
     headers: req.headers,
   });
-  res.writeHead(result.status, { "Content-Type": "application/json" });
+  res.writeHead(result.status, { "Content-Type": "application/json", ...(result.headers || {}) });
   res.end(JSON.stringify(result.body));
 }
 
