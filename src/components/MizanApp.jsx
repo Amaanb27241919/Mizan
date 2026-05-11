@@ -2158,6 +2158,135 @@ function CSVImporter({onImport,onDedupe}){
   </div>;
 }
 
+/* ─── SECURITY PANEL ─────────────────────────────────── */
+// Account security: 2FA enrollment + status. Available to every user
+// regardless of role — security is a baseline, not a paywall.
+function SecurityPanel(){
+  const{user,isSupabaseConfigured,mfaListFactors,mfaEnroll,mfaVerify,mfaUnenroll}=useAuth();
+  const[factors,setFactors]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[enrolling,setEnrolling]=useState(null); // {factorId, qr, secret, uri}
+  const[code,setCode]=useState("");
+  const[busy,setBusy]=useState(false);
+  const[error,setError]=useState(null);
+  const[info,setInfo]=useState(null);
+
+  const refresh=useCallback(async()=>{
+    if(!isSupabaseConfigured){setLoading(false);return;}
+    setLoading(true);
+    const r=await mfaListFactors();
+    setFactors(r?.data?.totp||[]);
+    setLoading(false);
+  },[isSupabaseConfigured,mfaListFactors]);
+  useEffect(()=>{refresh();},[refresh]);
+
+  const startEnroll=async()=>{
+    setError(null);setInfo(null);setBusy(true);
+    const r=await mfaEnroll("MIZAN");
+    setBusy(false);
+    if(r.error)return setError(r.error.message||"Could not start enrollment");
+    setEnrolling({
+      factorId:r.data.id,
+      qr:r.data.totp?.qr_code,
+      secret:r.data.totp?.secret,
+      uri:r.data.totp?.uri,
+    });
+    setCode("");
+  };
+  const confirmEnroll=async()=>{
+    if(!enrolling||code.length<6)return setError("Enter the 6-digit code from your authenticator");
+    setBusy(true);setError(null);
+    const r=await mfaVerify(enrolling.factorId,code);
+    setBusy(false);
+    if(r.error)return setError(r.error.message||"Invalid code");
+    setEnrolling(null);setCode("");
+    setInfo("Two-factor authentication enabled. You'll be prompted for a code on next sign-in.");
+    refresh();
+  };
+  const cancelEnroll=async()=>{
+    if(!enrolling)return;
+    // Clean up the unverified factor so it doesn't dangle in Supabase.
+    await mfaUnenroll(enrolling.factorId).catch(()=>{});
+    setEnrolling(null);setCode("");setError(null);
+  };
+  const disableMfa=async(factorId)=>{
+    if(!confirm("Disable two-factor authentication? Your account becomes less secure."))return;
+    setBusy(true);setError(null);
+    const r=await mfaUnenroll(factorId);
+    setBusy(false);
+    if(r.error)return setError(r.error.message||"Could not disable");
+    setInfo("Two-factor authentication disabled.");
+    refresh();
+  };
+
+  const verified=factors.filter(f=>f.status==="verified");
+  if(!isSupabaseConfigured){
+    return<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"24px 28px"}}>
+      <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>SECURITY</div>
+      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6}}>Multi-factor authentication requires Supabase Auth. Configure VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY to enable.</p>
+    </div>;
+  }
+
+  return<div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"22px 24px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,marginBottom:10}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>TWO-FACTOR AUTHENTICATION</div>
+          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+            Add a TOTP authenticator (1Password, Authy, Google Authenticator) so a stolen password isn't enough to sign in.
+          </p>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          {verified.length>0
+            ?<Tag label="Enabled" color={T.gain}/>
+            :<Tag label="Off"     color={T.muted}/>}
+        </div>
+      </div>
+
+      {loading&&<div style={{fontFamily:FM,fontSize:11,color:T.muted,padding:"6px 0"}}>Loading…</div>}
+
+      {!loading&&!enrolling&&verified.length===0&&<div style={{marginTop:8}}>
+        <button onClick={startEnroll} disabled={busy} style={{padding:"9px 18px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",background:T.blue,border:"none",color:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"Working…":"Enable 2FA"}</button>
+      </div>}
+
+      {!loading&&!enrolling&&verified.length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
+        {verified.map(f=><div key={f.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 14px"}}>
+          <div>
+            <div style={{fontFamily:FM,fontSize:12,color:T.textHi}}>{f.friendly_name||"Authenticator"}</div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>Enrolled {f.created_at?new Date(f.created_at).toLocaleDateString():""}</div>
+          </div>
+          <button onClick={()=>disableMfa(f.id)} disabled={busy} style={{padding:"6px 12px",borderRadius:6,fontFamily:FM,fontSize:10,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.loss}40`,color:T.loss,cursor:busy?"not-allowed":"pointer"}}>Disable</button>
+        </div>)}
+      </div>}
+
+      {enrolling&&<div style={{marginTop:14,padding:14,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>STEP 1 — SCAN QR</div>
+        {enrolling.qr&&<div style={{display:"flex",justifyContent:"center",marginBottom:10}}>
+          <img src={enrolling.qr} alt="2FA QR code" style={{width:180,height:180,background:"#fff",padding:8,borderRadius:8}}/>
+        </div>}
+        {enrolling.secret&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,textAlign:"center",marginBottom:12}}>
+          Can't scan? Enter this secret manually:<br/>
+          <span style={{fontFamily:FM,fontSize:11,color:T.text,letterSpacing:"0.06em"}}>{enrolling.secret}</span>
+        </div>}
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>STEP 2 — VERIFY</div>
+        <input
+          type="text" inputMode="numeric" maxLength={6}
+          placeholder="6-digit code"
+          value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))}
+          style={{width:"100%",padding:"10px 12px",background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontFamily:FM,fontSize:16,color:T.text,letterSpacing:"0.3em",textAlign:"center",outline:"none",boxSizing:"border-box"}}
+        />
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <button onClick={confirmEnroll} disabled={busy} style={{flex:1,padding:"9px 14px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",background:busy?T.dim:T.blue,border:"none",color:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"Verifying…":"Confirm"}</button>
+          <button onClick={cancelEnroll} disabled={busy} style={{padding:"9px 14px",borderRadius:8,fontFamily:FM,fontSize:11,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:busy?"not-allowed":"pointer"}}>Cancel</button>
+        </div>
+      </div>}
+
+      {error&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:8,fontFamily:FM,fontSize:11,background:T.lossBg,border:`1px solid ${T.loss}30`,color:T.loss}}>{error}</div>}
+      {info&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:8,fontFamily:FM,fontSize:11,background:T.gainBg,border:`1px solid ${T.gain}30`,color:T.gain}}>{info}</div>}
+    </div>
+  </div>;
+}
+
 function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode,onToggleDemo}){
   const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
   const[keys,setKeys]=useState({...apiKeys});
@@ -2214,8 +2343,8 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
         // API Keys section is admin-only. End-users use server-side keys.
         ...(isRoot?[["keys","API Keys"]]:[]),
         ["brokers","Connect Accounts"],
+        ["security","Security"],
         ["assets","Manual Assets"],
-        ["zakat","Sadaqah & Zakat"],
       ]}
       active={sub}
       onChange={setSub}
@@ -2285,12 +2414,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
       </div>
     </>}
 
-    {sub==="zakat"&&<div style={{background:T.card,border:`1px dashed ${T.border}`,borderRadius:14,padding:"36px 28px",textAlign:"center"}}>
-      <div style={{fontFamily:FM,fontSize:11,color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:10}}>ZAKAT — COMING SOON</div>
-      <p style={{fontFamily:FU,fontSize:13,color:T.muted,maxWidth:480,margin:"0 auto",lineHeight:1.6}}>
-        Per-user Zakat calculation + donation tracking is being rebuilt to read from your connected accounts. The previous panel rendered placeholder figures and has been temporarily hidden.
-      </p>
-    </div>}
+    {sub==="security"&&<SecurityPanel/>}
   </div>;
 }
 

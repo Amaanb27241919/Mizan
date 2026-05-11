@@ -136,18 +136,24 @@ export default function Login() {
     signUpWithPassword,
     sendPasswordReset,
     updatePassword,
+    mfaListFactors,
+    mfaChallengeAndVerify,
+    mfaAssuranceLevel,
     isSupabaseConfigured,
     recoveryMode,
     exitRecovery,
   } = useAuth();
 
-  // 'signin' | 'signup' | 'forgot' | 'reset' | 'verify-sent'
+  // 'signin' | 'signup' | 'forgot' | 'reset' | 'verify-sent' | 'mfa'
   // 'reset' shows when Supabase emits PASSWORD_RECOVERY (user clicked reset link).
   // 'verify-sent' shows after sign-up if Supabase has email confirmation enabled.
+  // 'mfa' shows after password sign-in when the account has a verified TOTP factor.
   const [mode, setMode] = useState(recoveryMode ? 'reset' : 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaFactor, setMfaFactor] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
@@ -174,9 +180,32 @@ export default function Login() {
       if (!email || !password) return setError('Email and password required');
       setSubmitting(true);
       const { error: err } = await signInWithPassword(email, password);
+      if (err) {
+        setSubmitting(false);
+        return setError(err.message || 'Sign-in failed');
+      }
+      // Password OK. Check if MFA is required to step up to AAL2.
+      const aal = await mfaAssuranceLevel();
+      if (aal?.data?.currentLevel === 'aal1' && aal?.data?.nextLevel === 'aal2') {
+        const factors = await mfaListFactors();
+        const verified = (factors?.data?.totp || []).find(f => f.status === 'verified');
+        if (verified) {
+          setMfaFactor(verified);
+          setMode('mfa');
+          setSubmitting(false);
+          return;
+        }
+      }
       setSubmitting(false);
-      if (err) return setError(err.message || 'Sign-in failed');
       // Success — AuthProvider will flip user and unmount this screen.
+    } else if (mode === 'mfa') {
+      if (!mfaCode || mfaCode.length < 6) return setError('Enter the 6-digit code');
+      if (!mfaFactor) return setError('Session expired — sign in again');
+      setSubmitting(true);
+      const { error: err } = await mfaChallengeAndVerify(mfaFactor.id, mfaCode);
+      setSubmitting(false);
+      if (err) return setError(err.message || 'Invalid code');
+      // Success — session promotes to AAL2; AuthProvider unmounts this screen.
     } else if (mode === 'signup') {
       if (!email || !password) return setError('Email and password required');
       if (password.length < 8) return setError('Password must be at least 8 characters');
@@ -229,6 +258,10 @@ export default function Login() {
     title = 'Set a new password';
     subtitle = 'Enter and confirm your new password.';
     button = 'Update password';
+  } else if (mode === 'mfa') {
+    title = 'Two-factor verification';
+    subtitle = 'Enter the 6-digit code from your authenticator app.';
+    button = 'Verify';
   }
 
   return (
@@ -285,6 +318,24 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={styles.input}
+                />
+              </>
+            )}
+
+            {mode === 'mfa' && (
+              <>
+                <label style={styles.label} htmlFor="mizan-mfa">6-digit code</label>
+                <input
+                  id="mizan-mfa"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="123456"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                  style={{ ...styles.input, letterSpacing: '0.3em', fontSize: 18, textAlign: 'center' }}
                 />
               </>
             )}

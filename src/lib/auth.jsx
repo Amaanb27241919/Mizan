@@ -109,6 +109,51 @@ export function AuthProvider({ children }) {
     return supabase.auth.updateUser({ password });
   };
 
+  // ── 2FA / TOTP ────────────────────────────────────────────
+  // Thin wrappers around Supabase Auth MFA. Enabling MFA in the Supabase
+  // dashboard (Authentication → Multi-Factor) is a one-time prerequisite.
+  const mfaListFactors = async () => {
+    if (!supabase) return { data: { totp: [], all: [] }, error: null };
+    return supabase.auth.mfa.listFactors();
+  };
+  const mfaEnroll = async (friendlyName = 'Authenticator') => {
+    if (!supabase) return { data: null, error: new Error('Supabase not configured') };
+    return supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName });
+  };
+  const mfaVerify = async (factorId, code) => {
+    if (!supabase) return { data: null, error: new Error('Supabase not configured') };
+    const ch = await supabase.auth.mfa.challenge({ factorId });
+    if (ch.error) return ch;
+    const out = await supabase.auth.mfa.verify({
+      factorId,
+      challengeId: ch.data.id,
+      code,
+    });
+    if (!out.error) recordAudit('auth.mfa_enrolled', { target: factorId });
+    return out;
+  };
+  const mfaUnenroll = async (factorId) => {
+    if (!supabase) return { data: null, error: new Error('Supabase not configured') };
+    const out = await supabase.auth.mfa.unenroll({ factorId });
+    if (!out.error) recordAudit('auth.mfa_unenrolled', { target: factorId });
+    return out;
+  };
+  const mfaChallengeAndVerify = async (factorId, code) => {
+    // Used during sign-in to step from AAL1 → AAL2.
+    if (!supabase) return { data: null, error: new Error('Supabase not configured') };
+    const ch = await supabase.auth.mfa.challenge({ factorId });
+    if (ch.error) return ch;
+    return supabase.auth.mfa.verify({
+      factorId,
+      challengeId: ch.data.id,
+      code,
+    });
+  };
+  const mfaAssuranceLevel = async () => {
+    if (!supabase) return { data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null };
+    return supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  };
+
   // Legacy alias — old call sites can still call signInWithEmail but it
   // now requires a password. Removed magic-link path entirely.
   const signInWithEmail = signInWithPassword;
@@ -155,6 +200,12 @@ export function AuthProvider({ children }) {
     signUpWithPassword,
     sendPasswordReset,
     updatePassword,
+    mfaListFactors,
+    mfaEnroll,
+    mfaVerify,
+    mfaUnenroll,
+    mfaChallengeAndVerify,
+    mfaAssuranceLevel,
     signOut,
     isSupabaseConfigured,
   };
