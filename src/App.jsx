@@ -35,7 +35,7 @@ function Gate() {
   if (loading || !hydrated) {
     return (
       <div style={{
-        minHeight: '100vh', background: '#0A0B0F',
+        minHeight: '100vh', background: '#0B0F1E',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: '#5C6478', fontFamily: 'monospace', fontSize: 11, letterSpacing: '0.16em',
       }}>SYNCING…</div>

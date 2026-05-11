@@ -5,15 +5,18 @@ import { apiFetch } from "../lib/apiFetch.js";
 import { persistUserState } from "../lib/userState.js";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
-// PE/VC/fintech palette: warmer dark base, modern emerald, refined royal,
-// money-gold. Theme-variable colors live as CSS vars; accents stay constant.
+// Savium-inspired palette: deep navy base, vibrant purple primary, soft
+// coral for highlights, soft red for warnings/losses. Theme-variable colors
+// live as CSS vars; accent hexes stay constant across light/dark.
+// `T.blue` and `T.gold` keep their property names for codebase stability —
+// values shifted to the new direction.
 const T = {
   bg:"var(--mz-bg)", surface:"var(--mz-surface)", card:"var(--mz-card)",
   border:"var(--mz-border)", borderHi:"var(--mz-borderHi)",
-  blue:"#4F76FB", blueDim:"#3A5BD9",
-  gold:"#E0A82E", goldDim:"#A57C20",
+  blue:"#7B61FF", blueDim:"#5A3FE0",        // vibrant purple (primary)
+  gold:"#FF9F6A", goldDim:"#D9764A",        // soft coral (secondary)
   gain:"#10B981", gainBg:"var(--mz-gainBg)",
-  loss:"#EF4444", lossBg:"var(--mz-lossBg)",
+  loss:"#FF6B6B", lossBg:"var(--mz-lossBg)", // soft red
   text:"var(--mz-text)", textHi:"var(--mz-textHi)",
   muted:"var(--mz-muted)", dim:"var(--mz-dim)",
   // Surface effects (theme-variable)
@@ -21,22 +24,22 @@ const T = {
 };
 const THEME_CSS = `
   :root, :root[data-theme="dark"] {
-    --mz-bg: #0A0B0F; --mz-surface: #11141B; --mz-card: #161A23;
-    --mz-border: #1F2433; --mz-borderHi: #2B313F;
-    --mz-text: #C7CDD9; --mz-textHi: #E8ECF3;
-    --mz-muted: #5C6478; --mz-dim: #1F2433;
-    --mz-gainBg: #061B11; --mz-lossBg: #1B0A0A;
-    --mz-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 8px 24px rgba(0,0,0,0.35);
-    --mz-glass: rgba(17,20,27,0.72);
+    --mz-bg: #0B0F1E; --mz-surface: #141930; --mz-card: #1A1F35;
+    --mz-border: #252B40; --mz-borderHi: #353C55;
+    --mz-text: #C5CCDE; --mz-textHi: #ECEFF7;
+    --mz-muted: #6F7997; --mz-dim: #252B40;
+    --mz-gainBg: #0A1F18; --mz-lossBg: #1F1015;
+    --mz-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 28px rgba(0,0,0,0.5);
+    --mz-glass: rgba(20,25,48,0.72);
     color-scheme: dark;
   }
   :root[data-theme="light"] {
-    --mz-bg: #F5F6F9; --mz-surface: #FFFFFF; --mz-card: #FFFFFF;
-    --mz-border: #E4E7EC; --mz-borderHi: #C9CFD8;
-    --mz-text: #1F2433; --mz-textHi: #0A0B0F;
-    --mz-muted: #687184; --mz-dim: #EEF0F4;
+    --mz-bg: #F6F7FB; --mz-surface: #FFFFFF; --mz-card: #FFFFFF;
+    --mz-border: #E2E6EE; --mz-borderHi: #C6CCD9;
+    --mz-text: #1F2540; --mz-textHi: #0B0F1E;
+    --mz-muted: #6F7997; --mz-dim: #EEF0F5;
     --mz-gainBg: #F0FBF4; --mz-lossBg: #FFF1F1;
-    --mz-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 20px rgba(15,18,25,0.06);
+    --mz-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 20px rgba(15,18,30,0.06);
     --mz-glass: rgba(255,255,255,0.78);
     color-scheme: light;
   }
@@ -1066,7 +1069,7 @@ function AAOIFIScreener({holdings=[]}){
       ]} rows={[...enriched].sort((a,b)=>{const o={haram:0,review:1,unknown:2,halal:3};return(o[a._screen.status]??9)-(o[b._screen.status]??9);})}/>
     </div>
 
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+    <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14}}>
         <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>STANDARDS RUN AGAINST EACH HOLDING</div>
         {Object.entries(STANDARDS).map(([k,s])=><div key={k} style={{padding:"7px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FU,fontSize:12}}>
@@ -1753,7 +1756,7 @@ function HistoricalBacktest(){
         <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:14}}>BACKTEST INPUTS</div>
         <div style={{marginBottom:12}}><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:5}}>SYMBOL</div>
           <input value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"7px 10px",fontFamily:FM,fontSize:13,color:T.blue,outline:"none"}}/></div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+        <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
           <div><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:5}}>FROM</div>
             <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}/></div>
           <div><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:5}}>TO</div>
@@ -1912,7 +1915,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
       </div>
     </div>}
 
-    {sub==="sharia"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+    {sub==="sharia"&&<div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       {[{t:"No Riba (Interest)",ok:true,d:"Cash-only accounts. No margin, no overnight interest charges. Never borrows capital to trade."},{t:"No Gharar (Uncertainty)",ok:true,d:"Spot equity only. No options, futures, CFDs, or leveraged ETFs."},{t:"No Maisir (Gambling)",ok:true,d:"Systematic edge required. Positive expectancy confirmed before any capital is deployed."},{t:"Debt Screening",ok:true,d:"Total Debt / Total Assets must be below 33% per AAOIFI standard."},{t:"Revenue Test",ok:true,d:"Haram revenue must be below 5% of total revenue. Purification calculated for mixed income."},{t:"No Short Selling",ok:false,d:"You cannot sell what you don't own. Long positions only — no inverse or bear positions."},{t:"No Derivatives",ok:false,d:"Options and futures contracts are prohibited under Gharar (excessive uncertainty)."},{t:"No Margin",ok:false,d:"Borrowed capital with interest charges is Riba — absolutely prohibited."}].map(r=><div key={r.t} style={{background:T.card,border:`1px solid ${T.border}`,borderLeft:`3px solid ${r.ok?T.gain:T.loss}`,borderRadius:12,padding:"13px 16px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:7}}><span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:r.ok?T.textHi:T.muted}}>{r.t}</span><Tag label={r.ok?"Required":"Prohibited"} color={r.ok?T.gain:T.loss}/></div><p style={{fontFamily:FU,fontSize:12,color:T.muted,margin:0,lineHeight:1.6}}>{r.d}</p></div>)}
     </div>}
   </div>;
@@ -2082,8 +2085,18 @@ function CSVImporter({onImport}){
     if(!file||!onImport)return;
     setBusy(true);setStatus(null);
     try{
-      const n=await onImport(file,broker);
-      setStatus({ok:true,msg:`Imported ${n} rows from ${file.name}`});
+      const r=await onImport(file,broker);
+      // Backwards-compat: importCSV used to resolve with a row count. It
+      // now resolves with {added,skipped,total}. Handle both shapes.
+      if(typeof r==="number"){
+        setStatus({ok:true,msg:`Imported ${r} rows from ${file.name}`});
+      }else if(r.added===0&&r.skipped>0){
+        setStatus({ok:true,msg:`No new rows — all ${r.skipped} entries in ${file.name} are already imported.`});
+      }else if(r.skipped>0){
+        setStatus({ok:true,msg:`Added ${r.added} new rows from ${file.name} (skipped ${r.skipped} duplicates).`});
+      }else{
+        setStatus({ok:true,msg:`Imported ${r.added} rows from ${file.name}.`});
+      }
     }catch(err){
       setStatus({ok:false,msg:err.message||"Parse failed"});
     }finally{
@@ -2174,7 +2187,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,demoMode,onToggleDem
           </div>
           <a href={`https://${api.url}`} target="_blank" rel="noreferrer" style={{fontFamily:FM,fontSize:9,color:api.color,textDecoration:"none",padding:"4px 10px",border:`1px solid ${api.color}30`,borderRadius:6,letterSpacing:"0.08em",flexShrink:0}}>GET KEY ↗</a>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:api.fields.length>1?"1fr 1fr":"1fr",gap:10}}>
+        <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:api.fields.length>1?"1fr 1fr":"1fr",gap:10}}>
           {api.fields.map(f=><div key={f.k}><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:4}}>{f.l}</div><div style={{position:"relative"}}><input type="password" value={keys[f.k]||""} placeholder={f.ph} onChange={e=>setKeys(k=>({...k,[f.k]:e.target.value}))} style={{width:"100%",background:T.surface,border:`1px solid ${has(f.k)?api.color+"50":T.border}`,borderRadius:8,padding:"8px 12px",fontFamily:FM,fontSize:11,color:T.text,outline:"none",boxSizing:"border-box",transition:"border-color 0.15s"}}/>{has(f.k)&&<span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:10,color:api.color}}>✓</span>}</div></div>)}
         </div>
         {api.serverOnly&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:`${T.gain}0E`,border:`1px solid ${T.gain}28`,borderRadius:8,fontFamily:FM,fontSize:10,color:T.gain}}>
@@ -2183,7 +2196,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,demoMode,onToggleDem
       </div>)}
       <div>
         <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>{FEATURES.filter(f=>f.req.every(r=>has(r))).length}/{FEATURES.length} FEATURES ACTIVE</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+        <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
           {FEATURES.map(f=>{const on=f.alwaysOn||f.req.every(r=>has(r));return<div key={f.f} style={{display:"flex",gap:9,alignItems:"center",padding:"8px 12px",background:T.card,border:`1px solid ${on?T.gain+"18":T.border}`,borderRadius:8}}><LiveDot on={on}/><span style={{fontFamily:FM,fontSize:11,color:on?T.text:T.muted}}>{f.f}</span>{f.note&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,marginLeft:"auto"}}>{f.note}</span>}</div>;})}
         </div>
       </div>
@@ -2224,7 +2237,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,demoMode,onToggleDem
       </div>
     </>}
 
-    {sub==="zakat"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+    {sub==="zakat"&&<div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         <div style={{background:T.card,border:`1px solid ${T.gold}28`,borderRadius:12,padding:20}}>
           <div style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.14em",marginBottom:14}}>ZAKAT CALCULATION — 2026</div>
@@ -2509,7 +2522,7 @@ function ConnectModal({onClose,snapId}){
                 style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px 12px",fontFamily:FM,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box"}}/>
             </div>
             <div style={{overflowY:"auto",flex:1,padding:14,
-              display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}} className="mz-grid-2">
               {mergedBrokers.length===0&&<div style={{gridColumn:"1 / -1",fontFamily:FM,fontSize:11,color:T.muted,textAlign:"center",padding:24}}>
                 {allBrokerages.length===0?"Loading SnapTrade brokerages…":"No brokerages match your search."}
               </div>}
@@ -2605,7 +2618,7 @@ function About(){
     </div>
 
     {/* 4 FEATURE CARDS — equal-height 2×2 */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14}}>
+    <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14}}>
       {sections.map(s=><div key={s.t} style={{
         background:T.card, border:`1px solid ${T.border}`, borderRadius:14,
         padding:"24px 26px", boxShadow:T.shadow, display:"flex", flexDirection:"column",
@@ -2870,6 +2883,21 @@ export default function Mizan(){
   // CSV import for historical backfill (Fidelity / Robinhood / Coinbase
   // activity exports). Parsed rows merge into snapActivities so all the
   // performance metrics pick them up automatically.
+  //
+  // Dedup: two rows are considered the same if their broker + trade_date +
+  // type + symbol + units + price + amount all match. This catches the
+  // common "user re-uploads the same export" case without rejecting a
+  // legitimately-updated export that simply contains the same older rows
+  // plus new ones — only the duplicates are skipped, new rows still land.
+  const fingerprintRow=r=>[
+    r.institution_name||"",
+    r.trade_date||"",
+    r.type||"",
+    r.symbol?.symbol||"",
+    r.units??"",
+    r.price??"",
+    r.amount??"",
+  ].join("|");
   const importCSV=useCallback((file,broker)=>{
     return new Promise((resolve,reject)=>{
       const reader=new FileReader();
@@ -2879,11 +2907,26 @@ export default function Mizan(){
           const rows=parseCSV(text,broker);
           if(!rows.length){reject(new Error("No rows parsed — check the CSV format"));return;}
           const existing=JSON.parse(localStorage.getItem("mizan_imports")||"[]");
-          const merged=[...existing,...rows];
+          const seen=new Set(existing.map(fingerprintRow));
+          const fresh=[];
+          let skipped=0;
+          for(const r of rows){
+            const fp=fingerprintRow(r);
+            if(seen.has(fp)){skipped++;continue;}
+            seen.add(fp);
+            fresh.push(r);
+          }
+          if(fresh.length===0){
+            // Nothing new — leave storage untouched so we don't waste a
+            // Supabase round-trip on an identical re-upload.
+            resolve({added:0,skipped,total:rows.length});
+            return;
+          }
+          const merged=[...existing,...fresh];
           localStorage.setItem("mizan_imports",JSON.stringify(merged));persistUserState("mizan_imports",merged);
           // Push into the live state so Overview updates immediately.
-          setSnapActivities(prev=>[...prev,...rows].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
-          resolve(rows.length);
+          setSnapActivities(prev=>[...prev,...fresh].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
+          resolve({added:fresh.length,skipped,total:rows.length});
         }catch(err){reject(err);}
       };
       reader.onerror=()=>reject(reader.error);
