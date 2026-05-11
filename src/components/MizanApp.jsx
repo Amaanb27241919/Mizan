@@ -431,9 +431,42 @@ function Sk({vals,color,w=72,h=22}){if(!vals?.length)return null;const mn=Math.m
 
 function TT2({active,payload}){if(!active||!payload?.length)return null;return<div style={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:8,padding:"6px 12px",fontFamily:FM,fontSize:11,color:T.textHi}}>${payload[0]?.value?.toLocaleString?.("en-US",{minimumFractionDigits:2})}</div>;}
 
-function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr>{cols.map(c=><th key={c.l} style={{padding:"8px 14px",textAlign:c.r?"right":"left",fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",borderBottom:`1px solid ${T.border}`,fontWeight:500,whiteSpace:"nowrap"}}>{c.l}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={i} onClick={()=>onRow?.(r,i)} className="trow" style={{borderBottom:`1px solid ${T.border}`,cursor:onRow?"pointer":"default"}}>{cols.map(c=><td key={c.l} style={{padding:"11px 14px",textAlign:c.r?"right":"left",...(c.s?.(r)||{})}}>{c.r_?c.r_(r):r[c.k]}</td>)}</tr>)}</tbody></table></div>;}
+// Data table — fintech-style. Tabular numerics, hover row highlight,
+// sticky header optional (not on by default to keep nested tables simple).
+function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}><table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontVariantNumeric:"tabular-nums"}}>
+  <thead><tr>{cols.map(c=><th key={c.l} style={{
+    padding:`${T.s3} ${T.s4}`,textAlign:c.r?"right":"left",
+    fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",
+    borderBottom:`1px solid ${T.border}`,fontWeight:600,whiteSpace:"nowrap",
+    background:T.surface,
+  }}>{c.l}</th>)}</tr></thead>
+  <tbody>{rows.map((r,i)=><tr key={i} onClick={()=>onRow?.(r,i)} className="trow" style={{
+    borderBottom:`1px solid ${T.border}`,cursor:onRow?"pointer":"default",transition:"background 0.12s",
+  }}>{cols.map(c=><td key={c.l} style={{
+    padding:`${T.s3} ${T.s4}`,textAlign:c.r?"right":"left",
+    borderBottom:`1px solid ${T.border}`,
+    ...(c.s?.(r)||{}),
+  }}>{c.r_?c.r_(r):r[c.k]}</td>)}</tr>)}</tbody>
+</table></div>;}
 
-function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar" style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:20,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>{tabs.map(([id,l])=><button key={id} onClick={()=>onChange(id)} style={{padding:"10px 20px",background:"none",border:"none",borderBottom:`2px solid ${active===id?(accent||T.blue):"transparent"}`,color:active===id?T.textHi:T.muted,fontFamily:FM,fontSize:11,letterSpacing:"0.04em",cursor:"pointer",marginBottom:-1,transition:"color 0.12s",whiteSpace:"nowrap",flexShrink:0}}>{l}</button>)}</div>;}
+// Tab bar — pill-style segmented control. Active pill gets a soft purple
+// halo. Scrolls horizontally on mobile via .mz-tabbar overflow handling.
+function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar" style={{
+  display:"flex",gap:T.s1,marginBottom:T.s5,padding:T.s1,
+  background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rLg,
+  overflowX:"auto",WebkitOverflowScrolling:"touch",
+}}>{tabs.map(([id,l])=>{
+  const on=active===id;const acc=accent||T.blue;
+  return<button key={id} onClick={()=>onChange(id)} style={{
+    padding:`8px ${T.s4}`,background:on?T.card:"transparent",
+    border:"none",borderRadius:T.rMd,
+    color:on?T.textHi:T.muted,
+    fontFamily:FU,fontSize:13,fontWeight:on?600:500,letterSpacing:"-0.005em",
+    cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,
+    boxShadow:on?`0 1px 3px rgba(0,0,0,0.18), 0 0 0 1px ${acc}24`:"none",
+    transition:"all 0.15s ease",
+  }}>{l}</button>;
+})}</div>;}
 
 /* ─── CSV PARSER (Fidelity / Robinhood / Coinbase) ───── */
 // Returns activity rows shaped like SnapTrade's /activities response so they
@@ -2102,24 +2135,36 @@ Activity rows on file: ${activities.length}.`;
       </div>
     </div>
 
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"18px 22px",display:"flex",flexDirection:"column",gap:14}}>
-        {msgs.length===0&&<div style={{color:T.muted,fontFamily:FU,fontSize:13,textAlign:"center",margin:"40px auto",maxWidth:380,lineHeight:1.6}}>
+    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rLg,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"var(--sh-md)"}}>
+      <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:`${T.s5} ${T.s6}`,display:"flex",flexDirection:"column",gap:T.s3}}>
+        {msgs.length===0&&<div style={{color:T.muted,fontFamily:FU,fontSize:14,textAlign:"center",margin:"56px auto",maxWidth:380,lineHeight:1.6,letterSpacing:"-0.005em"}}>
           Ask anything about your portfolio. The advisor has your real account context — try one of the suggested questions or type your own.
         </div>}
-        {msgs.map((m,i)=><div key={i} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-          <div style={{width:36,fontFamily:FM,fontSize:9,color:m.role==="user"?T.blue:m.role==="err"?T.loss:T.gold,letterSpacing:"0.08em",paddingTop:2,flexShrink:0}}>{m.role==="user"?"YOU":m.role==="err"?"ERR":"MZN"}</div>
-          <div style={{flex:1,fontFamily:m.role==="user"?FM:FU,fontSize:13,color:m.role==="err"?T.loss:T.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{m.text}</div>
-        </div>)}
-        {busy&&<div style={{display:"flex",gap:10,alignItems:"center"}}>
-          <div style={{width:36,fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.08em"}}>MZN</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Thinking…</div>
+        {msgs.map((m,i)=>{
+          const isUser=m.role==="user",isErr=m.role==="err";
+          return<div key={i} style={{display:"flex",justifyContent:isUser?"flex-end":"flex-start"}}>
+            <div style={{
+              maxWidth:"82%",
+              padding:`10px ${T.s4}`,
+              borderRadius:T.rLg,
+              background:isUser?`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`:isErr?T.lossBg:T.surface,
+              border:isUser?"none":`1px solid ${isErr?T.loss+"40":T.border}`,
+              color:isUser?"#fff":isErr?T.loss:T.text,
+              fontFamily:FU,fontSize:14,lineHeight:1.55,letterSpacing:"-0.005em",
+              whiteSpace:"pre-wrap",wordBreak:"break-word",
+              boxShadow:isUser?`0 4px 14px ${T.blue}40`:"none",
+            }}>{m.text}</div>
+          </div>;
+        })}
+        {busy&&<div style={{display:"flex",alignItems:"center",gap:T.s2,color:T.muted,fontFamily:FM,fontSize:11}}>
+          <span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:T.gold,animation:"blink 1.2s infinite"}}/>
+          Thinking…
         </div>}
       </div>
-      <form onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:`1px solid ${T.border}`,padding:"12px 14px",display:"flex",gap:8}}>
+      <form onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:`1px solid ${T.border}`,padding:T.s3,display:"flex",gap:T.s2,background:T.surface}}>
         <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about your portfolio…" disabled={busy}
-          style={{flex:1,background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"9px 12px",fontFamily:FU,fontSize:13,color:T.text,outline:"none"}}/>
-        <button type="submit" disabled={busy||!input.trim()} style={{padding:"9px 18px",borderRadius:6,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:busy?T.dim:T.blue,border:"none",color:busy?T.muted:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"…":"Send"}</button>
+          className="field" style={{flex:1,fontFamily:FU,fontSize:14}}/>
+        <button type="submit" disabled={busy||!input.trim()} className="btn-primary">{busy?"…":"Send"}</button>
       </form>
     </div>
   </div>;
@@ -2231,25 +2276,25 @@ function CSVImporter({onImport,onDedupe}){
     }
   };
 
-  return<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"15px 18px",marginTop:14}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
+  return<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rLg,padding:`${T.s4} ${T.s5}`,marginTop:T.s4,boxShadow:"var(--sh-sm)"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
       <div>
-        <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi,marginBottom:4}}>CSV Import — Historical Backfill</div>
-        <p style={{fontFamily:FU,fontSize:11,color:T.muted,margin:0,lineHeight:1.6,maxWidth:480}}>
+        <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,marginBottom:T.s1,letterSpacing:"-0.01em"}}>CSV Import — Historical Backfill</div>
+        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:480}}>
           SnapTrade only backfills 1–2 years for some brokers. Export your full activity CSV from Fidelity / Robinhood / Coinbase and import it here for complete YTD + lifetime contribution numbers.
         </p>
       </div>
-      <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
-        <select value={broker} onChange={e=>setBroker(e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer"}}>
+      <div style={{display:"flex",gap:T.s2,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+        <select value={broker} onChange={e=>setBroker(e.target.value)} className="field" style={{width:"auto",cursor:"pointer"}}>
           <option>Fidelity</option><option>Robinhood</option><option>Coinbase</option>
           <option>Schwab</option><option>Vanguard</option><option>Other</option>
         </select>
         <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handle} style={{display:"none"}}/>
-        <button onClick={()=>fileRef.current?.click()} disabled={busy} style={{padding:"7px 16px",borderRadius:6,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:busy?T.dim:T.blue,border:"none",color:busy?T.muted:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"Parsing…":"Choose CSV"}</button>
-        {onDedupe&&<button onClick={handleDedupe} disabled={dedupeBusy} title="Scan imported activity and remove duplicate rows" style={{padding:"7px 14px",borderRadius:6,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:dedupeBusy?T.muted:T.text,cursor:dedupeBusy?"not-allowed":"pointer"}}>{dedupeBusy?"Scanning…":"Dedupe history"}</button>}
+        <button onClick={()=>fileRef.current?.click()} disabled={busy} className="btn-primary">{busy?"Parsing…":"Choose CSV"}</button>
+        {onDedupe&&<button onClick={handleDedupe} disabled={dedupeBusy} title="Scan imported activity and remove duplicate rows" className="btn-ghost">{dedupeBusy?"Scanning…":"Dedupe history"}</button>}
       </div>
     </div>
-    {status&&<div style={{marginTop:10,padding:"9px 12px",borderRadius:8,fontFamily:FM,fontSize:11,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,whiteSpace:"pre-wrap",lineHeight:1.5}}>{status.ok?"✓ ":"✗ "}{status.msg}</div>}
+    {status&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,whiteSpace:"pre-wrap",lineHeight:1.5}}>{status.ok?"✓ ":"✗ "}{status.msg}</div>}
   </div>;
 }
 
