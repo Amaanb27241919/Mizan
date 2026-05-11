@@ -2825,38 +2825,59 @@ function ManualAssets(){
   const total=assets.reduce((s,a)=>s+(+a.value||0),0);
   const zakatable=assets.filter(a=>a.zakatable).reduce((s,a)=>s+(+a.value||0),0);
 
-  return<div style={{display:"flex",flexDirection:"column",gap:14}}>
-    <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:680}}>
-      Track assets your brokerage accounts can't see — physical gold, real estate equity, private business stake, vehicles, collectibles. Toggle Zakat-eligibility per asset (e.g. primary residence excluded; investment property included).
-    </p>
-    <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
-      <KV label="Manual assets total" value={kf(total)} sub={`${assets.length} entries`}/>
-      <KV label="Zakatable share"      value={kf(zakatable)} sub={`Adds ${kf(zakatable*0.025)} to Zakat`} subColor={T.gold} accent={T.gold}/>
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    {/* ─── Hero: total + zakatable side stack ────────── */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:T.s4}}>
+      <BentoTile style={{
+        background:`radial-gradient(circle at 0% 0%, ${T.blue}15, transparent 55%), ${T.card}`,
+      }}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>MANUAL ASSETS TOTAL</div>
+        <div style={{fontFamily:FU,fontSize:34,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{kf(total)}</div>
+        <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{assets.length} entr{assets.length===1?"y":"ies"}</div>
+        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
+          Track assets your brokerage can't see — physical gold, real estate equity, private business stake, vehicles, collectibles. Toggle Zakat-eligibility per asset.
+        </p>
+      </BentoTile>
+      <BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKATABLE SHARE</div>
+        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(zakatable)}</div>
+        <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.gold,marginTop:T.s2}}>Adds {kf(zakatable*0.025)} to Zakat</div>
+      </BentoTile>
     </div>
-    <form onSubmit={add} className="mz-form-row" style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14,display:"grid",gridTemplateColumns:"140px 1fr 140px 110px auto",gap:10,alignItems:"center"}}>
-      <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:11,color:T.text,outline:"none"}}>
-        {["Gold","Silver","Real Estate","Investment Property","Business Equity","Vehicle","Collectible","Other"].map(t=><option key={t}>{t}</option>)}
-      </select>
-      <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Description (e.g., Wedding gold, Primary home equity)"
-        style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FU,fontSize:12,color:T.text,outline:"none"}}/>
-      <input type="number" value={form.value} onChange={e=>setForm({...form,value:e.target.value})} placeholder="Value $"
-        style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,padding:"7px 10px",fontFamily:FM,fontSize:12,color:T.text,outline:"none"}}/>
-      <label style={{fontFamily:FM,fontSize:10,color:T.muted,display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}>
-        <input type="checkbox" checked={form.zakatable} onChange={e=>setForm({...form,zakatable:e.target.checked})} style={{accentColor:T.gold}}/>
-        Zakat
-      </label>
-      <button type="submit" style={{padding:"7px 16px",borderRadius:6,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:T.blue,border:"none",color:"#fff",cursor:"pointer"}}>+ Add</button>
-    </form>
-    {assets.length>0&&<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-      <Tbl cols={[
-        {l:"Type",r_:r=><Tag label={r.type} color={r.type==="Gold"||r.type==="Silver"?T.gold:r.type.includes("Real")?T.blue:r.type==="Business Equity"?T.gain:T.muted}/>},
-        {l:"Name",r_:r=><span style={{fontFamily:FU,fontSize:12,color:T.text}}>{r.name}</span>},
-        {l:"Value",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>{f$(r.value)}</span>},
-        {l:"Zakat",r_:r=><Tag label={r.zakatable?"Included":"Excluded"} color={r.zakatable?T.gold:T.muted}/>},
-        {l:"Added",r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.added}</span>},
-        {l:"",r_:r=><button onClick={()=>remove(r.id)} style={{padding:"3px 8px",borderRadius:6,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:9}}>✕</button>},
-      ]} rows={assets}/>
-    </div>}
+
+    {/* ─── Add asset form ─────────────────────────── */}
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>ADD AN ASSET</div>
+      <form onSubmit={add} className="mz-form-row" style={{display:"grid",gridTemplateColumns:"150px 1fr 140px auto auto",gap:T.s2,alignItems:"center"}}>
+        <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="field" style={{cursor:"pointer"}}>
+          {["Gold","Silver","Real Estate","Investment Property","Business Equity","Vehicle","Collectible","Other"].map(t=><option key={t}>{t}</option>)}
+        </select>
+        <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Description (e.g. Wedding gold, Primary home equity)" className="field"/>
+        <input type="number" value={form.value} onChange={e=>setForm({...form,value:e.target.value})} placeholder="Value $" className="field" style={{fontVariantNumeric:"tabular-nums"}}/>
+        <label style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.muted,display:"flex",alignItems:"center",gap:T.s1,cursor:"pointer",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>
+          <input type="checkbox" checked={form.zakatable} onChange={e=>setForm({...form,zakatable:e.target.checked})} style={{accentColor:T.gold,width:14,height:14}}/>
+          Zakat
+        </label>
+        <button type="submit" className="btn-primary">+ Add</button>
+      </form>
+    </BentoTile>
+
+    {/* ─── Assets table ─────────────────────────── */}
+    {assets.length>0
+      ?<BentoTile style={{padding:0,overflow:"hidden"}}>
+        <Tbl cols={[
+          {l:"Type",r_:r=><Tag label={r.type} color={r.type==="Gold"||r.type==="Silver"?T.gold:r.type.includes("Real")?T.blue:r.type==="Business Equity"?T.gain:T.muted}/>},
+          {l:"Name",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>},
+          {l:"Value",r:true,r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(r.value)}</span>},
+          {l:"Zakat",r_:r=><Tag label={r.zakatable?"Included":"Excluded"} color={r.zakatable?T.gold:T.muted}/>},
+          {l:"Added",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.added}</span>},
+          {l:"",r_:r=><button onClick={()=>remove(r.id)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>},
+        ]} rows={assets}/>
+      </BentoTile>
+      :<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
+        <div style={{fontFamily:FU,fontSize:14,fontWeight:500,color:T.muted}}>No manual assets yet.</div>
+        <div style={{fontFamily:FU,fontSize:12,color:T.muted,marginTop:T.s1}}>Add gold, real estate, or business equity above to include them in net-worth + Zakat math.</div>
+      </BentoTile>}
   </div>;
 }
 
@@ -3096,31 +3117,37 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
     {f:"Paper trading bot",         req:["alpacaId","alpacaSecret"]},
   ];
 
-  // Zakat panel — placeholder until a real per-user Zakat calc lands.
-  // The previous version rendered the OWNER's actual donation history and
-  // zakat numbers from module-level constants, which leaked to every user.
-  // Hide the panel for everyone until it's wired to real user data.
-  const TOTAL_GIVEN=0;
-  const PLEDGED=0;
-  const ZAKAT=0;
-
-  return<div style={{display:"flex",flexDirection:"column",gap:20}}>
-    {/* Account row — current user + sign out (or single-user mode badge). */}
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:6}}>
-      <div style={{display:"flex",alignItems:"center",gap:12}}>
-        <div style={{width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg, ${T.blue}, ${T.gold})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:13,fontWeight:600,color:"#fff"}}>{(user?.email||"?")[0].toUpperCase()}</div>
-        <div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.06em"}}>{isSupabaseConfigured?"SIGNED IN":"SINGLE-USER MODE"}</div>
-          <div style={{fontFamily:FM,fontSize:13,color:T.textHi,fontWeight:500}}>{user?.email||"local"}</div>
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    {/* ─── ACCOUNT PROFILE HERO ───────────────────── */}
+    <BentoTile style={{
+      background:`radial-gradient(circle at 0% 0%, ${T.blue}1A, transparent 50%), radial-gradient(circle at 100% 100%, ${T.gold}10, transparent 50%), ${T.card}`,
+      borderColor:T.blue+"30",
+    }}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s4,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
+          <div style={{
+            width:52,height:52,borderRadius:T.rLg,
+            background:`linear-gradient(135deg, ${T.blue}, ${T.gold})`,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontFamily:FU,fontSize:22,fontWeight:700,color:"#fff",letterSpacing:"-0.025em",
+            boxShadow:`0 6px 18px ${T.blue}55`,
+          }}>{(user?.email||"?")[0].toUpperCase()}</div>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s1,flexWrap:"wrap"}}>
+              <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>{isSupabaseConfigured?"SIGNED IN":"SINGLE-USER MODE"}</span>
+              {isRoot&&<Tag label="ROOT" color={T.gold}/>}
+            </div>
+            <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.015em"}}>{user?.email||"local"}</div>
+          </div>
         </div>
+        {isSupabaseConfigured
+          ?<button onClick={async()=>{if(confirm("Sign out of MIZAN?"))await signOut();}} className="btn-danger">Sign out</button>
+          :<span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>Set VITE_SUPABASE_URL to enable accounts</span>}
       </div>
-      {isSupabaseConfigured&&<button onClick={async()=>{if(confirm("Sign out of MIZAN?"))await signOut();}} style={{padding:"7px 14px",borderRadius:8,fontFamily:FM,fontSize:11,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.loss}40`,color:T.loss,cursor:"pointer"}}>Sign out</button>}
-      {!isSupabaseConfigured&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.08em"}}>Set VITE_SUPABASE_URL to enable accounts</span>}
-    </div>
+    </BentoTile>
 
     <TabBar
       tabs={[
-        // API Keys section is admin-only. End-users use server-side keys.
         ...(isRoot?[["keys","API Keys"]]:[]),
         ["brokers","Connect Accounts"],
         ["security","Security"],
@@ -3130,73 +3157,125 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,demoMode
       active={sub}
       onChange={setSub}
     />
+
     {sub==="assets"&&<ManualAssets/>}
 
-    {sub==="keys"&&isRoot&&<>
-      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:20}}>
-        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:480}}>Add keys in order. Finnhub activates real prices immediately. Keys save to localStorage — no re-entry needed.</p>
-        <button onClick={save} style={{padding:"9px 24px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.08em",flexShrink:0,background:saved?`${T.gain}18`:T.blue,border:`1px solid ${saved?T.gain:T.blue}`,color:saved?T.gain:"#fff",cursor:"pointer",transition:"all 0.2s"}}>{saved?"Saved ✓":"Save Keys"}</button>
-      </div>
-      {APIS.map(api=><div key={api.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"15px 18px"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-          <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>{api.l}</span>
+    {/* ─── API KEYS (Root only) ───────────────────── */}
+    {sub==="keys"&&isRoot&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+      <BentoTile>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>API KEYS · ADMIN</div>
+            <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+              Add keys in order. Finnhub activates real prices immediately. Keys save to localStorage — no re-entry needed. End-user accounts don't see this page.
+            </p>
+          </div>
+          <button onClick={save} className="btn-primary" style={{background:saved?`linear-gradient(135deg, ${T.gain}, #0A8A65)`:undefined,boxShadow:saved?`0 2px 10px ${T.gain}55`:undefined}}>{saved?"Saved ✓":"Save Keys"}</button>
+        </div>
+      </BentoTile>
+
+      {APIS.map(api=><BentoTile key={api.id} accent={api.color}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+          <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{api.l}</span>
             <Tag label={api.tier} color={api.color}/>
             <Tag label={api.cost} color={T.muted}/>
           </div>
-          <a href={`https://${api.url}`} target="_blank" rel="noreferrer" style={{fontFamily:FM,fontSize:9,color:api.color,textDecoration:"none",padding:"4px 10px",border:`1px solid ${api.color}30`,borderRadius:6,letterSpacing:"0.08em",flexShrink:0}}>GET KEY ↗</a>
+          <a href={`https://${api.url}`} target="_blank" rel="noreferrer" style={{fontFamily:FM,fontSize:10,fontWeight:600,color:api.color,textDecoration:"none",padding:`5px ${T.s3}`,border:`1px solid ${api.color}40`,borderRadius:T.rMd,letterSpacing:"0.08em",flexShrink:0,transition:"all 0.15s",background:`${api.color}10`}}>GET KEY ↗</a>
         </div>
-        <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:api.fields.length>1?"1fr 1fr":"1fr",gap:10}}>
-          {api.fields.map(f=><div key={f.k}><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:4}}>{f.l}</div><div style={{position:"relative"}}><input type="password" value={keys[f.k]||""} placeholder={f.ph} onChange={e=>setKeys(k=>({...k,[f.k]:e.target.value}))} style={{width:"100%",background:T.surface,border:`1px solid ${has(f.k)?api.color+"50":T.border}`,borderRadius:8,padding:"8px 12px",fontFamily:FM,fontSize:11,color:T.text,outline:"none",boxSizing:"border-box",transition:"border-color 0.15s"}}/>{has(f.k)&&<span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:10,color:api.color}}>✓</span>}</div></div>)}
-        </div>
-        {api.serverOnly&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:`${T.gain}0E`,border:`1px solid ${T.gain}28`,borderRadius:8,fontFamily:FM,fontSize:10,color:T.gain}}>
-          ✓ Server-configured. Set <code style={{color:T.text}}>{api.id==="anthropic"?"ANTHROPIC_KEY":"SNAPTRADE_CONSUMER_KEY"}</code> in <code style={{color:T.text}}>.env.local</code> on the host. Never exposed to browser.
-        </div>}
-      </div>)}
-      <div>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>{FEATURES.filter(f=>f.req.every(r=>has(r))).length}/{FEATURES.length} FEATURES ACTIVE</div>
-        <div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          {FEATURES.map(f=>{const on=f.alwaysOn||f.req.every(r=>has(r));return<div key={f.f} style={{display:"flex",gap:9,alignItems:"center",padding:"8px 12px",background:T.card,border:`1px solid ${on?T.gain+"18":T.border}`,borderRadius:8}}><LiveDot on={on}/><span style={{fontFamily:FM,fontSize:11,color:on?T.text:T.muted}}>{f.f}</span>{f.note&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,marginLeft:"auto"}}>{f.note}</span>}</div>;})}
-        </div>
-      </div>
-    </>}
-
-    {sub==="brokers"&&<>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:520}}>Connect your existing accounts via SnapTrade OAuth. Your credentials go directly to your broker — MĪZAN never sees your password.</p>
-        <button onClick={onConnect} style={{padding:"9px 20px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.08em",background:T.blue,border:"none",color:"#fff",cursor:"pointer",flexShrink:0}}>Connect Account</button>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
-        {BROKERS.map(b=>{
-          const saved=JSON.parse(localStorage.getItem("mizan_brokers")||"[]");
-          const conn=saved.find(s=>s.id===b.id);
-          return<div key={b.id} style={{background:T.card,border:`1px solid ${conn?T.blue+"40":T.border}`,borderRadius:12,padding:"13px 16px"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
-              <span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:conn?T.blue:T.textHi}}>{b.nm}</span>
+        {api.fields.length>0&&<div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:api.fields.length>1?"1fr 1fr":"1fr",gap:T.s2}}>
+          {api.fields.map(f=><div key={f.k}>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{f.l}</div>
+            <div style={{position:"relative"}}>
+              <input type="password" value={keys[f.k]||""} placeholder={f.ph}
+                onChange={e=>setKeys(k=>({...k,[f.k]:e.target.value}))}
+                className="field"
+                style={{borderColor:has(f.k)?api.color+"50":T.border,fontVariantNumeric:"tabular-nums"}}/>
+              {has(f.k)&&<span style={{position:"absolute",right:T.s3,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:11,fontWeight:700,color:api.color}}>✓</span>}
             </div>
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:8}}>{b.desc}</div>
-            <Tag label={conn?"Connected":"Not Connected"} color={conn?T.gain:T.muted}/>
-          </div>;
-        })}
-      </div>
+          </div>)}
+        </div>}
+        {api.serverOnly&&<div style={{marginTop:T.s2,display:"flex",alignItems:"center",gap:T.s2,padding:`${T.s2} ${T.s3}`,background:`${T.gain}0F`,border:`1px solid ${T.gain}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.gain,lineHeight:1.5}}>
+          ✓ Server-configured. Set <code style={{color:T.text,padding:"1px 5px",background:T.surface,borderRadius:4}}>{api.id==="anthropic"?"ANTHROPIC_KEY":"SNAPTRADE_CONSUMER_KEY"}</code> in env vars on the host. Never exposed to the browser.
+        </div>}
+      </BentoTile>)}
+
+      <BentoTile>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>FEATURES ACTIVE</span>
+          <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{FEATURES.filter(f=>f.alwaysOn||f.req.every(r=>has(r))).length}<span style={{color:T.muted,fontWeight:400}}> / {FEATURES.length}</span></span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:T.s2}}>
+          {FEATURES.map(f=>{
+            const on=f.alwaysOn||f.req.every(r=>has(r));
+            return<div key={f.f} style={{display:"flex",gap:T.s2,alignItems:"center",padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${on?T.gain+"30":T.border}`,borderRadius:T.rMd}}>
+              <LiveDot on={on}/>
+              <span style={{fontFamily:FU,fontSize:12,color:on?T.text:T.muted,letterSpacing:"-0.005em"}}>{f.f}</span>
+              {f.note&&<span style={{fontFamily:FM,fontSize:10,color:T.muted,marginLeft:"auto"}}>{f.note}</span>}
+            </div>;
+          })}
+        </div>
+      </BentoTile>
+    </div>}
+
+    {/* ─── CONNECT ACCOUNTS ─────────────────────────── */}
+    {sub==="brokers"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+      <BentoTile>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BROKERAGE CONNECTIONS</div>
+            <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+              Connect via SnapTrade OAuth. Credentials go directly to your broker — MĪZAN never sees your password.
+            </p>
+          </div>
+          <button onClick={onConnect} className="btn-primary">+ Connect Account</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:T.s2,marginTop:T.s4}}>
+          {BROKERS.map(b=>{
+            const saved=(()=>{try{return JSON.parse(localStorage.getItem("mizan_brokers")||"[]");}catch{return[];}})();
+            const conn=saved.find(s=>s.id===b.id);
+            return<div key={b.id} style={{
+              background:T.surface,
+              border:`1px solid ${conn?T.blue+"40":T.border}`,
+              borderLeft:`3px solid ${conn?T.blue:T.border}`,
+              borderRadius:T.rMd,
+              padding:`${T.s3} ${T.s4}`,
+              transition:"all 0.18s",
+            }}>
+              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:conn?T.blue:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.nm}</div>
+              <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:T.s2}}>{b.desc}</div>
+              <Tag label={conn?"Connected":"Not Connected"} color={conn?T.gain:T.muted}/>
+            </div>;
+          })}
+        </div>
+      </BentoTile>
 
       {/* CSV import for historical backfill */}
       <CSVImporter onImport={onImportCSV} onDedupe={onDedupeCSV}/>
 
-      {/* Demo-mode toggle — re-enable the fictional 8-figure book for previews / screenshots */}
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"15px 18px",marginTop:14,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
-        <div>
-          <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi,marginBottom:4}}>Demo Mode</div>
-          <p style={{fontFamily:FU,fontSize:11,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
-            Replaces your live data with a fictional ~$42M halal portfolio across 8 brokers — useful for screenshots, sharing with friends, or previewing MIZAN before connecting brokers. Toggle off to return to your real connections.
-          </p>
+      {/* Demo mode toggle */}
+      <BentoTile accent={demoMode?T.gold:null} style={demoMode?{background:`linear-gradient(135deg, ${T.gold}0F, transparent 60%), ${T.card}`}:undefined}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontFamily:FM,fontSize:10,color:demoMode?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DEMO MODE</div>
+            <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+              Replaces your live data with a fictional ~$42M halal portfolio across 8 brokers — useful for screenshots, sharing, or previewing MIZAN before connecting brokers.
+            </p>
+          </div>
+          <button onClick={onToggleDemo} style={{
+            padding:`8px ${T.s4}`,borderRadius:T.rMd,
+            fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",
+            background:demoMode?`${T.gold}22`:"transparent",
+            border:`1px solid ${demoMode?T.gold+"50":T.border}`,
+            color:demoMode?T.gold:T.text,
+            cursor:"pointer",flexShrink:0,
+            transition:"all 0.15s",
+          }}>{demoMode?"Demo: ON":"Demo: OFF"}</button>
         </div>
-        <button onClick={onToggleDemo} style={{padding:"7px 16px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,color:demoMode?T.gold:T.text,cursor:"pointer",flexShrink:0}}>{demoMode?"Demo: ON":"Demo: OFF"}</button>
-      </div>
-    </>}
+      </BentoTile>
+    </div>}
 
     {sub==="security"&&<SecurityPanel/>}
-
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
   </div>;
 }
