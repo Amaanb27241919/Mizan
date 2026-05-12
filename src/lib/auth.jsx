@@ -22,6 +22,34 @@ export function AuthProvider({ children }) {
   // True when Supabase emits PASSWORD_RECOVERY — the user clicked a reset
   // link and we should show the "set new password" UI instead of the app.
   const [recoveryMode, setRecoveryMode] = useState(false);
+  // profiles.is_root, fetched after sign-in via Supabase RLS (the 005
+  // migration grants SELECT on own row). null while loading, boolean once
+  // resolved. Source of truth for the Admin tab — no rebuild needed when
+  // switching the root account, just UPDATE profiles SET is_root = true.
+  const [profileIsRoot, setProfileIsRoot] = useState(false);
+
+  // Fetch the current user's profiles row whenever they change. Misses are
+  // fine — backfill fills in for legacy accounts and the signup trigger
+  // for new ones, but if profiles isn't migrated yet we stay false.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !user?.id || user.id === 'single-user') {
+      setProfileIsRoot(false);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from('profiles')
+      .select('is_root')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || !data) { setProfileIsRoot(false); return; }
+        setProfileIsRoot(!!data.is_root);
+      })
+      .catch(() => { if (!cancelled) setProfileIsRoot(false); });
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -197,17 +225,20 @@ export function AuthProvider({ children }) {
 
   const exitRecovery = () => setRecoveryMode(false);
 
-  // Role detection. A user is "root" (glass-break / global admin) if EITHER
-  // their email matches the VITE_OWNER_EMAIL build-time constant, OR Supabase
-  // has stamped them with `app_metadata.role === 'root'` (server-side, can
-  // only be set via service-role key — users can't promote themselves).
-  // `user_metadata` is intentionally NOT consulted: that's user-writable.
+  // Role detection. Priority:
+  //   1. local pass-through mode (no Supabase) → always root
+  //   2. profiles.is_root === true (set via SQL, source of truth)
+  //   3. VITE_OWNER_EMAIL env-var match (bootstrap fallback, lets the
+  //      initial owner sign in BEFORE running the migration / SQL update)
+  //   4. Supabase app_metadata.role (service-role stamped; user-writable
+  //      user_metadata is intentionally NOT consulted)
   const ownerEmail = (import.meta.env.VITE_OWNER_EMAIL || '').trim().toLowerCase();
   const userEmail  = (user?.email || '').toLowerCase();
   const metadataRole = user?.app_metadata?.role || null;
   const isRoot = (
     user?.id === 'single-user'                          // local pass-through mode
-    || (ownerEmail && userEmail === ownerEmail)         // configured owner email
+    || profileIsRoot                                    // profiles.is_root (DB)
+    || (ownerEmail && userEmail === ownerEmail)         // env-var bootstrap
     || metadataRole === 'root'                          // Supabase-stamped role
     || metadataRole === 'admin'
   );
