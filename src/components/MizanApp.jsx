@@ -3,6 +3,10 @@ import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tool
 import { useAuth } from "../lib/auth.jsx";
 import { apiFetch, recordAudit } from "../lib/apiFetch.js";
 import { persistUserState } from "../lib/userState.js";
+import { downloadCSV } from "../lib/exportCSV.js";
+import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
+import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
+import { Skeleton, SkeletonCard, SkeletonTable } from "./Skeleton.jsx";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
 // Savium-inspired palette: deep navy base, vibrant purple primary, soft
@@ -2055,11 +2059,29 @@ function ActivityPanel({activities=[],accounts=[]}){
         <option value="all">All Accounts</option>
         {acctOptions.filter(o=>o!=="all").map(id=><option key={id} value={id}>{acctNameById[id]||id}</option>)}
       </select>
-      <div style={{marginLeft:"auto",display:"flex",gap:T.s1}}>
+      <div style={{marginLeft:"auto",display:"flex",gap:T.s1,alignItems:"center"}}>
         {[["1m","1M"],["3m","3M"],["1y","1Y"],["5y","5Y"],["all","All"]].map(([v,l])=>
           <button key={v} onClick={()=>setRange(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",
             background:range===v?T.borderHi:"transparent",border:`1px solid ${range===v?T.borderHi:T.border}`,
             color:range===v?T.text:T.muted,cursor:"pointer"}}>{l}</button>)}
+        <button
+          onClick={()=>downloadCSV(
+            rows.map(r=>({
+              Date:r.trade_date||r.settlement_date||"",
+              Type:(r.type||"").toUpperCase(),
+              Symbol:fmtSym(r.symbol),
+              Description:r.description||"",
+              Quantity:r.units?+r.units:"",
+              Price:r.price?+r.price:"",
+              Amount:+r.amount||0,
+              Account:acctNameById[r.account?.id]||r.institution_name||"",
+            })),
+            `mizan-activity-${new Date().toISOString().slice(0,10)}.csv`,
+          )}
+          disabled={rows.length===0}
+          title={rows.length===0?"No activity to export":"Download activity as CSV"}
+          style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:rows.length===0?T.dim:T.muted,cursor:rows.length===0?"not-allowed":"pointer"}}
+        >CSV ↓</button>
       </div>
     </div>
 
@@ -2371,7 +2393,25 @@ function ZakatSadaqah({accounts=[],demoMode=false}){
     <BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,flexWrap:"wrap",gap:T.s2}}>
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DONATION HISTORY{hasActiveFilter?<span style={{color:T.blue,marginLeft:T.s2}}>· {filtered.length} of {sadaqah.length}</span>:""}</span>
-        <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(hasActiveFilter?filteredGiven:given)} given{(hasActiveFilter?filteredPledged:pledged)>0?` · ${fmtUSD(hasActiveFilter?filteredPledged:pledged)} pledged`:""}</span>
+        <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
+          <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(hasActiveFilter?filteredGiven:given)} given{(hasActiveFilter?filteredPledged:pledged)>0?` · ${fmtUSD(hasActiveFilter?filteredPledged:pledged)} pledged`:""}</span>
+          <button
+            onClick={()=>downloadCSV(
+              filtered.map(s=>({
+                Date:s.dt||"",
+                Organization:s.org||"",
+                Method:s.method||"",
+                Account:s.account||"",
+                Amount:+s.amt||0,
+                Status:s.done?"Given":"Pledged",
+              })),
+              `mizan-donations-${new Date().toISOString().slice(0,10)}.csv`,
+            )}
+            disabled={filtered.length===0}
+            title={filtered.length===0?"No donations to export":"Download donations as CSV"}
+            style={{padding:`4px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:filtered.length===0?T.dim:T.muted,cursor:filtered.length===0?"not-allowed":"pointer"}}
+          >CSV ↓</button>
+        </div>
       </div>
       {sadaqah.length===0
         ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No donations logged yet. Add one with the form above, or import a CSV.</div>
@@ -2789,8 +2829,22 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
           const c=v==="halal"?T.gain:v==="haram"?T.loss:v==="review"?T.gold:T.blue;
           return<button key={v} onClick={()=>setScreen(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"-0.005em",background:screen===v?`${c}22`:"transparent",border:`1px solid ${screen===v?c:T.border}`,color:screen===v?c:T.muted,cursor:"pointer",transition:"all 0.15s"}}>{l}</button>;
         })}
-        <div style={{marginLeft:"auto",display:"flex",gap:T.s1}}>
+        <div style={{marginLeft:"auto",display:"flex",gap:T.s1,alignItems:"center"}}>
           {[["mv","Value"],["gp","Gain%"],["tk","A-Z"]].map(([v,l])=><button key={v} onClick={()=>setSort(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:sort===v?T.borderHi:"transparent",border:`1px solid ${sort===v?T.borderHi:T.border}`,color:sort===v?T.text:T.muted,cursor:"pointer"}}>{l}</button>)}
+          <button
+            onClick={()=>downloadCSV(
+              filtered.map(h=>({
+                Ticker:h.tk, Name:h.nm||"", Shares:h.sh, AvgCost:+(+h.ac).toFixed(2),
+                CurrentPrice:+(+h.px).toFixed(2), MarketValue:+mv(h).toFixed(2),
+                GainLoss:+gv(h).toFixed(2), GainPct:+gp(h).toFixed(2),
+                Account:h.ac_||"", Broker:h.brk||"", ShariaStatus:h.sh_||"",
+              })),
+              `mizan-holdings-${new Date().toISOString().slice(0,10)}.csv`,
+            )}
+            disabled={filtered.length===0}
+            title={filtered.length===0?"No rows to export":"Download visible holdings as CSV"}
+            style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:filtered.length===0?T.dim:T.muted,cursor:filtered.length===0?"not-allowed":"pointer"}}
+          >CSV ↓</button>
         </div>
       </div>
 
@@ -2806,7 +2860,15 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
           {l:"Gain/Loss",r:true,r_:r=><div style={{textAlign:"right"}}><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:fc(gv(r)),fontVariantNumeric:"tabular-nums"}}>{gv(r)>=0?"+":""}{f$(gv(r))}</div><div style={{fontFamily:FM,fontSize:10,color:fc(gp(r)),marginTop:1}}>{fp(gp(r))}</div></div>},
           {l:"Sharia",  r_:r=><Tag label={r.sh_==="halal"?"Halal":r.sh_==="haram"?"Non-Compliant":"Review"} color={r.sh_==="halal"?T.gain:r.sh_==="haram"?T.loss:T.gold}/>},
         ]} rows={filtered}/>
-        {filtered.length===0&&<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No positions match these filters.</div>}
+        {filtered.length===0&&merged.length===0&&snapAccounts.length===0
+          // No accounts connected → genuine empty state, show skeleton rows
+          // so users sense the table shape while their first sync runs in
+          // the background. After the first sync completes, the empty
+          // state below replaces this only if filters knocked everything out.
+          ?<div style={{padding:T.s4}}><SkeletonTable rows={8} cols={6}/></div>
+          :filtered.length===0
+            ?<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No positions match these filters.</div>
+            :null}
       </BentoTile>
     </>}
 
@@ -3201,6 +3263,10 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
   const[orderBusy,setOrderBusy]=useState(false);
   const[orderErr,setOrderErr]=useState(null);
   const[impactPreview,setImpactPreview]=useState(null);
+  // Venue selector — "snaptrade" = real broker preview/confirm flow,
+  // "alpaca" = paper-trading single-shot order. Persists per-device.
+  const[venue,setVenueState]=useState(()=>{try{return localStorage.getItem("mizan_trade_venue")||"snaptrade";}catch{return"snaptrade";}});
+  const setVenue=v=>{setVenueState(v);try{localStorage.setItem("mizan_trade_venue",v);}catch{}};
   useEffect(()=>{if(!acctId&&accounts[0])setAcctId(accounts[0].accountId);},[accounts]);
 
   // Pre-fill from a pending order stashed by the Rebalancer's "Copy to Order"
@@ -3220,15 +3286,37 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
     }catch{}
   },[]);
 
-  // Step 1: preview the order via SnapTrade impact. Server returns
-  // {impact: {trade: {id, ...estimated_fees, ...}}} — we surface in a modal.
+  // Step 1: preview (SnapTrade) or place (Alpaca paper) the order.
+  // - SnapTrade: posts to /trade/impact, surfaces a modal, then user
+  //   confirms via placeOrder() which calls /trade/place.
+  // - Alpaca paper: single-shot — posts to /api/alpaca/order which
+  //   forwards to paper-api.alpaca.markets. No preview modal.
   const submit=async()=>{
     if(orderBusy)return;
     setOrderErr(null);
-    if(!acctId){setOrderErr("Select an account first.");return;}
+    if(venue==="snaptrade"&&!acctId){setOrderErr("Select an account first.");return;}
     if(!sym||!qty){setOrderErr("Symbol and quantity are required.");return;}
     setOrderBusy(true);
     try{
+      if(venue==="alpaca"){
+        const r=await apiFetch("/api/alpaca/order",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            symbol:sym.toUpperCase(),
+            qty:+qty,
+            side,
+            type:otype==="limit"?"limit":otype==="stop"?"stop":otype==="stoplimit"?"stop_limit":"market",
+            limitPrice:otype==="limit"||otype==="stoplimit"?+lpx:undefined,
+          }),
+        });
+        const d=await r.json();
+        if(!r.ok||d.error){setOrderErr(d.error||`HTTP ${r.status}`);return;}
+        // No preview/confirm — Alpaca returns the placed order directly.
+        setDone(true);
+        setTimeout(()=>setDone(false),4000);
+        onOrderPlaced?.();
+        return;
+      }
       const orderTypeMap={market:"Market",limit:"Limit",stop:"StopLoss",stoplimit:"StopLimit"};
       const r=await apiFetch("/api/snaptrade/trade/impact",{
         method:"POST",headers:{"Content-Type":"application/json"},
@@ -3283,7 +3371,19 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
     {sub==="order"&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
       {/* ─── Order Ticket bento ────────────────────────── */}
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ORDER TICKET</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ORDER TICKET</div>
+          <Tag label={venue==="alpaca"?"PAPER · ALPACA":"LIVE · SNAPTRADE"} color={venue==="alpaca"?T.gold:T.blue}/>
+        </div>
+        <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
+          {[["snaptrade","Live · SnapTrade"],["alpaca","Paper · Alpaca"]].map(([v,l])=><button key={v} onClick={()=>setVenue(v)} title={v==="alpaca"?"Paper trade against Alpaca's free sandbox — no real money":"Place a real order through your connected broker"} style={{
+            flex:1,padding:"8px 10px",fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"-0.005em",
+            border:"none",cursor:"pointer",borderRadius:T.rSm,
+            background:venue===v?(v==="alpaca"?`${T.gold}22`:`${T.blue}22`):"transparent",
+            color:venue===v?(v==="alpaca"?T.gold:T.blue):T.muted,
+            transition:"all 0.15s",
+          }}>{l}</button>)}
+        </div>
         <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
           {["buy","sell"].map(s=><button key={s} onClick={()=>setSide(s)} style={{
             flex:1,padding:"10px",fontFamily:FU,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
@@ -3294,12 +3394,16 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
             boxShadow:side===s?`0 2px 8px ${(s==="buy"?T.gain:T.loss)}55`:"none",
           }}>{s}</button>)}
         </div>
-        <div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>ACCOUNT</div>
-          <select value={acctId} onChange={e=>setAcctId(e.target.value)} className="field">
-            {accounts.length===0?<option value="">No accounts connected</option>:accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName} ({kf(a.balance||0)})</option>)}
-          </select>
-        </div>
+        {venue==="snaptrade"
+          ?<div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>ACCOUNT</div>
+            <select value={acctId} onChange={e=>setAcctId(e.target.value)} className="field">
+              {accounts.length===0?<option value="">No accounts connected</option>:accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName} ({kf(a.balance||0)})</option>)}
+            </select>
+          </div>
+          :<div style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
+            <span style={{color:T.gold,fontWeight:600,letterSpacing:"0.06em"}}>PAPER MODE</span> — order routes to your Alpaca paper account (no real money). Halal-only: haram tickers blocked server-side.
+          </div>}
         {[["SYMBOL",sym,setSym,"text"],["QUANTITY",qty,setQty,"number"],["LIMIT PRICE",lpx,setLpx,"number"]].map(([l,v,set,type])=>
           <div key={l}>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{l}</div>
@@ -3314,16 +3418,16 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
           <div style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>● SHARIA PRE-CHECK</div>
           <div style={{fontFamily:FU,fontSize:12,color:T.text,letterSpacing:"-0.005em"}}>{sym} — screening against AAOIFI criteria</div>
         </div>
-        <button onClick={submit} disabled={orderBusy||!acctId} style={{
+        <button onClick={submit} disabled={orderBusy||(venue==="snaptrade"&&!acctId)} style={{
           padding:`12px ${T.s4}`,borderRadius:T.rMd,
           fontFamily:FU,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
-          border:"none",cursor:orderBusy||!acctId?"not-allowed":"pointer",
+          border:"none",cursor:orderBusy||(venue==="snaptrade"&&!acctId)?"not-allowed":"pointer",
           background:done?`${T.gain}22`:orderBusy?T.dim:`linear-gradient(135deg, ${side==="buy"?T.gain:T.loss}, ${side==="buy"?"#0A8A65":"#D85555"})`,
           color:done?T.gain:orderBusy?T.muted:"#fff",
           transition:"all 0.2s",
           boxShadow:done||orderBusy?"none":`0 4px 14px ${(side==="buy"?T.gain:T.loss)}55`,
         }}>
-          {done?"Order Placed ✓":orderBusy?"Loading…":`Preview ${side==="buy"?"Buy":"Sell"} ${sym}`}
+          {done?"Order Placed ✓":orderBusy?"Loading…":venue==="alpaca"?`Place Paper ${side==="buy"?"Buy":"Sell"} ${sym}`:`Preview ${side==="buy"?"Buy":"Sell"} ${sym}`}
         </button>
         {orderErr&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss,whiteSpace:"pre-wrap",lineHeight:1.4}}>✗ {orderErr}</div>}
       </BentoTile>
@@ -4107,6 +4211,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
         ["brokers","Connect Accounts"],
         ["account","Account"],
         ["security","Security"],
+        ["notifications","Notifications"],
         ["assets","Manual Assets"],
         ["docs","Documents"],
         ["privacy","Privacy & Data"],
@@ -4235,9 +4340,156 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
 
     {sub==="account"&&<AccountPanel/>}
     {sub==="security"&&<SecurityPanel/>}
+    {sub==="notifications"&&<NotificationsPanel/>}
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
     {sub==="privacy"&&<PrivacyPanel/>}
     {sub==="admin"&&isRoot&&<AdminPanel/>}
+  </div>;
+}
+
+/* ─── NOTIFICATIONS PANEL (push subscription) ─────────── */
+// Browser-only — service worker registered in main.jsx (already there).
+// VAPID public key fetched from /api/notifications/vapid-public-key
+// so we never have to commit it to the bundle.
+function NotificationsPanel(){
+  const[supported]=useState(()=>typeof window!=="undefined"&&"serviceWorker"in navigator&&"PushManager"in window);
+  const[permission,setPermission]=useState(()=>typeof Notification!=="undefined"?Notification.permission:"default");
+  const[busy,setBusy]=useState(false);
+  const[subscription,setSubscription]=useState(null);
+  const[vapidKey,setVapidKey]=useState(null);
+  const[err,setErr]=useState(null);
+  const[ok,setOk]=useState(null);
+
+  // Probe current subscription state on mount.
+  useEffect(()=>{
+    if(!supported)return;
+    let cancel=false;
+    (async()=>{
+      try{
+        const reg=await navigator.serviceWorker.ready;
+        const sub=await reg.pushManager.getSubscription();
+        if(!cancel)setSubscription(sub);
+      }catch(e){if(!cancel)setErr(e.message);}
+    })();
+    apiFetch("/api/notifications/vapid-public-key")
+      .then(r=>r.ok?r.json():null)
+      .then(j=>{if(!cancel&&j?.key)setVapidKey(j.key);})
+      .catch(()=>{});
+    return()=>{cancel=true;};
+  },[supported]);
+
+  const urlBase64ToUint8Array=base64=>{
+    const padding="=".repeat((4-base64.length%4)%4);
+    const b64=(base64+padding).replace(/-/g,"+").replace(/_/g,"/");
+    const raw=atob(b64);
+    const out=new Uint8Array(raw.length);
+    for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
+    return out;
+  };
+
+  const enable=async()=>{
+    setBusy(true);setErr(null);setOk(null);
+    try{
+      if(!vapidKey)throw new Error("Server hasn't generated a VAPID public key yet. Ask the admin to set VAPID_PUBLIC_KEY in Vercel.");
+      const perm=await Notification.requestPermission();
+      setPermission(perm);
+      if(perm!=="granted")throw new Error("Notification permission denied");
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:urlBase64ToUint8Array(vapidKey),
+      });
+      const json=sub.toJSON();
+      const r=await apiFetch("/api/notifications/subscribe",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({subscription:json}),
+      });
+      if(!r.ok)throw new Error(`Server rejected subscription (${r.status})`);
+      setSubscription(sub);
+      setOk("Notifications enabled on this device.");
+    }catch(e){setErr(e.message||"Failed to enable notifications");}
+    finally{setBusy(false);}
+  };
+
+  const disable=async()=>{
+    setBusy(true);setErr(null);setOk(null);
+    try{
+      if(subscription){
+        const endpoint=subscription.endpoint;
+        await subscription.unsubscribe();
+        await apiFetch("/api/notifications/subscribe",{
+          method:"DELETE",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({endpoint}),
+        }).catch(()=>{});
+      }
+      setSubscription(null);
+      setOk("Notifications disabled on this device.");
+    }catch(e){setErr(e.message||"Failed to disable");}
+    finally{setBusy(false);}
+  };
+
+  const sendTest=async()=>{
+    setBusy(true);setErr(null);setOk(null);
+    try{
+      const r=await apiFetch("/api/notifications/test",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+      if(!r.ok)throw new Error(`Server returned ${r.status}`);
+      setOk("Test notification sent. Check your device.");
+    }catch(e){setErr(e.message||"Test failed");}
+    finally{setBusy(false);}
+  };
+
+  if(!supported){
+    return<BentoTile>
+      <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.14em",marginBottom:T.s2}}>NOTIFICATIONS</div>
+      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6}}>This browser doesn't support push notifications.</p>
+    </BentoTile>;
+  }
+
+  const enabled=!!subscription&&permission==="granted";
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,marginBottom:T.s3,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>PUSH NOTIFICATIONS</div>
+          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+            Get a system notification when something needs attention — Sharia status changes, price alerts, dividends, and sync errors. Per-device opt-in.
+          </p>
+        </div>
+        <Tag label={enabled?"Enabled":permission==="denied"?"Blocked":"Off"} color={enabled?T.gain:permission==="denied"?T.loss:T.muted}/>
+      </div>
+
+      {permission==="denied"&&<div style={{padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}30`,fontFamily:FM,fontSize:11,color:T.loss,lineHeight:1.5,marginBottom:T.s3}}>
+        Your browser is blocking notifications for this site. Re-enable them in your browser's site-settings panel, then reload.
+      </div>}
+
+      <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+        {enabled
+          ?<>
+            <button onClick={disable} disabled={busy} className="btn-ghost">Disable</button>
+            <button onClick={sendTest} disabled={busy} className="btn-primary">Send a test notification</button>
+          </>
+          :<button onClick={enable} disabled={busy||permission==="denied"||!vapidKey} className="btn-primary">{busy?"Working…":"Enable notifications"}</button>}
+      </div>
+
+      {!vapidKey&&permission!=="denied"&&<div style={{marginTop:T.s3,fontFamily:FM,fontSize:11,color:T.muted}}>
+        Waiting on server: VAPID_PUBLIC_KEY isn't configured yet. Once admin sets it, refresh this page.
+      </div>}
+      {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain}}>✓ {ok}</div>}
+      {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>}
+    </BentoTile>
+
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>WHAT YOU'LL RECEIVE</div>
+      <ul style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,padding:`0 0 0 ${T.s4}`,lineHeight:1.8}}>
+        <li><span style={{color:T.text,fontWeight:500}}>Price alerts</span> — when a watchlist target is crossed</li>
+        <li><span style={{color:T.text,fontWeight:500}}>Sharia status changes</span> — a holding flips halal→haram or vice-versa</li>
+        <li><span style={{color:T.text,fontWeight:500}}>Upcoming dividends</span> — ex-div date is tomorrow on a ticker you hold</li>
+        <li><span style={{color:T.text,fontWeight:500}}>Sync errors</span> — nightly SnapTrade sync failed and needs attention</li>
+      </ul>
+    </BentoTile>
   </div>;
 }
 
@@ -5533,6 +5785,49 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
   </div>;
 }
 
+/* ─── KEYBOARD SHORTCUTS ──────────────────────────────────
+   Defined as a tiny child component (rather than inline in Mizan) so the
+   useKeyboard hook only re-binds when the wrapped handlers actually
+   change. Mizan re-renders on every nav switch, but the handler
+   references are stable callbacks — passing them as props lets React
+   bail out cheaply. */
+const SHORTCUT_REFERENCE = {
+  "g o": "Go to Overview",
+  "g p": "Go to Portfolio",
+  "g f": "Go to Finances",
+  "g t": "Go to Trade & Bot",
+  "g a": "Go to AI Advisor",
+  "g s": "Go to Settings",
+  "r":   "Sync All",
+  "/":   "Open command palette",
+  "?":   "Show this help",
+  "Esc": "Close any open modal",
+};
+
+function KeyboardShortcuts({ onNav, onSync, onConnect, onHelp, onCommand }) {
+  useKeyboard({
+    shortcuts: {
+      "g o": "overview",
+      "g p": "portfolio",
+      "g f": "finances",
+      "g t": "trade",
+      "g a": "advisor",
+      "g s": "settings",
+      "r": "sync",
+      "?": "help",
+      "/": "command",
+    },
+    onShortcut: (name) => {
+      const NAV_TARGETS = new Set(["overview","portfolio","finances","trade","advisor","settings"]);
+      if (NAV_TARGETS.has(name)) { onNav(name); return; }
+      if (name === "sync")    { onSync?.(); return; }
+      if (name === "help")    { onHelp?.(); return; }
+      if (name === "command") { onCommand?.(); return; }
+    },
+  });
+  return null;
+}
+
 export default function Mizan(){
   // Scope cross-tab broadcasts to the authenticated user so a separate tab
   // signed in as a different user can't receive (or send) state intended
@@ -5574,6 +5869,13 @@ export default function Mizan(){
     }catch{return"overview";}
   });
   const setNav=v=>{setNavState(v);try{localStorage.setItem("mizan_nav",v);}catch{}};
+
+  // Command palette state (Cmd+K). The hook listens for the global
+  // keystroke and toggles open. Commands are built below from setNav
+  // + sync + setConn + toggleDemo, so they always reflect the latest
+  // closure of those handlers.
+  const palette=useCommandPalette();
+  const[shortcutHelpOpen,setShortcutHelpOpen]=useState(false);
   const[live,setLive]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_live_cache")||"[]");}catch{return[];}});
   // Plaid net cash position (depository minus credit/loan), seeded from
   // localStorage so the Overview hero can include it on first paint
@@ -6551,6 +6853,41 @@ export default function Mizan(){
     </nav>
 
     {showConn&&<ConnectModal onClose={()=>setConn(false)} snapId={apiKeys.snapId}/>}
+
+    {/* Keyboard shortcuts + command palette. Both global at the root so
+        every nav target and action is one keystroke away. */}
+    <KeyboardShortcuts
+      onNav={setNav}
+      onSync={sync}
+      onConnect={()=>setConn(true)}
+      onHelp={()=>setShortcutHelpOpen(true)}
+      onCommand={()=>palette.setOpen(true)}
+    />
+    <ShortcutHelp
+      open={shortcutHelpOpen}
+      onClose={()=>setShortcutHelpOpen(false)}
+      shortcuts={SHORTCUT_REFERENCE}
+    />
+    <CommandPalette
+      open={palette.open}
+      onClose={palette.close}
+      commands={[
+        // Navigate
+        {id:"nav-overview", label:"Go to Overview",      group:"Navigate", hint:"g o", icon:"◎", action:()=>setNav("overview")},
+        {id:"nav-portfolio",label:"Go to Portfolio",     group:"Navigate", hint:"g p", icon:"▣", action:()=>setNav("portfolio")},
+        {id:"nav-finances", label:"Go to Finances",      group:"Navigate", hint:"g f", icon:"$", action:()=>setNav("finances")},
+        {id:"nav-trade",    label:"Go to Trade & Bot",   group:"Navigate", hint:"g t", icon:"⤢", action:()=>setNav("trade")},
+        {id:"nav-advisor",  label:"Go to AI Advisor",    group:"Navigate", hint:"g a", icon:"✦", action:()=>setNav("advisor")},
+        {id:"nav-settings", label:"Go to Settings",      group:"Navigate", hint:"g s", icon:"⚙", action:()=>setNav("settings")},
+        {id:"nav-about",    label:"About MIZAN",         group:"Navigate", icon:"ⓘ",            action:()=>setNav("about")},
+        // Actions
+        {id:"act-sync",     label:"Sync All",            group:"Actions",  hint:"r",   icon:"↻", action:()=>sync()},
+        {id:"act-connect",  label:"Connect Account",     group:"Actions",  icon:"+",             action:()=>setConn(true)},
+        {id:"act-demo",     label:demoMode?"Disable demo mode":"Enable demo mode", group:"Actions", icon:"◧", action:()=>toggleDemo()},
+        {id:"act-help",     label:"Keyboard shortcuts",  group:"Actions",  hint:"?",   icon:"⌨", action:()=>setShortcutHelpOpen(true)},
+      ]}
+      onSelect={()=>{/* command.action already fired in the palette */}}
+    />
 
     {/* Onboarding. Auto-shows for fresh users (no brokers connected); the
         Settings "Replay tour" button sets onboardingForce so existing users
