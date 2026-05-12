@@ -3983,6 +3983,8 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
         ["security","Security"],
         ["assets","Manual Assets"],
         ["docs","Documents"],
+        ["privacy","Privacy & Data"],
+        ...(isRoot?[["admin","Admin"]]:[]),
       ]}
       active={sub}
       onChange={setSub}
@@ -4107,6 +4109,240 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
 
     {sub==="security"&&<SecurityPanel/>}
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
+    {sub==="privacy"&&<PrivacyPanel/>}
+    {sub==="admin"&&isRoot&&<AdminPanel/>}
+  </div>;
+}
+
+/* ─── PRIVACY & DATA (export + delete) ────────────────── */
+function PrivacyPanel(){
+  const{signOut}=useAuth();
+  const[exportBusy,setExportBusy]=useState(false);
+  const[deleteBusy,setDeleteBusy]=useState(false);
+  const[confirmText,setConfirmText]=useState("");
+  const[showModal,setShowModal]=useState(false);
+  const[err,setErr]=useState(null);
+  const[done,setDone]=useState(false);
+
+  const downloadExport=async()=>{
+    setExportBusy(true);setErr(null);
+    try{
+      const res=await apiFetch("/api/account/export");
+      if(!res.ok)throw new Error(`Export failed (${res.status})`);
+      const blob=await res.blob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;a.download=`mizan-export-${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);a.click();a.remove();
+      URL.revokeObjectURL(url);
+    }catch(e){setErr(e.message||"Export failed");}
+    finally{setExportBusy(false);}
+  };
+
+  const submitDelete=async()=>{
+    if(confirmText!=="DELETE")return;
+    setDeleteBusy(true);setErr(null);
+    try{
+      const res=await apiFetch("/api/account",{
+        method:"DELETE",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({confirm:"DELETE"}),
+      });
+      if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||`Delete failed (${res.status})`);}
+      setDone(true);
+      // Drop session + reload — Supabase signOut clears the JWT cookie.
+      try{await signOut();}catch{}
+      setTimeout(()=>{window.location.replace("/");},2000);
+    }catch(e){setErr(e.message||"Delete failed");setDeleteBusy(false);}
+  };
+
+  if(done){
+    return<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center"}}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ACCOUNT DELETED</div>
+      <div style={{fontFamily:FU,fontSize:18,color:T.textHi,fontWeight:600,letterSpacing:"-0.01em",marginBottom:T.s2}}>Your account has been deleted.</div>
+      <div style={{fontFamily:FU,fontSize:13,color:T.muted}}>You'll be redirected in a moment.</div>
+    </BentoTile>;
+  }
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DOWNLOAD MY DATA</div>
+      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
+        Exports a JSON file containing your profile, account settings, CSV imports, manual assets, donations, audit history, brokerage holdings, and bank accounts. The file is for your records — MIZAN never shares it.
+      </p>
+      <button onClick={downloadExport} disabled={exportBusy} className="btn-primary">
+        {exportBusy?"Preparing…":"Download my data"}
+      </button>
+    </BentoTile>
+
+    <BentoTile accent={T.loss} style={{background:`linear-gradient(135deg, ${T.loss}08, transparent 60%), ${T.card}`}}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DELETE MY ACCOUNT</div>
+      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
+        Permanently deletes everything — profile, account state, brokerage connections (via SnapTrade), bank links (via Plaid), and audit trail. This action cannot be undone.
+      </p>
+      <button onClick={()=>setShowModal(true)} className="btn-danger">Delete my account…</button>
+    </BentoTile>
+
+    {err&&<BentoTile style={{background:`${T.loss}10`,border:`1px solid ${T.loss}40`}}>
+      <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>
+    </BentoTile>}
+
+    {showModal&&<div style={{
+      position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(4px)",
+      display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:T.s4,
+    }} onClick={()=>!deleteBusy&&setShowModal(false)}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        maxWidth:520,width:"100%",background:T.card,border:`1px solid ${T.loss}40`,borderRadius:T.rLg,padding:`${T.s6} ${T.s5}`,
+      }}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.18em",fontWeight:700,marginBottom:T.s3}}>DELETE ACCOUNT — IRREVERSIBLE</div>
+        <p style={{fontFamily:FU,fontSize:14,color:T.text,margin:`0 0 ${T.s3}`,lineHeight:1.55}}>
+          This will permanently remove:
+        </p>
+        <ul style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s4} ${T.s4}`,padding:0,lineHeight:1.7}}>
+          <li>Your profile, settings, and authentication credentials</li>
+          <li>Every connected brokerage (via SnapTrade /snapTrade/deleteUser)</li>
+          <li>Every linked bank (Plaid Items unlinked)</li>
+          <li>CSV imports, manual assets, donations, watchlist, screening baselines</li>
+          <li>All cached holdings and activity data</li>
+        </ul>
+        <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.06em",marginBottom:T.s2}}>TYPE <span style={{color:T.loss,fontWeight:700}}>DELETE</span> TO CONFIRM</div>
+        <input
+          value={confirmText} onChange={e=>setConfirmText(e.target.value)}
+          placeholder="DELETE"
+          disabled={deleteBusy}
+          style={{width:"100%",padding:`${T.s3} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:14,color:T.text,letterSpacing:"0.15em",textAlign:"center",outline:"none",boxSizing:"border-box",marginBottom:T.s4}}
+          autoFocus
+        />
+        <div style={{display:"flex",gap:T.s2,justifyContent:"flex-end"}}>
+          <button onClick={()=>{if(!deleteBusy){setShowModal(false);setConfirmText("");setErr(null);}}} disabled={deleteBusy} className="btn-ghost">Cancel</button>
+          <button onClick={submitDelete} disabled={deleteBusy||confirmText!=="DELETE"} className="btn-danger">
+            {deleteBusy?"Deleting…":"Delete account"}
+          </button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+/* ─── ADMIN PANEL (root only) ────────────────────────── */
+function AdminPanel(){
+  const[tab,setTab]=useState("users");
+  const[stats,setStats]=useState(null);
+  const[users,setUsers]=useState([]);
+  const[auditRows,setAuditRows]=useState([]);
+  const[auditTotal,setAuditTotal]=useState(0);
+  const[auditOffset,setAuditOffset]=useState(0);
+  const[busy,setBusy]=useState(false);
+  const[err,setErr]=useState(null);
+  const[dbStatus,setDbStatus]=useState(null);
+
+  const PAGE=50;
+
+  const load=useCallback(async()=>{
+    setBusy(true);setErr(null);
+    try{
+      const[s,u,a,d]=await Promise.all([
+        apiFetch("/api/admin/stats").then(r=>r.json()),
+        apiFetch("/api/admin/users?limit=200").then(r=>r.json()),
+        apiFetch(`/api/admin/audit-log?limit=${PAGE}&offset=${auditOffset}`).then(r=>r.json()),
+        apiFetch("/api/admin/db-status").then(r=>r.json()),
+      ]);
+      setStats(s);setUsers(u.users||[]);setAuditRows(a.rows||[]);setAuditTotal(a.total||0);setDbStatus(d);
+    }catch(e){setErr(e.message||"Failed to load");}
+    finally{setBusy(false);}
+  },[auditOffset]);
+  useEffect(()=>{load();},[load]);
+
+  const suspend=async(id,op)=>{
+    if(!confirm(`${op==="suspend"?"Suspend":"Unsuspend"} this user?`))return;
+    const r=await apiFetch(`/api/admin/users/${id}/${op}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
+    if(!r.ok){setErr(`${op} failed`);return;}
+    load();
+  };
+
+  const fmtDate=s=>s?new Date(s).toLocaleString():"—";
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    {/* ─── Stats cards ───────────────────────────── */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:T.s3}}>
+      {[
+        ["TOTAL USERS",         stats?.users_total ?? "—"],
+        ["ACTIVE (7d)",         stats?.active_last_7_days ?? "—"],
+        ["SYNCS TODAY",         stats?.syncs_today ?? "—"],
+        ["AI QUERIES TODAY",    stats?.ai_queries_today ?? "—"],
+      ].map(([l,v])=><BentoTile key={l}>
+        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>{l}</div>
+        <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{v.toLocaleString?.()||v}</div>
+      </BentoTile>)}
+    </div>
+
+    {/* ─── DB / Cron health ──────────────────────── */}
+    {dbStatus&&<BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SCHEMA + CRON</span>
+        <Tag label={dbStatus.ok?"All migrations applied":"Migrations missing"} color={dbStatus.ok?T.gain:T.loss}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s3}}>
+        {(dbStatus.migrations||[]).map(m=><div key={m.migration} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
+          <div style={{fontFamily:FM,fontSize:11,color:T.text,marginBottom:T.s1}}>{m.migration}</div>
+          <Tag label={m.complete?"OK":"Missing"} color={m.complete?T.gain:T.loss}/>
+        </div>)}
+        {Object.entries(dbStatus.cron||{}).map(([action,row])=><div key={action} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
+          <div style={{fontFamily:FM,fontSize:11,color:T.text,marginBottom:T.s1}}>{action}</div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>Last: {fmtDate(row?.created_at)}</div>
+          {row?.metadata&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{Object.entries(row.metadata).map(([k,v])=>`${k}=${v}`).join(", ")}</div>}
+        </div>)}
+      </div>
+    </BentoTile>}
+
+    {/* ─── Sub-tabs ──────────────────────────────── */}
+    <TabBar tabs={[["users","Users"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
+
+    {err&&<BentoTile style={{background:`${T.loss}10`,border:`1px solid ${T.loss}40`}}>
+      <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>
+    </BentoTile>}
+
+    {tab==="users"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
+      <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>USERS · {users.length}</span>
+        <button onClick={load} disabled={busy} className="btn-ghost" style={{fontSize:10}}>{busy?"Loading…":"Refresh"}</button>
+      </div>
+      {users.length===0
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No users yet.</div>
+        :<Tbl cols={[
+          {l:"Email",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text}}>{r.email}</span>},
+          {l:"Joined",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.created_at)}</span>},
+          {l:"Last sign-in",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.last_sign_in)}</span>},
+          {l:"Status",r_:r=><Tag label={r.suspended?"Suspended":r.is_root?"Root":"Active"} color={r.suspended?T.loss:r.is_root?T.gold:T.gain}/>},
+          {l:"",r:true,r_:r=><div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
+            {r.suspended
+              ?<button onClick={()=>suspend(r.id,"unsuspend")} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:`${T.gain}18`,border:`1px solid ${T.gain}40`,color:T.gain,cursor:"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em"}}>UNSUSPEND</button>
+              :<button onClick={()=>suspend(r.id,"suspend")} disabled={r.is_root} title={r.is_root?"Cannot suspend a root account":""} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}40`,color:T.loss,cursor:r.is_root?"not-allowed":"pointer",opacity:r.is_root?0.4:1,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em"}}>SUSPEND</button>}
+          </div>},
+        ]} rows={users}/>}
+    </BentoTile>}
+
+    {tab==="audit"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
+      <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>AUDIT LOG · {auditTotal.toLocaleString()} total · showing {auditOffset+1}-{Math.min(auditOffset+PAGE,auditTotal)}</span>
+        <div style={{display:"flex",gap:T.s2}}>
+          <button onClick={()=>setAuditOffset(Math.max(0,auditOffset-PAGE))} disabled={busy||auditOffset===0} className="btn-ghost" style={{fontSize:10}}>← Prev</button>
+          <button onClick={()=>setAuditOffset(auditOffset+PAGE)} disabled={busy||auditOffset+PAGE>=auditTotal} className="btn-ghost" style={{fontSize:10}}>Next →</button>
+        </div>
+      </div>
+      {auditRows.length===0
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No audit entries.</div>
+        :<Tbl cols={[
+          {l:"When",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,whiteSpace:"nowrap"}}>{fmtDate(r.created_at)}</span>},
+          {l:"User",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.user_id?.slice(0,8)||"—"}</span>},
+          {l:"Action",r_:r=><span style={{fontFamily:FU,fontSize:12,color:T.text,fontWeight:500}}>{r.action}</span>},
+          {l:"Target",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.target||"—"}</span>},
+          {l:"IP",r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.ip||"—"}</span>},
+          {l:"Metadata",r_:r=>r.metadata&&Object.keys(r.metadata).length>0
+            ?<span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{Object.entries(r.metadata).slice(0,3).map(([k,v])=>`${k}=${String(v).slice(0,30)}`).join(" · ")}</span>
+            :<span style={{fontFamily:FM,fontSize:10,color:T.dim}}>—</span>},
+        ]} rows={auditRows}/>}
+    </BentoTile>}
   </div>;
 }
 

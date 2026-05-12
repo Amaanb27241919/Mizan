@@ -109,7 +109,7 @@ CRON_SECRET=set-a-32-byte-random-hex-string-here   # server-only
 1. Create a Supabase project
 2. Settings → API → copy URL + anon key into `.env.local` (and Vercel)
 3. Settings → API → Legacy tab → copy service_role JWT
-4. Apply migrations in order: either run `npx supabase db push` (after `supabase link`) **or** paste each file in `supabase/migrations/` into Supabase → SQL Editor in numeric order (`001_audit_log.sql`, `002_user_state.sql`, `003_plaid.sql`).
+4. Apply migrations in order: either run `npx supabase db push` (after `supabase link`) **or** paste each file in `supabase/migrations/` into Supabase → SQL Editor in numeric order (`001_audit_log.sql`, `002_user_state.sql`, `003_plaid.sql`, `004_rate_limits.sql`, `005_profiles.sql`).
 5. Verify the schema is current — sign in as the `OWNER_EMAIL` account and hit `GET /api/admin/db-status`; it returns which expected tables are present and flags any missing.
 6. Authentication → URL Configuration → Site URL + Redirect URLs to `http://localhost:3000` (add Vercel URL after deploy)
 7. Authentication → Providers → Email → **disable "Confirm email"** so sign-up lands authenticated in the same tab (no email click-through). Password reset emails still work — that flow uses a recovery link.
@@ -236,7 +236,9 @@ A fictional ~$42M halal portfolio built into the bundle. Defaults **on** for new
 │   ├── migrations/          # Numbered SQL migrations (source of truth)
 │   │   ├── 001_audit_log.sql
 │   │   ├── 002_user_state.sql
-│   │   └── 003_plaid.sql
+│   │   ├── 003_plaid.sql
+│   │   ├── 004_rate_limits.sql
+│   │   └── 005_profiles.sql
 │   ├── schema.sql           # Pointer comment — see migrations/ instead
 │   └── README.md            # Supabase setup notes
 ├── server.js                # Node http server for local dev (uses lib/handlers.mjs)

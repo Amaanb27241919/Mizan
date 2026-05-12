@@ -227,11 +227,11 @@ const server = http.createServer(async (req, res) => {
     url.pathname.startsWith("/api/polygon")   ||
     url.pathname === "/api/advisor"
   ) {
-    console.log(`${req.method} ${url.pathname}`);
+    // handlers.mjs already emits structured request.start / request.end /
+    // request.failed lines via lib/logger.mjs — no need to duplicate here.
     try { await handleApi(req, res, url); }
     catch (err) {
       logLine(`api error: ${err.stack || err}`);
-      console.error("  ✗", err.message);
       const status = Number.isInteger(err?.status) ? err.status : 500;
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: err.message }));
