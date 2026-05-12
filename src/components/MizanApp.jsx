@@ -4334,7 +4334,7 @@ function AdminPanel(){
         ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No audit entries.</div>
         :<Tbl cols={[
           {l:"When",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,whiteSpace:"nowrap"}}>{fmtDate(r.created_at)}</span>},
-          {l:"User",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.user_id?.slice(0,8)||"—"}</span>},
+          {l:"User",r_:r=><span style={{fontFamily:FU,fontSize:11,color:T.text}}>{r.email||(r.user_id?r.user_id.slice(0,8)+"…":"—")}</span>},
           {l:"Action",r_:r=><span style={{fontFamily:FU,fontSize:12,color:T.text,fontWeight:500}}>{r.action}</span>},
           {l:"Target",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.target||"—"}</span>},
           {l:"IP",r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.ip||"—"}</span>},
