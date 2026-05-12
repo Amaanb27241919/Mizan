@@ -4014,9 +4014,26 @@ export default function Mizan(){
       if(r2.ok){
         const d2=await r2.json();
         const real=Array.isArray(d2.activities)?d2.activities:[];
+        // Enrich SnapTrade rows with a full broker + sub-account label so
+        // fingerprint dedup can distinguish "Fidelity ROTH IRA" from
+        // "Coinbase" (was the cause of Fidelity rows showing as Coinbase
+        // after the retag tool ran). Builds an accountId → label map from
+        // the just-fetched snapAccounts cache; falls back to brokerage or
+        // whatever institution_name SnapTrade returned.
+        let acctLabelById={};
+        try{
+          const cachedAccts=JSON.parse(localStorage.getItem("mizan_accounts_cache")||"[]");
+          cachedAccts.forEach(a=>{
+            acctLabelById[a.accountId]=`${a.brokerage} — ${a.accountName}`;
+          });
+        }catch{}
+        const enrichedReal=real.map(r=>({
+          ...r,
+          institution_name:acctLabelById[r.account?.id]||r.institution_name||r.account?.institution_name||"Unknown",
+        }));
         // SnapTrade real first so any CSV import row that fingerprint-matches
         // a real transaction is dropped (the broker is the source of truth).
-        persistActivities(dedupeActivities([...real,...imported]).sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
+        persistActivities(dedupeActivities([...enrichedReal,...imported]).sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
       }else{
         persistActivities(dedupeActivities(imported));
       }
@@ -4051,26 +4068,32 @@ export default function Mizan(){
   // fetchSnapHoldings so SnapTrade activities and CSV imports of the same
   // underlying transaction collapse to a single row.
   //
-  // Lenient on purpose. Two CSV exports of the same Robinhood trade can
-  // differ in:
-  //   - broker label ("Robinhood" vs "ROBINHOOD") — dropped
-  //   - transaction type ("Buy" vs "BTOO" vs "BUY") — dropped (Robinhood
-  //     has churned trans-code formats over the years)
-  //   - price precision ($150.234 vs $150.23) — dropped (less stable than
-  //     amount, which is rounded to cents at the broker)
   // Kept:
+  //   - institution_name (broker + sub-account, normalized) — required.
+  //     Prevents a Coinbase ACH deposit collapsing with a Fidelity ACH
+  //     deposit on the same day for the same amount. Both upstream
+  //     sources (CSV imports + SnapTrade real activities, now enriched
+  //     in fetchSnapHoldings) produce the same "Broker — SubAccount"
+  //     string so re-uploads of the same Robinhood CSV still dedup.
   //   - date (YYYY-MM-DD)            — required
-  //   - symbol (uppercased, trimmed) — required
+  //   - symbol (uppercased, trimmed)
   //   - units, signed, 2 dp          — preserves direction
-  //   - amount, signed, 2 dp         — preserves direction (so a BUY and
+  //   - amount, signed, 2 dp         — preserves direction (a BUY and
   //                                    SELL of the same lot don't collapse)
+  //
+  // Dropped:
+  //   - transaction type ("Buy" vs "BUY" vs "BTOO") — Robinhood has
+  //     churned trans-code formats over the years
+  //   - price precision ($150.234 vs $150.23) — less stable than amount
   const fingerprintRow=r=>{
     const n=v=>{
       const f=parseFloat(v);
       return Number.isFinite(f)?f.toFixed(2):"";
     };
     const sym=r.symbol?.symbol||r.symbol||"";
+    const inst=(r.institution_name||"").trim().toUpperCase();
     return[
+      inst,
       (r.trade_date||r.settlement_date||"").slice(0,10),
       (typeof sym==="string"?sym:"").trim().toUpperCase(),
       n(r.units),
@@ -4137,32 +4160,41 @@ export default function Mizan(){
   },[persistActivities]);
 
   // One-shot tool to fix already-imported rows that were tagged with the
-  // wrong broker (e.g., Robinhood CSV imported with the dropdown still on
-  // Fidelity). Walks mizan_imports, infers the correct broker per-row from
-  // the row's symbol + structure heuristics, and rewrites institution_name.
-  // Heuristics are intentionally simple — when uncertain, leaves the tag
-  // alone. Returns {checked, fixed, byBroker}.
+  // wrong broker (e.g., Fidelity CSV uploaded with the dropdown still on
+  // Coinbase). Strategy:
+  //   1. Build a map keyed by content-only fingerprint (no institution)
+  //      from SnapTrade real activities → the authoritative broker label.
+  //   2. For each CSV row, look up by content-only FP. If a real activity
+  //      matches and its broker differs from the row's institution_name,
+  //      retag the row.
+  // Stripping the institution piece is what makes this work even after
+  // fingerprintRow started including institution_name — otherwise a
+  // mistagged row would never match its real twin.
   const retagImports=useCallback(()=>{
     let existing=[];
     try{existing=JSON.parse(localStorage.getItem("mizan_imports")||"[]");}catch{}
     if(!Array.isArray(existing)||existing.length===0)return{checked:0,fixed:0,byBroker:{}};
-    // Build a fingerprint→broker map from SnapTrade real activities so we
-    // can correctly attribute imported rows that match a known real trade.
-    const realByFp=new Map();
+    // Content-only fingerprint: drop the leading institution segment.
+    const stripFp=fp=>fp.split("|").slice(1).join("|");
+    const realByContentFp=new Map();
     try{
       const realCache=JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]");
+      // The real cache rows are already enriched with full "Broker — Sub" in
+      // institution_name by fetchSnapHoldings. We still build the broker
+      // label from snapAccounts when possible as a safer fallback.
       realCache.filter(a=>!a._imported).forEach(a=>{
-        const fp=fingerprintRow(a);
         const acct=visibleAccounts.find(x=>x.accountId===a.account?.id);
-        const brokerLabel=acct?.brokerage||a.institution_name||null;
-        if(brokerLabel)realByFp.set(fp,brokerLabel);
+        const brokerLabel=acct?`${acct.brokerage} — ${acct.accountName}`:a.institution_name||null;
+        if(brokerLabel){
+          realByContentFp.set(stripFp(fingerprintRow(a)),brokerLabel);
+        }
       });
     }catch{}
     const byBroker={};
     let fixed=0;
     const next=existing.map(r=>{
-      const fp=fingerprintRow(r);
-      const realBroker=realByFp.get(fp);
+      const contentFp=stripFp(fingerprintRow(r));
+      const realBroker=realByContentFp.get(contentFp);
       if(realBroker&&realBroker!==r.institution_name){
         fixed++;
         byBroker[realBroker]=(byBroker[realBroker]||0)+1;
