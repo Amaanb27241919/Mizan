@@ -544,6 +544,48 @@ const gp   = h => ((h.px-h.ac)/h.ac)*100;
 const TOTAL_MV   = HOLDINGS.reduce((s,h)=>s+mv(h),0);
 const TOTAL_COST = HOLDINGS.reduce((s,h)=>s+cost(h),0);
 
+/* ─── ASSET-CLASS CLASSIFICATION ─────────────────────── */
+// Map of ticker → asset class. Anything not in the map defaults to "us_equity"
+// since the demo + most real portfolios skew that way. Bond funds, crypto,
+// and money-market positions fall under "other" (informational only — they
+// don't count against any of the 5 user-targetable classes).
+const ASSET_CLASS_MAP = {
+  // Sukuk (Sharia-compliant fixed-income proxies)
+  SPSK:"sukuk", SPSU:"sukuk", FIIS:"sukuk", AGGS:"sukuk", SUKK:"sukuk",
+  // REITs
+  VNQ:"reit", SPRE:"reit", SCHH:"reit", IYR:"reit", REET:"reit",
+  O:"reit", AMT:"reit", PLD:"reit", EQIX:"reit", SPG:"reit",
+  // Global / international equity
+  VXUS:"global_equity", VEA:"global_equity", VWO:"global_equity",
+  IEFA:"global_equity", IEMG:"global_equity", VT:"global_equity",
+  BABA:"global_equity", TM:"global_equity", UL:"global_equity",
+  TSM:"global_equity", ASML:"global_equity", ARM:"global_equity",
+  // Bonds + crypto + money market → "other" (untargeted, informational)
+  BND:"other", AGG:"other", BNDX:"other", VGIT:"other", VGSH:"other",
+  BTC:"other", ETH:"other", SOL:"other",
+};
+const ASSET_CLASSES = [
+  { key:"us_equity",     label:"U.S. Equity",   defaultPct:60 },
+  { key:"global_equity", label:"Global Equity", defaultPct:15 },
+  { key:"sukuk",         label:"Sukuk",         defaultPct:10 },
+  { key:"reit",          label:"Real Estate (REIT)", defaultPct:10 },
+  { key:"cash",          label:"Cash",          defaultPct: 5 },
+];
+const DEFAULT_REBALANCE_TARGETS = ASSET_CLASSES.reduce((o,c)=>{o[c.key]=c.defaultPct;return o;},{});
+// Default proxies used when a class is under-target and we need to buy SOMETHING.
+// halal=true picks the screened-compliant alternative.
+const CLASS_PROXY = {
+  us_equity:    { default:"VOO",  halal:"SPUS" },
+  global_equity:{ default:"VXUS", halal:"HLAL" },
+  sukuk:        { default:"SPSK", halal:"SPSK" },
+  reit:         { default:"VNQ",  halal:"SPRE" },
+};
+const classifyTicker = (tk) => {
+  if (!tk) return "other";
+  const u = String(tk).toUpperCase();
+  return ASSET_CLASS_MAP[u] || "us_equity";
+};
+
 /* ─── CHART SEED ─────────────────────────────────────── */
 const mkCurve=(n,start,vol)=>{let v=start;return Array.from({length:n},(_,i)=>{v+=(Math.random()-.46)*vol;if(v<start*.6)v=start*.65;return{i,v:+v.toFixed(2)};});};
 const C1Y=mkCurve(252,TOTAL_MV*.82,TOTAL_MV*.006);
@@ -2373,8 +2415,258 @@ function ZakatSadaqah({accounts=[],demoMode=false}){
   </div>;
 }
 
+/* ─── REBALANCER ─────────────────────────────────────── */
+// Target allocation editor + drift table + trade suggestions.
+// Suggestions stash a "pending order" into localStorage and switch the
+// user to the Trade tab; TradeBot reads + clears it on mount.
+function Rebalancer({holdings=[],snapAccounts=[],onNav}){
+  const[targets,setTargets]=useState(()=>{
+    try{
+      const raw=JSON.parse(localStorage.getItem("mizan_rebalance_targets")||"null");
+      if(raw&&typeof raw==="object")return{...DEFAULT_REBALANCE_TARGETS,...raw};
+    }catch{}
+    return DEFAULT_REBALANCE_TARGETS;
+  });
+  const[halalOnly,setHalalOnly]=useState(()=>{
+    try{return localStorage.getItem("mizan_rebalance_halal")==="1";}catch{return false;}
+  });
+
+  const saveTargets=t=>{
+    setTargets(t);
+    try{localStorage.setItem("mizan_rebalance_targets",JSON.stringify(t));}catch{}
+    persistUserState("mizan_rebalance_targets",t);
+  };
+  const toggleHalal=()=>{
+    const next=!halalOnly;setHalalOnly(next);
+    try{localStorage.setItem("mizan_rebalance_halal",next?"1":"0");}catch{}
+  };
+
+  // ── Current allocation ────────────────────────────────────────────
+  const cashTotal=snapAccounts.reduce((s,a)=>s+(a.cash||0),0);
+  const byClass={us_equity:0,global_equity:0,sukuk:0,reit:0,cash:cashTotal,other:0};
+  const positionsByClass={us_equity:[],global_equity:[],sukuk:[],reit:[],other:[]};
+  holdings.forEach(h=>{
+    const cls=classifyTicker(h.tk);
+    const value=mv(h);
+    byClass[cls]=(byClass[cls]||0)+value;
+    if(positionsByClass[cls])positionsByClass[cls].push(h);
+  });
+  const total=Object.values(byClass).reduce((s,v)=>s+v,0);
+  const currentPct=k=>total>0?(byClass[k]/total)*100:0;
+
+  // ── Drift ─────────────────────────────────────────────────────────
+  const targetSum=ASSET_CLASSES.reduce((s,c)=>s+(+targets[c.key]||0),0);
+  const driftRows=ASSET_CLASSES.map(c=>{
+    const tgt=+targets[c.key]||0;
+    const cur=currentPct(c.key);
+    const drift=cur-tgt;
+    const absDrift=Math.abs(drift);
+    const status=absDrift<=5?"ok":absDrift<=10?"warn":"alert";
+    const dollarDrift=(drift/100)*total;
+    return{cls:c,tgt,cur,drift,absDrift,status,dollarDrift,currentValue:byClass[c.key]};
+  });
+
+  // ── Trade suggestions ─────────────────────────────────────────────
+  // 1. If halalOnly: sell every haram position first (full liquidation).
+  // 2. For each over-target class: sell pro-rata across holdings.
+  // 3. For each under-target class: buy the class proxy (halal proxy if toggled).
+  const haramHoldings=holdings.filter(h=>h.sh_==="haram");
+  const fmt$=v=>`$${(+v).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0})}`;
+
+  const suggestions=[];
+  if(halalOnly){
+    haramHoldings.forEach(h=>{
+      suggestions.push({
+        kind:"haram",
+        side:"sell",
+        sym:h.tk,
+        name:h.nm||h.tk,
+        qty:Math.floor(h.sh),
+        price:h.px,
+        amount:Math.floor(h.sh)*h.px,
+        reason:`Sharia non-compliant — full liquidation`,
+        cls:classifyTicker(h.tk),
+      });
+    });
+  }
+  driftRows.forEach(r=>{
+    if(r.cls.key==="cash")return; // cash is a residual, not actively traded
+    const dollarMove=Math.abs(r.dollarDrift);
+    if(dollarMove<500)return; // ignore noise under $500
+    if(r.drift>0){
+      // OVER target — sell pro-rata across class positions (excluding haram
+      // we already liquidated, since they're gone in the halalOnly branch).
+      const pool=positionsByClass[r.cls.key].filter(h=>!halalOnly||h.sh_!=="haram");
+      const poolValue=pool.reduce((s,h)=>s+mv(h),0);
+      if(poolValue<=0)return;
+      pool.forEach(h=>{
+        const sliceValue=(mv(h)/poolValue)*dollarMove;
+        const shares=Math.floor(sliceValue/h.px);
+        if(shares<=0)return;
+        suggestions.push({
+          kind:"drift",
+          side:"sell",
+          sym:h.tk,
+          name:h.nm||h.tk,
+          qty:shares,
+          price:h.px,
+          amount:shares*h.px,
+          reason:`${r.cls.label} +${r.drift.toFixed(1)}% over target — trim`,
+          cls:r.cls.key,
+        });
+      });
+    }else if(r.drift<0){
+      // UNDER target — buy the class proxy
+      const proxy=CLASS_PROXY[r.cls.key];
+      if(!proxy)return;
+      const sym=halalOnly?proxy.halal:proxy.default;
+      // Use the live price if we hold the proxy already, else fall back to a
+      // class-typical estimate. Defaults below are rough; user will see real
+      // execution price at order time.
+      const heldProxy=holdings.find(h=>h.tk===sym);
+      const estPx=heldProxy?heldProxy.px:(r.cls.key==="sukuk"?22:r.cls.key==="reit"?86:r.cls.key==="global_equity"?64:520);
+      const shares=Math.floor(dollarMove/estPx);
+      if(shares<=0)return;
+      suggestions.push({
+        kind:"drift",
+        side:"buy",
+        sym,
+        name:`${r.cls.label} proxy`,
+        qty:shares,
+        price:estPx,
+        amount:shares*estPx,
+        reason:`${r.cls.label} ${r.drift.toFixed(1)}% under target — add`,
+        cls:r.cls.key,
+      });
+    }
+  });
+
+  const copyToOrder=s=>{
+    try{
+      localStorage.setItem("mizan_pending_order",JSON.stringify({
+        sym:s.sym,side:s.side,qty:String(s.qty),at:Date.now(),
+      }));
+    }catch{}
+    if(onNav)onNav("trade");
+  };
+
+  const haramSellTotal=suggestions.filter(s=>s.kind==="haram").reduce((s,r)=>s+r.amount,0);
+  const sellTotal=suggestions.filter(s=>s.side==="sell").reduce((s,r)=>s+r.amount,0);
+  const buyTotal=suggestions.filter(s=>s.side==="buy").reduce((s,r)=>s+r.amount,0);
+
+  // Sum validation status for the editor
+  const sumOK=Math.abs(targetSum-100)<0.01;
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    {/* ─── ROW 1: Hero + halal toggle ─────────────────────────── */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:T.s4}}>
+      <BentoTile style={{
+        background:`radial-gradient(circle at 0% 0%, ${T.blue}15, transparent 55%), ${T.card}`,
+      }}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PORTFOLIO REBALANCE</div>
+        <div style={{fontFamily:FU,fontSize:34,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmt$(total)}</div>
+        <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>across {holdings.length} positions + {fmt$(cashTotal)} cash</div>
+        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
+          Set target weights per asset class. Mizan compares to your live allocation, flags drift, and proposes trades — one click pre-fills the Order Ticket.
+        </p>
+      </BentoTile>
+      <BentoTile accent={halalOnly?T.gold:undefined} style={halalOnly?{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}:undefined}>
+        <div style={{fontFamily:FM,fontSize:10,color:halalOnly?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>HALAL-ONLY REBALANCE</div>
+        <p style={{fontFamily:FU,fontSize:12,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.5}}>
+          Liquidates every non-compliant holding first, then buys only screened halal proxies (SPUS, HLAL, SPSK, SPRE).
+        </p>
+        <button onClick={toggleHalal} style={{
+          padding:`9px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",
+          background:halalOnly?T.gold:"transparent",border:`1px solid ${halalOnly?T.gold:T.border}`,
+          color:halalOnly?"#000":T.text,cursor:"pointer",width:"100%",
+        }}>{halalOnly?"Halal Mode: ON":"Halal Mode: OFF"}</button>
+        {halalOnly&&haramHoldings.length>0&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rSm,background:`${T.loss}10`,border:`1px solid ${T.loss}30`,fontFamily:FM,fontSize:10,color:T.loss,lineHeight:1.5}}>
+          {haramHoldings.length} haram position{haramHoldings.length===1?"":"s"} queued for liquidation ({fmt$(haramSellTotal)})
+        </div>}
+      </BentoTile>
+    </div>
+
+    {/* ─── ROW 2: Targets editor ───────────────────────────────── */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TARGET ALLOCATION</span>
+        <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
+          <span style={{fontFamily:FM,fontSize:11,color:sumOK?T.gain:T.loss,fontVariantNumeric:"tabular-nums"}}>Sum: {targetSum.toFixed(1)}%{!sumOK&&" — must equal 100%"}</span>
+          <button onClick={()=>saveTargets(DEFAULT_REBALANCE_TARGETS)} className="btn-ghost" style={{fontSize:10}}>Reset defaults</button>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:T.s3}}>
+        {ASSET_CLASSES.map(c=><div key={c.key} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500,marginBottom:T.s2}}>{c.label.toUpperCase()}</div>
+          <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
+            <input
+              type="number" min={0} max={100} step={1}
+              value={targets[c.key]??0}
+              onChange={e=>saveTargets({...targets,[c.key]:Math.max(0,Math.min(100,+e.target.value||0))})}
+              className="field" style={{fontSize:18,fontWeight:700,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums",width:"100%"}}
+            />
+            <span style={{fontFamily:FM,fontSize:14,color:T.muted,fontWeight:600}}>%</span>
+          </div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s2,fontVariantNumeric:"tabular-nums"}}>Target value {fmt$((+targets[c.key]||0)/100*total)}</div>
+        </div>)}
+      </div>
+    </BentoTile>
+
+    {/* ─── ROW 3: Drift table ──────────────────────────────────── */}
+    <BentoTile style={{padding:0,overflow:"hidden"}}>
+      <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DRIFT ANALYSIS</span>
+        <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>green ≤ 5% · yellow ≤ 10% · red &gt; 10%</span>
+      </div>
+      <Tbl cols={[
+        {l:"Asset Class",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.cls.label}</span>},
+        {l:"Target %",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.tgt.toFixed(1)}%</span>},
+        {l:"Current %",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{r.cur.toFixed(1)}%</span>},
+        {l:"Current $",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmt$(r.currentValue)}</span>},
+        {l:"Drift",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,fontVariantNumeric:"tabular-nums",color:r.drift>0?T.gain:r.drift<0?T.loss:T.muted}}>{r.drift>0?"+":""}{r.drift.toFixed(1)}%</span>},
+        {l:"$ Move",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.drift>0?"−":"+"}{fmt$(Math.abs(r.dollarDrift))}</span>},
+        {l:"Status",r_:r=><Tag label={r.status==="ok"?"OK":r.status==="warn"?"Warning":"Alert"} color={r.status==="ok"?T.gain:r.status==="warn"?T.gold:T.loss}/>},
+      ]} rows={driftRows}/>
+      {byClass.other>0&&<div style={{padding:`${T.s3} ${T.s5}`,background:T.surface,borderTop:`1px solid ${T.border}`,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
+        Other / uncategorized (crypto, bonds, etc.): <span style={{color:T.text,fontWeight:600}}>{fmt$(byClass.other)}</span> · {(total>0?byClass.other/total*100:0).toFixed(1)}% — informational, not targeted.
+      </div>}
+    </BentoTile>
+
+    {/* ─── ROW 4: Trade suggestions ────────────────────────────── */}
+    <BentoTile style={{padding:0,overflow:"hidden"}}>
+      <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SUGGESTED TRADES{suggestions.length>0&&<span style={{color:T.blue,marginLeft:T.s2}}>· {suggestions.length}</span>}</span>
+        <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
+          Sell {fmt$(sellTotal)} · Buy {fmt$(buyTotal)} · Est. cost $0 (commission-free)
+        </span>
+      </div>
+      {suggestions.length===0
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>
+          {total===0
+            ?"Connect a brokerage or enable demo mode to see rebalance suggestions."
+            :sumOK
+              ?"No trades needed — every class is within tolerance of its target."
+              :"Set targets that sum to 100% to generate suggestions."}
+        </div>
+        :<Tbl cols={[
+          {l:"Action",r_:r=><Tag label={r.side.toUpperCase()} color={r.side==="sell"?T.loss:T.gain}/>},
+          {l:"Symbol",r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.sym}</span>},
+          {l:"Qty",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontVariantNumeric:"tabular-nums",color:T.text}}>{r.qty.toLocaleString()}</span>},
+          {l:"~Price",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.muted,fontVariantNumeric:"tabular-nums"}}>${r.price.toFixed(2)}</span>},
+          {l:"~Amount",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:r.side==="sell"?T.loss:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmt$(r.amount)}</span>},
+          {l:"Reason",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.4}}>{r.reason}</span>},
+          {l:"",r:true,r_:r=><button
+            onClick={()=>copyToOrder(r)}
+            style={{padding:`5px ${T.s3}`,borderRadius:T.rSm,background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,cursor:"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",whiteSpace:"nowrap"}}
+            title="Pre-fill the Order Ticket with this trade"
+          >COPY TO ORDER →</button>},
+        ]} rows={suggestions}/>}
+    </BentoTile>
+  </div>;
+}
+
 /* ─── PORTFOLIO ──────────────────────────────────────── */
-function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false}){
+function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav}){
   const[sub,setSub]=useState("holdings");
   const[acct,setAcct]=useState("all");
   const[screen,setScreen]=useState("all");
@@ -2413,7 +2705,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
   })();
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["holdings","Holdings"],["watchlist","Watchlist"],["activity","Activity"],["tax","Tax Planning"],["zakat","Zakat & Sadaqah"],["etfs","ETFs & Funds"],["screener","Sharia Screener"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["holdings","Holdings"],["watchlist","Watchlist"],["activity","Activity"],["rebalance","Rebalance"],["tax","Tax Planning"],["zakat","Zakat & Sadaqah"],["etfs","ETFs & Funds"],["screener","Sharia Screener"]]} active={sub} onChange={setSub}/>
 
     {sub==="holdings"&&<>
       {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}
@@ -2515,6 +2807,8 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
     {sub==="watchlist"&&<Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>}
 
     {sub==="activity"&&<ActivityPanel activities={activities} accounts={snapAccounts}/>}
+
+    {sub==="rebalance"&&<Rebalancer holdings={merged} snapAccounts={snapAccounts} onNav={onNav}/>}
 
     {sub==="tax"&&<TaxPlanner holdings={merged} activities={activities}/>}
 
@@ -2902,6 +3196,23 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
   const[orderErr,setOrderErr]=useState(null);
   const[impactPreview,setImpactPreview]=useState(null);
   useEffect(()=>{if(!acctId&&accounts[0])setAcctId(accounts[0].accountId);},[accounts]);
+
+  // Pre-fill from a pending order stashed by the Rebalancer's "Copy to Order"
+  // button. Read once, clear immediately so reloads don't keep re-filling.
+  useEffect(()=>{
+    try{
+      const raw=localStorage.getItem("mizan_pending_order");
+      if(!raw)return;
+      const o=JSON.parse(raw);
+      localStorage.removeItem("mizan_pending_order");
+      if(o&&o.sym){
+        setSub("order");
+        setSym(String(o.sym).toUpperCase());
+        if(o.side==="sell"||o.side==="buy")setSide(o.side);
+        if(o.qty)setQty(String(o.qty));
+      }
+    }catch{}
+  },[]);
 
   // Step 1: preview the order via SnapTrade impact. Server returns
   // {impact: {trade: {id, ...estimated_fees, ...}}} — we surface in a modal.
@@ -5758,7 +6069,7 @@ export default function Mizan(){
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode}/>}
-        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode}/>}
+        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}

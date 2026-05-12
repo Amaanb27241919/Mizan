@@ -118,7 +118,31 @@ export function AuthProvider({ children }) {
   };
   const mfaEnroll = async (friendlyName = 'Authenticator') => {
     if (!supabase) return { data: null, error: new Error('Supabase not configured') };
-    return supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName });
+    // Clean up stale unverified factors before enrolling. Supabase rejects
+    // a new factor if one with the same friendlyName already exists in *any*
+    // status (including 'unverified' from an aborted enroll). Without this,
+    // a user who closes the QR modal can never re-enroll until manual cleanup.
+    try {
+      const list = await supabase.auth.mfa.listFactors();
+      const stale = (list?.data?.all || []).filter(
+        (f) => f.status !== 'verified' && (f.friendly_name === friendlyName || !f.friendly_name),
+      );
+      for (const f of stale) {
+        await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+      }
+    } catch { /* best-effort cleanup */ }
+    // CRITICAL: pass `issuer` explicitly. Without it, Supabase derives the
+    // issuer from the project's Site URL (Auth → URL Configuration). If
+    // that Site URL is missing or malformed, the enroll call fails with
+    // "Site URL is improperly formatted" before a factor is ever created.
+    // Hard-coding the issuer here means MFA works regardless of dashboard
+    // config drift, and the authenticator app shows "MIZAN: user@example.com"
+    // which is what we want anyway.
+    return supabase.auth.mfa.enroll({
+      factorType: 'totp',
+      friendlyName,
+      issuer: 'MIZAN',
+    });
   };
   const mfaVerify = async (factorId, code) => {
     if (!supabase) return { data: null, error: new Error('Supabase not configured') };
