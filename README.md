@@ -67,6 +67,13 @@ SUPABASE_SERVICE_ROLE_KEY=ey...                    # server-only, bypasses RLS
 
 # Owner email — this user inherits any legacy mizan_primary SnapTrade connections
 OWNER_EMAIL=you@example.com
+
+# Plaid — banking aggregation. Sign up at dashboard.plaid.com.
+# Sandbox uses fake test banks (Tartan Bank / First Platypus etc.); production
+# requires Plaid to approve your application.
+PLAID_CLIENT_ID=your-plaid-client-id                  # server-only
+PLAID_SECRET=your-plaid-secret                        # server-only
+PLAID_ENV=sandbox                                     # sandbox | development | production
 ```
 
 ### Multi-user setup (Supabase)

@@ -766,18 +766,22 @@ function SectorBreakdown({holdings=[],total=0}){
 }
 
 /* ─── OVERVIEW ───────────────────────────────────────── */
-function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner}){
+function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0}){
   const[range,setRange]=useState("All");
   const liveSrc=snapAccounts.length>0
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
     : [];
   const merged=liveSrc.map(h=>{const l=live.find(q=>q.tk===h.tk);return l?{...h,px:l.price||h.px,_p:l.pct||0}:h;});
-  // Total value = account balance sum (cash + equity) when SnapTrade is connected;
-  // otherwise fall back to summing position market values from fixtures.
-  // This matches what brokers (and Origin/Mint/etc.) report.
+  // Total value combines:
+  //   - Brokerage balances from SnapTrade (cash + equity per account)
+  //   - Bank net position from Plaid (checking + savings − credit/loan)
+  //   - Manual zakatable assets (gold, real estate, business equity)
+  // Falls back to summing position market values when no broker is connected.
   const equityValue=merged.reduce((s,h)=>s+mv(h),0);
   const balanceSum=snapAccounts.reduce((s,a)=>s+(a.balance||0),0);
-  const tot=snapAccounts.length>0?balanceSum:equityValue;
+  const manualAssetTotal=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]").reduce((s,a)=>s+(+a.value||0),0);}catch{return 0;}})();
+  const brokerageTot=snapAccounts.length>0?balanceSum:equityValue;
+  const tot=brokerageTot+(bankBalance||0)+manualAssetTotal;
   const totCost=merged.reduce((s,h)=>s+cost(h),0);
   // Gain is computed against position cost basis only (cash isn't a "gain")
   const gain=equityValue-totCost;
@@ -3819,6 +3823,255 @@ function About(){
   </div>;
 }
 
+/* ─── FINANCES (Plaid banking) ───────────────────────── */
+// Bank accounts (checking/savings/credit), recent transactions, spending
+// summary by category, recurring subscription detection. Powered by Plaid
+// via the server proxy at /api/plaid/*.
+function Finances({onBankBalanceChange}){
+  const{user}=useAuth();
+  const[accounts,setAccounts]=useState([]);
+  const[txns,setTxns]=useState([]);
+  const[loading,setLoading]=useState(false);
+  const[linkToken,setLinkToken]=useState(null);
+  const[plaidReady,setPlaidReady]=useState(false);
+  const[busy,setBusy]=useState(false);
+  const[status,setStatus]=useState(null);
+
+  const fmtUSD=v=>`$${(+v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const fmtDate=s=>{try{return new Date(s).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}catch{return s;}};
+
+  const totalBank=useMemo(()=>accounts.reduce((s,a)=>{
+    // For credit cards / loans, current_bal is a positive number representing
+    // what you OWE. Treat depository (checking/savings) as positive net worth
+    // contribution; loans/credit as negative.
+    const v=+a.current_bal||0;
+    if(a.type==="credit"||a.type==="loan")return s-v;
+    return s+v;
+  },0),[accounts]);
+
+  // Spending by category (positive amount = outflow per Plaid convention)
+  const spendingByCategory=useMemo(()=>{
+    const map={};
+    txns.forEach(t=>{
+      if(t.amount<=0)return; // refunds/credits → skip from spending view
+      const cat=t.personal_finance_category?.primary||t.category?.[0]||"Other";
+      map[cat]=(map[cat]||0)+t.amount;
+    });
+    return Object.entries(map).map(([cat,total])=>({cat,total})).sort((a,b)=>b.total-a.total);
+  },[txns]);
+
+  // Recurring detection: same merchant_name appears 2+ times across distinct months
+  const recurring=useMemo(()=>{
+    const byMerchant={};
+    txns.forEach(t=>{
+      const m=(t.merchant_name||t.name||"").trim();
+      if(!m||t.amount<=0)return;
+      const month=(t.date||"").slice(0,7);
+      if(!byMerchant[m])byMerchant[m]={merchant:m,months:new Set(),amounts:[],lastDate:t.date};
+      byMerchant[m].months.add(month);
+      byMerchant[m].amounts.push(t.amount);
+      if(t.date>byMerchant[m].lastDate)byMerchant[m].lastDate=t.date;
+    });
+    return Object.values(byMerchant)
+      .filter(x=>x.months.size>=2)
+      .map(x=>({merchant:x.merchant,monthCount:x.months.size,avgAmount:x.amounts.reduce((s,n)=>s+n,0)/x.amounts.length,lastDate:x.lastDate}))
+      .sort((a,b)=>b.monthCount-a.monthCount);
+  },[txns]);
+
+  useEffect(()=>{onBankBalanceChange?.(totalBank);},[totalBank]); // eslint-disable-line
+
+  // Load existing accounts + transactions on mount.
+  const refresh=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const ar=await apiFetch("/api/plaid/accounts");
+      if(ar.ok){const ad=await ar.json();setAccounts(Array.isArray(ad.accounts)?ad.accounts:[]);}
+      const tr=await apiFetch("/api/plaid/transactions");
+      if(tr.ok){const td=await tr.json();setTxns(Array.isArray(td.transactions)?td.transactions:[]);}
+    }catch(err){console.error("Finances refresh failed:",err);}
+    finally{setLoading(false);}
+  },[]);
+  useEffect(()=>{refresh();},[refresh]);
+
+  // Lazy-load react-plaid-link only when user clicks Connect (keeps initial bundle small).
+  const[PlaidLink,setPlaidLink]=useState(null);
+  const startLink=async()=>{
+    setBusy(true);setStatus(null);
+    try{
+      const r=await apiFetch("/api/plaid/link-token",{method:"POST"});
+      const d=await r.json();
+      if(!r.ok||!d.link_token)throw new Error(d.error||"Could not start Plaid Link");
+      setLinkToken(d.link_token);
+      if(!PlaidLink){
+        const mod=await import("react-plaid-link");
+        setPlaidLink(()=>mod);
+      }
+      setPlaidReady(true);
+    }catch(err){
+      setStatus({ok:false,msg:err.message||"Plaid Link failed to start"});
+    }finally{setBusy(false);}
+  };
+
+  const onPlaidSuccess=async(public_token,metadata)=>{
+    setBusy(true);setStatus(null);
+    try{
+      const r=await apiFetch("/api/plaid/exchange",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({public_token,metadata}),
+      });
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);
+      setStatus({ok:true,msg:`Linked ${d.institution_name}.`});
+      setPlaidReady(false);setLinkToken(null);
+      await refresh();
+    }catch(err){
+      setStatus({ok:false,msg:err.message||"Bank link failed"});
+    }finally{
+      setBusy(false);
+      setTimeout(()=>setStatus(null),5000);
+    }
+  };
+
+  const removeItem=async(itemId,institutionName)=>{
+    if(!window.confirm(`Disconnect ${institutionName}? Your balances + transactions will stop syncing.`))return;
+    setBusy(true);
+    try{
+      const r=await apiFetch(`/api/plaid/item?itemId=${encodeURIComponent(itemId)}`,{method:"DELETE"});
+      if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||`HTTP ${r.status}`);}
+      await refresh();
+    }catch(err){
+      setStatus({ok:false,msg:err.message||"Disconnect failed"});
+      setTimeout(()=>setStatus(null),5000);
+    }finally{setBusy(false);}
+  };
+
+  // Group accounts by institution for the bank cards.
+  const byInst={};
+  accounts.forEach(a=>{
+    if(!byInst[a.institution_name])byInst[a.institution_name]={inst:a.institution_name,item_id:a.item_id,accts:[]};
+    byInst[a.institution_name].accts.push(a);
+  });
+  const institutions=Object.values(byInst);
+
+  // Plaid Link hook from the lazy-loaded module.
+  const usePlaidLinkHook=PlaidLink?.usePlaidLink;
+  const linkConfig=linkToken?{token:linkToken,onSuccess:onPlaidSuccess,onExit:()=>setPlaidReady(false)}:null;
+  const linkApi=usePlaidLinkHook?usePlaidLinkHook(linkConfig||{token:null}):{open:null,ready:false};
+  useEffect(()=>{
+    if(plaidReady&&linkApi.ready&&linkApi.open){linkApi.open();}
+  },[plaidReady,linkApi.ready]); // eslint-disable-line
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    {/* ─── HERO: Total bank balance + Connect ─────────── */}
+    <BentoTile style={{
+      background:`radial-gradient(circle at 0% 0%, ${T.blue}1A, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gain}10, transparent 50%), ${T.card}`,
+      borderColor:T.blue+"30",
+      padding:`${T.s6} ${T.s6}`,
+    }}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s4}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s2}}>BANK NET POSITION
+            {loading&&<span style={{marginLeft:T.s2,color:T.blue}}>● Syncing…</span>}
+          </div>
+          <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:totalBank>=0?T.textHi:T.loss,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalBank)}</div>
+          <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{institutions.length} institution{institutions.length===1?"":"s"} · {accounts.length} account{accounts.length===1?"":"s"}</div>
+        </div>
+        <button onClick={startLink} disabled={busy} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":"+ Connect Bank"}</button>
+      </div>
+      {status&&<div style={{marginTop:T.s4,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss}}>{status.ok?"✓ ":"✗ "}{status.msg}</div>}
+    </BentoTile>
+
+    {/* ─── INSTITUTIONS + ACCOUNTS ─────────────────── */}
+    {institutions.length===0&&!loading?<BentoTile style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
+      <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,marginBottom:T.s2,letterSpacing:"-0.01em"}}>No banks linked yet</div>
+      <div style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.55,maxWidth:520,margin:"0 auto"}}>
+        Connect a bank to track checking, savings, and credit balances alongside your brokerage portfolio. Powered by Plaid — read-only, your credentials never touch our servers.
+      </div>
+    </BentoTile>:null}
+
+    {institutions.map(inst=><BentoTile key={inst.item_id||inst.inst} accent={T.blue}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        <div style={{fontFamily:FU,fontSize:16,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{inst.inst}</div>
+        <button onClick={()=>removeItem(inst.item_id,inst.inst)} disabled={busy} className="btn-danger" style={{fontSize:10}}>Disconnect</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s2}}>
+        {inst.accts.map(a=>{
+          const isLiability=a.type==="credit"||a.type==="loan";
+          return<div key={a.account_id} style={{
+            padding:`${T.s3} ${T.s4}`,
+            background:T.surface,
+            border:`1px solid ${T.border}`,
+            borderLeft:`3px solid ${isLiability?T.loss:a.subtype==="savings"?T.gain:T.blue}`,
+            borderRadius:T.rMd,
+          }}>
+            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{(a.subtype||a.type||"").toUpperCase()}{a.mask?` · ····${a.mask}`:""}</div>
+            <div style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em",marginBottom:T.s1}}>{a.name||a.official_name||"Account"}</div>
+            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:isLiability?T.loss:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{isLiability?"−":""}{fmtUSD(a.current_bal)}</div>
+            {a.available_bal!=null&&a.available_bal!==a.current_bal&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(a.available_bal)} available</div>}
+          </div>;
+        })}
+      </div>
+    </BentoTile>)}
+
+    {/* ─── SPENDING BY CATEGORY ─────────────────── */}
+    {spendingByCategory.length>0&&<BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SPENDING BY CATEGORY</span>
+        <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{txns.filter(t=>t.amount>0).length} outflows in window</span>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+        {spendingByCategory.slice(0,8).map(s=>{
+          const max=spendingByCategory[0]?.total||1;
+          const pct=(s.total/max)*100;
+          return<div key={s.cat} style={{display:"grid",gridTemplateColumns:"160px 1fr 100px",gap:T.s3,alignItems:"center"}}>
+            <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{s.cat.replace(/_/g," ")}</span>
+            <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${pct}%`,background:`linear-gradient(90deg, ${T.blue}, ${T.blueDim})`,borderRadius:2}}/>
+            </div>
+            <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(s.total)}</span>
+          </div>;
+        })}
+      </div>
+    </BentoTile>}
+
+    {/* ─── RECURRING SUBSCRIPTIONS ─────────────── */}
+    {recurring.length>0&&<BentoTile accent={T.gold}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>RECURRING SUBSCRIPTIONS</div>
+      <div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
+        <Tbl cols={[
+          {l:"Merchant",r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.merchant}</span>},
+          {l:"Frequency",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.monthCount} month{r.monthCount===1?"":"s"}</span>},
+          {l:"Avg / charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgAmount)}</span>},
+          {l:"Est. monthly",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.gold,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgAmount*r.monthCount/r.monthCount)}</span>},
+          {l:"Last seen",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
+        ]} rows={recurring.slice(0,12)}/>
+      </div>
+    </BentoTile>}
+
+    {/* ─── RECENT TRANSACTIONS ────────────────── */}
+    {txns.length>0&&<BentoTile style={{padding:0,overflow:"hidden"}}>
+      <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>RECENT TRANSACTIONS · {txns.length} entries</div>
+      <Tbl cols={[
+        {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.date}</span>},
+        {l:"Merchant",r_:r=><div>
+          <div style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.merchant_name||r.name||"—"}</div>
+          {r.pending&&<div style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.06em",marginTop:2}}>● PENDING</div>}
+        </div>},
+        {l:"Category",r_:r=>{
+          const c=r.personal_finance_category?.primary||r.category?.[0]||"";
+          return c?<Tag label={c.replace(/_/g," ")} color={T.blue}/>:<span style={{color:T.muted}}>—</span>;
+        }},
+        {l:"Account",r_:r=>{
+          const a=accounts.find(x=>x.account_id===r.account_id);
+          return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{a?`${a.name} ····${a.mask}`:r.institution_name||"—"}</span>;
+        }},
+        {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{fmtUSD(Math.abs(r.amount))}</span>;}},
+      ]} rows={txns.slice(0,200)}/>
+      {txns.length>200&&<div style={{padding:`${T.s2} ${T.s4}`,fontFamily:FM,fontSize:10,color:T.muted,textAlign:"center",borderTop:`1px solid ${T.border}`}}>Showing 200 of {txns.length}.</div>}
+    </BentoTile>}
+  </div>;
+}
+
 export default function Mizan(){
   // Scope cross-tab broadcasts to the authenticated user so a separate tab
   // signed in as a different user can't receive (or send) state intended
@@ -3831,12 +4084,37 @@ export default function Mizan(){
     try{
       const v=localStorage.getItem("mizan_nav");
       // Guard against a stale value that no longer maps to a real tab.
-      const valid=new Set(["overview","portfolio","trade","advisor","settings","about"]);
+      const valid=new Set(["overview","finances","portfolio","trade","advisor","settings","about"]);
       return v&&valid.has(v)?v:"overview";
     }catch{return"overview";}
   });
   const setNav=v=>{setNavState(v);try{localStorage.setItem("mizan_nav",v);}catch{}};
   const[live,setLive]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_live_cache")||"[]");}catch{return[];}});
+  // Plaid net cash position (depository minus credit/loan), seeded from
+  // localStorage so the Overview hero can include it on first paint
+  // without waiting for the Finances tab to mount.
+  const[bankBalance,setBankBalance]=useState(()=>{try{const v=localStorage.getItem("mizan_bank_balance");return v?+v:0;}catch{return 0;}});
+  useEffect(()=>{try{localStorage.setItem("mizan_bank_balance",String(bankBalance||0));}catch{}},[bankBalance]);
+  // Hydrate bank balance on mount + every 90s when auto-sync ticks elsewhere.
+  useEffect(()=>{
+    let cancel=false;
+    const pull=async()=>{
+      try{
+        const r=await apiFetch("/api/plaid/accounts");
+        if(!r.ok||cancel)return;
+        const d=await r.json();
+        const total=(d.accounts||[]).reduce((s,a)=>{
+          const v=+a.current_bal||0;
+          if(a.type==="credit"||a.type==="loan")return s-v;
+          return s+v;
+        },0);
+        if(!cancel)setBankBalance(total);
+      }catch{/* ignore */}
+    };
+    pull();
+    const tick=setInterval(pull,90*1000);
+    return()=>{cancel=true;clearInterval(tick);};
+  },[]);
   const[fetching,setFetch]=useState(false);
   const[lastSync,setSync]=useState(null);
   const[showConn,setConn]=useState(false);
@@ -4623,7 +4901,7 @@ export default function Mizan(){
   const hr=nyc.minutes/60;
   const sessionLabel=nyc.status,sessionColor=nyc.color;
 
-  const NAV=[{id:"overview",l:"Overview"},{id:"portfolio",l:"Portfolio"},{id:"trade",l:"Trade & Bot"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"},{id:"about",l:"About"}];
+  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},{id:"trade",l:"Trade & Bot"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"},{id:"about",l:"About"}];
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     <style>{`
@@ -4746,7 +5024,8 @@ export default function Mizan(){
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
       <div className="page">
-        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo}/>}
+        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance}/>}
+        {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
