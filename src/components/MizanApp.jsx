@@ -3344,7 +3344,7 @@ function SecurityPanel(){
   </div>;
 }
 
-function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagCSV,demoMode,onToggleDemo,documents=[],accounts=[]}){
+function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[]}){
   const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
   const[keys,setKeys]=useState({...apiKeys});
   const[saved,setSaved]=useState(false);
@@ -3397,7 +3397,10 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
           </div>
         </div>
         {isSupabaseConfigured
-          ?<button onClick={async()=>{if(confirm("Sign out of MIZAN?"))await signOut();}} className="btn-danger">Sign out</button>
+          ?<div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
+            {onReplayOnboarding&&<button onClick={onReplayOnboarding} className="btn-ghost" title="Re-run the 5-step welcome tour">Replay tour</button>}
+            <button onClick={async()=>{if(confirm("Sign out of MIZAN?"))await signOut();}} className="btn-danger">Sign out</button>
+          </div>
           :<span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>Set VITE_SUPABASE_URL to enable accounts</span>}
       </div>
     </BentoTile>
@@ -4530,6 +4533,24 @@ export default function Mizan(){
   const[onboardingDismissed,setOnboardingDismissed]=useState(()=>{
     try{return localStorage.getItem("mizan_onboarded")==="1";}catch{return true;}
   });
+  // Manual-replay path lets a user with brokers already connected re-run
+  // the tour. The default auto-show only fires when snapAccounts is empty;
+  // force=true bypasses that so Settings can trigger it any time.
+  const[onboardingForce,setOnboardingForce]=useState(false);
+  const replayOnboarding=useCallback(()=>{
+    if(!window.confirm("Re-run the 5-step welcome tour?"))return;
+    try{
+      localStorage.removeItem("mizan_onboarded");
+      localStorage.removeItem("mizan_onboarding_step");
+    }catch{}
+    // Best effort: tell Supabase we're not onboarded. "0" is falsy
+    // against the `=== "1"` trigger check, so hydrating on another
+    // device will also re-show the modal.
+    persistUserState("mizan_onboarded","0");
+    setOnboardingDismissed(false);
+    setOnboardingForce(true);
+    setNav("overview");
+  },[]); // eslint-disable-line react-hooks/exhaustive-deps
   // Persist active tab per-device so a reload lands you where you left off.
   // Per-device, not per-user — different devices may want different defaults.
   const[nav,setNavState]=useState(()=>{
@@ -5481,7 +5502,7 @@ export default function Mizan(){
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
         {nav==="about"     &&<About/>}
       </div>
     </main>
@@ -5519,18 +5540,19 @@ export default function Mizan(){
 
     {showConn&&<ConnectModal onClose={()=>setConn(false)} snapId={apiKeys.snapId}/>}
 
-    {/* Onboarding — first-time user with no connected accounts. Suppress in
-        single-user pass-through (id === "single-user") and demo mode, and
-        once mizan_onboarded is set. */}
+    {/* Onboarding. Auto-shows for fresh users (no brokers connected); the
+        Settings "Replay tour" button sets onboardingForce so existing users
+        can run the tour again. Always suppressed in single-user pass-through
+        and demo mode. */}
     {!onboardingDismissed
       &&authUser?.id&&authUser.id!=="single-user"
       &&!demoMode
-      &&snapAccounts.length===0
+      &&(onboardingForce||snapAccounts.length===0)
       &&<OnboardingFlow
           snapAccountsLen={snapAccounts.length}
           onConnect={()=>setConn(true)}
           onImportCSV={importCSV}
-          onComplete={()=>setOnboardingDismissed(true)}
+          onComplete={()=>{setOnboardingDismissed(true);setOnboardingForce(false);}}
           onNav={setNav}
         />}
   </div>;
