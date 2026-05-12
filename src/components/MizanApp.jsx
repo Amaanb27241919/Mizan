@@ -4213,12 +4213,323 @@ function Finances({onBankBalanceChange}){
   </div>;
 }
 
+/* ─── ONBOARDING FLOW ─────────────────────────────── */
+// Full-screen 5-step intro shown to first-time users (no broker connections,
+// no onboarding-complete flag). Progress persists to localStorage so a refresh
+// or tab close doesn't restart from step 1. Final step writes mizan_onboarded=1
+// to Supabase user_state which marks the user as fully onboarded.
+function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}){
+  const STORAGE_KEY="mizan_onboarding_step";
+  const[step,setStepRaw]=useState(()=>{try{const v=+localStorage.getItem(STORAGE_KEY);return Number.isFinite(v)&&v>=0&&v<5?v:0;}catch{return 0;}});
+  const[dir,setDir]=useState(0); // -1 prev, +1 next; drives slide direction
+  const[mounted,setMounted]=useState(false);
+  const setStep=n=>{
+    setDir(n>step?1:-1);
+    setStepRaw(n);
+    try{localStorage.setItem(STORAGE_KEY,String(n));}catch{}
+  };
+  useEffect(()=>{setMounted(true);},[]);
+
+  // Auto-advance step 2 once a broker is actually connected during the tour.
+  useEffect(()=>{if(step===1&&snapAccountsLen>0)setStep(2);},[snapAccountsLen]); // eslint-disable-line
+
+  const finish=async()=>{
+    try{localStorage.setItem("mizan_onboarded","1");}catch{}
+    try{localStorage.removeItem(STORAGE_KEY);}catch{}
+    await persistUserState("mizan_onboarded","1");
+    onComplete?.();
+  };
+
+  // ───── STEP 1 — Welcome ──────────
+  const StepWelcome=<>
+    <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:T.s3,marginBottom:T.s5}}>
+      <svg width={56} height={56} viewBox="0 0 16 16" fill="none">
+        <defs><linearGradient id="onbLg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs>
+        <path d="M8 1L15 7L8 13L1 7Z" stroke="url(#onbLg)" strokeWidth={1.4} fill="none"/>
+        <circle cx="8" cy="7" r="2.2" fill={T.blue} opacity={0.9}/>
+      </svg>
+      <span style={{fontFamily:FU,fontSize:38,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>MĪZAN</span>
+    </div>
+    <div style={{fontFamily:FU,fontSize:30,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.15,maxWidth:560,margin:`0 auto ${T.s3}`}}>Your Halal Financial Terminal</div>
+    <div style={{fontFamily:FU,fontSize:15,color:T.muted,lineHeight:1.6,maxWidth:560,margin:`0 auto ${T.s6}`,letterSpacing:"-0.005em"}}>
+      Brokerages, banking, AI insights — unified and Sharia-screened, in one place.
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:T.s2,maxWidth:480,margin:"0 auto",textAlign:"left"}}>
+      {[
+        {accent:T.blue,t:"Real portfolio",d:"Live balances + positions from every connected broker (Fidelity, Robinhood, Schwab, Coinbase, and 60+ more)."},
+        {accent:T.gold,t:"Sharia-screened",d:"Every position screened against AAOIFI + 6 other frameworks. Automatic Zakat + purification math."},
+        {accent:T.gain,t:"AI advisor with context",d:"Ask anything about your portfolio. Claude sees your accounts, positions, and activity — answers are specific to you."},
+      ].map(b=><div key={b.t} style={{padding:`${T.s3} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${b.accent}`,borderRadius:T.rMd}}>
+        <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.t}</div>
+        <div style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{b.d}</div>
+      </div>)}
+    </div>
+  </>;
+
+  // ───── STEP 2 — Connect brokerage ──────────
+  const StepConnect=<>
+    <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Connect your brokerage</div>
+    <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+      MĪZAN reads your accounts directly via SnapTrade — your credentials never touch our servers. Read-only by default.
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s2,maxWidth:560,margin:`0 auto ${T.s5}`}}>
+      {[
+        {n:"Fidelity",  c:T.blue},
+        {n:"Robinhood", c:T.gain},
+        {n:"Schwab",    c:T.loss},
+        {n:"Empower",   c:"#7C3AED"},
+        {n:"Coinbase",  c:T.gold},
+        {n:"Chase",     c:"#0F4C81"},
+      ].map(b=><div key={b.n} style={{
+        padding:`${T.s3} ${T.s2}`,
+        background:T.surface,
+        border:`1px solid ${T.border}`,
+        borderTop:`3px solid ${b.c}`,
+        borderRadius:T.rMd,
+        textAlign:"center",
+        fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",
+      }}>{b.n}</div>)}
+    </div>
+    <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.06em",marginBottom:T.s4}}>+ 60 more available</div>
+    {snapAccountsLen>0
+      ?<div style={{padding:`${T.s3} ${T.s4}`,background:T.gainBg,border:`1px solid ${T.gain}40`,borderRadius:T.rMd,fontFamily:FM,fontSize:13,color:T.gain,maxWidth:420,margin:"0 auto"}}>● Connected — {snapAccountsLen} account{snapAccountsLen===1?"":"s"} linked.</div>
+      :<button onClick={onConnect} className="btn-primary" style={{fontSize:14,padding:`12px ${T.s6}`}}>+ Connect Account</button>}
+  </>;
+
+  // ───── STEP 3 — Import CSV ──────────
+  const csvRef=useRef(null);
+  const[csvBroker,setCsvBroker]=useState("Fidelity");
+  const[csvStatus,setCsvStatus]=useState(null);
+  const handleCsv=async file=>{
+    if(!file||!onImportCSV)return;
+    try{
+      const r=await onImportCSV(file,csvBroker);
+      const msg=typeof r==="number"?`Imported ${r} rows.`:r?.added>0?`Imported ${r.added} new rows${r.skipped?` (${r.skipped} duplicates)`:""}.`:r?.skipped?`All ${r.skipped} rows were duplicates.`:"No rows parsed.";
+      setCsvStatus({ok:true,msg});
+    }catch(err){setCsvStatus({ok:false,msg:err.message||"Import failed"});}
+  };
+  const StepImport=<>
+    <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Bring in your past activity</div>
+    <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+      SnapTrade only backfills 1–2 years. Drop a Fidelity / Robinhood / Coinbase CSV here for your complete history. Drag in or click to choose.
+    </div>
+    <input ref={csvRef} type="file" accept=".csv,text/csv" onChange={e=>handleCsv(e.target.files?.[0])} style={{display:"none"}}/>
+    <div
+      onClick={()=>csvRef.current?.click()}
+      onDragOver={e=>{e.preventDefault();}}
+      onDrop={e=>{e.preventDefault();handleCsv(e.dataTransfer.files?.[0]);}}
+      style={{
+        maxWidth:520,margin:`0 auto ${T.s4}`,
+        padding:`${T.s8} ${T.s5}`,
+        border:`2px dashed ${T.borderHi}`,
+        borderRadius:T.rLg,
+        background:T.surface,
+        cursor:"pointer",
+        transition:"border-color 0.15s, background 0.15s",
+      }}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blue;e.currentTarget.style.background=`${T.blue}10`;}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.borderHi;e.currentTarget.style.background=T.surface;}}>
+      <div style={{fontFamily:FU,fontSize:16,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>Drop a CSV here</div>
+      <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.04em"}}>or click to browse</div>
+    </div>
+    <div style={{display:"flex",gap:T.s2,justifyContent:"center",marginBottom:T.s3}}>
+      <select value={csvBroker} onChange={e=>setCsvBroker(e.target.value)} className="field" style={{width:"auto",fontSize:12,cursor:"pointer"}}>
+        <option>Fidelity</option><option>Robinhood</option><option>Coinbase</option>
+        <option>Schwab</option><option>Vanguard</option><option>Other</option>
+      </select>
+      <span style={{fontFamily:FM,fontSize:10,color:T.muted,alignSelf:"center"}}>auto-detected if your CSV is recognizable</span>
+    </div>
+    {csvStatus&&<div style={{maxWidth:520,margin:"0 auto",padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:csvStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(csvStatus.ok?T.gain:T.loss)+"30"}`,color:csvStatus.ok?T.gain:T.loss}}>{csvStatus.ok?"✓ ":"✗ "}{csvStatus.msg}</div>}
+  </>;
+
+  // ───── STEP 4 — First AI question ──────────
+  const PRESET_QUESTION="How is my portfolio performing vs. halal benchmarks?";
+  const[aiQ]=useState(PRESET_QUESTION);
+  const[aiAnswer,setAiAnswer]=useState("");
+  const[aiBusy,setAiBusy]=useState(false);
+  const[aiErr,setAiErr]=useState(null);
+  const[aiStarted,setAiStarted]=useState(false);
+  const askAi=useCallback(async()=>{
+    if(aiBusy||aiAnswer)return;
+    setAiBusy(true);setAiErr(null);
+    try{
+      const r=await apiFetch("/api/advisor",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          system:"You are MIZAN's Sharia-aware personal finance advisor. Use AAOIFI screening rules. Be specific, numeric, and concise (under 150 words). This is the user's first conversation — be welcoming.",
+          messages:[{role:"user",content:aiQ}],
+          max_tokens:600,
+        }),
+      });
+      const d=await r.json();
+      if(!r.ok||d.error)throw new Error(d.error?.message||d.error||`HTTP ${r.status}`);
+      const text=(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+      setAiAnswer(text||"(empty response)");
+    }catch(err){setAiErr(err.message||"Request failed");}
+    finally{setAiBusy(false);}
+  },[aiBusy,aiAnswer,aiQ]);
+  // Auto-fire when the step opens (once).
+  useEffect(()=>{if(step===3&&!aiStarted){setAiStarted(true);askAi();}},[step,aiStarted,askAi]);
+  const StepAdvisor=<>
+    <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Ask your AI advisor</div>
+    <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+      This is how every conversation works on the AI Advisor tab. The advisor sees your real account context — answers are tailored to you.
+    </div>
+    <div style={{maxWidth:560,margin:"0 auto",display:"flex",flexDirection:"column",gap:T.s3,textAlign:"left"}}>
+      {/* User bubble */}
+      <div style={{display:"flex",justifyContent:"flex-end",gap:T.s2}}>
+        <div style={{
+          maxWidth:"82%",
+          padding:`${T.s3} ${T.s4}`,
+          borderRadius:T.rLg,
+          background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
+          color:"#fff",
+          fontFamily:FU,fontSize:14,lineHeight:1.55,letterSpacing:"-0.005em",
+          boxShadow:`0 4px 14px ${T.blue}40`,
+        }}>{aiQ}</div>
+        <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:T.surface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FU,fontSize:13,fontWeight:600,color:T.text}}>Y</div>
+      </div>
+      {/* Assistant bubble */}
+      <div style={{display:"flex",gap:T.s2,alignItems:"flex-start"}}>
+        <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FU,fontSize:13,fontWeight:700,color:"#fff",boxShadow:`0 2px 8px ${T.blue}40`}}>M</div>
+        <div style={{
+          maxWidth:"82%",
+          padding:`${T.s3} ${T.s4}`,
+          borderRadius:T.rLg,
+          background:T.surface,
+          border:`1px solid ${T.border}`,
+          color:T.text,
+          fontFamily:FU,fontSize:14,lineHeight:1.6,letterSpacing:"-0.005em",
+          whiteSpace:"pre-wrap",
+          minHeight:60,
+        }}>
+          {aiBusy
+            ?<div style={{display:"flex",gap:T.s1}}>{[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:T.muted,animation:"blink 1.4s infinite",animationDelay:`${i*0.15}s`}}/>)}</div>
+            :aiErr?<span style={{color:T.loss}}>{aiErr}</span>:aiAnswer||"…"}
+        </div>
+      </div>
+    </div>
+  </>;
+
+  // ───── STEP 5 — Tour complete ──────────
+  const navItems=[
+    {n:"Overview",   d:"Net worth, performance, allocation, top holdings — all in one bento."},
+    {n:"Finances",   d:"Bank balances, recurring subscriptions, spending by category (Plaid)."},
+    {n:"Portfolio",  d:"Holdings, activity, tax-loss planning, Zakat, ETFs, Sharia screener."},
+    {n:"Trade & Bot",d:"Order ticket with Sharia pre-check. SMA backtest. FIRE projection."},
+    {n:"AI Advisor", d:"Sharia-aware, context-rich chat (you just tried this)."},
+    {n:"Settings",   d:"Brokers, 2FA, manual assets, documents, demo mode."},
+  ];
+  const StepDone=<>
+    <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>You're set</div>
+    <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+      Six tabs. Everything connects. Here's the lay of the land:
+    </div>
+    <div style={{maxWidth:600,margin:"0 auto",display:"flex",flexDirection:"column",gap:T.s2,textAlign:"left"}}>
+      {navItems.map((it,i)=><div key={it.n} style={{
+        display:"grid",gridTemplateColumns:"auto 130px 1fr",gap:T.s3,alignItems:"baseline",
+        padding:`${T.s2} ${T.s3}`,
+        background:T.surface,
+        border:`1px solid ${T.border}`,
+        borderRadius:T.rMd,
+      }}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{String(i+1).padStart(2,"0")}</span>
+        <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{it.n}</span>
+        <span style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.5,letterSpacing:"-0.005em"}}>{it.d}</span>
+      </div>)}
+    </div>
+  </>;
+
+  const steps=[StepWelcome,StepConnect,StepImport,StepAdvisor,StepDone];
+  const ctaLabel=step===0?"Let's get started →":step===4?"Open MĪZAN →":"Continue →";
+  const onCta=()=>{if(step===4)return finish();setStep(step+1);};
+  const onSkip=()=>{if(step===4)return finish();setStep(step+1);};
+  const canSkip=step!==0&&step!==4;
+
+  return<div style={{
+    position:"fixed",inset:0,zIndex:1000,
+    background:"rgba(11,15,30,0.78)",
+    backdropFilter:"blur(20px) saturate(160%)",
+    WebkitBackdropFilter:"blur(20px) saturate(160%)",
+    display:"flex",alignItems:"center",justifyContent:"center",
+    padding:T.s5,
+    opacity:mounted?1:0,
+    transition:"opacity 0.25s",
+  }}>
+    <div style={{
+      width:"100%",maxWidth:720,
+      background:`radial-gradient(circle at 0% 0%, ${T.blue}14, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gold}10, transparent 50%), ${T.card}`,
+      border:`1px solid ${T.borderHi}`,
+      borderRadius:T.rLg,
+      boxShadow:"var(--sh-lg)",
+      padding:`${T.s8} ${T.s8} ${T.s6}`,
+      position:"relative",
+      overflow:"hidden",
+    }}>
+      {/* Progress dots */}
+      <div style={{display:"flex",justifyContent:"center",gap:T.s2,marginBottom:T.s6}}>
+        {steps.map((_,i)=><button
+          key={i}
+          onClick={()=>i<step?setStep(i):null}
+          disabled={i>step}
+          aria-label={`Step ${i+1}`}
+          style={{
+            width:i===step?28:8,
+            height:8,
+            borderRadius:999,
+            background:i<=step?T.blue:T.dim,
+            border:"none",
+            padding:0,
+            cursor:i<step?"pointer":"default",
+            transition:"width 0.25s, background 0.25s",
+            opacity:i===step?1:i<step?0.55:0.3,
+          }}/>)}
+      </div>
+
+      {/* Step content — keyed for slide animation */}
+      <div style={{
+        textAlign:"center",
+        minHeight:380,
+        animation:dir!==0?`onbSlide${dir>0?"R":"L"} 0.32s cubic-bezier(.34,1.56,.64,1)`:"none",
+      }} key={step}>
+        {steps[step]}
+      </div>
+
+      {/* Footer: prev / skip / cta */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:T.s6,gap:T.s3,flexWrap:"wrap"}}>
+        <button
+          onClick={()=>step>0?setStep(step-1):null}
+          disabled={step===0}
+          className="btn-ghost"
+          style={{opacity:step===0?0.4:1,cursor:step===0?"not-allowed":"pointer"}}
+        >← Back</button>
+        <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
+          {canSkip&&<button onClick={onSkip} className="btn-ghost" style={{fontSize:11,padding:`6px ${T.s3}`}}>Skip</button>}
+          <button onClick={onCta} className="btn-primary" style={{fontSize:13,padding:`10px ${T.s5}`}}>{ctaLabel}</button>
+        </div>
+      </div>
+
+      {/* Inline slide keyframes — local so we don't pollute the global block */}
+      <style>{`
+        @keyframes onbSlideR { from { opacity:0; transform: translateX(40px); } to { opacity:1; transform:none; } }
+        @keyframes onbSlideL { from { opacity:0; transform: translateX(-40px); } to { opacity:1; transform:none; } }
+      `}</style>
+    </div>
+  </div>;
+}
+
 export default function Mizan(){
   // Scope cross-tab broadcasts to the authenticated user so a separate tab
   // signed in as a different user can't receive (or send) state intended
   // for this one. Falls back to "anon" in single-user pass-through mode.
   const{user:authUser}=useAuth();
   const bcastChannelName="mizan:"+(authUser?.id||"anon");
+  // Onboarding: show the 5-step intro modal for fresh users. Suppress in
+  // single-user pass-through mode (no real auth, demo only) and once the
+  // mizan_onboarded flag has been set (persists via TRACKED_KEYS).
+  const[onboardingDismissed,setOnboardingDismissed]=useState(()=>{
+    try{return localStorage.getItem("mizan_onboarded")==="1";}catch{return true;}
+  });
   // Persist active tab per-device so a reload lands you where you left off.
   // Per-device, not per-user — different devices may want different defaults.
   const[nav,setNavState]=useState(()=>{
@@ -5207,5 +5518,20 @@ export default function Mizan(){
     </nav>
 
     {showConn&&<ConnectModal onClose={()=>setConn(false)} snapId={apiKeys.snapId}/>}
+
+    {/* Onboarding — first-time user with no connected accounts. Suppress in
+        single-user pass-through (id === "single-user") and demo mode, and
+        once mizan_onboarded is set. */}
+    {!onboardingDismissed
+      &&authUser?.id&&authUser.id!=="single-user"
+      &&!demoMode
+      &&snapAccounts.length===0
+      &&<OnboardingFlow
+          snapAccountsLen={snapAccounts.length}
+          onConnect={()=>setConn(true)}
+          onImportCSV={importCSV}
+          onComplete={()=>setOnboardingDismissed(true)}
+          onNav={setNav}
+        />}
   </div>;
 }

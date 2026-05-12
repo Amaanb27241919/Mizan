@@ -26,6 +26,7 @@ export const TRACKED_KEYS = [
   'mizan_sadaqah',                    // user-entered donation history
   'mizan_user_docs',                  // user-uploaded files (csv/pdf/docx)
   'mizan_sadaqah_seeded',             // one-time owner backfill marker
+  'mizan_onboarded',                  // "1" once the user finishes the 5-step tour
 ];
 
 // User-scoped *local caches* — not synced (regenerated on next sync), but
