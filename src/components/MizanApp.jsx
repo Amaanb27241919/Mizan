@@ -353,63 +353,126 @@ const DEMO_SHARIA = {
 /* ─── DEMO BANK FIXTURES (Plaid stand-in) ────────────── */
 // Mirrors DEMO_ACCOUNTS pattern — used to populate the Finances tab when
 // demoMode is on. No real API calls needed; everything is local fixture.
+// Cash profile sized to match the ~$41M brokerage demo: ~$2.6M total cash
+// across private-banking, retail, HYSA, sweep, and business accounts.
 const DEMO_BANK_ACCOUNTS = [
-  // Chase
-  { item_id:"d-chase", institution_name:"Chase",            account_id:"d-chase-1", name:"Total Checking",     official_name:"Chase Total Checking", type:"depository", subtype:"checking", mask:"4421", current_bal:18_240.55, available_bal:18_240.55, iso_currency:"USD" },
-  { item_id:"d-chase", institution_name:"Chase",            account_id:"d-chase-2", name:"Premier Savings",    official_name:"Chase Premier Savings",type:"depository", subtype:"savings",  mask:"8810", current_bal:62_900.00, available_bal:62_900.00, iso_currency:"USD" },
-  { item_id:"d-chase", institution_name:"Chase",            account_id:"d-chase-3", name:"Sapphire Preferred", official_name:"Chase Sapphire Preferred",type:"credit",    subtype:"credit card",mask:"3344", current_bal:1_287.45, available_bal:13_712.55, iso_currency:"USD" },
-  // Marcus
-  { item_id:"d-marcus",institution_name:"Marcus by Goldman",account_id:"d-marcus-1",name:"High-Yield Savings", official_name:"Marcus HYSA",          type:"depository", subtype:"savings",  mask:"7733", current_bal:45_500.20, available_bal:45_500.20, iso_currency:"USD" },
+  // JPMorgan Private Client — primary banking relationship
+  { item_id:"d-jpm",   institution_name:"JPMorgan Private Client", account_id:"d-jpm-1", name:"Private Client Checking", official_name:"JPM Private Client Checking", type:"depository", subtype:"checking", mask:"0142", current_bal:184_620.55, available_bal:184_620.55, iso_currency:"USD" },
+  { item_id:"d-jpm",   institution_name:"JPMorgan Private Client", account_id:"d-jpm-2", name:"Premier Savings",         official_name:"JPM Premier Plus Savings",    type:"depository", subtype:"savings",  mask:"5588", current_bal:1_240_820.00, available_bal:1_240_820.00, iso_currency:"USD" },
+  // Chase — day-to-day spending
+  { item_id:"d-chase", institution_name:"Chase",                   account_id:"d-chase-1", name:"Total Checking",        official_name:"Chase Total Checking",         type:"depository", subtype:"checking", mask:"4421", current_bal:42_180.32, available_bal:42_180.32, iso_currency:"USD" },
+  { item_id:"d-chase", institution_name:"Chase",                   account_id:"d-chase-2", name:"Sapphire Reserve",      official_name:"Chase Sapphire Reserve",       type:"credit",     subtype:"credit card",mask:"3344", current_bal:4_287.45,  available_bal:45_712.55, iso_currency:"USD" },
+  // Marcus — high-yield reserve
+  { item_id:"d-marcus",institution_name:"Marcus by Goldman",       account_id:"d-marcus-1",name:"High-Yield Savings",    official_name:"Marcus HYSA",                  type:"depository", subtype:"savings",  mask:"7733", current_bal:842_500.20, available_bal:842_500.20, iso_currency:"USD" },
+  // Fidelity Cash Management — sweep
+  { item_id:"d-fid",   institution_name:"Fidelity",                account_id:"d-fid-1",   name:"Cash Management",       official_name:"Fidelity CMA",                 type:"depository", subtype:"checking", mask:"9012", current_bal:312_440.10, available_bal:312_440.10, iso_currency:"USD" },
+  // Mercury — business banking for Halal Bites LLC
+  { item_id:"d-merc",  institution_name:"Mercury",                 account_id:"d-merc-1",  name:"Halal Bites LLC",       official_name:"Mercury Business Checking",    type:"depository", subtype:"checking", mask:"6720", current_bal:128_620.40, available_bal:128_620.40, iso_currency:"USD" },
 ];
 
 const DEMO_TRANSACTIONS = (() => {
   const today = new Date();
   const dt = (n) => { const d = new Date(today); d.setDate(today.getDate() - n); return d.toISOString().slice(0, 10); };
-  const T_ = (id, account_id, n, name, amount, primary, merchant) => ({
-    transaction_id: `dt-${id}`, account_id, item_id: account_id.startsWith("d-chase") ? "d-chase" : "d-marcus",
-    institution_name: account_id.startsWith("d-chase") ? "Chase" : "Marcus by Goldman",
-    date: dt(n), authorized_date: dt(n),
-    name, merchant_name: merchant || name, amount, iso_currency: "USD",
-    category: [primary], personal_finance_category: { primary, detailed: primary },
-    pending: false, payment_channel: "online",
-  });
+  // account_id → item_id + institution lookup so we don't string-sniff prefixes.
+  const acctMeta = {
+    "d-jpm-1":   { item_id:"d-jpm",   inst:"JPMorgan Private Client" },
+    "d-jpm-2":   { item_id:"d-jpm",   inst:"JPMorgan Private Client" },
+    "d-chase-1": { item_id:"d-chase", inst:"Chase" },
+    "d-chase-2": { item_id:"d-chase", inst:"Chase" },
+    "d-marcus-1":{ item_id:"d-marcus",inst:"Marcus by Goldman" },
+    "d-fid-1":   { item_id:"d-fid",   inst:"Fidelity" },
+    "d-merc-1":  { item_id:"d-merc",  inst:"Mercury" },
+  };
+  const T_ = (id, account_id, n, name, amount, primary, merchant) => {
+    const m = acctMeta[account_id] || { item_id:"", inst:"" };
+    return {
+      transaction_id: `dt-${id}`, account_id, item_id: m.item_id, institution_name: m.inst,
+      date: dt(n), authorized_date: dt(n),
+      name, merchant_name: merchant || name, amount, iso_currency: "USD",
+      category: [primary], personal_finance_category: { primary, detailed: primary },
+      pending: false, payment_channel: "online",
+    };
+  };
   return [
-    // Recurring subscriptions (appear monthly)
-    T_( 1, "d-chase-3",   1, "NETFLIX.COM",          15.99, "ENTERTAINMENT", "Netflix"),
-    T_( 2, "d-chase-3",  31, "NETFLIX.COM",          15.99, "ENTERTAINMENT", "Netflix"),
-    T_( 3, "d-chase-3",  62, "NETFLIX.COM",          15.99, "ENTERTAINMENT", "Netflix"),
-    T_( 4, "d-chase-3",   4, "SPOTIFY USA",          11.99, "ENTERTAINMENT", "Spotify"),
-    T_( 5, "d-chase-3",  35, "SPOTIFY USA",          11.99, "ENTERTAINMENT", "Spotify"),
-    T_( 6, "d-chase-3",  66, "SPOTIFY USA",          11.99, "ENTERTAINMENT", "Spotify"),
-    T_( 7, "d-chase-3",   8, "ADOBE CREATIVE CLOUD", 54.99, "GENERAL_SERVICES", "Adobe"),
-    T_( 8, "d-chase-3",  39, "ADOBE CREATIVE CLOUD", 54.99, "GENERAL_SERVICES", "Adobe"),
-    T_( 9, "d-chase-3",  11, "PLANET FITNESS",       24.99, "PERSONAL_CARE", "Planet Fitness"),
-    T_(10, "d-chase-3",  41, "PLANET FITNESS",       24.99, "PERSONAL_CARE", "Planet Fitness"),
-    // Food
-    T_(11, "d-chase-1",   2, "WHOLE FOODS MARKET",   142.83, "FOOD_AND_DRINK", "Whole Foods"),
-    T_(12, "d-chase-1",   5, "TRADER JOE'S",          87.21, "FOOD_AND_DRINK", "Trader Joe's"),
-    T_(13, "d-chase-1",   9, "WHOLE FOODS MARKET",   118.05, "FOOD_AND_DRINK", "Whole Foods"),
-    T_(14, "d-chase-1",  14, "WHOLE FOODS MARKET",   166.41, "FOOD_AND_DRINK", "Whole Foods"),
-    T_(15, "d-chase-3",   3, "CHIPOTLE",              18.42, "FOOD_AND_DRINK", "Chipotle"),
-    T_(16, "d-chase-3",   6, "STARBUCKS",              6.75, "FOOD_AND_DRINK", "Starbucks"),
-    T_(17, "d-chase-3",  10, "STARBUCKS",              7.20, "FOOD_AND_DRINK", "Starbucks"),
-    // Transport
-    T_(18, "d-chase-3",   3, "UBER",                  24.50, "TRANSPORTATION", "Uber"),
-    T_(19, "d-chase-3",   7, "SHELL OIL",             58.20, "TRANSPORTATION", "Shell"),
-    T_(20, "d-chase-3",  13, "UBER",                  31.05, "TRANSPORTATION", "Uber"),
-    // Bills
-    T_(21, "d-chase-1",  12, "COMED ELECTRIC",       142.50, "RENT_AND_UTILITIES", "ComEd"),
-    T_(22, "d-chase-1",  12, "PEOPLES GAS",           84.20, "RENT_AND_UTILITIES", "Peoples Gas"),
-    T_(23, "d-chase-1",  15, "VERIZON WIRELESS",     115.00, "RENT_AND_UTILITIES", "Verizon"),
-    T_(24, "d-chase-1",   1, "RENT — APT 4B",       2400.00, "RENT_AND_UTILITIES", "Landlord"),
-    // Inflows (Plaid: negative amount = inflow)
-    T_(25, "d-chase-1",   2, "ACME CORP PAYROLL",  -5_842.18,"INCOME",         "Acme Corp"),
-    T_(26, "d-chase-1",  16, "ACME CORP PAYROLL",  -5_842.18,"INCOME",         "Acme Corp"),
-    T_(27, "d-chase-2",  10, "TRANSFER FROM CHECKING",-1_000.00,"TRANSFER_IN", "Internal"),
-    // Misc
-    T_(28, "d-chase-3",   6, "AMAZON.COM",            68.42, "GENERAL_MERCHANDISE", "Amazon"),
-    T_(29, "d-chase-3",  11, "AMAZON.COM",           134.50, "GENERAL_MERCHANDISE", "Amazon"),
-    T_(30, "d-chase-3",   4, "TARGET",                57.30, "GENERAL_MERCHANDISE", "Target"),
+    // ─── INFLOWS (Plaid convention: negative = inflow) ───────────────
+    // Consulting / advisory income — JPM Private Client checking
+    T_( 1, "d-jpm-1",    2, "WIRE IN — CONSULTING RETAINER",-42_000.00, "INCOME",      "Strategic Advisory"),
+    T_( 2, "d-jpm-1",   18, "WIRE IN — CONSULTING RETAINER",-42_000.00, "INCOME",      "Strategic Advisory"),
+    T_( 3, "d-jpm-1",   48, "WIRE IN — CONSULTING RETAINER",-42_000.00, "INCOME",      "Strategic Advisory"),
+    // Rental income (from the demo's Investment Property)
+    T_( 4, "d-jpm-1",    5, "RENT — CONDO TENANT ACH",      -2_400.00,  "INCOME",      "Tenant"),
+    T_( 5, "d-jpm-1",   35, "RENT — CONDO TENANT ACH",      -2_400.00,  "INCOME",      "Tenant"),
+    T_( 6, "d-jpm-1",   65, "RENT — CONDO TENANT ACH",      -2_400.00,  "INCOME",      "Tenant"),
+    // Business distribution from Halal Bites LLC (Mercury → JPM)
+    T_( 7, "d-jpm-1",   12, "HALAL BITES DISTRIBUTION",     -18_500.00, "INCOME",      "Halal Bites LLC"),
+    T_( 8, "d-jpm-1",   72, "HALAL BITES DISTRIBUTION",     -22_400.00, "INCOME",      "Halal Bites LLC"),
+    // Brokerage dividend sweep (Fidelity CMA receives quarterly dividends)
+    T_( 9, "d-fid-1",    8, "FIDELITY DIVIDEND SWEEP",      -8_482.40,  "INCOME",      "Fidelity"),
+    T_(10, "d-fid-1",   98, "FIDELITY DIVIDEND SWEEP",      -7_640.20,  "INCOME",      "Fidelity"),
+    // Internal transfers
+    T_(11, "d-jpm-2",    1, "TRANSFER FROM CHECKING",       -25_000.00, "TRANSFER_IN", "Internal"),
+    T_(12, "d-marcus-1",10, "TRANSFER FROM JPM",            -50_000.00, "TRANSFER_IN", "Internal"),
+
+    // ─── CHARITABLE GIVING (shows up in bank tx feed too) ───────────
+    T_(13, "d-jpm-1",    4, "ZAKAT — ISLAMIC RELIEF USA",   50_000.00,  "TRANSFER_OUT","Islamic Relief USA"),
+    T_(14, "d-jpm-1",    7, "ZELLE — HELPING HAND",         25_000.00,  "TRANSFER_OUT","Helping Hand"),
+    T_(15, "d-jpm-1",   22, "ZELLE — ZAYTUNA COLLEGE",      15_000.00,  "TRANSFER_OUT","Zaytuna College"),
+    T_(16, "d-jpm-1",   38, "WIRE — BAYYINAH INSTITUTE",    10_000.00,  "TRANSFER_OUT","Bayyinah"),
+
+    // ─── HOUSING (paid off — only HOA + utilities + property tax) ───
+    T_(17, "d-jpm-1",    9, "HOA — RESIDENCE",                650.00,   "RENT_AND_UTILITIES","HOA"),
+    T_(18, "d-jpm-1",   14, "COOK COUNTY PROPERTY TAX",     8_420.00,   "RENT_AND_UTILITIES","Cook County"),
+    T_(19, "d-chase-1", 12, "COMED ELECTRIC",                 312.50,   "RENT_AND_UTILITIES","ComEd"),
+    T_(20, "d-chase-1", 12, "PEOPLES GAS",                    184.20,   "RENT_AND_UTILITIES","Peoples Gas"),
+    T_(21, "d-chase-1", 15, "AT&T FIBER 5GB",                 165.00,   "RENT_AND_UTILITIES","AT&T"),
+    T_(22, "d-chase-1", 15, "VERIZON WIRELESS — FAMILY PLAN", 285.00,   "RENT_AND_UTILITIES","Verizon"),
+
+    // ─── KIDS / EDUCATION ───────────────────────────────────────────
+    T_(23, "d-jpm-1",    3, "IQRA INTERNATIONAL — TUITION", 2_850.00,   "GENERAL_SERVICES","Iqra School"),
+    T_(24, "d-jpm-1",   33, "IQRA INTERNATIONAL — TUITION", 2_850.00,   "GENERAL_SERVICES","Iqra School"),
+    T_(25, "d-jpm-1",   63, "IQRA INTERNATIONAL — TUITION", 2_850.00,   "GENERAL_SERVICES","Iqra School"),
+    T_(26, "d-chase-1", 18, "QURAN ACADEMY ONLINE",           320.00,   "GENERAL_SERVICES","Quran Academy"),
+
+    // ─── SUBSCRIPTIONS / SERVICES ──────────────────────────────────
+    T_(27, "d-chase-2",  1, "NETFLIX PREMIUM",                22.99,    "ENTERTAINMENT","Netflix"),
+    T_(28, "d-chase-2", 31, "NETFLIX PREMIUM",                22.99,    "ENTERTAINMENT","Netflix"),
+    T_(29, "d-chase-2",  4, "APPLE TV+ / MUSIC FAMILY",       32.99,    "ENTERTAINMENT","Apple"),
+    T_(30, "d-chase-2",  8, "ADOBE CREATIVE CLOUD ALL APPS",  89.99,    "GENERAL_SERVICES","Adobe"),
+    T_(31, "d-chase-2", 11, "EQUINOX — GOLD MEMBERSHIP",     295.00,    "PERSONAL_CARE","Equinox"),
+    T_(32, "d-chase-2", 41, "EQUINOX — GOLD MEMBERSHIP",     295.00,    "PERSONAL_CARE","Equinox"),
+    T_(33, "d-chase-2",  6, "OPENAI / CHATGPT TEAM",         200.00,    "GENERAL_SERVICES","OpenAI"),
+
+    // ─── FOOD (halal grocery + dining) ──────────────────────────────
+    T_(34, "d-chase-1",  2, "WHOLE FOODS MARKET",            384.83,    "FOOD_AND_DRINK","Whole Foods"),
+    T_(35, "d-chase-1",  9, "WHOLE FOODS MARKET",            418.05,    "FOOD_AND_DRINK","Whole Foods"),
+    T_(36, "d-chase-1", 14, "WHOLE FOODS MARKET",            366.41,    "FOOD_AND_DRINK","Whole Foods"),
+    T_(37, "d-chase-1",  5, "ZABIHA HALAL MEAT MARKET",      287.20,    "FOOD_AND_DRINK","Zabiha Meat"),
+    T_(38, "d-chase-2",  3, "CAVA — DOWNTOWN",                28.42,    "FOOD_AND_DRINK","Cava"),
+    T_(39, "d-chase-2",  6, "HALAL GUYS",                     24.75,    "FOOD_AND_DRINK","Halal Guys"),
+    T_(40, "d-chase-2", 10, "SHAKE SHACK",                    36.20,    "FOOD_AND_DRINK","Shake Shack"),
+
+    // ─── TRANSPORT ─────────────────────────────────────────────────
+    T_(41, "d-chase-2",  3, "UBER BLACK",                     68.50,    "TRANSPORTATION","Uber"),
+    T_(42, "d-chase-2",  7, "SHELL V-POWER",                  92.20,    "TRANSPORTATION","Shell"),
+    T_(43, "d-chase-2", 13, "TESLA SUPERCHARGER",             42.10,    "TRANSPORTATION","Tesla"),
+    T_(44, "d-chase-1", 26, "AUTO INSURANCE — STATE FARM",   312.40,    "GENERAL_SERVICES","State Farm"),
+
+    // ─── TRAVEL ────────────────────────────────────────────────────
+    T_(45, "d-chase-2", 28, "EMIRATES — DXB BUSINESS",     5_840.00,    "TRAVEL","Emirates"),
+    T_(46, "d-chase-2", 30, "FOUR SEASONS DUBAI",          3_420.00,    "TRAVEL","Four Seasons"),
+
+    // ─── SHOPPING / MISC ───────────────────────────────────────────
+    T_(47, "d-chase-2",  6, "AMAZON.COM",                    168.42,    "GENERAL_MERCHANDISE","Amazon"),
+    T_(48, "d-chase-2", 11, "AMAZON.COM",                    334.50,    "GENERAL_MERCHANDISE","Amazon"),
+    T_(49, "d-chase-2",  4, "TARGET",                        127.30,    "GENERAL_MERCHANDISE","Target"),
+    T_(50, "d-chase-2", 19, "APPLE STORE — IPAD PRO M4",   1_899.00,    "GENERAL_MERCHANDISE","Apple Store"),
+
+    // ─── BUSINESS (Mercury) ────────────────────────────────────────
+    T_(51, "d-merc-1",   3, "STRIPE PAYOUT",               -18_420.00,  "INCOME","Stripe"),
+    T_(52, "d-merc-1",  17, "STRIPE PAYOUT",               -22_180.00,  "INCOME","Stripe"),
+    T_(53, "d-merc-1",   5, "VENDOR — HALAL SUPPLY CO",     4_280.00,   "GENERAL_SERVICES","Halal Supply"),
+    T_(54, "d-merc-1",   8, "AWS — INFRASTRUCTURE",         1_420.00,   "GENERAL_SERVICES","AWS"),
+    T_(55, "d-merc-1",  15, "PAYROLL — 4 STAFF",           14_820.00,   "GENERAL_SERVICES","Gusto Payroll"),
   ];
 })();
 
@@ -422,17 +485,55 @@ const DEMO_MANUAL_ASSETS = [
   { id:"dm-5", type:"Vehicle",              name:"2022 Toyota Camry",                 value:18_200, zakatable:false, added:"2022-08-15", notes:"Daily driver, not zakatable" },
 ];
 
+// Donations sized to match a ~$41M demo persona. Annual Zakat alone runs
+// ~$750k on the zakatable share, so historical sadaqah is in the high 5-
+// to mid 6-figure range. Covers a representative roster of major Muslim
+// orgs (relief, education, dawah, masjid, advocacy).
 const DEMO_SADAQAH = [
-  { id:"ds-1", dt:"2026-03-19", org:"Masjid Uthman",         method:"Zelle",       account:"Savings",  amt:500,   done:true  },
-  { id:"ds-2", dt:"2026-03-16", org:"ISNS",                  method:"Zelle",       account:"Savings",  amt:1000,  done:true  },
-  { id:"ds-3", dt:"2026-02-23", org:"ISNS",                  method:"Zelle",       account:"Savings",  amt:1000,  done:true  },
-  { id:"ds-4", dt:"2025-08-17", org:"Thakkat",               method:"Debit Card",  account:"Checking", amt:157.04,done:true  },
-  { id:"ds-5", dt:"2025-05-30", org:"Qalam",                 method:"Debit Card",  account:"Checking", amt:52.24, done:true  },
-  { id:"ds-6", dt:"2024-04-09", org:"Muhsen",                method:"Debit Card",  account:"Checking", amt:250,   done:true  },
-  { id:"ds-7", dt:"2024-04-08", org:"Masjid An-Noor (ICN)",  method:"Debit Card",  account:"Checking", amt:1000,  done:true  },
-  { id:"ds-8", dt:"2023-12-11", org:"ISNS",                  method:"Zelle",       account:"Checking", amt:2000,  done:true  },
-  { id:"ds-9", dt:"Pledge",     org:"Helping Hand",          method:"TBD",         account:"Savings",  amt:1300,  done:false },
-  { id:"ds-10",dt:"Pledge",     org:"Masjid Uthman",         method:"TBD",         account:"Savings",  amt:5000,  done:false },
+  // ───── 2026 — Ramadan + post-Ramadan zakat distribution ────────────
+  { id:"ds-1",  dt:"2026-03-29", org:"Islamic Relief USA",                  method:"Wire",        account:"Private Client Checking", amt:150_000, done:true  },
+  { id:"ds-2",  dt:"2026-03-26", org:"Helping Hand for Relief & Development",method:"Wire",      account:"Private Client Checking", amt:100_000, done:true  },
+  { id:"ds-3",  dt:"2026-03-22", org:"Zaytuna College",                     method:"Wire",        account:"Private Client Checking", amt:75_000,  done:true  },
+  { id:"ds-4",  dt:"2026-03-19", org:"Bayyinah Institute",                  method:"Zelle",       account:"Private Client Checking", amt:25_000,  done:true  },
+  { id:"ds-5",  dt:"2026-03-16", org:"Yaqeen Institute",                    method:"Zelle",       account:"Private Client Checking", amt:25_000,  done:true  },
+  { id:"ds-6",  dt:"2026-03-14", org:"ICNA Relief USA",                     method:"Zelle",       account:"Private Client Checking", amt:20_000,  done:true  },
+  { id:"ds-7",  dt:"2026-03-12", org:"Penny Appeal USA",                    method:"Zelle",       account:"Premier Savings",         amt:15_000,  done:true  },
+  { id:"ds-8",  dt:"2026-03-08", org:"LaunchGood — Orphan Sponsorship",     method:"Credit Card", account:"Sapphire Reserve",        amt:12_000,  done:true  },
+  { id:"ds-9",  dt:"2026-03-05", org:"Masjid Al-Uthman",                    method:"Zelle",       account:"Premier Savings",         amt:25_000,  done:true  },
+  { id:"ds-10", dt:"2026-03-02", org:"ISNS (Islamic Society of North Suburbs)",method:"Zelle",    account:"Premier Savings",         amt:15_000,  done:true  },
+  { id:"ds-11", dt:"2026-02-28", org:"Hidaya Foundation",                   method:"Zelle",       account:"Premier Savings",         amt:10_000,  done:true  },
+  { id:"ds-12", dt:"2026-02-22", org:"LIFE for Relief & Development",       method:"Zelle",       account:"Premier Savings",         amt:10_000,  done:true  },
+  { id:"ds-13", dt:"2026-02-15", org:"Muslim Legal Fund of America",        method:"Zelle",       account:"Private Client Checking", amt:8_500,   done:true  },
+  { id:"ds-14", dt:"2026-02-10", org:"CAIR — Civil Rights Defense",         method:"Credit Card", account:"Sapphire Reserve",        amt:5_000,   done:true  },
+  { id:"ds-15", dt:"2026-01-22", org:"Iqra International School",           method:"Zelle",       account:"Private Client Checking", amt:20_000,  done:true  },
+
+  // ───── 2025 — full year giving ──────────────────────────────────────
+  { id:"ds-16", dt:"2025-12-28", org:"Mercy Without Limits",                method:"Wire",        account:"Private Client Checking", amt:30_000,  done:true  },
+  { id:"ds-17", dt:"2025-12-20", org:"Islamic Relief USA — Gaza Appeal",    method:"Wire",        account:"Private Client Checking", amt:75_000,  done:true  },
+  { id:"ds-18", dt:"2025-11-15", org:"Zaytuna College",                     method:"Wire",        account:"Premier Savings",         amt:50_000,  done:true  },
+  { id:"ds-19", dt:"2025-09-08", org:"Bayyinah Institute",                  method:"Zelle",       account:"Premier Savings",         amt:15_000,  done:true  },
+  { id:"ds-20", dt:"2025-08-17", org:"Thakkat Charity",                     method:"Zelle",       account:"Private Client Checking", amt:5_000,   done:true  },
+  { id:"ds-21", dt:"2025-07-04", org:"Helping Hand — Eid Adha Qurbani",     method:"Credit Card", account:"Sapphire Reserve",        amt:8_400,   done:true  },
+  { id:"ds-22", dt:"2025-05-30", org:"Qalam Institute",                     method:"Zelle",       account:"Private Client Checking", amt:7_500,   done:true  },
+  { id:"ds-23", dt:"2025-04-02", org:"Masjid Al-Uthman — Ramadan Iftar",    method:"Zelle",       account:"Premier Savings",         amt:20_000,  done:true  },
+  { id:"ds-24", dt:"2025-03-25", org:"Yaqeen Institute",                    method:"Zelle",       account:"Premier Savings",         amt:20_000,  done:true  },
+  { id:"ds-25", dt:"2025-03-12", org:"Penny Appeal USA — Orphan Kind",      method:"Credit Card", account:"Sapphire Reserve",        amt:12_000,  done:true  },
+
+  // ───── 2024 ─────────────────────────────────────────────────────────
+  { id:"ds-26", dt:"2024-12-15", org:"ICNA Relief USA",                     method:"Wire",        account:"Premier Savings",         amt:25_000,  done:true  },
+  { id:"ds-27", dt:"2024-09-20", org:"Muslim Aid USA",                      method:"Zelle",       account:"Private Client Checking", amt:10_000,  done:true  },
+  { id:"ds-28", dt:"2024-04-09", org:"MUHSEN (Muslims w/ Disabilities)",    method:"Zelle",       account:"Private Client Checking", amt:5_000,   done:true  },
+  { id:"ds-29", dt:"2024-04-08", org:"Masjid An-Noor (ICN)",                method:"Zelle",       account:"Premier Savings",         amt:15_000,  done:true  },
+  { id:"ds-30", dt:"2024-03-22", org:"Islamic Relief USA — Ramadan Zakat",  method:"Wire",        account:"Private Client Checking", amt:120_000, done:true  },
+
+  // ───── 2023 ─────────────────────────────────────────────────────────
+  { id:"ds-31", dt:"2023-12-11", org:"ISNS",                                method:"Zelle",       account:"Premier Savings",         amt:15_000,  done:true  },
+  { id:"ds-32", dt:"2023-04-12", org:"Islamic Relief USA — Ramadan Zakat",  method:"Wire",        account:"Private Client Checking", amt:95_000,  done:true  },
+
+  // ───── Outstanding pledges ──────────────────────────────────────────
+  { id:"ds-33", dt:"Pledge",     org:"Helping Hand — Earthquake Relief",    method:"TBD",         account:"Private Client Checking", amt:50_000,  done:false },
+  { id:"ds-34", dt:"Pledge",     org:"Masjid Al-Uthman — Building Fund",    method:"TBD",         account:"Premier Savings",         amt:100_000, done:false },
+  { id:"ds-35", dt:"Pledge",     org:"Zaytuna College — Endowed Chair",     method:"TBD",         account:"Private Client Checking", amt:25_000,  done:false },
 ];
 
 /* ─── CALC HELPERS ───────────────────────────────────── */
