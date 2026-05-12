@@ -216,8 +216,31 @@ const DEMO_ACCOUNTS = [
       _pos("LMT",  "Lockheed Martin Corp.",         1_240.0, 380.00, 562.10),
       _pos("NOW",  "ServiceNow Inc.",                 980.0, 420.00, 882.40),
     ] },
+  { accountId:"d-schwab-ind", accountName:"Individual Brokerage", brokerage:"Charles Schwab", brokerageSlug:"SCHWAB",
+    balance:1_482_316.40, cash:38_200.00, positions:[
+      _pos("SCHD", "Schwab US Dividend ETF",        8_400.0,  72.00,  84.20,"ETF"),
+      _pos("SCHB", "Schwab US Broad Market ETF",    6_200.0,  48.00,  62.40,"ETF"),
+      _pos("UNH",  "UnitedHealth Group",              420.0, 480.00, 552.10),
+      _pos("LIN",  "Linde plc",                       640.0, 360.00, 442.80),
+      _pos("ABBV", "AbbVie Inc.",                     820.0, 138.00, 188.40),
+    ] },
+  { accountId:"d-vg-taxable", accountName:"Joint Taxable", brokerage:"Vanguard", brokerageSlug:"VANGUARD",
+    balance:982_440.12, cash:9_800.00, positions:[
+      _pos("VOO",  "Vanguard S&P 500 ETF",          1_240.0, 360.00, 522.40,"ETF"),
+      _pos("VYM",  "Vanguard High Dividend Yield",  2_180.0,  92.00, 128.40,"ETF"),
+      _pos("BND",  "Vanguard Total Bond Market",    4_240.0,  78.00,  72.10,"ETF"),
+      _pos("VUG",  "Vanguard Growth ETF",             840.0, 240.00, 388.20,"ETF"),
+    ] },
+  { accountId:"d-webull-active", accountName:"Active Trading", brokerage:"Webull", brokerageSlug:"WEBULL",
+    balance:284_910.66, cash:12_400.00, positions:[
+      _pos("AMZN", "Amazon.com Inc.",                 480.0, 142.00, 218.40),
+      _pos("CRM",  "Salesforce Inc.",                 320.0, 220.00, 308.20),
+      _pos("SHOP", "Shopify Inc.",                    640.0,  62.00, 108.40),
+      _pos("UBER", "Uber Technologies",               820.0,  48.00,  82.30),
+      _pos("NET",  "Cloudflare Inc.",                 480.0,  64.00, 112.40),
+    ] },
 ];
-// Net ~$38.4M across 8 expanded accounts.
+// Net ~$41M across 11 expanded accounts (Fidelity, JPM, Schwab ×2, Vanguard ×2, Robinhood, Empower, Coinbase, IBKR, Webull).
 // Tag the demo's non-overlapping tickers so the screener doesn't show
 // every position as "Review".
 // Demo transaction history — multi-year buys, sells, quarterly dividends,
@@ -315,9 +338,102 @@ const DEMO_SHARIA = {
   VLXVX:"review", VTSAX:"review",
   BTC:"halal", ETH:"halal", SOL:"halal",
   BABA:"halal", TM:"halal", UL:"review", LMT:"review", NOW:"halal",
+  // Schwab Individual Brokerage
+  SCHD:"review", SCHB:"review", UNH:"halal", LIN:"halal", ABBV:"halal",
+  // Vanguard Joint Taxable
+  VYM:"review", VUG:"review",
+  // Webull Active Trading
+  AMZN:"halal", CRM:"halal", SHOP:"halal", UBER:"halal", NET:"halal",
   // Non-compliant
   JPM:"haram", WYNN:"haram", MO:"haram", LCID:"haram",
+  // BND is a bond fund — interest-bearing → haram
+  BND:"haram",
 };
+
+/* ─── DEMO BANK FIXTURES (Plaid stand-in) ────────────── */
+// Mirrors DEMO_ACCOUNTS pattern — used to populate the Finances tab when
+// demoMode is on. No real API calls needed; everything is local fixture.
+const DEMO_BANK_ACCOUNTS = [
+  // Chase
+  { item_id:"d-chase", institution_name:"Chase",            account_id:"d-chase-1", name:"Total Checking",     official_name:"Chase Total Checking", type:"depository", subtype:"checking", mask:"4421", current_bal:18_240.55, available_bal:18_240.55, iso_currency:"USD" },
+  { item_id:"d-chase", institution_name:"Chase",            account_id:"d-chase-2", name:"Premier Savings",    official_name:"Chase Premier Savings",type:"depository", subtype:"savings",  mask:"8810", current_bal:62_900.00, available_bal:62_900.00, iso_currency:"USD" },
+  { item_id:"d-chase", institution_name:"Chase",            account_id:"d-chase-3", name:"Sapphire Preferred", official_name:"Chase Sapphire Preferred",type:"credit",    subtype:"credit card",mask:"3344", current_bal:1_287.45, available_bal:13_712.55, iso_currency:"USD" },
+  // Marcus
+  { item_id:"d-marcus",institution_name:"Marcus by Goldman",account_id:"d-marcus-1",name:"High-Yield Savings", official_name:"Marcus HYSA",          type:"depository", subtype:"savings",  mask:"7733", current_bal:45_500.20, available_bal:45_500.20, iso_currency:"USD" },
+];
+
+const DEMO_TRANSACTIONS = (() => {
+  const today = new Date();
+  const dt = (n) => { const d = new Date(today); d.setDate(today.getDate() - n); return d.toISOString().slice(0, 10); };
+  const T_ = (id, account_id, n, name, amount, primary, merchant) => ({
+    transaction_id: `dt-${id}`, account_id, item_id: account_id.startsWith("d-chase") ? "d-chase" : "d-marcus",
+    institution_name: account_id.startsWith("d-chase") ? "Chase" : "Marcus by Goldman",
+    date: dt(n), authorized_date: dt(n),
+    name, merchant_name: merchant || name, amount, iso_currency: "USD",
+    category: [primary], personal_finance_category: { primary, detailed: primary },
+    pending: false, payment_channel: "online",
+  });
+  return [
+    // Recurring subscriptions (appear monthly)
+    T_( 1, "d-chase-3",   1, "NETFLIX.COM",          15.99, "ENTERTAINMENT", "Netflix"),
+    T_( 2, "d-chase-3",  31, "NETFLIX.COM",          15.99, "ENTERTAINMENT", "Netflix"),
+    T_( 3, "d-chase-3",  62, "NETFLIX.COM",          15.99, "ENTERTAINMENT", "Netflix"),
+    T_( 4, "d-chase-3",   4, "SPOTIFY USA",          11.99, "ENTERTAINMENT", "Spotify"),
+    T_( 5, "d-chase-3",  35, "SPOTIFY USA",          11.99, "ENTERTAINMENT", "Spotify"),
+    T_( 6, "d-chase-3",  66, "SPOTIFY USA",          11.99, "ENTERTAINMENT", "Spotify"),
+    T_( 7, "d-chase-3",   8, "ADOBE CREATIVE CLOUD", 54.99, "GENERAL_SERVICES", "Adobe"),
+    T_( 8, "d-chase-3",  39, "ADOBE CREATIVE CLOUD", 54.99, "GENERAL_SERVICES", "Adobe"),
+    T_( 9, "d-chase-3",  11, "PLANET FITNESS",       24.99, "PERSONAL_CARE", "Planet Fitness"),
+    T_(10, "d-chase-3",  41, "PLANET FITNESS",       24.99, "PERSONAL_CARE", "Planet Fitness"),
+    // Food
+    T_(11, "d-chase-1",   2, "WHOLE FOODS MARKET",   142.83, "FOOD_AND_DRINK", "Whole Foods"),
+    T_(12, "d-chase-1",   5, "TRADER JOE'S",          87.21, "FOOD_AND_DRINK", "Trader Joe's"),
+    T_(13, "d-chase-1",   9, "WHOLE FOODS MARKET",   118.05, "FOOD_AND_DRINK", "Whole Foods"),
+    T_(14, "d-chase-1",  14, "WHOLE FOODS MARKET",   166.41, "FOOD_AND_DRINK", "Whole Foods"),
+    T_(15, "d-chase-3",   3, "CHIPOTLE",              18.42, "FOOD_AND_DRINK", "Chipotle"),
+    T_(16, "d-chase-3",   6, "STARBUCKS",              6.75, "FOOD_AND_DRINK", "Starbucks"),
+    T_(17, "d-chase-3",  10, "STARBUCKS",              7.20, "FOOD_AND_DRINK", "Starbucks"),
+    // Transport
+    T_(18, "d-chase-3",   3, "UBER",                  24.50, "TRANSPORTATION", "Uber"),
+    T_(19, "d-chase-3",   7, "SHELL OIL",             58.20, "TRANSPORTATION", "Shell"),
+    T_(20, "d-chase-3",  13, "UBER",                  31.05, "TRANSPORTATION", "Uber"),
+    // Bills
+    T_(21, "d-chase-1",  12, "COMED ELECTRIC",       142.50, "RENT_AND_UTILITIES", "ComEd"),
+    T_(22, "d-chase-1",  12, "PEOPLES GAS",           84.20, "RENT_AND_UTILITIES", "Peoples Gas"),
+    T_(23, "d-chase-1",  15, "VERIZON WIRELESS",     115.00, "RENT_AND_UTILITIES", "Verizon"),
+    T_(24, "d-chase-1",   1, "RENT — APT 4B",       2400.00, "RENT_AND_UTILITIES", "Landlord"),
+    // Inflows (Plaid: negative amount = inflow)
+    T_(25, "d-chase-1",   2, "ACME CORP PAYROLL",  -5_842.18,"INCOME",         "Acme Corp"),
+    T_(26, "d-chase-1",  16, "ACME CORP PAYROLL",  -5_842.18,"INCOME",         "Acme Corp"),
+    T_(27, "d-chase-2",  10, "TRANSFER FROM CHECKING",-1_000.00,"TRANSFER_IN", "Internal"),
+    // Misc
+    T_(28, "d-chase-3",   6, "AMAZON.COM",            68.42, "GENERAL_MERCHANDISE", "Amazon"),
+    T_(29, "d-chase-3",  11, "AMAZON.COM",           134.50, "GENERAL_MERCHANDISE", "Amazon"),
+    T_(30, "d-chase-3",   4, "TARGET",                57.30, "GENERAL_MERCHANDISE", "Target"),
+  ];
+})();
+
+/* ─── DEMO MANUAL ASSETS + SADAQAH ──────────────────── */
+const DEMO_MANUAL_ASSETS = [
+  { id:"dm-1", type:"Gold",                 name:"Wedding gold + bullion",            value:48_500, zakatable:true,  added:"2024-09-12", notes:"22k jewelry + 5oz bars" },
+  { id:"dm-2", type:"Real Estate",          name:"Primary residence equity (paid)",   value:220_000,zakatable:false, added:"2023-05-04", notes:"Primary home excluded from Zakat" },
+  { id:"dm-3", type:"Investment Property",  name:"Rental — 2bd condo",                value:185_000,zakatable:true,  added:"2024-01-22", notes:"Net of mortgage; rents at $2,400/mo" },
+  { id:"dm-4", type:"Business Equity",      name:"Halal Bites LLC (40% stake)",       value:60_000, zakatable:true,  added:"2023-11-08", notes:"Founder equity" },
+  { id:"dm-5", type:"Vehicle",              name:"2022 Toyota Camry",                 value:18_200, zakatable:false, added:"2022-08-15", notes:"Daily driver, not zakatable" },
+];
+
+const DEMO_SADAQAH = [
+  { id:"ds-1", dt:"2026-03-19", org:"Masjid Uthman",         method:"Zelle",       account:"Savings",  amt:500,   done:true  },
+  { id:"ds-2", dt:"2026-03-16", org:"ISNS",                  method:"Zelle",       account:"Savings",  amt:1000,  done:true  },
+  { id:"ds-3", dt:"2026-02-23", org:"ISNS",                  method:"Zelle",       account:"Savings",  amt:1000,  done:true  },
+  { id:"ds-4", dt:"2025-08-17", org:"Thakkat",               method:"Debit Card",  account:"Checking", amt:157.04,done:true  },
+  { id:"ds-5", dt:"2025-05-30", org:"Qalam",                 method:"Debit Card",  account:"Checking", amt:52.24, done:true  },
+  { id:"ds-6", dt:"2024-04-09", org:"Muhsen",                method:"Debit Card",  account:"Checking", amt:250,   done:true  },
+  { id:"ds-7", dt:"2024-04-08", org:"Masjid An-Noor (ICN)",  method:"Debit Card",  account:"Checking", amt:1000,  done:true  },
+  { id:"ds-8", dt:"2023-12-11", org:"ISNS",                  method:"Zelle",       account:"Checking", amt:2000,  done:true  },
+  { id:"ds-9", dt:"Pledge",     org:"Helping Hand",          method:"TBD",         account:"Savings",  amt:1300,  done:false },
+  { id:"ds-10",dt:"Pledge",     org:"Masjid Uthman",         method:"TBD",         account:"Savings",  amt:5000,  done:false },
+];
 
 /* ─── CALC HELPERS ───────────────────────────────────── */
 const mv   = h => h.sh * h.px;
@@ -1833,12 +1949,20 @@ function ActivityPanel({activities=[],accounts=[]}){
 // Sadaqah is a user-entered ledger persisted to mizan_sadaqah (synced).
 const NISAB_USD = 5765; // 87.48g gold @ ~$66/g — updated periodically.
 
-function ZakatSadaqah({accounts=[]}){
+function ZakatSadaqah({accounts=[],demoMode=false}){
   // The previous owner-only seed has been removed — it leaked the owner's
   // actual donation list into the JS bundle. Owner's existing donations are
   // already in Supabase user_state.mizan_sadaqah and hydrate on sign-in.
   // To restore from scratch, use the CSV Import button.
-  const[sadaqah,setSadaqah]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]");}catch{return[];}});
+  const[sadaqah,setSadaqah]=useState(()=>{
+    if(demoMode)return DEMO_SADAQAH;
+    try{return JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]");}catch{return[];}
+  });
+  // Re-sync when demo toggle flips
+  useEffect(()=>{
+    if(demoMode){setSadaqah(DEMO_SADAQAH);return;}
+    try{setSadaqah(JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]"));}catch{setSadaqah([]);}
+  },[demoMode]);
   const[form,setForm]=useState({dt:new Date().toISOString().slice(0,10),org:"",method:"",account:"",amt:"",done:true});
   const[editingId,setEditingId]=useState(null);
   const[editDraft,setEditDraft]=useState({});
@@ -1853,7 +1977,9 @@ function ZakatSadaqah({accounts=[]}){
   const[fAccount,setFAccount]=useState("all");
   const[fYear,setFYear]=useState("all");
 
-  const manualAssets=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
+  const manualAssets=demoMode
+    ?DEMO_MANUAL_ASSETS
+    :(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
   const acctTotal       = accounts.reduce((s,a)=>s+(a.balance||0),0);
   const zakatableManual = manualAssets.filter(a=>a.zakatable).reduce((s,a)=>s+(a.value||0),0);
   const zakatable       = acctTotal+zakatableManual;
@@ -1901,18 +2027,23 @@ function ZakatSadaqah({accounts=[]}){
   const filteredPledged=filtered.filter(s=>!s.done).reduce((a,b)=>a+(+b.amt||0),0);
   const hasActiveFilter=fSearch||fStatus!=="all"||fMethod!=="all"||fAccount!=="all"||fYear!=="all";
 
-  const persist=arr=>{setSadaqah(arr);localStorage.setItem("mizan_sadaqah",JSON.stringify(arr));persistUserState("mizan_sadaqah",arr);};
+  const persist=arr=>{
+    if(demoMode)return; // demo fixtures are read-only
+    setSadaqah(arr);localStorage.setItem("mizan_sadaqah",JSON.stringify(arr));persistUserState("mizan_sadaqah",arr);
+  };
   const add=e=>{
     e.preventDefault();
-    if(!form.org||!form.amt)return;
+    if(demoMode||!form.org||!form.amt)return;
     persist([{id:`s-${Date.now()}`,...form,amt:+form.amt},...sadaqah]);
     setForm({...form,org:"",amt:""}); // keep method/account for next entry
   };
   const remove=id=>{
+    if(demoMode)return;
     if(!window.confirm("Remove this donation entry?"))return;
     persist(sadaqah.filter(s=>s.id!==id));
   };
   const startEdit=row=>{
+    if(demoMode)return;
     setEditingId(row.id);
     setEditDraft({
       dt:row.dt||"",
@@ -1937,7 +2068,7 @@ function ZakatSadaqah({accounts=[]}){
   // Fingerprint dedups by (dt, org, amount).
   const handleImport=async e=>{
     const file=e.target.files?.[0];
-    if(!file)return;
+    if(!file||demoMode)return;
     setImportBusy(true);setImportStatus(null);
     try{
       const text=await file.text();
@@ -2039,23 +2170,26 @@ function ZakatSadaqah({accounts=[]}){
     {/* ─── ROW 2: Log entry + import ───────────────── */}
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>LOG A DONATION</div>
+        <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>LOG A DONATION</span>
+          {demoMode&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
+        </div>
         <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
           <input ref={importRef} type="file" accept=".csv,text/csv" onChange={handleImport} style={{display:"none"}}/>
-          <button onClick={()=>importRef.current?.click()} disabled={importBusy} className="btn-ghost" title="Import CSV with columns: Date, Organization, Method, Account, Amount, Status">{importBusy?"Importing…":"Import CSV"}</button>
+          <button onClick={()=>importRef.current?.click()} disabled={importBusy||demoMode} className="btn-ghost" title={demoMode?"Disable demo mode in Settings to import":"Import CSV with columns: Date, Organization, Method, Account, Amount, Status"}>{importBusy?"Importing…":"Import CSV"}</button>
         </div>
       </div>
-      <form onSubmit={add} className="mz-form-row" style={{display:"grid",gridTemplateColumns:"130px 1fr 120px 110px 110px 100px auto",gap:T.s2,alignItems:"end"}}>
-        <input type="date" value={form.dt} onChange={e=>setForm({...form,dt:e.target.value})} className="field"/>
-        <input placeholder="Organization" value={form.org} onChange={e=>setForm({...form,org:e.target.value})} className="field"/>
-        <input list="dn-methods" placeholder="Method" value={form.method} onChange={e=>setForm({...form,method:e.target.value})} className="field"/>
-        <input list="dn-accts" placeholder="Account" value={form.account} onChange={e=>setForm({...form,account:e.target.value})} className="field"/>
-        <input type="number" step="0.01" placeholder="Amount" value={form.amt} onChange={e=>setForm({...form,amt:e.target.value})} className="field" style={{fontVariantNumeric:"tabular-nums"}}/>
-        <select value={form.done?"done":"pledged"} onChange={e=>setForm({...form,done:e.target.value==="done"})} className="field" style={{cursor:"pointer"}}>
+      <form onSubmit={add} className="mz-form-row" style={{display:"grid",gridTemplateColumns:"130px 1fr 120px 110px 110px 100px auto",gap:T.s2,alignItems:"end",opacity:demoMode?0.55:1,pointerEvents:demoMode?"none":undefined}}>
+        <input type="date" value={form.dt} onChange={e=>setForm({...form,dt:e.target.value})} className="field" disabled={demoMode}/>
+        <input placeholder="Organization" value={form.org} onChange={e=>setForm({...form,org:e.target.value})} className="field" disabled={demoMode}/>
+        <input list="dn-methods" placeholder="Method" value={form.method} onChange={e=>setForm({...form,method:e.target.value})} className="field" disabled={demoMode}/>
+        <input list="dn-accts" placeholder="Account" value={form.account} onChange={e=>setForm({...form,account:e.target.value})} className="field" disabled={demoMode}/>
+        <input type="number" step="0.01" placeholder="Amount" value={form.amt} onChange={e=>setForm({...form,amt:e.target.value})} className="field" style={{fontVariantNumeric:"tabular-nums"}} disabled={demoMode}/>
+        <select value={form.done?"done":"pledged"} onChange={e=>setForm({...form,done:e.target.value==="done"})} className="field" style={{cursor:"pointer"}} disabled={demoMode}>
           <option value="done">Given</option>
           <option value="pledged">Pledged</option>
         </select>
-        <button type="submit" className="btn-primary">Add</button>
+        <button type="submit" className="btn-primary" disabled={demoMode}>Add</button>
       </form>
       <datalist id="dn-methods">{["Debit Card","Credit Card","Zelle","Cash","Check","Wire","Crypto","TBD",...allMethods].filter((v,i,a)=>a.indexOf(v)===i).map(m=><option key={m} value={m}/>)}</datalist>
       <datalist id="dn-accts">{["Checking","Savings","Brokerage","Cash",...allAccounts].filter((v,i,a)=>a.indexOf(v)===i).map(m=><option key={m} value={m}/>)}</datalist>
@@ -2122,7 +2256,9 @@ function ZakatSadaqah({accounts=[]}){
                 <option value="pledged">Pledged</option>
               </select>
               :<Tag label={r.done?"Given":"Pledged"} color={r.done?T.gain:T.gold}/>},
-            {l:"",r:true,     r_:r=>editingId===r.id
+            {l:"",r:true,     r_:r=>demoMode
+              ?<span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>—</span>
+              :editingId===r.id
               ?<div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
                 <button onClick={saveEdit} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:`${T.gain}18`,border:`1px solid ${T.gain}40`,color:T.gain,cursor:"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em"}}>SAVE</button>
                 <button onClick={cancelEdit} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:10,letterSpacing:"0.04em"}}>×</button>
@@ -2137,7 +2273,7 @@ function ZakatSadaqah({accounts=[]}){
 }
 
 /* ─── PORTFOLIO ──────────────────────────────────────── */
-function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission}){
+function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false}){
   const[sub,setSub]=useState("holdings");
   const[acct,setAcct]=useState("all");
   const[screen,setScreen]=useState("all");
@@ -2281,7 +2417,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
 
     {sub==="tax"&&<TaxPlanner holdings={merged} activities={activities}/>}
 
-    {sub==="zakat"&&<ZakatSadaqah accounts={snapAccounts}/>}
+    {sub==="zakat"&&<ZakatSadaqah accounts={snapAccounts} demoMode={demoMode}/>}
 
     {sub==="etfs"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
       <Tbl cols={[
@@ -3030,19 +3166,31 @@ Activity rows on file: ${activities.length}.`;
 /* ─── MANUAL ASSET LEDGER ────────────────────────────── */
 // Track non-broker assets (gold, real estate, business equity, vehicles) so
 // net-worth and Zakat math reflect everything you own. Persists locally.
-function ManualAssets(){
-  const[assets,setAssets]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}});
+function ManualAssets({demoMode=false}={}){
+  const[assets,setAssets]=useState(()=>{
+    if(demoMode)return DEMO_MANUAL_ASSETS;
+    try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}
+  });
   const[form,setForm]=useState({type:"Gold",name:"",value:"",zakatable:true,notes:""});
 
-  const persist=arr=>{setAssets(arr);try{localStorage.setItem("mizan_manual_assets",JSON.stringify(arr));}catch{}persistUserState("mizan_manual_assets",arr);};
+  // Keep demo fixture authoritative when demo toggle flips on/off
+  useEffect(()=>{
+    if(demoMode){setAssets(DEMO_MANUAL_ASSETS);return;}
+    try{setAssets(JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]"));}catch{setAssets([]);}
+  },[demoMode]);
+
+  const persist=arr=>{
+    if(demoMode)return; // demo state is read-only
+    setAssets(arr);try{localStorage.setItem("mizan_manual_assets",JSON.stringify(arr));}catch{}persistUserState("mizan_manual_assets",arr);
+  };
   const add=(e)=>{
     e.preventDefault();
-    if(!form.name||!form.value)return;
+    if(demoMode||!form.name||!form.value)return;
     const next=[...assets,{...form,value:+form.value,id:`m-${Date.now()}`,added:new Date().toISOString().slice(0,10)}];
     persist(next);
     setForm({type:"Gold",name:"",value:"",zakatable:true,notes:""});
   };
-  const remove=id=>persist(assets.filter(a=>a.id!==id));
+  const remove=id=>{if(demoMode)return;persist(assets.filter(a=>a.id!==id));};
   const total=assets.reduce((s,a)=>s+(+a.value||0),0);
   const zakatable=assets.filter(a=>a.zakatable).reduce((s,a)=>s+(+a.value||0),0);
 
@@ -3068,18 +3216,21 @@ function ManualAssets(){
 
     {/* ─── Add asset form ─────────────────────────── */}
     <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>ADD AN ASSET</div>
-      <form onSubmit={add} className="mz-form-row" style={{display:"grid",gridTemplateColumns:"150px 1fr 140px auto auto",gap:T.s2,alignItems:"center"}}>
-        <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="field" style={{cursor:"pointer"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,gap:T.s2,flexWrap:"wrap"}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ADD AN ASSET</div>
+        {demoMode&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
+      </div>
+      <form onSubmit={add} className="mz-form-row" style={{display:"grid",gridTemplateColumns:"150px 1fr 140px auto auto",gap:T.s2,alignItems:"center",opacity:demoMode?0.55:1,pointerEvents:demoMode?"none":undefined}}>
+        <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="field" style={{cursor:"pointer"}} disabled={demoMode}>
           {["Gold","Silver","Real Estate","Investment Property","Business Equity","Vehicle","Collectible","Other"].map(t=><option key={t}>{t}</option>)}
         </select>
-        <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Description (e.g. Wedding gold, Primary home equity)" className="field"/>
-        <input type="number" value={form.value} onChange={e=>setForm({...form,value:e.target.value})} placeholder="Value $" className="field" style={{fontVariantNumeric:"tabular-nums"}}/>
+        <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Description (e.g. Wedding gold, Primary home equity)" className="field" disabled={demoMode}/>
+        <input type="number" value={form.value} onChange={e=>setForm({...form,value:e.target.value})} placeholder="Value $" className="field" style={{fontVariantNumeric:"tabular-nums"}} disabled={demoMode}/>
         <label style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.muted,display:"flex",alignItems:"center",gap:T.s1,cursor:"pointer",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>
-          <input type="checkbox" checked={form.zakatable} onChange={e=>setForm({...form,zakatable:e.target.checked})} style={{accentColor:T.gold,width:14,height:14}}/>
+          <input type="checkbox" checked={form.zakatable} onChange={e=>setForm({...form,zakatable:e.target.checked})} style={{accentColor:T.gold,width:14,height:14}} disabled={demoMode}/>
           Zakat
         </label>
-        <button type="submit" className="btn-primary">+ Add</button>
+        <button type="submit" className="btn-primary" disabled={demoMode}>+ Add</button>
       </form>
     </BentoTile>
 
@@ -3092,7 +3243,9 @@ function ManualAssets(){
           {l:"Value",r:true,r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(r.value)}</span>},
           {l:"Zakat",r_:r=><Tag label={r.zakatable?"Included":"Excluded"} color={r.zakatable?T.gold:T.muted}/>},
           {l:"Added",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.added}</span>},
-          {l:"",r_:r=><button onClick={()=>remove(r.id)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>},
+          {l:"",r_:r=>demoMode
+            ?<span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>—</span>
+            :<button onClick={()=>remove(r.id)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>},
         ]} rows={assets}/>
       </BentoTile>
       :<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
@@ -3417,7 +3570,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
       onChange={setSub}
     />
 
-    {sub==="assets"&&<ManualAssets/>}
+    {sub==="assets"&&<ManualAssets demoMode={demoMode}/>}
 
     {/* ─── API KEYS (Root only) ───────────────────── */}
     {sub==="keys"&&isRoot&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -3971,10 +4124,13 @@ function About(){
 // Bank accounts (checking/savings/credit), recent transactions, spending
 // summary by category, recurring subscription detection. Powered by Plaid
 // via the server proxy at /api/plaid/*.
-function Finances({onBankBalanceChange}){
+function Finances({onBankBalanceChange,demoMode=false}){
   const{user}=useAuth();
-  const[accounts,setAccounts]=useState([]);
-  const[txns,setTxns]=useState([]);
+  // In demo mode short-circuit straight to the local fixtures so the
+  // tab is fully populated without ever talking to Plaid. Toggle off
+  // returns the user to real (or empty) state.
+  const[accounts,setAccounts]=useState(()=>demoMode?DEMO_BANK_ACCOUNTS:[]);
+  const[txns,setTxns]=useState(()=>demoMode?DEMO_TRANSACTIONS:[]);
   const[loading,setLoading]=useState(false);
   const[linkToken,setLinkToken]=useState(null);
   const[plaidReady,setPlaidReady]=useState(false);
@@ -4026,6 +4182,8 @@ function Finances({onBankBalanceChange}){
 
   // Load existing accounts + transactions on mount.
   const refresh=useCallback(async()=>{
+    // Demo mode is a pure local fixture — never hit the Plaid API.
+    if(demoMode){setAccounts(DEMO_BANK_ACCOUNTS);setTxns(DEMO_TRANSACTIONS);return;}
     setLoading(true);
     try{
       const ar=await apiFetch("/api/plaid/accounts");
@@ -4034,7 +4192,7 @@ function Finances({onBankBalanceChange}){
       if(tr.ok){const td=await tr.json();setTxns(Array.isArray(td.transactions)?td.transactions:[]);}
     }catch(err){console.error("Finances refresh failed:",err);}
     finally{setLoading(false);}
-  },[]);
+  },[demoMode]);
   useEffect(()=>{refresh();},[refresh]);
 
   // Lazy-load react-plaid-link only when user clicks Connect (keeps initial bundle small).
@@ -4120,7 +4278,7 @@ function Finances({onBankBalanceChange}){
           <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:totalBank>=0?T.textHi:T.loss,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalBank)}</div>
           <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{institutions.length} institution{institutions.length===1?"":"s"} · {accounts.length} account{accounts.length===1?"":"s"}</div>
         </div>
-        <button onClick={startLink} disabled={busy} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":"+ Connect Bank"}</button>
+        <button onClick={startLink} disabled={busy||demoMode} title={demoMode?"Disable demo mode in Settings to connect a real bank":undefined} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":demoMode?"+ Connect Bank (demo)":"+ Connect Bank"}</button>
       </div>
       {status&&<div style={{marginTop:T.s4,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss}}>{status.ok?"✓ ":"✗ "}{status.msg}</div>}
     </BentoTile>
@@ -5498,8 +5656,8 @@ export default function Mizan(){
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance}/>}
-        {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance}/>}
-        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission}/>}
+        {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode}/>}
+        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
