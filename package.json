@@ -10,20 +10,32 @@
     "build": "vite build",
     "start": "NODE_ENV=production node server.js",
     "preview": "vite preview",
-    "gen:icons": "node scripts/gen-pwa-icons.mjs"
+    "gen:icons": "node scripts/gen-pwa-icons.mjs",
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@sentry/node": "^10.52.0",
+    "@sentry/react": "^10.52.0",
     "@supabase/supabase-js": "^2.45.0",
     "plaid": "^42.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-plaid-link": "^4.1.1",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.4.1"
+    "@vitest/ui": "^4.1.6",
+    "jsdom": "^29.1.1",
+    "vite": "^5.4.1",
+    "vitest": "^4.1.6"
   }
 }

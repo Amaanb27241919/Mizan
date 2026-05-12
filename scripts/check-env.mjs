@@ -43,6 +43,15 @@ const OPTIONAL_VARS = [
   // Alerting
   { name: "RESEND_API_KEY",          feature: "Email alerts (brute-force, cron staleness, SnapTrade spike, new device)" },
   { name: "ALERT_FROM",              feature: "From: header for alert emails (defaults to alerts@mizan.app)" },
+  // Alpaca paper trading
+  { name: "ALPACA_KEY_ID",           feature: "Alpaca paper trading" },
+  { name: "ALPACA_SECRET",           feature: "Alpaca paper trading" },
+  // Push notifications
+  { name: "VAPID_PUBLIC_KEY",        feature: "Push notifications" },
+  { name: "VAPID_PRIVATE_KEY",       feature: "Push notifications" },
+  { name: "VAPID_SUBJECT",           feature: "Push notifications" },
+  // Error tracking
+  { name: "SENTRY_DSN",              feature: "Sentry error tracking (server)" },
 ];
 
 // Vite-only / client-side. Validated separately for the build step, not
@@ -51,6 +60,7 @@ const CLIENT_VARS = [
   "VITE_SUPABASE_URL",
   "VITE_SUPABASE_ANON_KEY",
   "VITE_OWNER_EMAIL",
+  "VITE_SENTRY_DSN",
 ];
 
 const has = (k) => {

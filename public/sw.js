@@ -134,3 +134,43 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 });
+
+// ── Push notifications ──────────────────────────────────
+// Payload comes in as JSON from lib/notify.mjs: { title, body, url }.
+// We always show *something* — falling back to "Mizan" + "" keeps a bad
+// payload from silently dropping the notification.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) { data = {}; }
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Mizan", {
+      body:  data.body || "",
+      icon:  "/icon-192.png",
+      badge: "/icon-192.png",
+      data:  { url: data.url || "/" },
+    })
+  );
+});
+
+// Click → focus an existing tab if open, otherwise open a new one.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          try {
+            const clientUrl = new URL(client.url);
+            const targetUrl = new URL(target, self.location.origin);
+            if (clientUrl.origin === targetUrl.origin) {
+              client.navigate(targetUrl.href).catch(() => {});
+              return client.focus();
+            }
+          } catch (_) { /* fall through to openWindow */ }
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(target);
+    })
+  );
+});

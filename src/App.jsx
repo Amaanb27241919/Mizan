@@ -1,8 +1,39 @@
 import { useEffect, useState } from 'react'
+import * as Sentry from '@sentry/react'
 import MizanApp from './components/MizanApp.jsx'
 import Login from './components/Login.jsx'
 import { AuthProvider, useAuth } from './lib/auth.jsx'
 import { hydrateUserState } from './lib/userState.js'
+
+// Dark-themed fallback shown when an unhandled error escapes a child
+// component tree. Matches MIZAN's palette (no T-tokens — those live in
+// MizanApp.jsx and we want this to render even when MizanApp crashed).
+function SentryFallback({ resetError }) {
+  return (
+    <div style={{
+      minHeight: '100vh', background: '#0B0F1E',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24, fontFamily: 'system-ui, -apple-system, sans-serif',
+    }}>
+      <div style={{
+        maxWidth: 480, width: '100%', background: '#0E1216',
+        border: '1px solid #1F2530', borderRadius: 14, padding: '28px 32px',
+        textAlign: 'center', color: '#E7E9EC',
+      }}>
+        <div style={{ fontSize: 11, color: '#5C6478', letterSpacing: '0.18em', fontWeight: 600, marginBottom: 12 }}>MIZAN — SOMETHING WENT WRONG</div>
+        <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>The page hit an unexpected error.</div>
+        <div style={{ fontSize: 13, color: '#7C8597', lineHeight: 1.6, marginBottom: 20 }}>
+          The error has been reported automatically. You can try again — most issues clear with a refresh.
+        </div>
+        <button onClick={() => { try { resetError() } catch {} window.location.reload() }} style={{
+          padding: '10px 22px', borderRadius: 8, border: 'none',
+          background: '#1E90FF', color: '#fff', cursor: 'pointer',
+          fontFamily: 'inherit', fontSize: 13, fontWeight: 600, letterSpacing: '0.04em',
+        }}>Refresh</button>
+      </div>
+    </div>
+  )
+}
 
 function Gate() {
   const { user, loading, isSupabaseConfigured, recoveryMode } = useAuth()
@@ -56,8 +87,10 @@ function Gate() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Gate />
-    </AuthProvider>
+    <Sentry.ErrorBoundary fallback={({ resetError }) => <SentryFallback resetError={resetError} />}>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
+    </Sentry.ErrorBoundary>
   )
 }

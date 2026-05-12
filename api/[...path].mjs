@@ -12,6 +12,11 @@
 // you don't waste hours debugging "auth: not configured" 500s.
 import "../scripts/check-env.mjs";
 
+// Initialize Sentry FIRST so subsequent module loads can be instrumented
+// for errors. No-op when SENTRY_DSN is unset.
+import { initSentry, Sentry } from "../lib/sentry.mjs";
+initSentry();
+
 import { handleApiRequest } from "../lib/handlers.mjs";
 
 export default async function handler(req, res) {
@@ -30,6 +35,8 @@ export default async function handler(req, res) {
     }
     res.send(JSON.stringify(result.body));
   } catch (err) {
+    // Report to Sentry (no-op when DSN unset; PII scrubbed in beforeSend)
+    try { Sentry.captureException(err); } catch { /* swallow */ }
     const status = Number.isInteger(err?.status) ? err.status : 500;
     res.status(status).json({ error: err.message || "Internal error" });
   }
