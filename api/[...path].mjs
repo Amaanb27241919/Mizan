@@ -6,6 +6,12 @@
  * module so dev (server.js) and prod (this file) cannot drift.
  */
 
+// Side-effect import: validates required env vars at cold-start and logs
+// a ✓/✗ per variable. Doesn't throw — missing optional vars degrade
+// gracefully — but missing REQUIRED vars surface in the function log so
+// you don't waste hours debugging "auth: not configured" 500s.
+import "../scripts/check-env.mjs";
+
 import { handleApiRequest } from "../lib/handlers.mjs";
 
 export default async function handler(req, res) {

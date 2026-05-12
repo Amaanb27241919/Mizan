@@ -50,6 +50,8 @@ One terminal. One port (`3000`). Vite middleware + API on the same Node server.
 
 ### Required environment variables
 
+The canonical list lives in [`.env.example`](./.env.example) (sectioned by service with comments). `scripts/check-env.mjs` runs at boot and prints a ✓/✗ per variable; missing required vars fail the local server fast and log loudly in the Vercel function output.
+
 ```dotenv
 # SnapTrade — sign up at snaptrade.com/developers (free sandbox)
 VITE_SNAPTRADE_CLIENT_ID=your-client-id
@@ -57,8 +59,8 @@ VITE_SNAPTRADE_CONSUMER_KEY=your-consumer-key      # server-only
 
 # Market data (free tiers available)
 VITE_FINNHUB_KEY=your-finnhub-key
-VITE_POLYGON_KEY=your-polygon-key                  # promoted server-side
-VITE_ANTHROPIC_KEY=sk-ant-api03-...                # promoted server-side
+POLYGON_KEY=your-polygon-key                       # server-only
+ANTHROPIC_KEY=sk-ant-api03-...                     # server-only
 
 # Supabase — optional; leave blank for single-user pass-through mode
 VITE_SUPABASE_URL=https://your-project.supabase.co
@@ -67,26 +69,55 @@ SUPABASE_SERVICE_ROLE_KEY=ey...                    # server-only, bypasses RLS
 
 # Owner email — this user inherits any legacy mizan_primary SnapTrade connections
 OWNER_EMAIL=you@example.com
+VITE_OWNER_EMAIL=you@example.com                   # mirror for client-side isRoot check
 
 # Plaid — banking aggregation. Sign up at dashboard.plaid.com.
-# Sandbox uses fake test banks (Tartan Bank / First Platypus etc.); production
-# requires Plaid to approve your application.
-PLAID_CLIENT_ID=your-plaid-client-id                  # server-only
-PLAID_SECRET=your-plaid-secret                        # server-only
-PLAID_ENV=sandbox                                     # sandbox | development | production
+PLAID_CLIENT_ID=your-plaid-client-id               # server-only
+PLAID_SECRET=your-plaid-secret                     # server-only
+PLAID_ENV=sandbox                                  # sandbox | development | production
+
+# Cron — secures /api/cron/sync against unauthenticated invocation.
+# Generate with `openssl rand -hex 32`.
+CRON_SECRET=set-a-32-byte-random-hex-string-here   # server-only
 ```
+
+#### Vercel Dashboard vs `.env.local`
+
+| Variable | Vercel (Prod + Preview) | `.env.local` |
+|---|:-:|:-:|
+| `VITE_SUPABASE_URL` | ✅ | ✅ |
+| `VITE_SUPABASE_ANON_KEY` | ✅ | ✅ |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | ✅ |
+| `VITE_SNAPTRADE_CLIENT_ID` | ✅ | ✅ |
+| `VITE_SNAPTRADE_CONSUMER_KEY` | ✅ | ✅ |
+| `VITE_FINNHUB_KEY` | ✅ | ✅ |
+| `POLYGON_KEY` | ✅ | ✅ |
+| `ANTHROPIC_KEY` | ✅ | ✅ |
+| `PLAID_CLIENT_ID` | ✅ | ✅ |
+| `PLAID_SECRET` | ✅ | ✅ |
+| `PLAID_ENV` | ✅ | ✅ |
+| `OWNER_EMAIL` | ✅ | ✅ |
+| `VITE_OWNER_EMAIL` | ✅ | ✅ |
+| `CRON_SECRET` | ✅ (prod only — cron doesn't run on Preview) | optional locally |
+| `PORT` | ❌ (Vercel manages it) | optional (defaults to 3000) |
+| `NODE_ENV` | ❌ (Vercel sets it) | ❌ (auto-set by Vite/Node) |
+
+**Vite caveat.** Only `VITE_*` prefixed vars are exposed to the browser bundle — everything else stays server-only. The `VITE_` on `VITE_SNAPTRADE_CONSUMER_KEY` is a legacy alias (the server reads it via `process.env`); the consumer key itself is **never** shipped to the client.
 
 ### Multi-user setup (Supabase)
 
 1. Create a Supabase project
-2. Settings → API → copy URL + anon key into `.env.local`
+2. Settings → API → copy URL + anon key into `.env.local` (and Vercel)
 3. Settings → API → Legacy tab → copy service_role JWT
-4. SQL Editor → paste `supabase/schema.sql` → Run
-5. Authentication → URL Configuration → Site URL + Redirect URLs to `http://localhost:3000` (add Vercel URL after deploy)
-6. Authentication → Providers → Email → **disable "Confirm email"** so sign-up lands authenticated in the same tab (no email click-through). Password reset emails still work — that flow uses a recovery link.
-7. Restart dev server — login screen appears
+4. Apply migrations in order: either run `npx supabase db push` (after `supabase link`) **or** paste each file in `supabase/migrations/` into Supabase → SQL Editor in numeric order (`001_audit_log.sql`, `002_user_state.sql`, `003_plaid.sql`).
+5. Verify the schema is current — sign in as the `OWNER_EMAIL` account and hit `GET /api/admin/db-status`; it returns which expected tables are present and flags any missing.
+6. Authentication → URL Configuration → Site URL + Redirect URLs to `http://localhost:3000` (add Vercel URL after deploy)
+7. Authentication → Providers → Email → **disable "Confirm email"** so sign-up lands authenticated in the same tab (no email click-through). Password reset emails still work — that flow uses a recovery link.
+8. Restart dev server — login screen appears
 
 Each authenticated user gets isolated state via Postgres + Row Level Security.
+
+**Adding a new migration.** Create the next-numbered file in `supabase/migrations/`, then re-apply via `supabase db push` or paste-and-run in SQL Editor. Register the new file in the `MIGRATIONS` list inside `lib/handlers.mjs` (`/api/admin/db-status`) so it shows up in the status check.
 
 ### Custom SMTP (Resend)
 
@@ -193,7 +224,8 @@ A fictional ~$42M halal portfolio built into the bundle. Defaults **on** for new
 │   ├── manifest.webmanifest # PWA manifest
 │   └── sw.js                # Service worker (cache-first static, network-first API)
 ├── scripts/
-│   └── gen-pwa-icons.mjs    # PNG generator (no deps, pure zlib + Buffer)
+│   ├── gen-pwa-icons.mjs    # PNG generator (no deps, pure zlib + Buffer)
+│   └── check-env.mjs        # Env-var validator — ✓/✗ readout at boot
 ├── src/
 │   ├── App.jsx              # AuthProvider + Gate
 │   ├── main.jsx
@@ -201,7 +233,11 @@ A fictional ~$42M halal portfolio built into the bundle. Defaults **on** for new
 │       ├── MizanApp.jsx     # The whole UI (~3500 lines)
 │       └── Login.jsx        # Magic-link sign-in card
 ├── supabase/
-│   ├── schema.sql           # user_snaptrade, user_state, user_keys + RLS
+│   ├── migrations/          # Numbered SQL migrations (source of truth)
+│   │   ├── 001_audit_log.sql
+│   │   ├── 002_user_state.sql
+│   │   └── 003_plaid.sql
+│   ├── schema.sql           # Pointer comment — see migrations/ instead
 │   └── README.md            # Supabase setup notes
 ├── server.js                # Node http server for local dev (uses lib/handlers.mjs)
 ├── vercel.json              # Catch-all rewrite + security headers

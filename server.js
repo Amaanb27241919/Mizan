@@ -14,6 +14,10 @@
  * appended to .dev.log so we can see what killed the process.
  */
 
+// Validate env vars before anything else loads, so the local dev server
+// also gets the ✓/✗ readout in the terminal at boot.
+import "./scripts/check-env.mjs";
+
 import http from "node:http";
 import fs   from "node:fs";
 import path from "node:path";
