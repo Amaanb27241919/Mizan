@@ -40,6 +40,9 @@ const OPTIONAL_VARS = [
   { name: "OWNER_EMAIL",             feature: "Owner-claim of legacy mizan_primary SnapTrade record" },
   // Cron security
   { name: "CRON_SECRET",             feature: "Auth bearer required by /api/cron/sync (otherwise cron is unprotected)" },
+  // Alerting
+  { name: "RESEND_API_KEY",          feature: "Email alerts (brute-force, cron staleness, SnapTrade spike, new device)" },
+  { name: "ALERT_FROM",              feature: "From: header for alert emails (defaults to alerts@mizan.app)" },
 ];
 
 // Vite-only / client-side. Validated separately for the build step, not

@@ -104,7 +104,21 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured || !supabase) {
       return { data: null, error: new Error('Supabase not configured') };
     }
-    return supabase.auth.signInWithPassword({ email, password });
+    const result = await supabase.auth.signInWithPassword({ email, password });
+    // Notify the server of a failed attempt so the brute-force detector
+    // can tally and (after 5 hits in 60s) block the IP for 24h. Anonymous
+    // endpoint — no JWT required, no PII sent except the email hash on
+    // the server side. Fire-and-forget.
+    if (result.error) {
+      try {
+        fetch('/api/auth/track-failure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        }).catch(() => {});
+      } catch { /* never blocks the UI */ }
+    }
+    return result;
   };
 
   const signUpWithPassword = async (email, password) => {

@@ -3912,6 +3912,131 @@ function SecurityPanel(){
       {error&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:8,fontFamily:FM,fontSize:11,background:T.lossBg,border:`1px solid ${T.loss}30`,color:T.loss}}>{error}</div>}
       {info&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:8,fontFamily:FM,fontSize:11,background:T.gainBg,border:`1px solid ${T.gain}30`,color:T.gain}}>{info}</div>}
     </div>
+
+    <SessionsPanel/>
+  </div>;
+}
+
+/* ─── ACTIVE SESSIONS PANEL ─────────────────────────────── */
+// Light user-agent parsing — no external dependency.
+function parseUA(ua){
+  if(!ua)return{device:"desktop",browser:"Unknown",os:"Unknown"};
+  const u=String(ua);
+  let os="Unknown";
+  if(/Windows NT/.test(u))os="Windows";
+  else if(/Mac OS X|Macintosh/.test(u))os="macOS";
+  else if(/iPhone|iPad|iPod/.test(u))os="iOS";
+  else if(/Android/.test(u))os="Android";
+  else if(/Linux/.test(u))os="Linux";
+  let browser="Unknown";
+  if(/Edg\//.test(u))browser="Edge";
+  else if(/Firefox\//.test(u))browser="Firefox";
+  else if(/Chrome\//.test(u))browser="Chrome";
+  else if(/Safari\//.test(u))browser="Safari";
+  const device=/iPad|Tablet/.test(u)?"tablet":/Mobile|iPhone|Android(?!.*Tablet)/.test(u)?"mobile":"desktop";
+  return{device,browser,os};
+}
+function deviceIcon(kind){
+  if(kind==="mobile")return"▢";
+  if(kind==="tablet")return"▣";
+  return"▦";
+}
+
+function SessionsPanel(){
+  const[sessions,setSessions]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[busy,setBusy]=useState(false);
+  const[toast,setToast]=useState(null);
+  const[err,setErr]=useState(null);
+
+  const load=useCallback(async()=>{
+    setLoading(true);setErr(null);
+    try{
+      const r=await apiFetch("/api/account/sessions");
+      if(!r.ok)throw new Error(`Status ${r.status}`);
+      const j=await r.json();
+      setSessions(j.sessions||[]);
+    }catch(e){setErr(e.message||"Failed to load sessions");}
+    finally{setLoading(false);}
+  },[]);
+  useEffect(()=>{load();},[load]);
+
+  const revoke=async(id)=>{
+    setBusy(true);setErr(null);
+    try{
+      const r=await apiFetch(`/api/account/sessions/${id}`,{method:"DELETE"});
+      if(!r.ok)throw new Error(`Status ${r.status}`);
+      setSessions(sessions.filter(s=>s.id!==id));
+      setToast("Session revoked");
+      setTimeout(()=>setToast(null),3000);
+    }catch(e){setErr(e.message||"Revoke failed");}
+    finally{setBusy(false);}
+  };
+  const revokeAllOthers=async()=>{
+    if(!confirm("Sign out everywhere except this device?"))return;
+    setBusy(true);setErr(null);
+    try{
+      const r=await apiFetch("/api/account/sessions",{method:"DELETE"});
+      if(!r.ok)throw new Error(`Status ${r.status}`);
+      const j=await r.json();
+      setSessions(sessions.filter(s=>s.current));
+      setToast(`Revoked ${j.revoked} other session${j.revoked===1?"":"s"}`);
+      setTimeout(()=>setToast(null),3500);
+    }catch(e){setErr(e.message||"Revoke failed");}
+    finally{setBusy(false);}
+  };
+
+  const fmtDate=s=>s?new Date(s).toLocaleString():"—";
+  const otherCount=sessions.filter(s=>!s.current).length;
+
+  return<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"22px 24px",marginTop:T.s4}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,marginBottom:T.s3,flexWrap:"wrap"}}>
+      <div>
+        <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>ACTIVE SESSIONS</div>
+        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+          Every device currently signed into MIZAN with your account. Revoke any that you don't recognize.
+        </p>
+      </div>
+      {otherCount>0&&<button onClick={revokeAllOthers} disabled={busy} className="btn-danger">Sign out all others</button>}
+    </div>
+
+    {toast&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain}}>✓ {toast}</div>}
+    {err&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>}
+
+    {loading
+      ?<div style={{fontFamily:FM,fontSize:11,color:T.muted,padding:`${T.s3} 0`}}>Loading…</div>
+      :sessions.length===0
+        ?<div style={{fontFamily:FU,fontSize:13,color:T.muted,padding:`${T.s3} 0`}}>No active sessions found.</div>
+        :<div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+          {sessions.map(s=>{
+            const ua=parseUA(s.user_agent);
+            return<div key={s.id} style={{
+              display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,flexWrap:"wrap",
+              background:T.surface,border:`1px solid ${s.current?T.gain+"40":T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`,
+            }}>
+              <div style={{display:"flex",alignItems:"center",gap:T.s3,minWidth:0,flex:1}}>
+                <span style={{fontSize:24,color:s.current?T.gain:T.muted,lineHeight:1}}>{deviceIcon(ua.device)}</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+                    {ua.browser} · {ua.os}
+                    {s.current&&<Tag label="CURRENT" color={T.gain}/>}
+                  </div>
+                  <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2,letterSpacing:"0.02em"}}>
+                    {s.ip?`IP ${s.ip} · `:""}signed in {fmtDate(s.created_at)}{s.last_seen_at&&s.last_seen_at!==s.created_at?` · seen ${fmtDate(s.last_seen_at)}`:""}
+                  </div>
+                </div>
+              </div>
+              {!s.current&&<button
+                onClick={()=>revoke(s.id)}
+                disabled={busy}
+                title="Revoke this session"
+                style={{padding:`6px ${T.s3}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:busy?"not-allowed":"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em"}}
+                onMouseEnter={e=>{e.currentTarget.style.color=T.loss;e.currentTarget.style.borderColor=T.loss+"60";}}
+                onMouseLeave={e=>{e.currentTarget.style.color=T.muted;e.currentTarget.style.borderColor=T.border;}}
+              >REVOKE</button>}
+            </div>;
+          })}
+        </div>}
   </div>;
 }
 
@@ -3980,6 +4105,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
       tabs={[
         ...(isRoot?[["keys","API Keys"]]:[]),
         ["brokers","Connect Accounts"],
+        ["account","Account"],
         ["security","Security"],
         ["assets","Manual Assets"],
         ["docs","Documents"],
@@ -4107,10 +4233,84 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
       </BentoTile>
     </div>}
 
+    {sub==="account"&&<AccountPanel/>}
     {sub==="security"&&<SecurityPanel/>}
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
     {sub==="privacy"&&<PrivacyPanel/>}
     {sub==="admin"&&isRoot&&<AdminPanel/>}
+  </div>;
+}
+
+/* ─── ACCOUNT PANEL (email change) ─────────────────────── */
+function AccountPanel(){
+  const{user}=useAuth();
+  const[newEmail,setNewEmail]=useState("");
+  const[currentPassword,setCurrentPassword]=useState("");
+  const[busy,setBusy]=useState(false);
+  const[ok,setOk]=useState(null);
+  const[err,setErr]=useState(null);
+
+  const valid=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())
+    && newEmail.trim().toLowerCase()!==(user?.email||"").toLowerCase()
+    && currentPassword.length>0;
+
+  const submit=async(e)=>{
+    e.preventDefault();
+    if(!valid||busy)return;
+    setBusy(true);setErr(null);setOk(null);
+    try{
+      const r=await apiFetch("/api/account/email",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({newEmail:newEmail.trim().toLowerCase(),currentPassword}),
+      });
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(j.error||`Failed (${r.status})`);
+      setOk(j.message||"Confirmation sent to new email.");
+      setNewEmail("");setCurrentPassword("");
+    }catch(e2){setErr(e2.message||"Email change failed");}
+    finally{setBusy(false);}
+  };
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CURRENT EMAIL</div>
+      <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{user?.email||"—"}</div>
+    </BentoTile>
+
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CHANGE EMAIL</div>
+      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:560}}>
+        Enter your new address and current password. Supabase will email a confirmation link to the new address — the change only takes effect after you click it.
+      </p>
+      <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:T.s3,maxWidth:480}}>
+        <label style={{display:"flex",flexDirection:"column",gap:T.s1}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>NEW EMAIL</span>
+          <input
+            type="email" autoComplete="email"
+            value={newEmail} onChange={e=>setNewEmail(e.target.value)}
+            placeholder="new@example.com"
+            className="field"
+            disabled={busy}
+          />
+        </label>
+        <label style={{display:"flex",flexDirection:"column",gap:T.s1}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>CURRENT PASSWORD</span>
+          <input
+            type="password" autoComplete="current-password"
+            value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)}
+            className="field"
+            disabled={busy}
+          />
+        </label>
+        <button type="submit" disabled={!valid||busy} className="btn-primary" style={{alignSelf:"flex-start"}}>
+          {busy?"Sending…":"Send verification"}
+        </button>
+      </form>
+
+      {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain,lineHeight:1.5}}>✓ {ok}</div>}
+      {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss,lineHeight:1.5}}>✗ {err}</div>}
+    </BentoTile>
   </div>;
 }
 
