@@ -2452,7 +2452,13 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
     if(positionsByClass[cls])positionsByClass[cls].push(h);
   });
   const total=Object.values(byClass).reduce((s,v)=>s+v,0);
-  const currentPct=k=>total>0?(byClass[k]/total)*100:0;
+  // The 5 targetable classes always reference the *rebalanceable* slice
+  // (excludes "Other" — crypto, bond funds, etc. — which the user manages
+  // out-of-band). This keeps the math exact: when each class hits its
+  // target, the 5 of them sum to 100% of (NAV − Other), and Other stays
+  // visible as informational at the bottom of the table.
+  const targetedTotal=Math.max(0,total-byClass.other);
+  const currentPct=k=>targetedTotal>0?(byClass[k]/targetedTotal)*100:0;
 
   // ── Drift ─────────────────────────────────────────────────────────
   const targetSum=ASSET_CLASSES.reduce((s,c)=>s+(+targets[c.key]||0),0);
@@ -2462,7 +2468,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
     const drift=cur-tgt;
     const absDrift=Math.abs(drift);
     const status=absDrift<=5?"ok":absDrift<=10?"warn":"alert";
-    const dollarDrift=(drift/100)*total;
+    const dollarDrift=(drift/100)*targetedTotal;
     return{cls:c,tgt,cur,drift,absDrift,status,dollarDrift,currentValue:byClass[c.key]};
   });
 
@@ -2564,8 +2570,8 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         background:`radial-gradient(circle at 0% 0%, ${T.blue}15, transparent 55%), ${T.card}`,
       }}>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PORTFOLIO REBALANCE</div>
-        <div style={{fontFamily:FU,fontSize:34,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmt$(total)}</div>
-        <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>across {holdings.length} positions + {fmt$(cashTotal)} cash</div>
+        <div style={{fontFamily:FU,fontSize:34,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmt$(targetedTotal)}</div>
+        <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>rebalanceable · total NAV {fmt$(total)} {byClass.other>0?<>· <span style={{color:T.dim}}>{fmt$(byClass.other)} held outside</span></>:null}</div>
         <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
           Set target weights per asset class. Mizan compares to your live allocation, flags drift, and proposes trades — one click pre-fills the Order Ticket.
         </p>
@@ -2607,7 +2613,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
             />
             <span style={{fontFamily:FM,fontSize:14,color:T.muted,fontWeight:600}}>%</span>
           </div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s2,fontVariantNumeric:"tabular-nums"}}>Target value {fmt$((+targets[c.key]||0)/100*total)}</div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s2,fontVariantNumeric:"tabular-nums"}}>Target value {fmt$((+targets[c.key]||0)/100*targetedTotal)}</div>
         </div>)}
       </div>
     </BentoTile>
@@ -2628,7 +2634,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         {l:"Status",r_:r=><Tag label={r.status==="ok"?"OK":r.status==="warn"?"Warning":"Alert"} color={r.status==="ok"?T.gain:r.status==="warn"?T.gold:T.loss}/>},
       ]} rows={driftRows}/>
       {byClass.other>0&&<div style={{padding:`${T.s3} ${T.s5}`,background:T.surface,borderTop:`1px solid ${T.border}`,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
-        Other / uncategorized (crypto, bonds, etc.): <span style={{color:T.text,fontWeight:600}}>{fmt$(byClass.other)}</span> · {(total>0?byClass.other/total*100:0).toFixed(1)}% — informational, not targeted.
+        Other / uncategorized (crypto, bonds, etc.): <span style={{color:T.text,fontWeight:600}}>{fmt$(byClass.other)}</span> · {(total>0?byClass.other/total*100:0).toFixed(1)}% of total NAV — held outside the rebalanceable slice. Targets above apply to the remaining <span style={{color:T.text,fontWeight:600}}>{fmt$(targetedTotal)}</span>.
       </div>}
     </BentoTile>
 
