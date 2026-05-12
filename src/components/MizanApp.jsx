@@ -1835,16 +1835,23 @@ const NISAB_USD = 5765; // 87.48g gold @ ~$66/g — updated periodically.
 
 function ZakatSadaqah({accounts=[]}){
   // The previous owner-only seed has been removed — it leaked the owner's
-  // actual donation list into the JS bundle (any visitor could read it via
-  // DevTools → Sources, even though the seed only fired for the owner's
-  // email). Owner's existing donations are already persisted in Supabase
-  // user_state.mizan_sadaqah and will hydrate normally on every sign-in.
-  // If you need to restore from scratch, use the CSV Import button below.
+  // actual donation list into the JS bundle. Owner's existing donations are
+  // already in Supabase user_state.mizan_sadaqah and hydrate on sign-in.
+  // To restore from scratch, use the CSV Import button.
   const[sadaqah,setSadaqah]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]");}catch{return[];}});
-  const[form,setForm]=useState({dt:new Date().toISOString().slice(0,10),org:"",amt:"",done:true});
+  const[form,setForm]=useState({dt:new Date().toISOString().slice(0,10),org:"",method:"",account:"",amt:"",done:true});
+  const[editingId,setEditingId]=useState(null);
+  const[editDraft,setEditDraft]=useState({});
   const[importBusy,setImportBusy]=useState(false);
   const[importStatus,setImportStatus]=useState(null);
   const importRef=useRef(null);
+
+  // Filter state
+  const[fSearch,setFSearch]=useState("");
+  const[fStatus,setFStatus]=useState("all");
+  const[fMethod,setFMethod]=useState("all");
+  const[fAccount,setFAccount]=useState("all");
+  const[fYear,setFYear]=useState("all");
 
   const manualAssets=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
   const acctTotal       = accounts.reduce((s,a)=>s+(a.balance||0),0);
@@ -1856,16 +1863,78 @@ function ZakatSadaqah({accounts=[]}){
   const pledged         = sadaqah.filter(s=>!s.done).reduce((a,b)=>a+(+b.amt||0),0);
   const fmtUSD          = v=>`$${(+v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
+  // Date normalization for CSV imports. Accepts MM/DD/YYYY, MM/DD/YY, and
+  // ISO formats; returns YYYY-MM-DD. "Pledge" / empty stays as-is so
+  // outstanding entries keep their human label.
+  const normalizeDt=s=>{
+    if(!s)return"";
+    const trimmed=s.trim();
+    if(!trimmed)return"";
+    // Already ISO?
+    if(/^\d{4}-\d{2}-\d{2}/.test(trimmed))return trimmed.slice(0,10);
+    // US format M/D/YYYY or M/D/YY
+    const m=trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if(m){
+      const yy=m[3].length===2?(+m[3]<70?2000+ +m[3]:1900+ +m[3]):+m[3];
+      return`${yy}-${String(+m[1]).padStart(2,"0")}-${String(+m[2]).padStart(2,"0")}`;
+    }
+    // Non-date sentinel like "Pledge" — keep raw
+    return trimmed;
+  };
+
+  // Unique method/account values for filter dropdowns
+  const allMethods=[...new Set(sadaqah.map(s=>s.method).filter(Boolean))].sort();
+  const allAccounts=[...new Set(sadaqah.map(s=>s.account).filter(Boolean))].sort();
+  const allYears=[...new Set(sadaqah.map(s=>(s.dt||"").slice(0,4)).filter(y=>/^\d{4}$/.test(y)))].sort().reverse();
+
+  // Apply filters
+  const filtered=sadaqah.filter(s=>{
+    if(fSearch&&!(s.org||"").toLowerCase().includes(fSearch.toLowerCase()))return false;
+    if(fStatus==="given"&&!s.done)return false;
+    if(fStatus==="pledged"&&s.done)return false;
+    if(fMethod!=="all"&&s.method!==fMethod)return false;
+    if(fAccount!=="all"&&s.account!==fAccount)return false;
+    if(fYear!=="all"&&!(s.dt||"").startsWith(fYear))return false;
+    return true;
+  }).sort((a,b)=>(b.dt||"").localeCompare(a.dt||""));
+  const filteredGiven  =filtered.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
+  const filteredPledged=filtered.filter(s=>!s.done).reduce((a,b)=>a+(+b.amt||0),0);
+  const hasActiveFilter=fSearch||fStatus!=="all"||fMethod!=="all"||fAccount!=="all"||fYear!=="all";
+
   const persist=arr=>{setSadaqah(arr);localStorage.setItem("mizan_sadaqah",JSON.stringify(arr));persistUserState("mizan_sadaqah",arr);};
-  const add=e=>{e.preventDefault();if(!form.org||!form.amt)return;persist([{id:`s-${Date.now()}`,...form,amt:+form.amt},...sadaqah]);setForm({...form,org:"",amt:""});};
+  const add=e=>{
+    e.preventDefault();
+    if(!form.org||!form.amt)return;
+    persist([{id:`s-${Date.now()}`,...form,amt:+form.amt},...sadaqah]);
+    setForm({...form,org:"",amt:""}); // keep method/account for next entry
+  };
   const remove=id=>{
     if(!window.confirm("Remove this donation entry?"))return;
     persist(sadaqah.filter(s=>s.id!==id));
   };
+  const startEdit=row=>{
+    setEditingId(row.id);
+    setEditDraft({
+      dt:row.dt||"",
+      org:row.org||"",
+      method:row.method||"",
+      account:row.account||"",
+      amt:String(row.amt||""),
+      done:!!row.done,
+    });
+  };
+  const saveEdit=()=>{
+    if(!editingId)return;
+    persist(sadaqah.map(s=>s.id===editingId?{...s,...editDraft,amt:+editDraft.amt||0}:s));
+    setEditingId(null);setEditDraft({});
+  };
+  const cancelEdit=()=>{setEditingId(null);setEditDraft({});};
 
-  // CSV import: expects "Date, Organization, Amount, Status" header row,
-  // case-insensitive. Status of "given"|"done"|"paid"|"y"|"yes"|"true"
-  // means donated; anything else means pledged. Fingerprint-dedups.
+  // CSV import: header-flexible. Recognizes:
+  //   Date(s), Organization(/Name/Recipient/Charity), Method(/Payment),
+  //   Account(/Source), Amount(/Amt/Total), Status(/Paid/Given/Pledged).
+  // Dates accept M/D/YYYY and M/D/YY. Amounts strip $ + commas.
+  // Fingerprint dedups by (dt, org, amount).
   const handleImport=async e=>{
     const file=e.target.files?.[0];
     if(!file)return;
@@ -1874,31 +1943,44 @@ function ZakatSadaqah({accounts=[]}){
       const text=await file.text();
       const lines=text.split(/\r?\n/).filter(l=>l.trim());
       if(lines.length<2)throw new Error("CSV needs a header row + at least one donation row.");
-      const split=l=>l.split(",").map(c=>c.trim().replace(/^"|"$/g,""));
-      const header=split(lines[0]).map(h=>h.toLowerCase());
-      const idx={
-        date:header.findIndex(h=>h.includes("date")),
-        org: header.findIndex(h=>h.includes("org")||h.includes("recipient")||h.includes("charity")),
-        amt: header.findIndex(h=>h.includes("amount")||h.includes("amt")||h.includes("total")),
-        stat:header.findIndex(h=>h.includes("status")||h.includes("paid")||h.includes("given")||h.includes("pledged")),
+      // Quote-aware splitter so "$2,000.00" doesn't break on the embedded comma.
+      const split=l=>{
+        const out=[];let cur="",inQ=false;
+        for(const c of l){
+          if(c==='"'){inQ=!inQ;continue;}
+          if(c===","&&!inQ){out.push(cur);cur="";continue;}
+          cur+=c;
+        }
+        out.push(cur);return out.map(s=>s.trim());
       };
-      if(idx.date<0||idx.org<0||idx.amt<0)throw new Error("CSV must have Date, Organization, and Amount columns.");
+      const header=split(lines[0]).map(h=>h.toLowerCase().trim());
+      const idx={
+        date:   header.findIndex(h=>h.includes("date")),
+        org:    header.findIndex(h=>h.includes("org")||h.includes("recipient")||h.includes("charity")||h.includes("name")),
+        method: header.findIndex(h=>h.includes("method")||h.includes("payment")||h.includes("pay")),
+        acct:   header.findIndex(h=>h.includes("account")||h.includes("source")||h.includes("from")),
+        amt:    header.findIndex(h=>h.includes("amount")||h.includes("amt")||h.includes("total")),
+        stat:   header.findIndex(h=>h.includes("status")||h.includes("paid")||h.includes("given")||h.includes("pledged")),
+      };
+      if(idx.date<0||idx.org<0||idx.amt<0)throw new Error("CSV needs at least Date, Organization, and Amount columns.");
       const DONE=new Set(["given","done","paid","y","yes","true","1"]);
       const seen=new Set(sadaqah.map(s=>`${s.dt}|${(s.org||"").toLowerCase()}|${+s.amt||0}`));
       const fresh=[];let skipped=0;
       lines.slice(1).forEach((l,i)=>{
         const cells=split(l);
-        const dt=cells[idx.date]||"";
-        const org=cells[idx.org]||"";
-        const amtStr=(cells[idx.amt]||"").replace(/[$,]/g,"");
+        const dt=normalizeDt(cells[idx.date]||"");
+        const org=(cells[idx.org]||"").trim();
+        const method=idx.method>=0?(cells[idx.method]||"").trim():"";
+        const account=idx.acct>=0?(cells[idx.acct]||"").trim():"";
+        const amtStr=(cells[idx.amt]||"").replace(/[$,]/g,"").trim();
         const amt=parseFloat(amtStr);
         if(!org||!Number.isFinite(amt))return;
-        const stat=idx.stat>=0?(cells[idx.stat]||"").toLowerCase():"given";
+        const stat=idx.stat>=0?(cells[idx.stat]||"").toLowerCase().trim():"given";
         const done=DONE.has(stat);
         const fp=`${dt}|${org.toLowerCase()}|${amt}`;
         if(seen.has(fp)){skipped++;return;}
         seen.add(fp);
-        fresh.push({id:`s-${Date.now()}-${i}`,dt,org,amt,done});
+        fresh.push({id:`s-${Date.now()}-${i}`,dt,org,method,account,amt,done});
       });
       if(fresh.length===0){setImportStatus({ok:true,msg:`No new rows — all ${skipped} entries were already in your history.`});}
       else{
@@ -1960,12 +2042,14 @@ function ZakatSadaqah({accounts=[]}){
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>LOG A DONATION</div>
         <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
           <input ref={importRef} type="file" accept=".csv,text/csv" onChange={handleImport} style={{display:"none"}}/>
-          <button onClick={()=>importRef.current?.click()} disabled={importBusy} className="btn-ghost" title="Import a CSV with columns: Date, Organization, Amount, Status">{importBusy?"Importing…":"Import CSV"}</button>
+          <button onClick={()=>importRef.current?.click()} disabled={importBusy} className="btn-ghost" title="Import CSV with columns: Date, Organization, Method, Account, Amount, Status">{importBusy?"Importing…":"Import CSV"}</button>
         </div>
       </div>
-      <form onSubmit={add} className="mz-form-row" style={{display:"grid",gridTemplateColumns:"140px 1fr 130px 110px auto",gap:T.s2,alignItems:"end"}}>
+      <form onSubmit={add} className="mz-form-row" style={{display:"grid",gridTemplateColumns:"130px 1fr 120px 110px 110px 100px auto",gap:T.s2,alignItems:"end"}}>
         <input type="date" value={form.dt} onChange={e=>setForm({...form,dt:e.target.value})} className="field"/>
         <input placeholder="Organization" value={form.org} onChange={e=>setForm({...form,org:e.target.value})} className="field"/>
+        <input list="dn-methods" placeholder="Method" value={form.method} onChange={e=>setForm({...form,method:e.target.value})} className="field"/>
+        <input list="dn-accts" placeholder="Account" value={form.account} onChange={e=>setForm({...form,account:e.target.value})} className="field"/>
         <input type="number" step="0.01" placeholder="Amount" value={form.amt} onChange={e=>setForm({...form,amt:e.target.value})} className="field" style={{fontVariantNumeric:"tabular-nums"}}/>
         <select value={form.done?"done":"pledged"} onChange={e=>setForm({...form,done:e.target.value==="done"})} className="field" style={{cursor:"pointer"}}>
           <option value="done">Given</option>
@@ -1973,24 +2057,81 @@ function ZakatSadaqah({accounts=[]}){
         </select>
         <button type="submit" className="btn-primary">Add</button>
       </form>
+      <datalist id="dn-methods">{["Debit Card","Credit Card","Zelle","Cash","Check","Wire","Crypto","TBD",...allMethods].filter((v,i,a)=>a.indexOf(v)===i).map(m=><option key={m} value={m}/>)}</datalist>
+      <datalist id="dn-accts">{["Checking","Savings","Brokerage","Cash",...allAccounts].filter((v,i,a)=>a.indexOf(v)===i).map(m=><option key={m} value={m}/>)}</datalist>
       {importStatus&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:importStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(importStatus.ok?T.gain:T.loss)+"30"}`,color:importStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{importStatus.ok?"✓ ":"✗ "}{importStatus.msg}</div>}
     </BentoTile>
 
-    {/* ─── ROW 3: Donation history ─────────────────── */}
+    {/* ─── ROW 3: Filters ──────────────────────────── */}
+    <BentoTile>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>FILTER DONATIONS</span>
+        {hasActiveFilter&&<button onClick={()=>{setFSearch("");setFStatus("all");setFMethod("all");setFAccount("all");setFYear("all");}} className="btn-ghost" style={{fontSize:10,padding:`4px ${T.s3}`}}>Clear</button>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 120px 140px 140px 120px",gap:T.s2}}>
+        <input placeholder="Search organization…" value={fSearch} onChange={e=>setFSearch(e.target.value)} className="field"/>
+        <select value={fStatus} onChange={e=>setFStatus(e.target.value)} className="field" style={{cursor:"pointer"}}>
+          <option value="all">All status</option>
+          <option value="given">Given</option>
+          <option value="pledged">Pledged</option>
+        </select>
+        <select value={fMethod} onChange={e=>setFMethod(e.target.value)} className="field" style={{cursor:"pointer"}}>
+          <option value="all">All methods</option>
+          {allMethods.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+        <select value={fAccount} onChange={e=>setFAccount(e.target.value)} className="field" style={{cursor:"pointer"}}>
+          <option value="all">All accounts</option>
+          {allAccounts.map(a=><option key={a} value={a}>{a}</option>)}
+        </select>
+        <select value={fYear} onChange={e=>setFYear(e.target.value)} className="field" style={{cursor:"pointer"}}>
+          <option value="all">All years</option>
+          {allYears.map(y=><option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+    </BentoTile>
+
+    {/* ─── ROW 4: Donation history ─────────────────── */}
     <BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DONATION HISTORY</span>
-        <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(given)} given{pledged>0?` · ${fmtUSD(pledged)} pledged`:""}</span>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DONATION HISTORY{hasActiveFilter?<span style={{color:T.blue,marginLeft:T.s2}}>· {filtered.length} of {sadaqah.length}</span>:""}</span>
+        <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(hasActiveFilter?filteredGiven:given)} given{(hasActiveFilter?filteredPledged:pledged)>0?` · ${fmtUSD(hasActiveFilter?filteredPledged:pledged)} pledged`:""}</span>
       </div>
       {sadaqah.length===0
         ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No donations logged yet. Add one with the form above, or import a CSV.</div>
-        :<Tbl cols={[
-          {l:"Date",       r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.dt||"—"}</span>},
-          {l:"Organization",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.org}</span>},
-          {l:"Amount",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.gold,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.amt)}</span>},
-          {l:"Status",     r_:r=><Tag label={r.done?"Given":"Pledged"} color={r.done?T.gain:T.gold}/>},
-          {l:"",r:true,    r_:r=><button onClick={()=>remove(r.id)} title="Remove this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>},
-        ]} rows={[...sadaqah].sort((a,b)=>(b.dt||"").localeCompare(a.dt||""))}/>}
+        :filtered.length===0
+          ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No donations match these filters. <button onClick={()=>{setFSearch("");setFStatus("all");setFMethod("all");setFAccount("all");setFYear("all");}} style={{background:"none",border:"none",color:T.blue,cursor:"pointer",textDecoration:"underline",font:"inherit"}}>Clear filters</button></div>
+          :<Tbl cols={[
+            {l:"Date",        r_:r=>editingId===r.id
+              ?<input type="date" value={editDraft.dt} onChange={e=>setEditDraft({...editDraft,dt:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
+              :<span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.dt||"—"}</span>},
+            {l:"Organization",r_:r=>editingId===r.id
+              ?<input value={editDraft.org} onChange={e=>setEditDraft({...editDraft,org:e.target.value})} className="field" style={{fontSize:12,padding:`4px ${T.s2}`}}/>
+              :<span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.org}</span>},
+            {l:"Method",      r_:r=>editingId===r.id
+              ?<input list="dn-methods" value={editDraft.method} onChange={e=>setEditDraft({...editDraft,method:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
+              :<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.method||"—"}</span>},
+            {l:"Account",     r_:r=>editingId===r.id
+              ?<input list="dn-accts" value={editDraft.account} onChange={e=>setEditDraft({...editDraft,account:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
+              :<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.account||"—"}</span>},
+            {l:"Amount",r:true,r_:r=>editingId===r.id
+              ?<input type="number" step="0.01" value={editDraft.amt} onChange={e=>setEditDraft({...editDraft,amt:e.target.value})} className="field" style={{fontSize:12,padding:`4px ${T.s2}`,fontVariantNumeric:"tabular-nums",textAlign:"right"}}/>
+              :<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.gold,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.amt)}</span>},
+            {l:"Status",      r_:r=>editingId===r.id
+              ?<select value={editDraft.done?"done":"pledged"} onChange={e=>setEditDraft({...editDraft,done:e.target.value==="done"})} className="field" style={{fontSize:10,padding:`4px ${T.s2}`,cursor:"pointer"}}>
+                <option value="done">Given</option>
+                <option value="pledged">Pledged</option>
+              </select>
+              :<Tag label={r.done?"Given":"Pledged"} color={r.done?T.gain:T.gold}/>},
+            {l:"",r:true,     r_:r=>editingId===r.id
+              ?<div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
+                <button onClick={saveEdit} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:`${T.gain}18`,border:`1px solid ${T.gain}40`,color:T.gain,cursor:"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em"}}>SAVE</button>
+                <button onClick={cancelEdit} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:10,letterSpacing:"0.04em"}}>×</button>
+              </div>
+              :<div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
+                <button onClick={()=>startEdit(r)} title="Edit this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:10,letterSpacing:"0.04em"}}>EDIT</button>
+                <button onClick={()=>remove(r.id)} title="Remove this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>
+              </div>},
+          ]} rows={filtered}/>}
     </BentoTile>
   </div>;
 }
