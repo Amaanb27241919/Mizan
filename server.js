@@ -233,8 +233,10 @@ const server = http.createServer(async (req, res) => {
     catch (err) {
       logLine(`api error: ${err.stack || err}`);
       const status = Number.isInteger(err?.status) ? err.status : 500;
+      const body = { error: err.message };
+      if (typeof err?.code === "string") body.code = err.code;
       res.writeHead(status, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: err.message }));
+      res.end(JSON.stringify(body));
     }
     return;
   }

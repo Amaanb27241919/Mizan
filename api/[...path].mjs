@@ -38,7 +38,9 @@ export default async function handler(req, res) {
     // Report to Sentry (no-op when DSN unset; PII scrubbed in beforeSend)
     try { Sentry.captureException(err); } catch { /* swallow */ }
     const status = Number.isInteger(err?.status) ? err.status : 500;
-    res.status(status).json({ error: err.message || "Internal error" });
+    const body = { error: err.message || "Internal error" };
+    if (typeof err?.code === "string") body.code = err.code;
+    res.status(status).json(body);
   }
 }
 

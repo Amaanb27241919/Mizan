@@ -42,3 +42,6 @@ yarn-error.log*
 public/icon-192.png
 public/icon-512.png
 .vercel
+
+# Claude Code local state
+.claude/

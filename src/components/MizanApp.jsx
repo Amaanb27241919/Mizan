@@ -4799,10 +4799,11 @@ function AdminPanel(){
 }
 
 /* ─── CONNECT MODAL ──────────────────────────────────── */
-function ConnectModal({onClose,snapId}){
+function ConnectModal({onClose,snapId,onConnected}){
   const [step, setStep] = useState("select");
   const [sel,  setSel]  = useState(null);
   const [url,  setUrl]  = useState("");
+  const [errMsg, setErrMsg] = useState("");
   const [search, setSearch] = useState("");
   const [conn, setConn] = useState(()=>{
     try { return JSON.parse(localStorage.getItem("mizan_brokers")||"[]"); }
@@ -4860,6 +4861,11 @@ function ConnectModal({onClose,snapId}){
           setConn(u);
         }
         setStep("done");
+        // Ask SnapTrade to pull fresh balances/positions from the broker
+        // so the new connection reflects current state immediately
+        // instead of whatever SnapTrade had cached before linking. Best
+        // effort; the user can still click Force Refresh manually.
+        try { onConnected?.({ broker: sel?.id, authorizationId: d.authorizationId }); } catch {}
       } else if (d.status === "ERROR") {
         setStep("error");
       } else if (d==="CLOSED" || d==="CLOSE_MODAL" || d==="ABANDONED") {
@@ -4870,21 +4876,43 @@ function ConnectModal({onClose,snapId}){
     return () => window.removeEventListener("message", h, false);
   }, [sel, conn]);
 
-  const connect = b => {
+  const connect = async b => {
     if (!snapId || snapId.length < 6) { setStep("nokeys"); return; }
     setSel(b);
     setStep("loading");
-    apiFetch("/api/snaptrade/login", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({broker: b.id, connectionType: "read"})
-    })
-    .then(r => r.json())
-    .then(d => {
-      if (d.loginLink) { setUrl(d.loginLink); setStep("iframe"); }
-      else { setStep("noserver"); }
-    })
-    .catch(() => setStep("noserver"));
+    setErrMsg("");
+    try {
+      const r = await apiFetch("/api/snaptrade/login", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({broker: b.id, connectionType: "read"})
+      });
+      let d = null;
+      try { d = await r.json(); } catch {}
+      if (r.ok && d?.loginLink) {
+        setUrl(d.loginLink);
+        setStep("iframe");
+        return;
+      }
+      const detail = d?.error
+        ? (typeof d.error === "string" ? d.error : JSON.stringify(d.error))
+        : `HTTP ${r.status}`;
+      setErrMsg(detail);
+      setStep("error");
+      try { console.error("[snaptrade.login] failed", { status: r.status, body: d }); } catch {}
+    } catch (err) {
+      // True network/fetch failure: server unreachable. Only show the
+      // "node server.js" dev hint in development; in production this is
+      // an unexpected outage and users should see a friendly error.
+      const isDev = !!(import.meta && import.meta.env && import.meta.env.DEV);
+      if (isDev) {
+        setStep("noserver");
+      } else {
+        setErrMsg(err?.message || "Network error");
+        setStep("error");
+      }
+      try { console.error("[snaptrade.login] network error", err); } catch {}
+    }
   };
 
   const isConn = id => conn.some(b => b.id===id && b.status==="connected");
@@ -5031,6 +5059,16 @@ function ConnectModal({onClose,snapId}){
           <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
             justifyContent:"center",padding:40,gap:12,textAlign:"center"}}>
             <div style={{fontFamily:FM,fontSize:13,color:T.loss}}>Connection Failed</div>
+            <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.6,maxWidth:340}}>
+              We couldn't set up your broker connection right now. This is usually temporary — please try again.
+              If it keeps happening, contact support.
+            </div>
+            {errMsg && (
+              <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,
+                padding:"8px 12px",fontFamily:FM,fontSize:10,color:T.muted,maxWidth:340,wordBreak:"break-word"}}>
+                {errMsg}
+              </div>
+            )}
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>sel&&connect(sel)}
                 style={{padding:"7px 14px",borderRadius:6,background:`${T.blue}18`,
@@ -6852,7 +6890,7 @@ export default function Mizan(){
       })}
     </nav>
 
-    {showConn&&<ConnectModal onClose={()=>setConn(false)} snapId={apiKeys.snapId}/>}
+    {showConn&&<ConnectModal onClose={()=>setConn(false)} snapId={apiKeys.snapId} onConnected={()=>{ try{forceRefresh();}catch{} }}/>}
 
     {/* Keyboard shortcuts + command palette. Both global at the root so
         every nav target and action is one keystroke away. */}

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import * as Sentry from '@sentry/react'
 import MizanApp from './components/MizanApp.jsx'
 import Login from './components/Login.jsx'
+import Privacy from './components/Privacy.jsx'
+import Terms from './components/Terms.jsx'
 import { AuthProvider, useAuth } from './lib/auth.jsx'
 import { hydrateUserState } from './lib/userState.js'
 
@@ -85,7 +87,26 @@ function Gate() {
   return <MizanApp key={user?.id || 'anonymous'} />
 }
 
+// Render public legal pages BEFORE any auth / app initialization so they
+// are always reachable. Plaid's compliance review and search crawlers must
+// be able to load these without a logged-in session.
+function publicLegalRoute() {
+  if (typeof window === 'undefined') return null
+  const p = window.location.pathname.replace(/\/+$/, '').toLowerCase()
+  if (p === '/privacy' || p === '/privacy-policy') return <Privacy />
+  if (p === '/terms' || p === '/terms-of-service' || p === '/tos') return <Terms />
+  return null
+}
+
 export default function App() {
+  const legal = publicLegalRoute()
+  if (legal) {
+    return (
+      <Sentry.ErrorBoundary fallback={({ resetError }) => <SentryFallback resetError={resetError} />}>
+        {legal}
+      </Sentry.ErrorBoundary>
+    )
+  }
   return (
     <Sentry.ErrorBoundary fallback={({ resetError }) => <SentryFallback resetError={resetError} />}>
       <AuthProvider>
