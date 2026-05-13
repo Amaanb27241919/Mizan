@@ -43,7 +43,7 @@ export default function Terms() {
             secrets.</li>
         <li>You are responsible for all activity that occurs under your
             account.</li>
-        <li>Notify us immediately at <a href="mailto:noreply@omni-flow.net">noreply@omni-flow.net</a> if
+        <li>Notify us immediately at <a href="mailto:khanstyle02@gmail.com">khanstyle02@gmail.com</a> if
             you suspect unauthorized access to your account.</li>
       </ul>
 
@@ -136,7 +136,7 @@ export default function Terms() {
       <h2>12. Contact</h2>
       <p>
         Questions about these Terms?
-        Email <a href="mailto:noreply@omni-flow.net">noreply@omni-flow.net</a>.
+        Email <a href="mailto:khanstyle02@gmail.com">khanstyle02@gmail.com</a>.
       </p>
     </LegalLayout>
   );

@@ -17,7 +17,7 @@ export default function Privacy() {
         to throughout this policy as "we" or "the operator"). The service is
         hosted at <a href="https://mizan-puce.vercel.app">https://mizan-puce.vercel.app</a>.
         For all privacy-related questions or data-subject requests,
-        contact <a href="mailto:noreply@omni-flow.net">noreply@omni-flow.net</a>.
+        contact <a href="mailto:khanstyle02@gmail.com">khanstyle02@gmail.com</a>.
       </p>
 
       <h2>2. What data we collect</h2>
@@ -144,7 +144,7 @@ export default function Privacy() {
       </ul>
       <p>
         To exercise any of these rights,
-        email <a href="mailto:noreply@omni-flow.net">noreply@omni-flow.net</a>.
+        email <a href="mailto:khanstyle02@gmail.com">khanstyle02@gmail.com</a>.
         We will respond within 30 days.
       </p>
 
@@ -184,7 +184,7 @@ export default function Privacy() {
       <h2>10. Contact</h2>
       <p>
         Questions, data requests, or complaints?
-        Email <a href="mailto:noreply@omni-flow.net">noreply@omni-flow.net</a>.
+        Email <a href="mailto:khanstyle02@gmail.com">khanstyle02@gmail.com</a>.
       </p>
     </LegalLayout>
   );

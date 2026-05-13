@@ -234,7 +234,11 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured || !supabase) {
       return { error: null };
     }
-    return supabase.auth.signOut();
+    // scope: 'local' — only kills the session on THIS device. Without it,
+    // supabase-js defaults to 'global' and revokes every active session
+    // for the user, kicking them out of every other browser/tab/phone.
+    // Use the Sessions panel for an explicit "log me out everywhere" flow.
+    return supabase.auth.signOut({ scope: 'local' });
   };
 
   const exitRecovery = () => setRecoveryMode(false);

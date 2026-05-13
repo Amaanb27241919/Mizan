@@ -2,7 +2,7 @@
 
 **Effective date:** 2026-05-12
 **Operator:** Amaan Khan (sole operator)
-**Contact:** noreply@omni-flow.net
+**Contact:** khanstyle02@gmail.com
 
 This document describes the security practices that govern MĪZAN
 (https://mizan-puce.vercel.app), a personal finance dashboard that
@@ -163,7 +163,7 @@ and a published security policy before integration:
 
 ## 9. Contact
 
-Security questions or vulnerability reports: noreply@omni-flow.net
+Security questions or vulnerability reports: khanstyle02@gmail.com
 
 For end-user data requests (access, deletion, correction), refer to the
 contact channel listed in the Privacy Policy at

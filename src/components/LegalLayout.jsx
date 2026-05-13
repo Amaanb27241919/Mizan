@@ -25,7 +25,7 @@ export default function LegalLayout({ title, updated, children }) {
         <footer className="mz-legal-footer">
           <span>© 2026 MĪZAN · Operated by Amaan Khan</span>
           <span>
-            <a href="mailto:noreply@omni-flow.net">noreply@omni-flow.net</a>
+            <a href="mailto:khanstyle02@gmail.com">khanstyle02@gmail.com</a>
           </span>
         </footer>
       </div>
