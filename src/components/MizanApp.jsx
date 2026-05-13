@@ -5268,7 +5268,7 @@ function About(){
 // Bank accounts (checking/savings/credit), recent transactions, spending
 // summary by category, recurring subscription detection. Powered by Plaid
 // via the server proxy at /api/plaid/*.
-function Finances({onBankBalanceChange,demoMode=false}){
+function Finances({onBankBalanceChange,demoMode=false,onNav}){
   const{user}=useAuth();
   // In demo mode short-circuit straight to the local fixtures so the
   // tab is fully populated without ever talking to Plaid. Toggle off
@@ -5345,7 +5345,13 @@ function Finances({onBankBalanceChange,demoMode=false}){
     setBusy(true);setStatus(null);
     try{
       const r=await apiFetch("/api/plaid/link-token",{method:"POST"});
-      const d=await r.json();
+      const d=await r.json().catch(()=>({}));
+      // MFA gate from the server. Surface a specific CTA so the user
+      // knows exactly what to do next instead of getting a raw error.
+      if(r.status===403&&(d.code==="MFA_ENROLLMENT_REQUIRED"||d.code==="MFA_VERIFICATION_REQUIRED")){
+        setStatus({ok:false,msg:d.error||"Multi-factor authentication required.",code:d.code});
+        return;
+      }
       if(!r.ok||!d.link_token)throw new Error(d.error||"Could not start Plaid Link");
       setLinkToken(d.link_token);
       if(!PlaidLink){
@@ -5424,7 +5430,15 @@ function Finances({onBankBalanceChange,demoMode=false}){
         </div>
         <button onClick={startLink} disabled={busy||demoMode} title={demoMode?"Disable demo mode in Settings to connect a real bank":undefined} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":demoMode?"+ Connect Bank (demo)":"+ Connect Bank"}</button>
       </div>
-      {status&&<div style={{marginTop:T.s4,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss}}>{status.ok?"✓ ":"✗ "}{status.msg}</div>}
+      {status&&<div style={{marginTop:T.s4,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,display:"flex",alignItems:"center",gap:T.s3,flexWrap:"wrap"}}>
+        <span style={{flex:"1 1 auto"}}>{status.ok?"✓ ":"✗ "}{status.msg}</span>
+        {(status.code==="MFA_ENROLLMENT_REQUIRED"||status.code==="MFA_VERIFICATION_REQUIRED")&&onNav&&
+          <button onClick={()=>onNav("settings")}
+            style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.loss}`,background:"transparent",color:T.loss,fontFamily:FM,fontSize:11,fontWeight:600,cursor:"pointer",letterSpacing:"0.04em"}}>
+            {status.code==="MFA_ENROLLMENT_REQUIRED"?"Enable 2FA":"Verify 2FA"}
+          </button>
+        }
+      </div>}
     </BentoTile>
 
     {/* ─── INSTITUTIONS + ACCOUNTS ─────────────────── */}
@@ -6850,7 +6864,7 @@ export default function Mizan(){
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance}/>}
-        {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode}/>}
+        {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
