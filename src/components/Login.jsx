@@ -411,6 +411,26 @@ export default function Login() {
               {submitting ? 'Working…' : button}
             </button>
 
+            {mode === 'signup' && (
+              <div style={{
+                marginTop: 14,
+                fontSize: 11,
+                lineHeight: 1.55,
+                color: '#7C8597',
+                fontFamily: SF,
+                textAlign: 'center',
+              }}>
+                By creating an account, you agree to MĪZAN's{' '}
+                <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#7B61FF', textDecoration: 'none' }}>
+                  Terms of Service
+                </a>{' '}and{' '}
+                <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#7B61FF', textDecoration: 'none' }}>
+                  Privacy Policy
+                </a>,
+                and consent to the collection, processing, and storage of your data as described in our Privacy Policy.
+              </div>
+            )}
+
             {!isSupabaseConfigured && (
               <div style={styles.error}>
                 Supabase not configured — see supabase/README.md.
