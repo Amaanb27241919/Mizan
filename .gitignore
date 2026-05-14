@@ -45,3 +45,6 @@ public/icon-512.png
 
 # Claude Code local state
 .claude/
+
+# SnapTrade migration backups — contain user_secrets; never commit
+scripts/_snaptrade-backups/
