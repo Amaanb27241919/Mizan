@@ -786,8 +786,8 @@ function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto",WebkitOverfl
 
 // Tab bar — pill-style segmented control. Active pill gets a soft purple
 // halo. Scrolls horizontally on mobile via .mz-tabbar overflow handling.
-function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar" style={{
-  display:"flex",gap:T.s1,marginBottom:T.s5,padding:T.s1,
+function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar-wrap" style={{marginBottom:T.s5}}><div className="mz-tabbar" style={{
+  display:"flex",gap:T.s1,padding:T.s1,
   background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rLg,
   overflowX:"auto",WebkitOverflowScrolling:"touch",
 }}>{tabs.map(([id,l])=>{
@@ -801,7 +801,7 @@ function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar" 
     boxShadow:on?`0 1px 3px rgba(0,0,0,0.18), 0 0 0 1px ${acc}24`:"none",
     transition:"all 0.15s ease",
   }}>{l}</button>;
-})}</div>;}
+})}</div></div>;}
 
 /* ─── CSV PARSER (Fidelity / Robinhood / Coinbase) ───── */
 // Returns activity rows shaped like SnapTrade's /activities response so they
@@ -4616,7 +4616,40 @@ function PrivacyPanel(){
     </BentoTile>;
   }
 
+  const LEGAL_DOCS=[
+    {l:"Privacy Policy",      desc:"What we collect, how we use it, your rights under GDPR/CCPA.", href:"/privacy",                          ext:false},
+    {l:"Terms of Service",    desc:"Service rules, disclaimers, limitations of liability.",         href:"/terms",                            ext:false},
+    {l:"Security Policy",     desc:"Encryption, access control, monitoring, and incident response.",href:"/legal/SECURITY_POLICY.pdf",        ext:true},
+    {l:"Access Controls Policy",desc:"RBAC, MFA, periodic access reviews, secret management.",     href:"/legal/ACCESS_CONTROLS_POLICY.pdf", ext:true},
+    {l:"Data Retention Policy",desc:"What we keep, how long, when it's deleted, vendor handling.",  href:"/legal/DATA_RETENTION_POLICY.pdf",  ext:true},
+  ];
+
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>LEGAL DOCUMENTS</div>
+      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:600}}>
+        Our public-facing policies. Always available without a login at the same URLs — Plaid, Supabase, and your auditors can reach them too.
+      </p>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+        {LEGAL_DOCS.map(d=><a key={d.href} href={d.href} target={d.ext?"_blank":undefined} rel={d.ext?"noreferrer":undefined}
+          style={{
+            display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,
+            padding:`${T.s3} ${T.s4}`,
+            background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,
+            textDecoration:"none",color:"inherit",cursor:"pointer",
+            transition:"border-color 0.15s, background 0.15s",
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.borderHi;e.currentTarget.style.background=T.card;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.surface;}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{d.l}</div>
+            <div style={{fontFamily:FU,fontSize:12,color:T.muted,marginTop:2,lineHeight:1.45}}>{d.desc}</div>
+          </div>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em",flexShrink:0}}>{d.ext?"PDF ↗":"OPEN ↗"}</span>
+        </a>)}
+      </div>
+    </BentoTile>
+
     <BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DOWNLOAD MY DATA</div>
       <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
@@ -6776,8 +6809,39 @@ export default function Mizan(){
 
       /* TabBar — keep horizontal scrolling but hide the scrollbar so it
          doesn't look broken on iPhone Safari. Tabs stay reachable via swipe. */
-      .mz-tabbar { scrollbar-width: none; -ms-overflow-style: none; }
+      .mz-tabbar {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        scroll-snap-type: x proximity;
+        scroll-padding-left: 6px;
+        position: relative;
+      }
       .mz-tabbar::-webkit-scrollbar { display: none; }
+      .mz-tabbar > button { scroll-snap-align: start; }
+      /* Right-edge fade so users see there's more to scroll on narrow screens.
+         Pure background gradient that doesn't intercept clicks. */
+      .mz-tabbar-wrap {
+        position: relative;
+      }
+      .mz-tabbar-wrap::after {
+        content: "";
+        position: absolute;
+        top: 0; right: 0; bottom: 0;
+        width: 36px;
+        pointer-events: none;
+        background: linear-gradient(to right, transparent, ${T.card});
+        border-radius: 0 var(--r-lg) var(--r-lg) 0;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      @media (max-width: 720px) {
+        .mz-tabbar-wrap::after { opacity: 1; }
+        .mz-tabbar > button {
+          padding: 11px 16px !important;
+          font-size: 13px !important;
+          min-height: 40px;
+        }
+      }
 
       /* Mobile / tablet responsive rules */
       @media (max-width: 900px) {

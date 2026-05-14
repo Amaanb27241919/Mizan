@@ -467,6 +467,24 @@ export default function Login() {
             </>
           )}
         </div>
+
+        <div style={{
+          marginTop: 18,
+          paddingTop: 14,
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '10px 14px',
+          justifyContent: 'center',
+          fontSize: 11,
+          color: '#5C6478',
+          fontFamily: SF,
+        }}>
+          <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Privacy</a>
+          <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Terms</a>
+          <a href="/legal/SECURITY_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Security</a>
+          <a href="/legal/DATA_RETENTION_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Data Retention</a>
+        </div>
       </div>
     </div>
   );

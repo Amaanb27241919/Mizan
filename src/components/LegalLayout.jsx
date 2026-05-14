@@ -24,8 +24,13 @@ export default function LegalLayout({ title, updated, children }) {
 
         <footer className="mz-legal-footer">
           <span>© 2026 MĪZAN · Operated by Amaan Khan</span>
-          <span>
-            <a href="mailto:khanstyle02@gmail.com">khanstyle02@gmail.com</a>
+          <span className="mz-legal-footer-links">
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+            <a href="/legal/SECURITY_POLICY.pdf" target="_blank" rel="noreferrer">Security</a>
+            <a href="/legal/ACCESS_CONTROLS_POLICY.pdf" target="_blank" rel="noreferrer">Access Controls</a>
+            <a href="/legal/DATA_RETENTION_POLICY.pdf" target="_blank" rel="noreferrer">Data Retention</a>
+            <a href="mailto:khanstyle02@gmail.com">Contact</a>
           </span>
         </footer>
       </div>
@@ -136,14 +141,25 @@ const styles = `
 .mz-legal-footer {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
   padding: 20px 32px;
   border-top: 1px solid #1F2530;
   font-size: 12px;
   color: #5C6478;
 }
+.mz-legal-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
 .mz-legal-footer a {
   color: #7C8597;
   text-decoration: none;
+}
+.mz-legal-footer a:hover {
+  color: #E7E9EC;
 }
 @media (max-width: 640px) {
   .mz-legal-header, .mz-legal-footer { padding: 16px 20px; }
