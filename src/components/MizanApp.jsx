@@ -5308,8 +5308,17 @@ function About(){
 // conditional hook call in the parent (the previous approach) violated
 // the Rules of Hooks the moment the lazy import resolved and crashed
 // the Finances tree under SentryFallback.
-function PlaidLinker({ usePlaidLinkHook, linkToken, onSuccess, onExit, shouldOpen }) {
-  const linkApi = usePlaidLinkHook({ token: linkToken, onSuccess, onExit });
+function PlaidLinker({ usePlaidLinkHook, linkToken, onSuccess, onExit, shouldOpen, receivedRedirectUri }) {
+  // receivedRedirectUri is set only when the user is returning from an
+  // OAuth bank's site. Passing it tells Plaid Link to resume the OAuth
+  // handshake using the same link_token that started the flow. For the
+  // happy path (initial Connect Bank click) we leave it undefined.
+  const linkApi = usePlaidLinkHook({
+    token: linkToken,
+    onSuccess,
+    onExit,
+    ...(receivedRedirectUri ? { receivedRedirectUri } : {}),
+  });
   useEffect(() => {
     if (shouldOpen && linkApi.ready && typeof linkApi.open === "function") {
       linkApi.open();
@@ -5391,6 +5400,50 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
 
   // Lazy-load react-plaid-link only when user clicks Connect (keeps initial bundle small).
   const[PlaidLink,setPlaidLink]=useState(null);
+  // OAuth resume: if the user is on /oauth-redirect (Plaid sent them back
+  // from the bank's site) we need the same link_token they started with,
+  // plus the full incoming URL, to resume Plaid Link. Stash the token in
+  // sessionStorage on startLink and read it back on mount below.
+  const PLAID_OAUTH_TOKEN_KEY="mizan_plaid_oauth_token";
+  const isOAuthRedirect=typeof window!=="undefined"&&(
+    window.location.pathname==="/oauth-redirect"||
+    /[?&]oauth_state_id=/.test(window.location.search||"")
+  );
+  const[receivedRedirectUri,setReceivedRedirectUri]=useState(
+    isOAuthRedirect?(typeof window!=="undefined"?window.location.href:null):null
+  );
+
+  // On mount, if we landed on /oauth-redirect (or a URL with ?oauth_state_id=…),
+  // reload the link_token from sessionStorage so Plaid Link can resume the
+  // OAuth handshake. Lazy-import react-plaid-link too so usePlaidLink is
+  // available. Plaid Link auto-opens once both token + receivedRedirectUri
+  // are wired into the hook.
+  useEffect(()=>{
+    if(!isOAuthRedirect)return;
+    let cancelled=false;
+    (async()=>{
+      try{
+        const stashed=sessionStorage.getItem(PLAID_OAUTH_TOKEN_KEY);
+        if(!stashed){
+          setStatus({ok:false,msg:"Lost the OAuth session. Please connect again."});
+          return;
+        }
+        if(!PlaidLink){
+          const mod=await import("react-plaid-link");
+          if(cancelled)return;
+          setPlaidLink(()=>mod);
+        }
+        if(cancelled)return;
+        setLinkToken(stashed);
+        setPlaidReady(true);
+      }catch(err){
+        setStatus({ok:false,msg:err.message||"OAuth resume failed"});
+      }
+    })();
+    return()=>{cancelled=true;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   const startLink=async()=>{
     setBusy(true);setStatus(null);
     try{
@@ -5403,6 +5456,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
         return;
       }
       if(!r.ok||!d.link_token)throw new Error(d.error||"Could not start Plaid Link");
+      // Stash the token for the OAuth redirect-back path. Same-origin
+      // sessionStorage survives the bank-site round trip.
+      try{sessionStorage.setItem(PLAID_OAUTH_TOKEN_KEY,d.link_token);}catch{}
       setLinkToken(d.link_token);
       if(!PlaidLink){
         const mod=await import("react-plaid-link");
@@ -5416,6 +5472,14 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
 
   const onPlaidSuccess=async(public_token,metadata)=>{
     setBusy(true);setStatus(null);
+    // Connection succeeded — clear the OAuth resume token + the
+    // ?oauth_state_id= URL params so a refresh doesn't try to resume
+    // an already-completed flow.
+    try{sessionStorage.removeItem(PLAID_OAUTH_TOKEN_KEY);}catch{}
+    if(typeof window!=="undefined"&&(window.location.pathname==="/oauth-redirect"||/[?&]oauth_state_id=/.test(window.location.search))){
+      window.history.replaceState({},"","/");
+    }
+    setReceivedRedirectUri(null);
     try{
       const r=await apiFetch("/api/plaid/exchange",{
         method:"POST",headers:{"Content-Type":"application/json"},
@@ -5474,6 +5538,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
         onSuccess={onPlaidSuccess}
         onExit={() => setPlaidReady(false)}
         shouldOpen={plaidReady}
+        receivedRedirectUri={receivedRedirectUri}
       />
     )}
     {/* ─── HERO: Total bank balance + Connect ─────────── */}
@@ -5975,6 +6040,17 @@ export default function Mizan(){
   // Persist active tab per-device so a reload lands you where you left off.
   // Per-device, not per-user — different devices may want different defaults.
   const[nav,setNavState]=useState(()=>{
+    // OAuth resume from Plaid: bank redirected the user back to
+    // /oauth-redirect (or any URL with ?oauth_state_id=…). Force the
+    // Finances tab so its onMount effect can resume Plaid Link instead
+    // of restoring whichever tab the user was last on.
+    try{
+      if(typeof window!=="undefined"){
+        const p=window.location.pathname;
+        const q=window.location.search||"";
+        if(p==="/oauth-redirect"||/[?&]oauth_state_id=/.test(q))return"finances";
+      }
+    }catch{}
     try{
       const v=localStorage.getItem("mizan_nav");
       // Guard against a stale value that no longer maps to a real tab.
