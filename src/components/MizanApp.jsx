@@ -1109,9 +1109,24 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
   // Falls back to summing position market values when no broker is connected.
   const equityValue=merged.reduce((s,h)=>s+mv(h),0);
   const balanceSum=snapAccounts.reduce((s,a)=>s+(a.balance||0),0);
-  const manualAssetTotal=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]").reduce((s,a)=>s+(+a.value||0),0);}catch{return 0;}})();
+  const manualAssetsRaw=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
+  const manualAssetTotal=manualAssetsRaw.reduce((s,a)=>s+(+a.value||0),0);
+  // Manual liabilities (entries flagged `liability:true`) — used to deduct from
+  // zakatable wealth on the Overview tile so it stays consistent with the
+  // Portfolio → Zakat & Sadaqah tab's calculation.
+  const manualLiabilities=manualAssetsRaw
+    .filter(a=>a.liability && a.zakatable !== false)
+    .reduce((s,a)=>s+(+a.value||0),0);
   const brokerageTot=snapAccounts.length>0?balanceSum:equityValue;
   const tot=brokerageTot+(bankBalance||0)+manualAssetTotal;
+  // Net zakatable wealth = positive brokerage + positive bank − debt − liabilities.
+  // Mirrors ZakatSadaqah's computation so both surfaces show consistent figures.
+  const zakatableForOverview=Math.max(0,
+    Math.max(0,brokerageTot)
+    + Math.max(0,bankBalance||0)
+    + manualAssetTotal
+    - manualLiabilities
+  );
   const totCost=merged.reduce((s,h)=>s+cost(h),0);
   // Gain is computed against position cost basis only (cash isn't a "gain")
   const gain=equityValue-totCost;
@@ -1341,8 +1356,8 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
       <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKAT DUE</div>
-          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(tot*0.025))}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>2.5% of net worth</div>
+          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(zakatableForOverview*0.025))}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>2.5% of net zakatable wealth</div>
         </BentoTile>
         <BentoTile>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANCE</div>
@@ -1646,10 +1661,14 @@ function AAOIFIScreener({holdings=[]}){
   const totalEquity=enriched.reduce((s,h)=>s+mv(h),0);
   const haramValue=byStatus.haram.reduce((s,h)=>s+mv(h),0);
   const reviewValue=byStatus.review.reduce((s,h)=>s+mv(h),0);
-  // Purification estimate: 5% × dividend × non-permissible income proxy (we
-  // don't have non-perm income from free APIs, so use a conservative 5%
-  // multiplier on review-status dividends).
-  // For now, surface the haram + review values as "purification candidates".
+  // Purification (tazkiyyah) only applies to non-permissible income received from
+  // holding the position — NOT the full market value. Without dividend/revenue
+  // breakdown data, approximate using an average dividend-yield basis:
+  //   haram: ~2% yield (~100% non-permissible income share)
+  //   review: ~0.5% yield (~50% × half non-permissible income share)
+  const haramPurification=haramValue*0.02;
+  const reviewPurification=reviewValue*0.005;
+  const purification=haramPurification+reviewPurification;
   const haramPct=totalEquity>0?(haramValue/totalEquity)*100:0;
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -1698,8 +1717,8 @@ function AAOIFIScreener({holdings=[]}){
       </BentoTile>
       <BentoTile accent={T.gold}>
         <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PURIFICATION EST.</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(haramValue*0.025+reviewValue*0.005)}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1}}>2.5% haram + 0.5% review</div>
+        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(purification)}</div>
+        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1,lineHeight:1.45}}>Estimate: dividend yield × non-permissible income share. Real purification depends on each holding's actual dividend distributions and revenue breakdown.</div>
       </BentoTile>
     </div>
 
@@ -1762,7 +1781,7 @@ function AAOIFIScreener({holdings=[]}){
 // Tax-loss harvesting candidates + estimated annual tax cost.
 // Pure compute — no API calls. Replacement suggestions are halal defaults
 // from the existing ETF universe (SPUS, HLAL, UMMA).
-function TaxPlanner({holdings=[],activities=[]}){
+function TaxPlanner({holdings=[],activities=[],snapAccounts=[]}){
   const[bracket,setBracket]=useState(0.24);
   const[stateBracket,setStateBracket]=useState(0.05);
 
@@ -1779,10 +1798,36 @@ function TaxPlanner({holdings=[],activities=[]}){
   const totalLoss=losers.reduce((s,h)=>s+h._loss,0);
   const taxSavings=Math.abs(totalLoss)*(bracket+stateBracket);
 
-  // YTD realized gain/loss from SELL activities
+  // YTD realized gain/loss from SELL activities.
+  // Exact realized P&L requires lot-level cost basis (FIFO/LIFO/spec ID) which
+  // we don't have from the brokerage feed. Defensible interim approach: estimate
+  // realized P&L per sell as (proceeds − units × position_avg_cost) using the
+  // current position's avg cost from snapAccounts. If the symbol is fully sold
+  // (no longer held), fall back to a 0 contribution. Sum across YTD sells.
+  // TODO: replace with true lot-level realized P&L once cost-basis lots are
+  // surfaced from the brokerage import — tracked in math-correctness audit.
   const ytdISO=`${new Date().getFullYear()}-01-01`;
   const ytdSells=activities.filter(a=>(a.type||"").toUpperCase()==="SELL"&&(a.trade_date||"")>=ytdISO);
-  const ytdRealized=ytdSells.reduce((s,a)=>s+(+a.amount||0),0);
+  // Build a symbol → avg cost lookup from current positions across visible accounts.
+  // Holdings (merged) is the primary source; snapAccounts positions are the
+  // fallback for any holding shape mismatch.
+  const avgCostBySymbol={};
+  holdings.forEach(h=>{const sym=(h.tk||"").toUpperCase();if(sym&&h.ac>0)avgCostBySymbol[sym]=h.ac;});
+  snapAccounts.forEach(a=>(a.positions||[]).forEach(p=>{
+    const sym=(p.symbol?.symbol||p.symbol||p.tk||"").toString().toUpperCase();
+    const ac=+p.average_purchase_price||+p.ac||0;
+    if(sym&&ac>0&&!avgCostBySymbol[sym])avgCostBySymbol[sym]=ac;
+  }));
+  let missingBasisCount=0;
+  const ytdRealized=ytdSells.reduce((s,a)=>{
+    const sym=((a.symbol&&(a.symbol.symbol||a.symbol))||"").toString().toUpperCase();
+    const proceeds=Math.abs(+a.amount||0);
+    const units=Math.abs(+a.units||0);
+    const ac=avgCostBySymbol[sym];
+    if(!sym||!units||!ac){missingBasisCount++;return s;}
+    const basis=units*ac;
+    return s+(proceeds-basis);
+  },0);
   const ytdDividends=activities.filter(a=>(a.type||"").toUpperCase()==="DIVIDEND"&&(a.trade_date||"")>=ytdISO).reduce((s,a)=>s+(+a.amount||0),0);
   const estTax=Math.max(0,(ytdRealized+ytdDividends)*(bracket+stateBracket));
 
@@ -1810,7 +1855,7 @@ function TaxPlanner({holdings=[],activities=[]}){
         <BentoTile accent={fc(ytdRealized)}>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YTD REALIZED</div>
           <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:fc(ytdRealized),letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{ytdRealized>=0?"+":""}{kf(Math.abs(ytdRealized))}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{ytdSells.length} sells YTD</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{ytdSells.length} sells YTD{missingBasisCount>0?` · ${missingBasisCount} need lot-level basis`:""}</div>
         </BentoTile>
         <BentoTile accent={T.loss}>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>EST. TAX OWED</div>
@@ -2188,7 +2233,7 @@ function ActivityPanel({activities=[],accounts=[]}){
 // Sadaqah is a user-entered ledger persisted to mizan_sadaqah (synced).
 const NISAB_USD = 5765; // 87.48g gold @ ~$66/g — updated periodically.
 
-function ZakatSadaqah({accounts=[],demoMode=false}){
+function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   // The previous owner-only seed has been removed — it leaked the owner's
   // actual donation list into the JS bundle. Owner's existing donations are
   // already in Supabase user_state.mizan_sadaqah and hydrate on sign-in.
@@ -2221,7 +2266,14 @@ function ZakatSadaqah({accounts=[],demoMode=false}){
     :(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
   const acctTotal       = accounts.reduce((s,a)=>s+(a.balance||0),0);
   const zakatableManual = manualAssets.filter(a=>a.zakatable).reduce((s,a)=>s+(a.value||0),0);
-  const zakatable       = acctTotal+zakatableManual;
+  // Deduct short-term debt from zakatable wealth per AAOIFI guidance.
+  // Bank credit/loan balances flow in via bankBalance (negative component).
+  // Manual assets with a `liability:true` flag are user-flagged short-term debts.
+  const liabilityTotal = manualAssets
+    .filter(a=>a.liability && a.zakatable !== false)
+    .reduce((s,a)=>s+(+a.value||0),0);
+  const negativeBank   = bankBalance < 0 ? Math.abs(bankBalance) : 0;
+  const zakatable      = Math.max(0, acctTotal + zakatableManual - liabilityTotal - negativeBank);
   const zakatDue        = zakatable*0.025;
   const aboveNisab      = zakatable >= NISAB_USD;
   const given           = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
@@ -2382,7 +2434,8 @@ function ZakatSadaqah({accounts=[],demoMode=false}){
           {[
             ["Brokerage",fmtUSD(acctTotal)],
             ["Manual zakatable",fmtUSD(zakatableManual)],
-            ["Total zakatable",fmtUSD(zakatable),true],
+            ["Short-term debt", `− ${fmtUSD(liabilityTotal+negativeBank)}`],
+            ["Net zakatable wealth (assets minus short-term debt)",fmtUSD(zakatable),true],
             ["Nisab threshold",fmtUSD(NISAB_USD)],
           ].map(([l,v,b])=><div key={l}>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
@@ -2786,7 +2839,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
 }
 
 /* ─── PORTFOLIO ──────────────────────────────────────── */
-function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav}){
+function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav,bankBalance=0}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[sub,setSub]=useState("holdings");
   const[acct,setAcct]=useState("all");
@@ -2955,9 +3008,9 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
 
     {sub==="rebalance"&&<Rebalancer holdings={merged} snapAccounts={snapAccounts} onNav={onNav}/>}
 
-    {sub==="tax"&&<TaxPlanner holdings={merged} activities={activities}/>}
+    {sub==="tax"&&<TaxPlanner holdings={merged} activities={activities} snapAccounts={snapAccounts}/>}
 
-    {sub==="zakat"&&<ZakatSadaqah accounts={snapAccounts} demoMode={demoMode}/>}
+    {sub==="zakat"&&<ZakatSadaqah accounts={snapAccounts} demoMode={demoMode} bankBalance={bankBalance}/>}
 
     {sub==="etfs"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
       <Tbl cols={[
@@ -3259,7 +3312,9 @@ function HistoricalBacktest(){
     }
     const closed=trades.filter(t=>t.side==="SELL");
     const wins=closed.filter(t=>t.return>0).length;
-    const totalRet=closed.reduce((s,t)=>s+(t.return||0),0);
+    // Chain returns multiplicatively: each trade's return (%) compounds the prior equity.
+    const chained=closed.reduce((acc,t)=>acc*(1+(t.return||0)/100),1)-1;
+    const totalRet=chained*100;
     const buyHold=bars.length>1?((bars[bars.length-1].c-bars[0].c)/bars[0].c)*100:0;
     return{series,trades,stats:{trades:closed.length,wins,losses:closed.length-wins,winRate:closed.length?(wins/closed.length)*100:0,totalRet,buyHold,bars:bars.length}};
   },[bars]);
@@ -7128,7 +7183,7 @@ export default function Mizan(){
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav}/>}
-        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav}/>}
+        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} bankBalance={bankBalance}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
