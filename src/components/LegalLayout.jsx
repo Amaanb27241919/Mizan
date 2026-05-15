@@ -13,6 +13,7 @@ export default function LegalLayout({ title, updated, children }) {
           <nav className="mz-legal-nav">
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
+            <a href="/contact">Contact</a>
           </nav>
         </header>
 
@@ -27,10 +28,10 @@ export default function LegalLayout({ title, updated, children }) {
           <span className="mz-legal-footer-links">
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
+            <a href="/contact">Contact</a>
             <a href="/legal/SECURITY_POLICY.pdf" target="_blank" rel="noreferrer">Security</a>
             <a href="/legal/ACCESS_CONTROLS_POLICY.pdf" target="_blank" rel="noreferrer">Access Controls</a>
             <a href="/legal/DATA_RETENTION_POLICY.pdf" target="_blank" rel="noreferrer">Data Retention</a>
-            <a href="mailto:khanstyle02@gmail.com">Contact</a>
           </span>
         </footer>
       </div>
