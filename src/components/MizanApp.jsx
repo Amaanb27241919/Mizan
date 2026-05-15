@@ -5652,6 +5652,39 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     }
   };
 
+  // Update mode: an existing Item's bank session expired or needs a
+  // re-auth (PENDING_EXPIRATION / ITEM_LOGIN_REQUIRED webhook from Plaid,
+  // or the user's bank changed credentials). The server looks up the
+  // stored access_token by item_id and returns a link_token in update
+  // mode, which Plaid Link uses to resume the existing connection
+  // instead of creating a new Item. No new access_token is issued.
+  const startUpdateMode=async(itemId,institutionName)=>{
+    setBusy(true);setStatus(null);
+    try{
+      const r=await apiFetch("/api/plaid/link-token",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({item_id:itemId}),
+      });
+      const d=await r.json().catch(()=>({}));
+      if(r.status===403&&(d.code==="MFA_ENROLLMENT_REQUIRED"||d.code==="MFA_VERIFICATION_REQUIRED")){
+        setStatus({ok:false,msg:d.error,code:d.code});
+        return;
+      }
+      if(!r.ok||!d.link_token)throw new Error(d.error||"Could not start update mode");
+      try{sessionStorage.setItem(PLAID_OAUTH_TOKEN_KEY,d.link_token);}catch{}
+      setLinkToken(d.link_token);
+      if(!PlaidLink){
+        const mod=await import("react-plaid-link");
+        setPlaidLink(()=>mod);
+      }
+      setPlaidReady(true);
+      setStatus({ok:true,msg:`Re-authorizing ${institutionName}…`});
+    }catch(err){
+      setStatus({ok:false,msg:err.message||"Re-authorize failed"});
+    }finally{setBusy(false);}
+  };
+
   const removeItem=async(itemId,institutionName)=>{
     if(!window.confirm(`Disconnect ${institutionName}? Your balances + transactions will stop syncing.`))return;
     setBusy(true);
@@ -5733,7 +5766,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     {institutions.map(inst=><BentoTile key={inst.item_id||inst.inst} accent={T.blue}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
         <div style={{fontFamily:FU,fontSize:16,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{inst.inst}</div>
-        <button onClick={()=>removeItem(inst.item_id,inst.inst)} disabled={busy} className="btn-danger" style={{fontSize:10}}>Disconnect</button>
+        <div style={{display:"flex",gap:T.s2}}>
+          <button onClick={()=>startUpdateMode(inst.item_id,inst.inst)} disabled={busy} className="btn-ghost" style={{fontSize:10}} title="Re-authenticate with the bank if a session expired or a password changed">Re-authorize</button>
+          <button onClick={()=>removeItem(inst.item_id,inst.inst)} disabled={busy} className="btn-danger" style={{fontSize:10}}>Disconnect</button>
+        </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s2}}>
         {inst.accts.map(a=>{
