@@ -1028,8 +1028,75 @@ function SectorBreakdown({holdings=[],total=0}){
   </div>;
 }
 
+/* ─── PRIVACY: hide sensitive dollar values ──────────────
+ * Eye-toggle in the Overview / Portfolio hero. Persists to localStorage
+ * (so a refresh keeps the chosen state) and broadcasts via a custom
+ * event so a click in one tab updates the other tab's render too. */
+const HIDE_VALUES_KEY = "mizan_hide_values";
+function readHideValues(){
+  try { return localStorage.getItem(HIDE_VALUES_KEY) === "1"; } catch { return false; }
+}
+function useHideValues(){
+  const [hidden, setHidden] = useState(readHideValues);
+  useEffect(() => {
+    const sync = () => setHidden(readHideValues());
+    window.addEventListener("storage", sync);
+    window.addEventListener("mizan-hide-values", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("mizan-hide-values", sync);
+    };
+  }, []);
+  const toggle = () => {
+    try {
+      const next = !hidden;
+      localStorage.setItem(HIDE_VALUES_KEY, next ? "1" : "0");
+      setHidden(next);
+      try { window.dispatchEvent(new Event("mizan-hide-values")); } catch {}
+    } catch {}
+  };
+  return { hidden, toggle, mask: (formatted) => hidden ? "••••••" : formatted };
+}
+
+// Small button: open/closed eye icon, toggles the hide flag on click.
+// Receives `hidden` + `toggle` from useHideValues so caller controls state.
+function EyeToggle({ hidden, toggle, size = 18, color }){
+  const stroke = color || "currentColor";
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      title={hidden ? "Show values" : "Hide values"}
+      aria-label={hidden ? "Show values" : "Hide values"}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: size + 14, height: size + 14, padding: 0, marginLeft: 8,
+        background: "transparent", border: "none", borderRadius: 6,
+        cursor: "pointer", color: stroke, opacity: 0.7,
+        transition: "opacity 0.15s, background 0.15s",
+      }}
+      onMouseEnter={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.background="rgba(255,255,255,0.05)";}}
+      onMouseLeave={e=>{e.currentTarget.style.opacity="0.7";e.currentTarget.style.background="transparent";}}>
+      {hidden ? (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+          <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+          <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+          <line x1="1" y1="1" x2="23" y2="23"/>
+        </svg>
+      ) : (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      )}
+    </button>
+  );
+}
+
 /* ─── OVERVIEW ───────────────────────────────────────── */
 function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0}){
+  const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[range,setRange]=useState("All");
   const liveSrc=snapAccounts.length>0
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
@@ -1053,8 +1120,13 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
   const haram=merged.filter(h=>h.sh_==="haram");
   const haramV=haram.reduce((s,h)=>s+mv(h),0);
   const top=[...merged].sort((a,b)=>mv(b)-mv(a)).slice(0,5);
-  // Cash + per-account display from live data
-  const totalCash=snapAccounts.reduce((s,a)=>s+(a.cash||0),0);
+  // Cash + per-account display from live data. Combines brokerage cash
+  // (SnapTrade) with positive bank cash (Plaid). Credit / loan accounts
+  // contribute via bankBalance becoming negative, which we exclude from
+  // "Cash on Hand" — debt isn't cash, even though it's part of net worth.
+  const brokerCashSum=snapAccounts.reduce((s,a)=>s+(a.cash||0),0);
+  const bankCashContribution=Math.max(0,(bankBalance||0));
+  const totalCash=brokerCashSum+bankCashContribution;
   // Cards show every connected account (disabled ones dimmed); numbers above
   // are calculated from the parent-filtered `snapAccounts` only.
   // NO fallback to ACCOUNTS constant — that's the owner's data and would
@@ -1226,24 +1298,26 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
         minHeight:240,
       }}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600}}>TOTAL PORTFOLIO VALUE
+          <div style={{display:"inline-flex",alignItems:"center",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600}}>
+            <span>TOTAL PORTFOLIO VALUE</span>
             {snapAccounts.length>0&&<span style={{color:T.gain,marginLeft:T.s2,display:"inline-flex",alignItems:"center",gap:5}}><LiveDot on pulse/>LIVE</span>}
+            <EyeToggle hidden={valuesHidden} toggle={toggleHideValues} size={14} color={T.muted}/>
           </div>
           <div style={{display:"flex",gap:T.s1}}>
             {["1Y","3Y","5Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{r}</button>)}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"baseline",gap:T.s3,marginBottom:T.s1,flexWrap:"wrap"}}>
-          <div style={{fontFamily:FU,fontSize:46,fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(tot)}</div>
+          <div style={{fontFamily:FU,fontSize:46,fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(tot))}</div>
         </div>
         <div style={{display:"flex",gap:T.s4,marginTop:T.s2,fontFamily:FM,fontSize:12,color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
           <span style={{display:"inline-flex",alignItems:"center",gap:T.s1}}>
-            <span style={{color:gain>=0?T.gain:T.loss,fontWeight:600}}>{gain>=0?"+":""}{kf(Math.abs(gain))}</span>
-            <span style={{color:gpc>=0?T.gain:T.loss}}>({fp(gpc)})</span>
+            <span style={{color:gain>=0?T.gain:T.loss,fontWeight:600}}>{valuesHidden?"••••":`${gain>=0?"+":""}${kf(Math.abs(gain))}`}</span>
+            <span style={{color:gpc>=0?T.gain:T.loss}}>({valuesHidden?"••":fp(gpc)})</span>
             all-time
           </span>
           <span style={{color:T.dim}}>·</span>
-          <span>Today <span style={{color:fc(today),fontWeight:600}}>{today>=0?"+":""}{f$(Math.abs(today))}</span></span>
+          <span>Today <span style={{color:fc(today),fontWeight:600}}>{valuesHidden?"••••":`${today>=0?"+":""}${f$(Math.abs(today))}`}</span></span>
         </div>
         <div style={{marginTop:T.s4,height:120}}>
           <ResponsiveContainer width="100%" height="100%">
@@ -1267,7 +1341,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
       <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKAT DUE</div>
-          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(tot*0.025)}</div>
+          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(tot*0.025))}</div>
           <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>2.5% of net worth</div>
         </BentoTile>
         <BentoTile>
@@ -1277,7 +1351,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
         </BentoTile>
         {totalCash>0&&<BentoTile>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CASH ON HAND</div>
-          <div style={{fontFamily:FU,fontSize:24,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalCash)}</div>
+          <div style={{fontFamily:FU,fontSize:24,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(totalCash))}</div>
         </BentoTile>}
       </div>
     </div>
@@ -2713,6 +2787,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
 
 /* ─── PORTFOLIO ──────────────────────────────────────── */
 function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav}){
+  const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[sub,setSub]=useState("holdings");
   const[acct,setAcct]=useState("all");
   const[screen,setScreen]=useState("all");
@@ -2761,10 +2836,12 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
           borderColor:T.blue+"30",
           padding:`${T.s6} ${T.s6}`,
         }}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>MARKET VALUE
+          <div style={{display:"inline-flex",alignItems:"center",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>
+            <span>MARKET VALUE</span>
             {snapAccounts.length>0&&<span style={{color:T.gain,marginLeft:T.s2,display:"inline-flex",alignItems:"center",gap:5}}><LiveDot on pulse/>LIVE</span>}
+            <EyeToggle hidden={valuesHidden} toggle={toggleHideValues} size={14} color={T.muted}/>
           </div>
-          <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(tot)}</div>
+          <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(tot))}</div>
           <div style={{display:"flex",gap:T.s4,marginTop:T.s3,fontFamily:FM,fontSize:12,color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
             <span>
               <span style={{color:totGain>=0?T.gain:T.loss,fontWeight:600}}>{totGain>=0?"+":""}{kf(Math.abs(totGain))}</span>{" "}
@@ -6261,6 +6338,23 @@ export default function Mizan(){
         if(accts.length>0&&!hasRealData){
           setHasRealData(true);
           try{localStorage.setItem("mizan_has_real_data","1");}catch{}
+        }
+        // Reconcile mizan_brokers localStorage with reality. If the server
+        // reports zero connected accounts but localStorage still lists
+        // brokers as "connected" (stale state from the old SnapTrade
+        // account or a prior session), wipe the local list so the
+        // Connect modal stops showing brokers that aren't actually linked
+        // anymore. Same for mizan_accounts_cache / mizan_activities_cache.
+        if(accts.length===0){
+          try{
+            const stale=JSON.parse(localStorage.getItem("mizan_brokers")||"[]");
+            if(Array.isArray(stale)&&stale.length>0){
+              localStorage.setItem("mizan_brokers","[]");
+              persistUserState("mizan_brokers",[]);
+              localStorage.removeItem("mizan_accounts_cache");
+              localStorage.removeItem("mizan_activities_cache");
+            }
+          }catch{}
         }
       }
     }catch{/* backend down — ignore */}
