@@ -1284,7 +1284,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
 
     {/* Compliance alert ribbon */}
     {haramV>0&&<div style={{padding:`${T.s2} ${T.s4}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:T.s2}}>
-      <span style={{fontFamily:FM,fontSize:12,color:T.loss}}>{haram.map(h=>h.tk).join(", ")} — Non-compliant · {f$(haramV)}</span>
+      <span style={{fontFamily:FM,fontSize:12,color:T.loss}}>{haram.map(h=>h.tk).join(", ")} — Non-compliant · {mask(f$(haramV))}</span>
       <button onClick={()=>onNav("portfolio")} style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.loss,background:"transparent",border:`1px solid ${T.loss}40`,borderRadius:T.rMd,padding:`4px ${T.s3}`,cursor:"pointer",letterSpacing:"0.08em"}}>EXIT PLAN →</button>
     </div>}
 
@@ -1361,7 +1361,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
       <BentoTile>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ALLOCATION</div>
         {allocSlices.length>0?<div style={{display:"flex",gap:T.s5,alignItems:"center",flexWrap:"wrap"}}>
-          <Donut slices={allocSlices} size={170} thickness={20} centerLabel="Total" centerValue={kf(allocSlices.reduce((s,x)=>s+x.value,0))}/>
+          <Donut slices={allocSlices} size={170} thickness={20} centerLabel="Total" centerValue={mask(kf(allocSlices.reduce((s,x)=>s+x.value,0)))}/>
           <div style={{display:"flex",flexDirection:"column",gap:T.s2,flex:1,minWidth:140}}>
             {allocSlices.map(s=>{
               const t=allocSlices.reduce((a,b)=>a+b.value,0);
@@ -1369,7 +1369,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
               return<div key={s.label} style={{display:"flex",alignItems:"center",gap:T.s2}}>
                 <span style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/>
                 <span style={{fontFamily:FU,fontSize:13,color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
-                <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(1)}%</span>
+                <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{valuesHidden?"••":`${pct.toFixed(1)}%`}</span>
               </div>;
             })}
           </div>
@@ -1383,12 +1383,12 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",gap:T.s4}}>
           {[
-            {label:"Total Return",  value:`${gain>=0?"+":""}${kf(Math.abs(gain))}`,sub:totCost>0?fp(gpc):"Unrealized",subColor:fc(gain)},
-            {label:"YTD Contrib.",  value:kf(metrics.ytdContrib||0),                sub:"This year",                    subColor:T.gain},
-            {label:"All-Time",       value:kf(metrics.allTimeContrib||0),            sub:"Lifetime deposits"},
-            {label:"YTD Dividends", value:kf(metrics.ytdDividends||0),               sub:"Cash received",                subColor:T.gold},
-            {label:"Fees (YTD)",    value:kf(metrics.ytdFees||0),                    sub:`$${(metrics.allTimeFees||0).toFixed(0)} all-time`,subColor:T.loss},
-            {label:"Net Inflow",    value:kf((metrics.ytdContrib||0)-(metrics.ytdWithdrawals||0)),sub:"Deposits − withdrawals",subColor:T.gain},
+            {label:"Total Return",  value:mask(`${gain>=0?"+":""}${kf(Math.abs(gain))}`),sub:totCost>0?fp(gpc):"Unrealized",subColor:fc(gain)},
+            {label:"YTD Contrib.",  value:mask(kf(metrics.ytdContrib||0)),                sub:"This year",                    subColor:T.gain},
+            {label:"All-Time",       value:mask(kf(metrics.allTimeContrib||0)),            sub:"Lifetime deposits"},
+            {label:"YTD Dividends", value:mask(kf(metrics.ytdDividends||0)),               sub:"Cash received",                subColor:T.gold},
+            {label:"Fees (YTD)",    value:mask(kf(metrics.ytdFees||0)),                    sub:valuesHidden?"•••• all-time":`$${(metrics.allTimeFees||0).toFixed(0)} all-time`,subColor:T.loss},
+            {label:"Net Inflow",    value:mask(kf((metrics.ytdContrib||0)-(metrics.ytdWithdrawals||0))),sub:"Deposits − withdrawals",subColor:T.gain},
           ].map(s=><div key={s.label}>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1,textTransform:"uppercase"}}>{s.label}</div>
             <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.value}</div>
@@ -1416,11 +1416,11 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
               <div style={{height:4,background:T.dim,borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${Math.min(pof*4,100)}%`,background:`linear-gradient(90deg, ${h.sh_==="haram"?T.loss:T.blue}, ${h.sh_==="haram"?T.loss:T.blueDim})`,borderRadius:2,transition:"width 0.4s"}}/>
               </div>
-              <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginTop:T.s1,letterSpacing:"0.04em"}}>{pof.toFixed(1)}% of book</div>
+              <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginTop:T.s1,letterSpacing:"0.04em"}}>{valuesHidden?"••% of book":`${pof.toFixed(1)}% of book`}</div>
             </div>
             <div style={{width:90,textAlign:"right"}}>
-              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{f$(mv(h))}</div>
-              <div style={{fontFamily:FM,fontSize:10,fontWeight:500,color:fc(gpct),marginTop:2}}>{fp(gpct)}</div>
+              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(mv(h)))}</div>
+              <div style={{fontFamily:FM,fontSize:10,fontWeight:500,color:fc(gpct),marginTop:2}}>{valuesHidden?"••":fp(gpct)}</div>
             </div>
             <Sk vals={Array.from({length:24},()=>mv(h)*(1+(Math.random()-.48)*.02))} color={fc(gpct)} w={80} h={28} fill/>
           </div>;
@@ -1447,8 +1447,8 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
             transition:"all 0.18s",
           }}>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1,textDecoration:dim?"line-through":"none"}}>{(a.type||"").toUpperCase()}</div>
-            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",textDecoration:dim?"line-through":"none"}}>{fmtUSD(a.val||0)}</div>
-            {a.cash>0&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>{fmtUSD(a.cash)} cash</div>}
+            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",textDecoration:dim?"line-through":"none"}}>{mask(fmtUSD(a.val||0))}</div>
+            {a.cash>0&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>{mask(fmtUSD(a.cash))} cash</div>}
             <div style={{fontFamily:FU,fontSize:11,color:T.muted,marginTop:T.s1,letterSpacing:"-0.005em"}}>{a.nm}</div>
             {a.note&&<div style={{fontFamily:FM,fontSize:10,color:T.gold,marginTop:T.s1,fontWeight:500}}>{a.note}</div>}
             <div style={{position:"absolute",top:T.s2,right:T.s2,display:"flex",gap:4}}>
@@ -2844,14 +2844,14 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
           <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(tot))}</div>
           <div style={{display:"flex",gap:T.s4,marginTop:T.s3,fontFamily:FM,fontSize:12,color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
             <span>
-              <span style={{color:totGain>=0?T.gain:T.loss,fontWeight:600}}>{totGain>=0?"+":""}{kf(Math.abs(totGain))}</span>{" "}
-              <span style={{color:totGain>=0?T.gain:T.loss}}>({fp(totGainPct)})</span>{" "}
+              <span style={{color:totGain>=0?T.gain:T.loss,fontWeight:600}}>{valuesHidden?"••••":`${totGain>=0?"+":""}${kf(Math.abs(totGain))}`}</span>{" "}
+              <span style={{color:totGain>=0?T.gain:T.loss}}>({valuesHidden?"••":fp(totGainPct)})</span>{" "}
               <span style={{color:T.muted}}>all-time</span>
             </span>
             <span style={{color:T.dim}}>·</span>
             <span>Today{" "}
-              <span style={{color:fc(today),fontWeight:600}}>{today>=0?"+":""}{f$(Math.abs(today))}</span>{" "}
-              <span style={{color:fc(today)}}>({fp(todayPct)})</span>
+              <span style={{color:fc(today),fontWeight:600}}>{valuesHidden?"••••":`${today>=0?"+":""}${f$(Math.abs(today))}`}</span>{" "}
+              <span style={{color:fc(today)}}>({valuesHidden?"••":fp(todayPct)})</span>
             </span>
           </div>
           {merged.length>0&&<div style={{marginTop:T.s4,display:"flex",alignItems:"center",gap:T.s2}}>
@@ -2863,12 +2863,12 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
         <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
           <BentoTile accent={totGain>=0?T.gain:T.loss}>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>TOTAL RETURN</div>
-            <div style={{fontFamily:FU,fontSize:26,fontWeight:700,color:fc(totGain),letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{totGain>=0?"+":""}{kf(Math.abs(totGain))}</div>
-            <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:fc(totGain),marginTop:T.s1}}>{totCost>0?fp(totGainPct):"Unrealized"}</div>
+            <div style={{fontFamily:FU,fontSize:26,fontWeight:700,color:fc(totGain),letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(`${totGain>=0?"+":""}${kf(Math.abs(totGain))}`)}</div>
+            <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:fc(totGain),marginTop:T.s1}}>{totCost>0?(valuesHidden?"••":fp(totGainPct)):"Unrealized"}</div>
           </BentoTile>
           {haramV>0?<BentoTile accent={T.loss} style={{background:`linear-gradient(135deg, ${T.loss}10, transparent 60%), ${T.card}`}}>
             <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NON-COMPLIANT</div>
-            <div style={{fontFamily:FU,fontSize:26,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{f$(haramV)}</div>
+            <div style={{fontFamily:FU,fontSize:26,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(haramV))}</div>
             <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.loss,marginTop:T.s1}}>{haram.length} position{haram.length===1?"":"s"} · Exit required</div>
           </BentoTile>:<BentoTile accent={T.gain}>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANT</div>
@@ -2882,7 +2882,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
       {brokerSlices.length>1&&<BentoTile>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ALLOCATION BY BROKERAGE</div>
         <div style={{display:"flex",gap:T.s5,alignItems:"center",flexWrap:"wrap"}}>
-          <Donut slices={brokerSlices} size={160} thickness={18} centerLabel="Total" centerValue={kf(brokerSlices.reduce((s,x)=>s+x.value,0))}/>
+          <Donut slices={brokerSlices} size={160} thickness={18} centerLabel="Total" centerValue={mask(kf(brokerSlices.reduce((s,x)=>s+x.value,0)))}/>
           <div style={{display:"flex",flexDirection:"column",gap:T.s2,flex:1,minWidth:200}}>
             {brokerSlices.map(s=>{
               const tt=brokerSlices.reduce((a,b)=>a+b.value,0);
@@ -2890,8 +2890,8 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
               return<div key={s.label} style={{display:"flex",alignItems:"center",gap:T.s2}}>
                 <span style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/>
                 <span style={{fontFamily:FU,fontSize:13,color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
-                <span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{kf(s.value)}</span>
-                <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:45,textAlign:"right"}}>{pct.toFixed(1)}%</span>
+                <span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{mask(kf(s.value))}</span>
+                <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:45,textAlign:"right"}}>{valuesHidden?"••":`${pct.toFixed(1)}%`}</span>
               </div>;
             })}
           </div>
@@ -2929,12 +2929,12 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
       <BentoTile style={{padding:0,overflow:"hidden"}}>
         <Tbl cols={[
           {l:"Symbol", r_:r=><div><div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:r.sh_==="haram"?T.loss:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</div><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{r.ac_}</div></div>},
-          {l:"Shares",  r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.sh.toFixed(3)}</span>},
-          {l:"Avg Cost",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{f$(r.ac)}</span>},
-          {l:"Price",   r:true,r_:r=><div style={{textAlign:"right"}}><div style={{fontFamily:FM,fontSize:13,fontWeight:500,color:r._live?T.textHi:T.text,fontVariantNumeric:"tabular-nums"}}>{f$(r.px)}</div>{r._live&&<div style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.06em",marginTop:1}}>● LIVE</div>}</div>},
-          {l:"Today",   r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:fc(r._p),fontVariantNumeric:"tabular-nums"}}>{r._p?fp(r._p):"—"}</span>},
-          {l:"Mkt Value",r:true,r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(mv(r))}</span>},
-          {l:"Gain/Loss",r:true,r_:r=><div style={{textAlign:"right"}}><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:fc(gv(r)),fontVariantNumeric:"tabular-nums"}}>{gv(r)>=0?"+":""}{f$(gv(r))}</div><div style={{fontFamily:FM,fontSize:10,color:fc(gp(r)),marginTop:1}}>{fp(gp(r))}</div></div>},
+          {l:"Shares",  r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.text,fontVariantNumeric:"tabular-nums"}}>{valuesHidden?"••••":r.sh.toFixed(3)}</span>},
+          {l:"Avg Cost",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{mask(f$(r.ac))}</span>},
+          {l:"Price",   r:true,r_:r=><div style={{textAlign:"right"}}><div style={{fontFamily:FM,fontSize:13,fontWeight:500,color:r._live?T.textHi:T.text,fontVariantNumeric:"tabular-nums"}}>{mask(f$(r.px))}</div>{r._live&&<div style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.06em",marginTop:1}}>● LIVE</div>}</div>},
+          {l:"Today",   r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:fc(r._p),fontVariantNumeric:"tabular-nums"}}>{valuesHidden?"••":(r._p?fp(r._p):"—")}</span>},
+          {l:"Mkt Value",r:true,r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(mv(r)))}</span>},
+          {l:"Gain/Loss",r:true,r_:r=><div style={{textAlign:"right"}}><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:fc(gv(r)),fontVariantNumeric:"tabular-nums"}}>{mask(`${gv(r)>=0?"+":""}${f$(gv(r))}`)}</div><div style={{fontFamily:FM,fontSize:10,color:fc(gp(r)),marginTop:1}}>{valuesHidden?"••":fp(gp(r))}</div></div>},
           {l:"Sharia",  r_:r=><Tag label={r.sh_==="halal"?"Halal":r.sh_==="haram"?"Non-Compliant":"Review"} color={r.sh_==="halal"?T.gain:r.sh_==="haram"?T.loss:T.gold}/>},
         ]} rows={filtered}/>
         {filtered.length===0&&merged.length===0&&snapAccounts.length===0
