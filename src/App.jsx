@@ -4,6 +4,7 @@ import MizanApp from './components/MizanApp.jsx'
 import Login from './components/Login.jsx'
 import Privacy from './components/Privacy.jsx'
 import Terms from './components/Terms.jsx'
+import Contact from './components/Contact.jsx'
 import { AuthProvider, useAuth } from './lib/auth.jsx'
 import { hydrateUserState } from './lib/userState.js'
 
@@ -38,7 +39,7 @@ function SentryFallback({ resetError }) {
 }
 
 function Gate() {
-  const { user, loading, isSupabaseConfigured, recoveryMode } = useAuth()
+  const { user, loading, isSupabaseConfigured, recoveryMode, mfaRequired } = useAuth()
   const [hydrated, setHydrated] = useState(false)
 
   // Clean up any stray auth hash from the URL once we have a session.
@@ -80,6 +81,11 @@ function Gate() {
   // app, otherwise the user would silently land authenticated without ever
   // setting their new password.
   if (isSupabaseConfigured && recoveryMode) return <Login />
+  // User has a session but it's at AAL1 and they have a verified TOTP
+  // factor — keep Login mounted so it can render the MFA challenge step.
+  // Without this, Login unmounts immediately after sign-in and the user
+  // never sees the 6-digit code prompt.
+  if (isSupabaseConfigured && mfaRequired) return <Login />
   // key={user.id} forces a full unmount/remount on user-change so every
   // useState initializer that reads localStorage re-runs against the
   // freshly-hydrated (or cleared) cache — prevents the previous user's
@@ -95,6 +101,7 @@ function publicLegalRoute() {
   const p = window.location.pathname.replace(/\/+$/, '').toLowerCase()
   if (p === '/privacy' || p === '/privacy-policy') return <Privacy />
   if (p === '/terms' || p === '/terms-of-service' || p === '/tos') return <Terms />
+  if (p === '/contact' || p === '/contact-us') return <Contact />
   return null
 }
 

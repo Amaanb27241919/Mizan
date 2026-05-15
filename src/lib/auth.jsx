@@ -28,6 +28,31 @@ export function AuthProvider({ children }) {
   // switching the root account, just UPDATE profiles SET is_root = true.
   const [profileIsRoot, setProfileIsRoot] = useState(false);
 
+  // AAL state — currentLevel + nextLevel from Supabase, refreshed when
+  // the session changes. mfaRequired is true when the user has a verified
+  // factor but the current session is still AAL1 (i.e., they must enter
+  // a TOTP code to step up before MFA-gated endpoints unlock). Gate uses
+  // this to keep the Login screen mounted past sign-in so the MFA
+  // challenge UI can render without a race against MizanApp mounting.
+  const [aalLevels, setAalLevels] = useState(null);
+  const mfaRequired = !!(aalLevels?.currentLevel === 'aal1' && aalLevels?.nextLevel === 'aal2');
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !user?.id || user.id === 'single-user') {
+      setAalLevels(null);
+      return;
+    }
+    let cancelled = false;
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) { setAalLevels(null); return; }
+        setAalLevels(data || null);
+      })
+      .catch(() => { if (!cancelled) setAalLevels(null); });
+    return () => { cancelled = true; };
+  }, [user?.id, session?.access_token]);
+
   // Fetch the current user's profiles row whenever they change. Misses are
   // fine — backfill fills in for legacy accounts and the signup trigger
   // for new ones, but if profiles isn't migrated yet we stay false.
@@ -268,6 +293,8 @@ export function AuthProvider({ children }) {
     isRoot,
     recoveryMode,
     exitRecovery,
+    mfaRequired,
+    aalLevels,
     signInWithEmail,        // legacy alias for signInWithPassword
     signInWithPassword,
     signUpWithPassword,

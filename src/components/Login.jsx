@@ -158,6 +158,7 @@ export default function Login() {
     mfaListFactors,
     mfaChallengeAndVerify,
     mfaAssuranceLevel,
+    mfaRequired,
     isSupabaseConfigured,
     recoveryMode,
     exitRecovery,
@@ -180,6 +181,26 @@ export default function Login() {
   useEffect(() => {
     if (recoveryMode) setMode('reset');
   }, [recoveryMode]);
+
+  // When AuthProvider tells us the active session is AAL1 and the account
+  // has a verified TOTP factor, render the MFA challenge step instead of
+  // the password form. This is what makes the prompt appear when Login is
+  // mounted because of mfaRequired (page refresh mid-MFA, or the post-
+  // sign-in transition that previously raced against MizanApp mounting).
+  useEffect(() => {
+    if (!mfaRequired || mode === 'mfa') return;
+    let cancelled = false;
+    (async () => {
+      const factors = await mfaListFactors();
+      if (cancelled) return;
+      const verified = (factors?.data?.totp || []).find((f) => f.status === 'verified');
+      if (verified) {
+        setMfaFactor(verified);
+        setMode('mfa');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mfaRequired]);
 
   const reset = (next) => {
     setMode(next);
@@ -482,6 +503,7 @@ export default function Login() {
         }}>
           <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Privacy</a>
           <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Terms</a>
+          <a href="/contact" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Contact</a>
           <a href="/legal/SECURITY_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Security</a>
           <a href="/legal/DATA_RETENTION_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Data Retention</a>
         </div>
