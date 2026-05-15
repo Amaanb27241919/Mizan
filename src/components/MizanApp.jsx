@@ -5301,6 +5301,23 @@ function About(){
 // Bank accounts (checking/savings/credit), recent transactions, spending
 // summary by category, recurring subscription detection. Powered by Plaid
 // via the server proxy at /api/plaid/*.
+
+// Child wrapper for the Plaid usePlaidLink hook. Renders only when the
+// dynamically-imported `react-plaid-link` module AND a link token are
+// both available, so the hook executes unconditionally inside it. A
+// conditional hook call in the parent (the previous approach) violated
+// the Rules of Hooks the moment the lazy import resolved and crashed
+// the Finances tree under SentryFallback.
+function PlaidLinker({ usePlaidLinkHook, linkToken, onSuccess, onExit, shouldOpen }) {
+  const linkApi = usePlaidLinkHook({ token: linkToken, onSuccess, onExit });
+  useEffect(() => {
+    if (shouldOpen && linkApi.ready && typeof linkApi.open === "function") {
+      linkApi.open();
+    }
+  }, [shouldOpen, linkApi.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 function Finances({onBankBalanceChange,demoMode=false,onNav}){
   const{user}=useAuth();
   // In demo mode short-circuit straight to the local fixtures so the
@@ -5438,15 +5455,27 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
   });
   const institutions=Object.values(byInst);
 
-  // Plaid Link hook from the lazy-loaded module.
+  // Plaid Link hook from the lazy-loaded module. Mount the child only
+  // once both the module + link token are present so usePlaidLink is
+  // called unconditionally inside it. Calling the hook conditionally in
+  // this parent (before vs after dynamic import resolves) violates the
+  // Rules of Hooks and crashes the whole Finances tree under
+  // SentryFallback the first time a real connect succeeds.
   const usePlaidLinkHook=PlaidLink?.usePlaidLink;
-  const linkConfig=linkToken?{token:linkToken,onSuccess:onPlaidSuccess,onExit:()=>setPlaidReady(false)}:null;
-  const linkApi=usePlaidLinkHook?usePlaidLinkHook(linkConfig||{token:null}):{open:null,ready:false};
-  useEffect(()=>{
-    if(plaidReady&&linkApi.ready&&linkApi.open){linkApi.open();}
-  },[plaidReady,linkApi.ready]); // eslint-disable-line
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    {/* Plaid Link hook host. Mounted only when the lazy module + token
+        are both ready. Returns null; its sole job is to call usePlaidLink
+        and open the iframe when plaidReady flips true. */}
+    {usePlaidLinkHook && linkToken && (
+      <PlaidLinker
+        usePlaidLinkHook={usePlaidLinkHook}
+        linkToken={linkToken}
+        onSuccess={onPlaidSuccess}
+        onExit={() => setPlaidReady(false)}
+        shouldOpen={plaidReady}
+      />
+    )}
     {/* ─── HERO: Total bank balance + Connect ─────────── */}
     <BentoTile style={{
       background:`radial-gradient(circle at 0% 0%, ${T.blue}1A, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gain}10, transparent 50%), ${T.card}`,
