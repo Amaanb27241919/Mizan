@@ -544,7 +544,7 @@ const DEMO_SADAQAH = [
 const mv   = h => h.sh * h.px;
 const cost = h => h.sh * h.ac;
 const gv   = h => mv(h) - cost(h);
-const gp   = h => ((h.px-h.ac)/h.ac)*100;
+const gp   = h => (h.ac > 0 ? ((h.px - h.ac) / h.ac) * 100 : 0);
 const TOTAL_MV   = HOLDINGS.reduce((s,h)=>s+mv(h),0);
 const TOTAL_COST = HOLDINGS.reduce((s,h)=>s+cost(h),0);
 
@@ -1099,7 +1099,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[range,setRange]=useState("All");
   const liveSrc=snapAccounts.length>0
-    ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
+    ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h => h && h.sh > 0 && h.px > 0)
     : [];
   const merged=liveSrc.map(h=>{const l=live.find(q=>q.tk===h.tk);return l?{...h,px:l.price||h.px,_p:l.pct||0}:h;});
   // Total value combines:
@@ -1116,7 +1116,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
   // Gain is computed against position cost basis only (cash isn't a "gain")
   const gain=equityValue-totCost;
   const gpc=totCost>0?(gain/totCost)*100:0;
-  const today=merged.reduce((s,h)=>s+(h._p||0)/100*mv(h),0);
+  const today=merged.reduce((s,h)=>s + (typeof h._p === "number" ? h._p : 0)/100*mv(h), 0);
   const haram=merged.filter(h=>h.sh_==="haram");
   const haramV=haram.reduce((s,h)=>s+mv(h),0);
   const top=[...merged].sort((a,b)=>mv(b)-mv(a)).slice(0,5);
@@ -1124,7 +1124,18 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
   // (SnapTrade) with positive bank cash (Plaid). Credit / loan accounts
   // contribute via bankBalance becoming negative, which we exclude from
   // "Cash on Hand" — debt isn't cash, even though it's part of net worth.
-  const brokerCashSum=snapAccounts.reduce((s,a)=>s+(a.cash||0),0);
+  const brokerCashSum = snapAccounts.reduce((s,a) => {
+    if (typeof a.cash === "number") return s + a.cash;
+    // Some brokers don't return a separate cash field. Fall back to
+    // `balance - sum(position market values)` for that account.
+    const equity = (a.positions || []).reduce((es, p) => {
+      const px = p.last_ask_price || p.last_trade_price || p.price || 0;
+      const units = p.units || p.shares || 0;
+      return es + (px * units);
+    }, 0);
+    const inferred = Math.max(0, (a.balance || 0) - equity);
+    return s + inferred;
+  }, 0);
   const bankCashContribution=Math.max(0,(bankBalance||0));
   const totalCash=brokerCashSum+bankCashContribution;
   // Cards show every connected account (disabled ones dimmed); numbers above
@@ -2621,7 +2632,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
       if(poolValue<=0)return;
       pool.forEach(h=>{
         const sliceValue=(mv(h)/poolValue)*dollarMove;
-        const shares=Math.floor(sliceValue/h.px);
+        const shares = h.px > 0 ? Math.floor(sliceValue / h.px) : 0;
         if(shares<=0)return;
         suggestions.push({
           kind:"drift",
@@ -3060,7 +3071,7 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
   const fireNumber=monthly*12*30; // assume desired annual spend ≈ current contribution * 12 (rough), 30x for 4% rule with margin
   // Better: ask user what their target annual spend is. For now derive from current NW * withdrawRate
   const targetSpend=Math.round(currentNW*0.04/12)*12||60_000;
-  const fireTarget=targetSpend/withdrawRate;
+  const fireTarget = withdrawRate > 0 ? targetSpend / withdrawRate : 0;
   const yearAtTarget=projection.find(p=>p.nominal>=fireTarget);
   const balanceAtRetirement=projection.find(p=>p.year===targetAge);
 
@@ -4161,7 +4172,7 @@ function SessionsPanel(){
       if(!r.ok)throw new Error(`Status ${r.status}`);
       const j=await r.json();
       setSessions(sessions.filter(s=>s.current));
-      setToast(`Revoked ${j.revoked} other session${j.revoked===1?"":"s"}`);
+      setToast(`Revoked ${j.revoked ?? 0} other session${j.revoked===1?"":"s"}`);
       setTimeout(()=>setToast(null),3500);
     }catch(e){setErr(e.message||"Revoke failed");}
     finally{setBusy(false);}
