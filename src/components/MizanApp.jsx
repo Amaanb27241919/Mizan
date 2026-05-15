@@ -1383,12 +1383,12 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",gap:T.s4}}>
           {[
-            {label:"Total Return",  value:`${gain>=0?"+":""}${kf(Math.abs(gain))}`,sub:totCost>0?fp(gpc):"Unrealized",subColor:fc(gain)},
+            {label:"Total Return",  value:`${gain>=0?"+":""}${fmtUSD(Math.abs(gain))}`,sub:totCost>0?fp(gpc):"Unrealized",subColor:fc(gain)},
             {label:"YTD Contrib.",  value:kf(metrics.ytdContrib||0),                sub:"This year",                    subColor:T.gain},
             {label:"All-Time",       value:kf(metrics.allTimeContrib||0),            sub:"Lifetime deposits"},
             {label:"YTD Dividends", value:kf(metrics.ytdDividends||0),               sub:"Cash received",                subColor:T.gold},
-            {label:"Fees (YTD)",    value:kf(metrics.ytdFees||0),                    sub:`$${(metrics.allTimeFees||0).toFixed(0)} all-time`,subColor:T.loss},
-            {label:"Net Inflow",    value:kf((metrics.ytdContrib||0)-(metrics.ytdWithdrawals||0)),sub:"Deposits − withdrawals",subColor:T.gain},
+            {label:"Fees (YTD)",    value:kf(metrics.ytdFees||0),                    sub:`${kf(metrics.allTimeFees||0)} all-time`,subColor:T.loss},
+            {label:"Net Inflow",    value:fmtUSD((metrics.ytdContrib||0)-(metrics.ytdWithdrawals||0)),sub:"Deposits − withdrawals",subColor:T.gain},
           ].map(s=><div key={s.label}>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1,textTransform:"uppercase"}}>{s.label}</div>
             <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.value}</div>
@@ -1542,6 +1542,11 @@ const STANDARDS = {
     notes:"Prudential standard; defers to local board for retail screening.",
   },
 };
+// NOTE: The non-permissible income ratio (standard.nonPermMax) is intentionally
+// NOT evaluated here. That test requires a revenue-breakdown by business segment
+// (e.g. interest income, alcohol-derived revenue) which is not available from the
+// Finnhub free tier. We rely on the sector-exclusion check instead. The UI flags
+// this limitation next to each standard's spec line.
 function evaluateAgainst(standard,{sector,debt,cash,recv,mc,assets}){
   if(sector==="haram")return{pass:false,fails:[{rule:"Sector",detail:"Prohibited industry"}],ratios:{}};
   const denom=standard.denominator==="totalAssets"?assets:mc;
@@ -1675,7 +1680,7 @@ function AAOIFIScreener({holdings=[]}){
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Debt/{STANDARDS[primary].denominator==="totalAssets"?"Assets":"MC"} &lt; {STANDARDS[primary].debtMax}%
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Cash &lt; {STANDARDS[primary].cashMax}%
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>A/R &lt; {STANDARDS[primary].recvMax}%
-        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Non-perm &lt; {STANDARDS[primary].nonPermMax}%
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Non-perm &lt; {STANDARDS[primary].nonPermMax}% <span style={{color:T.dim,fontStyle:"italic"}}>(not evaluated — sector check applies)</span>
       </div>
     </BentoTile>
 
@@ -1734,7 +1739,7 @@ function AAOIFIScreener({holdings=[]}){
               <span style={{fontFamily:FM,fontSize:10,fontWeight:500,color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
             </div>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
-              Debt &lt; {s.debtMax}% · Cash &lt; {s.cashMax}% · A/R &lt; {s.recvMax}% · Non-perm &lt; {s.nonPermMax}%
+              Debt &lt; {s.debtMax}% · Cash &lt; {s.cashMax}% · A/R &lt; {s.recvMax}% · Non-perm &lt; {s.nonPermMax}% <span style={{fontStyle:"italic",color:T.dim}}>(not evaluated — sector check applies)</span>
             </div>
           </div>)}
         </div>
@@ -3049,7 +3054,6 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
   const projection=useMemo(()=>{
     const out=[];
     let bal=currentNW;
-    const realRet=ret-inflation;
     for(let yr=0;yr<=Math.max(40,targetAge-age+5);yr++){
       out.push({year:age+yr,nominal:+bal.toFixed(0),real:+(bal/Math.pow(1+inflation,yr)).toFixed(0)});
       bal=bal*(1+ret)+monthly*12;
@@ -3092,7 +3096,7 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
       <BentoTile>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PROJECTION</div>
         {[
-          ["Years to FIRE",yearAtTarget?`${yearAtTarget.year-age} yrs`:"Not reached",yearAtTarget?T.gain:T.muted],
+          ["Years to FIRE",yearAtTarget?(yearAtTarget.year===age?"Already at FIRE":`${yearAtTarget.year-age} yrs`):"Not reached",yearAtTarget?T.gain:T.muted],
           ["FIRE at age",yearAtTarget?yearAtTarget.year:"—"],
           ["Balance at target",balanceAtRetirement?kf(balanceAtRetirement.nominal):"—"],
           ["Today's $ at target",balanceAtRetirement?kf(balanceAtRetirement.real):"—"],
@@ -5454,7 +5458,14 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     });
     return Object.values(byMerchant)
       .filter(x=>x.months.size>=2)
-      .map(x=>({merchant:x.merchant,monthCount:x.months.size,avgAmount:x.amounts.reduce((s,n)=>s+n,0)/x.amounts.length,lastDate:x.lastDate}))
+      .map(x=>({
+        merchant:x.merchant,
+        monthCount:x.months.size,
+        totalSpent:x.amounts.reduce((s,n)=>s+n,0),
+        avgPerCharge:x.amounts.reduce((s,n)=>s+n,0)/x.amounts.length,
+        estMonthly:x.amounts.reduce((s,n)=>s+n,0)/x.months.size,
+        lastDate:x.lastDate,
+      }))
       .sort((a,b)=>b.monthCount-a.monthCount);
   },[txns]);
 
@@ -5705,8 +5716,8 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
         <Tbl cols={[
           {l:"Merchant",r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.merchant}</span>},
           {l:"Frequency",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.monthCount} month{r.monthCount===1?"":"s"}</span>},
-          {l:"Avg / charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgAmount)}</span>},
-          {l:"Est. monthly",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.gold,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgAmount*r.monthCount/r.monthCount)}</span>},
+          {l:"Avg / charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgPerCharge)}</span>},
+          {l:"Est. monthly",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.gold,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.estMonthly)}</span>},
           {l:"Last seen",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
         ]} rows={recurring.slice(0,12)}/>
       </div>
