@@ -1185,10 +1185,13 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   const haram=merged.filter(h=>h.sh_==="haram");
   const haramV=haram.reduce((s,h)=>s+mv(h),0);
   const top=[...merged].sort((a,b)=>mv(b)-mv(a)).slice(0,5);
-  // Cash + per-account display from live data. Combines brokerage cash
-  // (SnapTrade) with positive bank cash (Plaid). Credit / loan accounts
-  // contribute via bankBalance becoming negative, which we exclude from
-  // "Cash on Hand" — debt isn't cash, even though it's part of net worth.
+  // Cash on Hand = brokerage cash sweep + positive depository balances.
+  //
+  // Credit-card / loan debt is NOT subtracted here. Debt reduces Net Worth
+  // (handled by `tot` above, which uses bankBalance = depository − debt),
+  // but it does not reduce the dollars you have available to spend. A user
+  // with $1k checking + $5k credit-card debt still has $1k cash on hand
+  // — they owe $5k separately.
   const brokerCashSum = snapAccounts.reduce((s,a) => {
     if (typeof a.cash === "number") return s + a.cash;
     // Some brokers don't return a separate cash field. Fall back to
@@ -1201,8 +1204,14 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     const inferred = Math.max(0, (a.balance || 0) - equity);
     return s + inferred;
   }, 0);
-  const bankCashContribution=Math.max(0,(bankBalance||0));
-  const totalCash=brokerCashSum+bankCashContribution;
+  // Sum only positive depository balances from Plaid. We never net credit
+  // card debt out of cash, and we never add Plaid investment balances
+  // (those flow into `plaidInvestmentTot` for net-worth, not cash).
+  const depositorySum = plaidAccounts
+    .filter(isBankAsset)
+    .reduce((s,a) => s + Math.max(0, +a.current_bal || 0), 0);
+  const bankCashContribution = depositorySum;
+  const totalCash = brokerCashSum + bankCashContribution;
   // Cards show every connected account (disabled ones dimmed); numbers above
   // are calculated from the parent-filtered `snapAccounts` only.
   // NO fallback to ACCOUNTS constant — that's the owner's data and would
@@ -5721,12 +5730,17 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
         collectReauth(td.item_errors);
       }
       if(txnList.length===0&&acctCount>0&&!didBackfillRef.current){
-        didBackfillRef.current=true;
         try{
           const sr=await apiFetch("/api/plaid/transactions?sync=1");
           if(sr.ok){
             const sd=await sr.json();
             collectReauth(sd.errors);
+            // Only set the guard AFTER the sync call succeeds. If the sync
+            // failed (rate-limited, network blip, Plaid down), leave the
+            // ref false so the next refresh/poll/visibilitychange can try
+            // again — a transient failure shouldn't permanently disable
+            // backfill until page reload.
+            didBackfillRef.current=true;
             // Re-read after sync so the freshly upserted rows reach the UI.
             tr=await apiFetch("/api/plaid/transactions");
             if(tr.ok){
@@ -5742,6 +5756,51 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     finally{setLoading(false);}
   },[demoMode]);
   useEffect(()=>{refresh();},[refresh]);
+
+  // Explicit "Sync transactions" — bypasses didBackfillRef so the user can
+  // always force a re-sync even when the auto-backfill already fired.
+  // Useful when a sync failed silently (rate limit, bank latency) or when
+  // the user wants fresh diffs RIGHT NOW instead of waiting for the cron.
+  const[syncBusy,setSyncBusy]=useState(false);
+  const[syncMsg,setSyncMsg]=useState(null);
+  const syncTransactions=useCallback(async()=>{
+    if(demoMode||syncBusy)return;
+    setSyncBusy(true);setSyncMsg(null);
+    try{
+      const sr=await apiFetch("/api/plaid/transactions?sync=1");
+      const sd=await sr.json().catch(()=>({}));
+      if(!sr.ok){
+        if(sr.status===429){
+          setSyncMsg({ok:false,msg:"Rate-limited. Sync caps at 10/hour — try again later."});
+        }else{
+          setSyncMsg({ok:false,msg:sd.error||`Sync failed (${sr.status})`});
+        }
+        return;
+      }
+      const{added=0,modified=0,removed=0,failed=0}=sd;
+      didBackfillRef.current=true;
+      // Re-read the table after sync so the new rows render.
+      const tr=await apiFetch("/api/plaid/transactions");
+      if(tr.ok){
+        const td=await tr.json();
+        setTxns(Array.isArray(td.transactions)?td.transactions:[]);
+      }
+      const totalChanges=added+modified+removed;
+      setSyncMsg({
+        ok:failed===0,
+        msg:failed>0
+          ?`Synced with ${failed} item error${failed===1?"":"s"} · ${totalChanges} change${totalChanges===1?"":"s"}`
+          :totalChanges===0
+            ?"Up to date — no new transactions."
+            :`Synced · +${added} added, ~${modified} updated, −${removed} removed`,
+      });
+    }catch(err){
+      setSyncMsg({ok:false,msg:err.message||"Sync failed"});
+    }finally{
+      setSyncBusy(false);
+      setTimeout(()=>setSyncMsg(null),6000);
+    }
+  },[demoMode,syncBusy]);
 
   // Keep the Finances tab fresh: poll every 90s (matches the global live-price
   // cadence) and re-fetch the moment the tab becomes visible after being
@@ -5952,8 +6011,21 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
           <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:totalBank>=0?T.textHi:T.loss,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalBank)}</div>
           <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{institutions.length} institution{institutions.length===1?"":"s"} · {accounts.length} account{accounts.length===1?"":"s"}</div>
         </div>
-        <button onClick={startLink} disabled={busy||demoMode} title={demoMode?"Disable demo mode in Settings to connect a real bank":undefined} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":demoMode?"+ Connect Bank (demo)":"+ Connect Bank"}</button>
+        <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+          {institutions.length>0&&!demoMode&&<button onClick={syncTransactions} disabled={syncBusy}
+            title="Pull the latest transactions from Plaid (cursor-based diff sync)"
+            style={{padding:`12px ${T.s4}`,fontSize:12,fontFamily:FM,fontWeight:600,letterSpacing:"0.04em",
+              borderRadius:T.rMd,cursor:syncBusy?"wait":"pointer",
+              background:syncBusy?"transparent":`${T.blue}14`,
+              border:`1px solid ${T.blue}40`,color:T.blue}}>
+            {syncBusy?"Syncing…":"↻ Sync transactions"}
+          </button>}
+          <button onClick={startLink} disabled={busy||demoMode} title={demoMode?"Disable demo mode in Settings to connect a real bank":undefined} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":demoMode?"+ Connect Bank (demo)":"+ Connect Bank"}</button>
+        </div>
       </div>
+      {syncMsg&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:syncMsg.ok?T.gainBg:T.lossBg,border:`1px solid ${(syncMsg.ok?T.gain:T.loss)+"30"}`,color:syncMsg.ok?T.gain:T.loss}}>
+        {syncMsg.ok?"✓ ":"✗ "}{syncMsg.msg}
+      </div>}
       {status&&<div style={{marginTop:T.s4,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,display:"flex",alignItems:"center",gap:T.s3,flexWrap:"wrap"}}>
         <span style={{flex:"1 1 auto"}}>{status.ok?"✓ ":"✗ "}{status.msg}</span>
         {(status.code==="MFA_ENROLLMENT_REQUIRED"||status.code==="MFA_VERIFICATION_REQUIRED")&&onNav&&
