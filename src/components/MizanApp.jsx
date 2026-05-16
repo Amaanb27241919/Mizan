@@ -354,6 +354,20 @@ const DEMO_SHARIA = {
   BND:"haram",
 };
 
+/* ─── PLAID ACCOUNT TYPE CLASSIFICATION ──────────────────
+ * Plaid /accounts returns: depository, credit, loan, investment, brokerage, other.
+ * MIZAN treats Plaid as the BANKING data source and SnapTrade as the BROKERAGE
+ * data source. Investment-type Plaid accounts are excluded from all bank-side
+ * math (and from the Finances tab UI) so a user who links the same broker via
+ * both providers never double-counts cash, positions, or balances.
+ *   isBankAsset  → depository → counts as POSITIVE bank cash
+ *   isBankDebt   → credit/loan → counts as NEGATIVE bank balance
+ *   isBrokerage  → investment/brokerage → handled by SnapTrade, ignored by Plaid math
+ */
+const isBankAsset    = a => a?.type === "depository";
+const isBankDebt     = a => a?.type === "credit" || a?.type === "loan";
+const isBrokeragePlaid = a => a?.type === "investment" || a?.type === "brokerage";
+
 /* ─── DEMO BANK FIXTURES (Plaid stand-in) ────────────── */
 // Mirrors DEMO_ACCOUNTS pattern — used to populate the Finances tab when
 // demoMode is on. No real API calls needed; everything is local fixture.
@@ -624,13 +638,23 @@ const tryJ=t=>{try{const m=t.match(/\[[\s\S]*\]/);return m?JSON.parse(m[0]):null
 
 // Server-proxied. The browser never holds a vendor key; the proxy uses the
 // server's FINNHUB_KEY env var and is per-user JWT-scoped + rate limited.
+// The /quote proxy caps each request at 25 symbols (per-symbol Finnhub call
+// fan-out), so chunk client-side and merge so users with >25 holdings still
+// get a price + change % for every position.
 async function fetchFinnhub(tickers){
   if(!Array.isArray(tickers)||tickers.length===0)return[];
+  const uniq=[...new Set(tickers.filter(t=>typeof t==="string"&&t))];
+  const CHUNK=25;
+  const chunks=[];
+  for(let i=0;i<uniq.length;i+=CHUNK)chunks.push(uniq.slice(i,i+CHUNK));
   try{
-    const r=await apiFetch(`/api/finnhub/quote?symbols=${encodeURIComponent(tickers.slice(0,25).join(","))}`);
-    if(!r.ok)return[];
-    const d=await r.json();
-    return Array.isArray(d?.quotes)?d.quotes:[];
+    const results=await Promise.allSettled(chunks.map(async chunk=>{
+      const r=await apiFetch(`/api/finnhub/quote?symbols=${encodeURIComponent(chunk.join(","))}`);
+      if(!r.ok)return[];
+      const d=await r.json();
+      return Array.isArray(d?.quotes)?d.quotes:[];
+    }));
+    return results.flatMap(r=>r.status==="fulfilled"?r.value:[]);
   }catch{return[];}
 }
 
@@ -984,7 +1008,8 @@ function SectorBreakdown({holdings=[],total=0}){
   const tickerKey=holdings.map(h=>h.tk).filter(Boolean).join(",");
 
   useEffect(()=>{
-    if(!_gk.finnhub||!tickerKey)return;
+    // Finnhub calls are server-proxied; the env-var key is what counts.
+    if(!tickerKey)return;
     const cached={...sectors};
     const cryptoSet=new Set(["BTC","ETH","SOL","DOGE","ADA","DOT","LINK"]);
     const need=[...new Set(holdings.map(h=>h.tk))]
@@ -1011,21 +1036,37 @@ function SectorBreakdown({holdings=[],total=0}){
   const sorted=Object.entries(buckets).sort((a,b)=>b[1]-a[1]).slice(0,10);
   if(sorted.length===0)return null;
   const colorOf=(sec,i)=>["#2563EB","#059669","#D4AF37","#7C3AED","#DC2626","#0EA5E9","#F59E0B","#EC4899","#10B981","#6366F1"][i%10];
+  const donutSlices=sorted.map(([label,value],i)=>({label,value,color:colorOf(label,i)}));
+  const tracked=sorted.reduce((s,[,v])=>s+v,0);
+  const topSector=sorted[0];
 
-  return<div>
-    <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:12}}>SECTOR ALLOCATION{!_gk.finnhub&&<span style={{color:T.muted,marginLeft:8}}>· add Finnhub key for finer bucketing</span>}</div>
-    {sorted.map(([sec,val],i)=>{
-      const pct=total>0?(val/total)*100:0;
-      return<div key={sec} style={{padding:"7px 0",display:"flex",gap:14,alignItems:"center",borderBottom:`1px solid ${T.border}`}}>
-        <div style={{width:160,fontFamily:FM,fontSize:11,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sec}</div>
-        <div style={{flex:1,height:4,background:T.dim,borderRadius:6,overflow:"hidden"}}>
-          <div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:colorOf(sec,i),borderRadius:2}}/>
-        </div>
-        <div style={{width:90,textAlign:"right",fontFamily:FM,fontSize:11,color:T.textHi}}>{kf(val)}</div>
-        <div style={{width:48,textAlign:"right",fontFamily:FM,fontSize:10,color:T.muted}}>{pct.toFixed(1)}%</div>
-      </div>;
-    })}
-  </div>;
+  return<BentoTile accent={T.blue} style={{background:`radial-gradient(circle at 100% 0%, ${T.blue}10, transparent 55%), ${T.card}`}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
+      <div>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s1}}>SECTOR ALLOCATION</div>
+        <div style={{fontFamily:FU,fontSize:13,color:T.muted,letterSpacing:"-0.005em"}}>{sorted.length} sector{sorted.length===1?"":"s"} · {kf(tracked)} tracked</div>
+      </div>
+      {topSector&&<div style={{textAlign:"right"}}>
+        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>TOP SECTOR</div>
+        <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginTop:2}}>{topSector[0]}</div>
+        <div style={{fontFamily:FM,fontSize:11,color:T.blue,fontVariantNumeric:"tabular-nums",marginTop:2}}>{(total>0?(topSector[1]/total)*100:0).toFixed(1)}%</div>
+      </div>}
+    </div>
+    <div style={{display:"flex",gap:T.s5,alignItems:"center",flexWrap:"wrap"}}>
+      <Donut slices={donutSlices} size={160} thickness={18} centerLabel="Tracked" centerValue={kf(tracked)}/>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s2,flex:1,minWidth:220}}>
+        {sorted.map(([sec,val],i)=>{
+          const pct=total>0?(val/total)*100:0;
+          return<div key={sec} style={{display:"grid",gridTemplateColumns:"12px 1fr auto auto",gap:T.s2,alignItems:"center",padding:`${T.s1} 0`,borderBottom:i===sorted.length-1?"none":`1px solid ${T.border}`}}>
+            <span style={{width:8,height:8,borderRadius:2,background:colorOf(sec,i)}}/>
+            <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sec}</span>
+            <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums",marginRight:T.s3}}>{kf(val)}</span>
+            <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:48,textAlign:"right"}}>{pct.toFixed(1)}%</span>
+          </div>;
+        })}
+      </div>
+    </div>
+  </BentoTile>;
 }
 
 /* ─── PRIVACY: hide sensitive dollar values ──────────────
@@ -1095,7 +1136,7 @@ function EyeToggle({ hidden, toggle, size = 18, color }){
 }
 
 /* ─── OVERVIEW ───────────────────────────────────────── */
-function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0}){
+function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[range,setRange]=useState("All");
   const liveSrc=snapAccounts.length>0
@@ -1118,12 +1159,21 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
     .filter(a=>a.liability && a.zakatable !== false)
     .reduce((s,a)=>s+(+a.value||0),0);
   const brokerageTot=snapAccounts.length>0?balanceSum:equityValue;
-  const tot=brokerageTot+(bankBalance||0)+manualAssetTotal;
-  // Net zakatable wealth = positive brokerage + positive bank − debt − liabilities.
-  // Mirrors ZakatSadaqah's computation so both surfaces show consistent figures.
+  // Plaid investment / brokerage balances are NOT in `bankBalance` (which is
+  // depository − credit/loan only) and NOT in `brokerageTot` (which is
+  // SnapTrade-derived). Surface them as a separate addend so they still
+  // contribute to net worth — without inflating the bank or brokerage tiles.
+  const plaidInvestmentTot=plaidAccounts
+    .filter(isBrokeragePlaid)
+    .reduce((s,a)=>s+(+a.current_bal||0),0);
+  const tot=brokerageTot+(bankBalance||0)+plaidInvestmentTot+manualAssetTotal;
+  // Net zakatable wealth = positive brokerage + positive bank + Plaid
+  // investments + manual assets − manual liabilities. Mirrors
+  // ZakatSadaqah's computation so both surfaces show consistent figures.
   const zakatableForOverview=Math.max(0,
     Math.max(0,brokerageTot)
     + Math.max(0,bankBalance||0)
+    + plaidInvestmentTot
     + manualAssetTotal
     - manualLiabilities
   );
@@ -1158,14 +1208,52 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
   // NO fallback to ACCOUNTS constant — that's the owner's data and would
   // leak to every other user who signed up.
   const cardSource=allAccounts.length>0?allAccounts:snapAccounts;
-  const acctsForCards=cardSource.map(a=>({
-    id:a.accountId, nm:`${a.brokerage} — ${a.accountName}`, val:a.balance||0, cash:a.cash||0,
-    type:a.brokerage, authId:a.authorizationId,
+  // Infer per-account cash when the broker doesn't return a separate cash
+  // field. Matches the same fallback we apply to brokerCashSum above so the
+  // per-card "X cash" line stays consistent with the Cash on Hand tile.
+  const inferAcctCash=a=>{
+    if(typeof a.cash==="number")return a.cash;
+    const equity=(a.positions||[]).reduce((es,p)=>{
+      const px=p.last_ask_price||p.last_trade_price||p.price||0;
+      const units=p.units||p.shares||0;
+      return es+(px*units);
+    },0);
+    return Math.max(0,(a.balance||0)-equity);
+  };
+  const snapCards=cardSource.map(a=>({
+    source:"snaptrade",
+    id:a.accountId, nm:`${a.brokerage} — ${a.accountName}`, val:a.balance||0, cash:inferAcctCash(a),
+    type:a.brokerage, kind:"Brokerage", authId:a.authorizationId,
     disabled:disabledAccts.has(a.accountId),
     color:a.brokerageSlug==="FIDELITY"?T.blue:a.brokerageSlug==="ROBINHOOD"?T.gain
           :a.brokerageSlug==="EMPOWER"?"#7C3AED":a.brokerageSlug==="COINBASE"?T.gold
           :a.brokerageSlug==="CHASE"?"#0F4C81":T.muted,
   }));
+  // Plaid accounts — every type is surfaced so the Overview tab reflects
+  // every connection (10 accounts = 10 accounts, regardless of provider).
+  // Type drives the displayed `val` sign and the colored accent so users see
+  // at a glance whether a row is a bank deposit, debt, or investment.
+  const plaidCards=plaidAccounts.map(a=>{
+    const bal=+a.current_bal||0;
+    const isDebt=isBankDebt(a);
+    const isDep=isBankAsset(a);
+    const isInv=isBrokeragePlaid(a);
+    const kind=isDep?(a.subtype||"deposit").replace(/\b\w/g,c=>c.toUpperCase())
+              :isDebt?(a.subtype||a.type||"credit").replace(/\b\w/g,c=>c.toUpperCase())
+              :isInv?"Investment (Plaid)"
+              :"Other";
+    return{
+      source:"plaid",
+      id:a.account_id, nm:`${a.institution_name||"Bank"} — ${a.name||a.subtype||a.type}`,
+      val:isDebt?-bal:bal,
+      cash:isDep?bal:0,
+      type:a.institution_name||"Bank", kind,
+      mask:a.mask||null,
+      color:isDebt?T.loss:isDep?T.blue:isInv?T.gold:T.muted,
+      disabled:false,
+    };
+  });
+  const acctsForCards=[...snapCards,...plaidCards];
   // Stat cards: top 3 accounts by balance, dynamically pulled from real data.
   // Empty array when no real connections — caller renders the Welcome
   // banner instead of fallback cards with owner-specific account names.
@@ -1375,9 +1463,15 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
           <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:halalPct>=95?T.gain:halalPct>=70?T.gold:T.loss,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{halalPct.toFixed(1)}%</div>
           <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{merged.filter(h=>h.sh_==="halal").length} of {merged.length} halal</div>
         </BentoTile>
-        {totalCash>0&&<BentoTile>
+        {(totalCash>0||snapAccounts.length>0)&&<BentoTile>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CASH ON HAND</div>
-          <div style={{fontFamily:FU,fontSize:24,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(totalCash))}</div>
+          <div style={{fontFamily:FU,fontSize:24,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}
+               title={`Brokerage cash (SnapTrade): ${fmtUSD(brokerCashSum)}\nBank deposits (Plaid depository): ${fmtUSD(bankCashContribution)}\nTotal: ${fmtUSD(totalCash)}\n\nDebts (credit / loan) reduce Net Worth elsewhere but never reduce Cash on Hand.`}>{mask(fmtUSD(totalCash))}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>
+            {valuesHidden
+              ? "Brokerage cash + bank deposits"
+              : <>Brokerage <b style={{color:T.text}}>{fmtUSD(brokerCashSum)}</b> + Bank <b style={{color:T.text}}>{fmtUSD(bankCashContribution)}</b></>}
+          </div>
         </BentoTile>}
       </div>
     </div>
@@ -1454,15 +1548,22 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
       </div>
     </BentoTile>}
 
-    {/* ─── BENTO ROW 4: Accounts ────────────────────── */}
+    {/* ─── BENTO ROW 4: Accounts (unified SnapTrade + Plaid) ───── */}
     {acctsForCards.length>0&&<BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ACCOUNTS{disabledAccts.size>0&&<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {disabledAccts.size} hidden</span>}</span>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>
+          ACCOUNTS · {acctsForCards.length} total
+          {snapCards.length>0&&<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {snapCards.length} brokerage</span>}
+          {plaidCards.length>0&&<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {plaidCards.length} bank/credit</span>}
+          {disabledAccts.size>0&&<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {disabledAccts.size} hidden</span>}
+        </span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:T.s2}}>
         {acctsForCards.map(a=>{
           const dim=a.disabled;
-          return<div key={a.id} style={{
+          const isPlaid=a.source==="plaid";
+          const valColor=a.val<0?T.loss:T.textHi;
+          return<div key={`${a.source}-${a.id}`} style={{
             background:dim?"transparent":T.surface,
             border:`1px solid ${dim?T.border:T.border}`,
             borderLeft:`3px solid ${a.color}`,
@@ -1472,12 +1573,15 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
             opacity:dim?0.4:1,
             transition:"all 0.18s",
           }}>
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1,textDecoration:dim?"line-through":"none"}}>{(a.type||"").toUpperCase()}</div>
-            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",textDecoration:dim?"line-through":"none"}}>{mask(fmtUSD(a.val||0))}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s1}}>
+              <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,textDecoration:dim?"line-through":"none"}}>{(a.type||"").toUpperCase()}</div>
+              <div style={{fontFamily:FM,fontSize:8,color:isPlaid?T.gold:T.blue,letterSpacing:"0.1em",fontWeight:600,padding:`1px ${T.s1}`,border:`1px solid ${(isPlaid?T.gold:T.blue)+"40"}`,borderRadius:T.rSm,marginRight:onDisconnectAcct&&!isPlaid?28:0}}>{isPlaid?"PLAID":"SNAPTRADE"}</div>
+            </div>
+            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:valColor,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",textDecoration:dim?"line-through":"none"}}>{mask(fmtUSD(a.val||0))}</div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2,letterSpacing:"0.04em"}}>{a.kind}{a.mask?` · ••${a.mask}`:""}</div>
             {a.cash>0&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>{mask(fmtUSD(a.cash))} cash</div>}
             <div style={{fontFamily:FU,fontSize:11,color:T.muted,marginTop:T.s1,letterSpacing:"-0.005em"}}>{a.nm}</div>
-            {a.note&&<div style={{fontFamily:FM,fontSize:10,color:T.gold,marginTop:T.s1,fontWeight:500}}>{a.note}</div>}
-            <div style={{position:"absolute",top:T.s2,right:T.s2,display:"flex",gap:4}}>
+            {!isPlaid&&<div style={{position:"absolute",top:T.s2,right:T.s2,display:"flex",gap:4}}>
               {onToggleAcct&&<button onClick={()=>onToggleAcct(a.id)} title={dim?"Include in totals":"Hide from totals"}
                 style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
                   background:dim?"transparent":`${T.muted}14`,border:`1px solid ${dim?T.gain+"40":T.border}`,
@@ -1485,7 +1589,10 @@ function Overview({live,snapAccounts=[],allAccounts=[],disabledAccts=new Set(),o
               {onDisconnectAcct&&<button onClick={()=>onDisconnectAcct(a.id,a.authId,a.nm)} title="Permanently disconnect"
                 style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,
                   background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}>✕</button>}
-            </div>
+            </div>}
+            {isPlaid&&onNav&&<button onClick={()=>onNav("finances")} title="Manage in Finances tab"
+              style={{position:"absolute",top:T.s2,right:T.s2,padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
+                background:`${T.gold}14`,border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>MANAGE →</button>}
           </div>;
         })}
       </div>
@@ -1587,7 +1694,9 @@ function evaluateAgainst(standard,{sector,debt,cash,recv,mc,assets}){
   return{pass:fails.length===0,fails,ratios:{debtR,cashR,recvR},tests};
 }
 async function screenTicker(tk){
-  if(!_gk.finnhub)return{tk,status:"unknown",reason:"No Finnhub key"};
+  // No client-side Finnhub gate — /api/finnhub/* is server-proxied with the
+  // env-var FINNHUB_KEY and is per-user JWT-scoped + rate limited. The
+  // browser never holds the key, so we can always attempt the call.
   if(/^(BTC|ETH|SOL|DOGE|ADA|DOT|LINK)$/.test(tk))return{tk,status:"halal",industry:"Cryptocurrency",notes:"Treated as commodity per most contemporary scholars",byStandard:Object.fromEntries(Object.keys(STANDARDS).map(k=>[k,{pass:true,note:"crypto"}]))};
   try{
     const[profileR,metricR]=await Promise.all([
@@ -1669,7 +1778,7 @@ function AAOIFIScreener({holdings=[]}){
       }
     }catch{}
   };
-  useEffect(()=>{if(tickers.length&&_gk.finnhub)runScreen(false); /* eslint-disable-next-line */},[tickers.join(",")]);
+  useEffect(()=>{if(tickers.length)runScreen(false); /* eslint-disable-next-line */},[tickers.join(",")]);
 
   const enriched=holdings.map(h=>({...h,_screen:results[h.tk]||{status:h.sh_||"unknown"}}));
   const byStatus={halal:[],review:[],haram:[],unknown:[]};
@@ -1701,7 +1810,7 @@ function AAOIFIScreener({holdings=[]}){
           <select value={primary} onChange={e=>setStandard(e.target.value)} className="field" style={{width:"auto",fontSize:12,cursor:"pointer"}}>
             {Object.entries(STANDARDS).map(([k,s])=><option key={k} value={k}>{s.name}</option>)}
           </select>
-          <button onClick={()=>runScreen(true)} disabled={busy||!_gk.finnhub} className="btn-primary" title={!_gk.finnhub?"Server uses its own Finnhub key — should always be available":undefined}>{busy?"Screening…":"Re-screen"}</button>
+          <button onClick={()=>runScreen(true)} disabled={busy} className="btn-primary">{busy?"Screening…":"Re-screen"}</button>
         </div>
       </div>
       <div style={{marginTop:T.s3,padding:`${T.s2} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.6,letterSpacing:"0.02em"}}>
@@ -5498,27 +5607,44 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
   const totalBank=useMemo(()=>accounts.reduce((s,a)=>{
     // For credit cards / loans, current_bal is a positive number representing
     // what you OWE. Treat depository (checking/savings) as positive net worth
-    // contribution; loans/credit as negative.
+    // contribution; loans/credit as negative. Investment-type Plaid accounts
+    // are excluded — those are routed through SnapTrade as the canonical
+    // brokerage source, so including them here would double-count any broker
+    // a user happens to link via both providers (e.g. Robinhood).
     const v=+a.current_bal||0;
-    if(a.type==="credit"||a.type==="loan")return s-v;
-    return s+v;
+    if(isBankDebt(a))return s-v;
+    if(isBankAsset(a))return s+v;
+    return s;
   },0),[accounts]);
+
+  // Restrict transaction analysis to bank-side accounts only. If the user
+  // linked a brokerage via Plaid, its trade/dividend transactions would
+  // otherwise pollute the spending category + recurring widgets.
+  const bankAccountIds=useMemo(()=>{
+    const ids=new Set();
+    accounts.forEach(a=>{if(isBankAsset(a)||isBankDebt(a))ids.add(a.account_id);});
+    return ids;
+  },[accounts]);
+  const bankTxns=useMemo(()=>{
+    if(bankAccountIds.size===0)return txns; // no classification info → show all
+    return txns.filter(t=>bankAccountIds.has(t.account_id));
+  },[txns,bankAccountIds]);
 
   // Spending by category (positive amount = outflow per Plaid convention)
   const spendingByCategory=useMemo(()=>{
     const map={};
-    txns.forEach(t=>{
+    bankTxns.forEach(t=>{
       if(t.amount<=0)return; // refunds/credits → skip from spending view
       const cat=t.personal_finance_category?.primary||t.category?.[0]||"Other";
       map[cat]=(map[cat]||0)+t.amount;
     });
     return Object.entries(map).map(([cat,total])=>({cat,total})).sort((a,b)=>b.total-a.total);
-  },[txns]);
+  },[bankTxns]);
 
   // Recurring detection: same merchant_name appears 2+ times across distinct months
   const recurring=useMemo(()=>{
     const byMerchant={};
-    txns.forEach(t=>{
+    bankTxns.forEach(t=>{
       const m=(t.merchant_name||t.name||"").trim();
       if(!m||t.amount<=0)return;
       const month=(t.date||"").slice(0,7);
@@ -5538,7 +5664,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
         lastDate:x.lastDate,
       }))
       .sort((a,b)=>b.monthCount-a.monthCount);
-  },[txns]);
+  },[bankTxns]);
 
   useEffect(()=>{onBankBalanceChange?.(totalBank);},[totalBank]); // eslint-disable-line
 
@@ -5577,6 +5703,17 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     finally{setLoading(false);}
   },[demoMode]);
   useEffect(()=>{refresh();},[refresh]);
+
+  // Keep the Finances tab fresh: poll every 90s (matches the global live-price
+  // cadence) and re-fetch the moment the tab becomes visible after being
+  // backgrounded. Plaid /accounts is cached server-side so the cost is low.
+  useEffect(()=>{
+    if(demoMode)return;
+    const tick=setInterval(()=>{refresh();},90*1000);
+    const onVis=()=>{if(document.visibilityState==="visible")refresh();};
+    document.addEventListener("visibilitychange",onVis);
+    return()=>{clearInterval(tick);document.removeEventListener("visibilitychange",onVis);};
+  },[refresh,demoMode]);
 
   // Lazy-load react-plaid-link only when user clicks Connect (keeps initial bundle small).
   const[PlaidLink,setPlaidLink]=useState(null);
@@ -5728,7 +5865,11 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     }finally{setBusy(false);}
   };
 
-  // Group accounts by institution for the bank cards.
+  // Group every Plaid account by institution. All account types render here
+  // (depository, credit, loan, investment, brokerage, other) so the user sees
+  // every connection they've authorized — the type badge per card explains
+  // what each one is. Cash on Hand math elsewhere classifies them correctly
+  // so they don't double-count when also linked via SnapTrade.
   const byInst={};
   accounts.forEach(a=>{
     if(!byInst[a.institution_name])byInst[a.institution_name]={inst:a.institution_name,item_id:a.item_id,accts:[]};
@@ -5821,18 +5962,25 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
       </div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s2}}>
         {inst.accts.map(a=>{
-          const isLiability=a.type==="credit"||a.type==="loan";
+          const isLiability=isBankDebt(a);
+          const isInv=isBrokeragePlaid(a);
+          // Color: red for debt, green for savings, gold for investment,
+          // blue for everything else (checking, money market, etc.).
+          const accent=isLiability?T.loss:isInv?T.gold:a.subtype==="savings"?T.gain:T.blue;
           return<div key={a.account_id} style={{
             padding:`${T.s3} ${T.s4}`,
             background:T.surface,
             border:`1px solid ${T.border}`,
-            borderLeft:`3px solid ${isLiability?T.loss:a.subtype==="savings"?T.gain:T.blue}`,
+            borderLeft:`3px solid ${accent}`,
             borderRadius:T.rMd,
+            position:"relative",
           }}>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{(a.subtype||a.type||"").toUpperCase()}{a.mask?` · ····${a.mask}`:""}</div>
+            {isInv&&<div style={{position:"absolute",top:T.s2,right:T.s2,fontFamily:FM,fontSize:8,color:T.gold,letterSpacing:"0.1em",fontWeight:600,padding:`1px ${T.s1}`,border:`1px solid ${T.gold}40`,borderRadius:T.rSm}}>INVESTMENT</div>}
             <div style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em",marginBottom:T.s1}}>{a.name||a.official_name||"Account"}</div>
             <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:isLiability?T.loss:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{isLiability?"−":""}{fmtUSD(a.current_bal)}</div>
             {a.available_bal!=null&&a.available_bal!==a.current_bal&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(a.available_bal)} available</div>}
+            {isInv&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,lineHeight:1.4}}>Excluded from Bank Net Position — counted as brokerage on Overview / Portfolio.</div>}
           </div>;
         })}
       </div>
@@ -5843,7 +5991,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     {spendingByCategory.length>0&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SPENDING BY CATEGORY</span>
-        <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{txns.filter(t=>t.amount>0).length} outflows in window</span>
+        <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{bankTxns.filter(t=>t.amount>0).length} outflows in window</span>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
         {spendingByCategory.slice(0,8).map(s=>{
@@ -6311,7 +6459,15 @@ export default function Mizan(){
   // without waiting for the Finances tab to mount.
   const[bankBalance,setBankBalance]=useState(()=>{try{const v=localStorage.getItem("mizan_bank_balance");return v?+v:0;}catch{return 0;}});
   useEffect(()=>{try{localStorage.setItem("mizan_bank_balance",String(bankBalance||0));}catch{}},[bankBalance]);
-  // Hydrate bank balance on mount + every 90s when auto-sync ticks elsewhere.
+  // Unified Plaid accounts state — every type (depository / credit / loan /
+  // investment / brokerage / other) is held here, so the Overview, Finances,
+  // and Portfolio tabs can all consume the same source of truth. The numeric
+  // `bankBalance` is derived from it (depository as +, credit/loan as −) and
+  // exists separately so consumers that only need the net number don't have
+  // to re-walk the list. Hydrated from localStorage on first paint, then
+  // refreshed every 90s on the app-wide auto-sync cadence.
+  const[plaidAccounts,setPlaidAccounts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_plaid_accounts")||"[]");}catch{return[];}});
+  useEffect(()=>{try{localStorage.setItem("mizan_plaid_accounts",JSON.stringify(plaidAccounts));}catch{}},[plaidAccounts]);
   useEffect(()=>{
     let cancel=false;
     const pull=async()=>{
@@ -6319,10 +6475,18 @@ export default function Mizan(){
         const r=await apiFetch("/api/plaid/accounts");
         if(!r.ok||cancel)return;
         const d=await r.json();
-        const total=(d.accounts||[]).reduce((s,a)=>{
+        const accts=Array.isArray(d.accounts)?d.accounts:[];
+        if(cancel)return;
+        setPlaidAccounts(accts);
+        // bankBalance = depository − (credit + loan). Investment-type
+        // balances do not contribute here — they appear under the
+        // brokerage/investment bucket below, so they aren't double-counted
+        // against a SnapTrade-linked broker.
+        const total=accts.reduce((s,a)=>{
           const v=+a.current_bal||0;
-          if(a.type==="credit"||a.type==="loan")return s-v;
-          return s+v;
+          if(isBankDebt(a))return s-v;
+          if(isBankAsset(a))return s+v;
+          return s;
         },0);
         if(!cancel)setBankBalance(total);
       }catch{/* ignore */}
@@ -7288,7 +7452,7 @@ export default function Mizan(){
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
       <div className="page">
-        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance}/>}
+        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} bankBalance={bankBalance}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
