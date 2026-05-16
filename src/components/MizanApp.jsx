@@ -5644,6 +5644,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
       setStatus({ok:true,msg:`Linked ${d.institution_name}.`});
       setPlaidReady(false);setLinkToken(null);
       await refresh();
+      // Kick off the first /transactions/sync so cursor is established
+      // and the user sees transactions on next render. Best-effort —
+      // the daily cron will pick it up regardless.
+      apiFetch("/api/plaid/transactions?sync=1").catch(()=>{});
     }catch(err){
       setStatus({ok:false,msg:err.message||"Bank link failed"});
     }finally{
