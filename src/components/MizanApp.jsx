@@ -5486,6 +5486,11 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
   const[plaidReady,setPlaidReady]=useState(false);
   const[busy,setBusy]=useState(false);
   const[status,setStatus]=useState(null);
+  // Items the user must re-authorize (Plaid surfaced ITEM_LOGIN_REQUIRED /
+  // PENDING_EXPIRATION). Populated from per-item errors in /accounts and
+  // /transactions responses so we can show a yellow banner above the
+  // affected institution's account list.
+  const[itemsNeedingReauth,setItemsNeedingReauth]=useState([]);
 
   const fmtUSD=v=>`$${(+v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const fmtDate=s=>{try{return new Date(s).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}catch{return s;}};
@@ -5540,13 +5545,34 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
   // Load existing accounts + transactions on mount.
   const refresh=useCallback(async()=>{
     // Demo mode is a pure local fixture — never hit the Plaid API.
-    if(demoMode){setAccounts(DEMO_BANK_ACCOUNTS);setTxns(DEMO_TRANSACTIONS);return;}
+    if(demoMode){setAccounts(DEMO_BANK_ACCOUNTS);setTxns(DEMO_TRANSACTIONS);setItemsNeedingReauth([]);return;}
     setLoading(true);
+    // Collect per-item errors (ITEM_LOGIN_REQUIRED / PENDING_EXPIRATION) so
+    // we can surface a Re-authorize banner per affected institution.
+    const reauthMap=new Map();
+    const collectReauth=(arr)=>{
+      if(!Array.isArray(arr))return;
+      arr.forEach(e=>{
+        if(!e?.item_id)return;
+        if(e.hint==="UPDATE_MODE_REQUIRED"||e.code==="ITEM_LOGIN_REQUIRED"||e.code==="PENDING_EXPIRATION"){
+          reauthMap.set(e.item_id,{item_id:e.item_id,institution_name:e.institution_name||null});
+        }
+      });
+    };
     try{
       const ar=await apiFetch("/api/plaid/accounts");
-      if(ar.ok){const ad=await ar.json();setAccounts(Array.isArray(ad.accounts)?ad.accounts:[]);}
+      if(ar.ok){
+        const ad=await ar.json();
+        setAccounts(Array.isArray(ad.accounts)?ad.accounts:[]);
+        collectReauth(ad.item_errors);
+      }
       const tr=await apiFetch("/api/plaid/transactions");
-      if(tr.ok){const td=await tr.json();setTxns(Array.isArray(td.transactions)?td.transactions:[]);}
+      if(tr.ok){
+        const td=await tr.json();
+        setTxns(Array.isArray(td.transactions)?td.transactions:[]);
+        collectReauth(td.item_errors);
+      }
+      setItemsNeedingReauth(Array.from(reauthMap.values()));
     }catch(err){console.error("Finances refresh failed:",err);}
     finally{setLoading(false);}
   },[demoMode]);
@@ -5763,7 +5789,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
       </div>
     </BentoTile>:null}
 
-    {institutions.map(inst=><BentoTile key={inst.item_id||inst.inst} accent={T.blue}>
+    {institutions.map(inst=>{
+      const needsReauth=itemsNeedingReauth.some(r=>r.item_id===inst.item_id);
+      return<BentoTile key={inst.item_id||inst.inst} accent={T.blue}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
         <div style={{fontFamily:FU,fontSize:16,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{inst.inst}</div>
         <div style={{display:"flex",gap:T.s2}}>
@@ -5771,6 +5799,22 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
           <button onClick={()=>removeItem(inst.item_id,inst.inst)} disabled={busy} className="btn-danger" style={{fontSize:10}}>Disconnect</button>
         </div>
       </div>
+      {needsReauth&&<div style={{
+        marginBottom:T.s3,
+        padding:`${T.s2} ${T.s3}`,
+        background:`${T.gold}1A`,
+        border:`1px solid ${T.gold}`,
+        borderRadius:T.rMd,
+        fontFamily:FU,
+        fontSize:12,
+        color:T.textHi,
+        display:"flex",
+        alignItems:"center",
+        gap:T.s2,
+      }}>
+        <span style={{fontSize:14}} aria-hidden="true">⚠️</span>
+        <span>This connection needs re-authorization. Click Re-authorize.</span>
+      </div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s2}}>
         {inst.accts.map(a=>{
           const isLiability=a.type==="credit"||a.type==="loan";
@@ -5788,7 +5832,8 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
           </div>;
         })}
       </div>
-    </BentoTile>)}
+    </BentoTile>;
+    })}
 
     {/* ─── SPENDING BY CATEGORY ─────────────────── */}
     {spendingByCategory.length>0&&<BentoTile>
