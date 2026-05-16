@@ -1,0 +1,132 @@
+[
+  {
+    "tab": "overview",
+    "subtab": null,
+    "flags": []
+  },
+  {
+    "tab": "finances",
+    "subtab": null,
+    "flags": []
+  },
+  {
+    "tab": "portfolio",
+    "subtab": null,
+    "flags": []
+  },
+  {
+    "tab": "portfolio",
+    "subtab": "Holdings",
+    "flags": []
+  },
+  {
+    "tab": "portfolio",
+    "subtab": "Watchlist",
+    "flags": []
+  },
+  {
+    "tab": "portfolio",
+    "subtab": "Activity",
+    "flags": []
+  },
+  {
+    "tab": "portfolio",
+    "subtab": "Rebalance",
+    "flags": []
+  },
+  {
+    "tab": "portfolio",
+    "subtab": "Tax Planning",
+    "flags": []
+  },
+  {
+    "tab": "portfolio",
+    "subtab": "Zakat & Sadaqah",
+    "flags": []
+  },
+  {
+    "tab": "portfolio",
+    "subtab": "ETFs & Funds",
+    "flags": []
+  },
+  {
+    "tab": "portfolio",
+    "subtab": "Sharia Screener",
+    "flags": []
+  },
+  {
+    "tab": "trade",
+    "subtab": null,
+    "flags": []
+  },
+  {
+    "tab": "trade",
+    "subtab": "Order Ticket",
+    "flags": []
+  },
+  {
+    "tab": "trade",
+    "subtab": "Backtest",
+    "flags": []
+  },
+  {
+    "tab": "trade",
+    "subtab": "Retirement / FIRE",
+    "flags": []
+  },
+  {
+    "tab": "trade",
+    "subtab": "Sharia Principles",
+    "flags": []
+  },
+  {
+    "tab": "advisor",
+    "subtab": null,
+    "flags": []
+  },
+  {
+    "tab": "settings",
+    "subtab": null,
+    "flags": []
+  },
+  {
+    "tab": "settings",
+    "subtab": "Connect Accounts",
+    "flags": []
+  },
+  {
+    "tab": "settings",
+    "subtab": "Account",
+    "flags": []
+  },
+  {
+    "tab": "settings",
+    "subtab": "Security",
+    "flags": []
+  },
+  {
+    "tab": "settings",
+    "subtab": "Notifications",
+    "flags": []
+  },
+  {
+    "tab": "settings",
+    "subtab": "Manual Assets",
+    "flags": []
+  },
+  {
+    "tab": "settings",
+    "subtab": "Documents",
+    "flags": []
+  },
+  {
+    "tab": "settings",
+    "subtab": "Privacy & Data",
+    "flags": []
+  },
+  {
+    "tab": "about",
+    "subtab": null,
+    "flags": []
+  }
+]
