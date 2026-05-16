@@ -7,6 +7,7 @@ import { downloadCSV } from "../lib/exportCSV.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Skeleton, SkeletonCard, SkeletonTable } from "./Skeleton.jsx";
+import BillsCalendar from "./BillsCalendar.jsx";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
 // Savium-inspired palette: deep navy base, vibrant purple primary, soft
@@ -6132,6 +6133,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
         ]} rows={recurring.slice(0,12)}/>
       </div>
     </BentoTile>}
+
+    {/* ─── UPCOMING BILLS · list view + 3-day push (server cron) ─── */}
+    {recurring.length>0&&<BillsCalendar recurring={recurring} txns={bankTxns} accounts={accounts} demoMode={demoMode}/>}
 
     {/* ─── RECENT TRANSACTIONS ────────────────── */}
     {txns.length>0&&<BentoTile style={{padding:0,overflow:"hidden"}}>
