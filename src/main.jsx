@@ -51,3 +51,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )
+
+// Service worker registration. Lives here (module-scope of an external
+// script) so the CSP can drop 'unsafe-inline' from script-src. The inline
+// <script> that used to do this in index.html has been removed.
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
