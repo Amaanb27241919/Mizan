@@ -5598,6 +5598,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
   const[accounts,setAccounts]=useState(()=>demoMode?DEMO_BANK_ACCOUNTS:[]);
   const[txns,setTxns]=useState(()=>demoMode?DEMO_TRANSACTIONS:[]);
   const[loading,setLoading]=useState(false);
+  // One-shot backfill guard: only attempt /transactions/sync once per mount
+  // if the read returns empty. Stops the 90s auto-poll from hammering sync
+  // when the user has a brand-new account with no transactions yet.
+  const didBackfillRef=useRef(false);
   const[linkToken,setLinkToken]=useState(null);
   const[plaidReady,setPlaidReady]=useState(false);
   const[busy,setBusy]=useState(false);
@@ -5694,17 +5698,45 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     };
     try{
       const ar=await apiFetch("/api/plaid/accounts");
+      let acctCount=0;
       if(ar.ok){
         const ad=await ar.json();
-        setAccounts(Array.isArray(ad.accounts)?ad.accounts:[]);
+        const acctList=Array.isArray(ad.accounts)?ad.accounts:[];
+        acctCount=acctList.length;
+        setAccounts(acctList);
         collectReauth(ad.item_errors);
       }
-      const tr=await apiFetch("/api/plaid/transactions");
+      // Read path: /api/plaid/transactions returns rows from the
+      // plaid_transactions table (populated by /transactions/sync). For
+      // users who linked their bank before the cursor-based migration
+      // shipped, that table is empty until the first sync runs. Self-heal:
+      // if the read came back empty AND the user has Plaid accounts, fire
+      // ?sync=1 to backfill via the cursor, then re-read. Best-effort — if
+      // sync fails we just leave the empty state alone.
+      let tr=await apiFetch("/api/plaid/transactions");
+      let txnList=[];
       if(tr.ok){
         const td=await tr.json();
-        setTxns(Array.isArray(td.transactions)?td.transactions:[]);
+        txnList=Array.isArray(td.transactions)?td.transactions:[];
         collectReauth(td.item_errors);
       }
+      if(txnList.length===0&&acctCount>0&&!didBackfillRef.current){
+        didBackfillRef.current=true;
+        try{
+          const sr=await apiFetch("/api/plaid/transactions?sync=1");
+          if(sr.ok){
+            const sd=await sr.json();
+            collectReauth(sd.errors);
+            // Re-read after sync so the freshly upserted rows reach the UI.
+            tr=await apiFetch("/api/plaid/transactions");
+            if(tr.ok){
+              const td2=await tr.json();
+              txnList=Array.isArray(td2.transactions)?td2.transactions:[];
+            }
+          }
+        }catch(syncErr){console.warn("Plaid backfill sync failed:",syncErr);}
+      }
+      setTxns(txnList);
       setItemsNeedingReauth(Array.from(reauthMap.values()));
     }catch(err){console.error("Finances refresh failed:",err);}
     finally{setLoading(false);}
