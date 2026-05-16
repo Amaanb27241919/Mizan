@@ -173,8 +173,19 @@ async function handleApi(req, res, url) {
     body: parsed,
     headers: req.headers,
   });
-  res.writeHead(result.status, { "Content-Type": "application/json", ...(result.headers || {}) });
-  res.end(JSON.stringify(result.body));
+  // Honor handler-provided Content-Type (e.g. text/csv for /api/export/*).
+  // When the handler sets a Content-Type explicitly, `result.body` is a string
+  // that should be written as-is — no JSON serialisation. Default to JSON
+  // when no override is supplied.
+  const extraHeaders = result.headers || {};
+  const ctOverride = extraHeaders["Content-Type"] || extraHeaders["content-type"];
+  if (ctOverride) {
+    res.writeHead(result.status, extraHeaders);
+    res.end(typeof result.body === "string" ? result.body : JSON.stringify(result.body));
+  } else {
+    res.writeHead(result.status, { "Content-Type": "application/json", ...extraHeaders });
+    res.end(JSON.stringify(result.body));
+  }
 }
 
 // ── Boot: Vite middleware + API on one port ──────────────
@@ -225,6 +236,7 @@ const server = http.createServer(async (req, res) => {
     url.pathname.startsWith("/api/snaptrade") ||
     url.pathname.startsWith("/api/finnhub")   ||
     url.pathname.startsWith("/api/polygon")   ||
+    url.pathname.startsWith("/api/export")    ||
     url.pathname === "/api/advisor"
   ) {
     // handlers.mjs already emits structured request.start / request.end /
