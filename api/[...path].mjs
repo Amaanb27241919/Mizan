@@ -29,11 +29,15 @@ export default async function handler(req, res) {
       body:     typeof req.body === "string" ? (req.body ? JSON.parse(req.body) : {}) : (req.body || {}),
       headers:  req.headers,
     });
-    res.status(result.status).setHeader("Content-Type", "application/json");
-    if (result.headers) {
-      for (const [k, v] of Object.entries(result.headers)) res.setHeader(k, v);
-    }
-    res.send(JSON.stringify(result.body));
+    // Honor handler-provided Content-Type (e.g. text/csv for /api/export/*).
+    // When the handler sets one, write `result.body` as-is and skip the JSON
+    // default. Otherwise, fall back to application/json + JSON.stringify.
+    const extraHeaders = result.headers || {};
+    const ctOverride = extraHeaders["Content-Type"] || extraHeaders["content-type"];
+    if (!ctOverride) res.setHeader("Content-Type", "application/json");
+    for (const [k, v] of Object.entries(extraHeaders)) res.setHeader(k, v);
+    res.status(result.status);
+    res.send(ctOverride && typeof result.body === "string" ? result.body : JSON.stringify(result.body));
   } catch (err) {
     // Report to Sentry (no-op when DSN unset; PII scrubbed in beforeSend)
     try { Sentry.captureException(err); } catch { /* swallow */ }

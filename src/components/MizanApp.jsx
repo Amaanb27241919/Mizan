@@ -2419,6 +2419,20 @@ function ActivityPanel({activities=[],accounts=[]}){
           title={rows.length===0?"No activity to export":"Download activity as CSV"}
           style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:rows.length===0?T.dim:T.muted,cursor:rows.length===0?"not-allowed":"pointer"}}
         >CSV ↓</button>
+        <button
+          onClick={async()=>{
+            const r=await apiFetch("/api/export/activity.csv");
+            if(!r.ok){alert("Export failed");return;}
+            const blob=await r.blob();
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement("a");
+            a.href=url;a.download=`mizan-activity-${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a);a.click();
+            setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},100);
+          }}
+          title="Download full activity export from server (5-year SnapTrade window)"
+          style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer"}}
+        >↓ Export CSV</button>
       </div>
     </div>
 
@@ -3193,6 +3207,20 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
             title={filtered.length===0?"No rows to export":"Download visible holdings as CSV"}
             style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:filtered.length===0?T.dim:T.muted,cursor:filtered.length===0?"not-allowed":"pointer"}}
           >CSV ↓</button>
+          <button
+            onClick={async()=>{
+              const r=await apiFetch("/api/export/holdings.csv");
+              if(!r.ok){alert("Export failed");return;}
+              const blob=await r.blob();
+              const url=URL.createObjectURL(blob);
+              const a=document.createElement("a");
+              a.href=url;a.download=`mizan-holdings-${new Date().toISOString().slice(0,10)}.csv`;
+              document.body.appendChild(a);a.click();
+              setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},100);
+            }}
+            title="Download full holdings export from server (Plaid cache + fresh SnapTrade pull)"
+            style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer"}}
+          >↓ Export CSV</button>
         </div>
       </div>
 
@@ -5930,6 +5958,20 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     }
   },[demoMode,syncBusy]);
 
+  // Server-side CSV download — fetches the endpoint as text/csv, builds a
+  // blob-URL, clicks a synthetic anchor, then cleans up. Used by the Finances
+  // tab Export CSV button below (and the Holdings/Activity buttons in the
+  // Portfolio tab via the same helper inlined there).
+  const downloadCSVFromEndpoint = useCallback(async (endpoint, filename) => {
+    const r = await apiFetch(endpoint);
+    if (!r.ok) { alert("Export failed"); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+  }, []);
+
   // Keep the Finances tab fresh: poll every 90s (matches the global live-price
   // cadence) and re-fetch the moment the tab becomes visible after being
   // backgrounded. Plaid /accounts is cached server-side so the cost is low.
@@ -6147,6 +6189,15 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               background:syncBusy?"transparent":`${T.blue}14`,
               border:`1px solid ${T.blue}40`,color:T.blue}}>
             {syncBusy?"Syncing…":"↻ Sync transactions"}
+          </button>}
+          {institutions.length>0&&!demoMode&&<button
+            onClick={()=>downloadCSVFromEndpoint("/api/export/transactions.csv",`mizan-transactions-${new Date().toISOString().slice(0,10)}.csv`)}
+            title="Download every Plaid transaction on file as CSV"
+            style={{padding:`12px ${T.s4}`,fontSize:12,fontFamily:FM,fontWeight:600,letterSpacing:"0.04em",
+              borderRadius:T.rMd,cursor:"pointer",
+              background:"transparent",
+              border:`1px solid ${T.border}`,color:T.muted}}>
+            ↓ Export CSV
           </button>}
           <button onClick={startLink} disabled={busy||demoMode} title={demoMode?"Disable demo mode in Settings to connect a real bank":undefined} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":demoMode?"+ Connect Bank (demo)":"+ Connect Bank"}</button>
         </div>
