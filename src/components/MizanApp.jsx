@@ -5650,6 +5650,57 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     return txns.filter(t=>bankAccountIds.has(t.account_id));
   },[txns,bankAccountIds]);
 
+  // ─── Transactions table state (search + filter chips + pagination) ─────
+  // Launch-blocker: real bank histories have thousands of rows; .slice(0,200)
+  // with no controls is unusable. Search is debounced ~200ms via a paired
+  // useEffect/setTimeout (no new dependency). All four filters compose on
+  // top of bankTxns (which already strips brokerage-Plaid trades).
+  const[txnSearch,setTxnSearch]=useState("");
+  const[txnSearchDebounced,setTxnSearchDebounced]=useState("");
+  useEffect(()=>{
+    const id=setTimeout(()=>setTxnSearchDebounced(txnSearch.trim().toLowerCase()),200);
+    return()=>clearTimeout(id);
+  },[txnSearch]);
+  const[txnType,setTxnType]=useState("all"); // all | outflow | inflow | pending
+  const[txnRange,setTxnRange]=useState("90d"); // 30d | 90d | ytd | all
+  const[txnAccount,setTxnAccount]=useState("all"); // all | account_id
+  const PAGE_SIZE=50;
+  const[txnLimit,setTxnLimit]=useState(PAGE_SIZE);
+  // Reset pagination whenever any filter input changes so users don't get
+  // stuck on page 5 after narrowing the result set.
+  useEffect(()=>{setTxnLimit(PAGE_SIZE);},[txnSearchDebounced,txnType,txnRange,txnAccount]);
+
+  // Compose all filters on top of bankTxns. useMemo so the heavy work runs
+  // once per dependency change, not on every keystroke before debounce fires.
+  const filteredTxns=useMemo(()=>{
+    const now=new Date();
+    let cutoff=null;
+    if(txnRange==="30d"){cutoff=new Date(now);cutoff.setDate(now.getDate()-30);}
+    else if(txnRange==="90d"){cutoff=new Date(now);cutoff.setDate(now.getDate()-90);}
+    else if(txnRange==="ytd"){cutoff=new Date(now.getFullYear(),0,1);}
+    const cutoffStr=cutoff?cutoff.toISOString().slice(0,10):null;
+    const q=txnSearchDebounced;
+    return bankTxns.filter(t=>{
+      // Date range — string compare works because Plaid dates are ISO YYYY-MM-DD.
+      if(cutoffStr&&(t.date||"")<cutoffStr)return false;
+      // Type filter — Plaid convention: amount > 0 is outflow, < 0 is inflow.
+      if(txnType==="outflow"&&!(t.amount>0))return false;
+      if(txnType==="inflow"&&!(t.amount<0))return false;
+      if(txnType==="pending"&&!t.pending)return false;
+      // Account filter — exact account_id match.
+      if(txnAccount!=="all"&&t.account_id!==txnAccount)return false;
+      // Search — merchant_name OR name OR Plaid category, substring, case-insensitive.
+      if(q){
+        const merchant=(t.merchant_name||"").toLowerCase();
+        const name=(t.name||"").toLowerCase();
+        const cat=(t.personal_finance_category?.primary||t.category?.[0]||"").toLowerCase();
+        if(!merchant.includes(q)&&!name.includes(q)&&!cat.includes(q))return false;
+      }
+      return true;
+    });
+  },[bankTxns,txnSearchDebounced,txnType,txnRange,txnAccount]);
+  const visibleTxns=useMemo(()=>filteredTxns.slice(0,txnLimit),[filteredTxns,txnLimit]);
+
   // Spending by category (positive amount = outflow per Plaid convention)
   const spendingByCategory=useMemo(()=>{
     const map={};
@@ -6134,26 +6185,101 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
     </BentoTile>}
 
     {/* ─── RECENT TRANSACTIONS ────────────────── */}
-    {txns.length>0&&<BentoTile style={{padding:0,overflow:"hidden"}}>
-      <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>RECENT TRANSACTIONS · {txns.length} entries</div>
-      <Tbl cols={[
-        {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.date}</span>},
-        {l:"Merchant",r_:r=><div>
-          <div style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.merchant_name||r.name||"—"}</div>
-          {r.pending&&<div style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.06em",marginTop:2}}>● PENDING</div>}
-        </div>},
-        {l:"Category",r_:r=>{
-          const c=r.personal_finance_category?.primary||r.category?.[0]||"";
-          return c?<Tag label={c.replace(/_/g," ")} color={T.blue}/>:<span style={{color:T.muted}}>—</span>;
-        }},
-        {l:"Account",r_:r=>{
-          const a=accounts.find(x=>x.account_id===r.account_id);
-          return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{a?`${a.name} ····${a.mask}`:r.institution_name||"—"}</span>;
-        }},
-        {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{fmtUSD(Math.abs(r.amount))}</span>;}},
-      ]} rows={txns.slice(0,200)}/>
-      {txns.length>200&&<div style={{padding:`${T.s2} ${T.s4}`,fontFamily:FM,fontSize:10,color:T.muted,textAlign:"center",borderTop:`1px solid ${T.border}`}}>Showing 200 of {txns.length}.</div>}
-    </BentoTile>}
+    {txns.length>0&&(()=>{
+      // Chip styling helper — keep visual style consistent with the rest of
+      // the Finances tab (Tag-component look but selectable).
+      const chip=(label,active,onClick)=>(<button key={label} onClick={onClick} style={{
+        padding:`4px ${T.s3}`,borderRadius:999,
+        fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
+        color:active?T.textHi:T.muted,
+        background:active?`${T.blue}22`:"transparent",
+        border:`1px solid ${active?`${T.blue}55`:T.border}`,
+        cursor:"pointer",whiteSpace:"nowrap",transition:"all 0.12s",
+      }}>{label}</button>);
+      return<BentoTile style={{padding:0,overflow:"hidden"}}>
+        <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>RECENT TRANSACTIONS · {bankTxns.length} entries</div>
+        {/* Controls row — search + filters. Wraps responsively. */}
+        <div style={{padding:`${T.s3} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:T.s3}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:T.s3,alignItems:"center"}}>
+            <input
+              type="text"
+              value={txnSearch}
+              onChange={e=>setTxnSearch(e.target.value)}
+              placeholder="Search merchant, name, or category…"
+              style={{
+                flex:"1 1 240px",minWidth:200,
+                padding:`8px ${T.s3}`,
+                background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,
+                color:T.textHi,fontFamily:FU,fontSize:13,letterSpacing:"-0.005em",
+                outline:"none",
+              }}
+            />
+            <select
+              value={txnAccount}
+              onChange={e=>setTxnAccount(e.target.value)}
+              style={{
+                padding:`8px ${T.s3}`,
+                background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,
+                color:T.text,fontFamily:FU,fontSize:13,letterSpacing:"-0.005em",
+                outline:"none",cursor:"pointer",
+              }}
+            >
+              <option value="all">All accounts</option>
+              {accounts.map(a=>(<option key={a.account_id} value={a.account_id}>{`${a.name} ····${a.mask||""}`}</option>))}
+            </select>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:T.s2,alignItems:"center"}}>
+            <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",marginRight:T.s1}}>Type</span>
+            {chip("All",     txnType==="all",     ()=>setTxnType("all"))}
+            {chip("Outflow", txnType==="outflow", ()=>setTxnType("outflow"))}
+            {chip("Inflow",  txnType==="inflow",  ()=>setTxnType("inflow"))}
+            {chip("Pending", txnType==="pending", ()=>setTxnType("pending"))}
+            <span style={{flex:"0 0 1px",alignSelf:"stretch",background:T.border,margin:`0 ${T.s2}`}}/>
+            <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",marginRight:T.s1}}>Range</span>
+            {chip("30d", txnRange==="30d", ()=>setTxnRange("30d"))}
+            {chip("90d", txnRange==="90d", ()=>setTxnRange("90d"))}
+            {chip("YTD", txnRange==="ytd", ()=>setTxnRange("ytd"))}
+            {chip("All", txnRange==="all", ()=>setTxnRange("all"))}
+          </div>
+        </div>
+        <Tbl cols={[
+          {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.date}</span>},
+          {l:"Merchant",r_:r=><div>
+            <div style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.merchant_name||r.name||"—"}</div>
+            {r.pending&&<div style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.06em",marginTop:2}}>● PENDING</div>}
+          </div>},
+          {l:"Category",r_:r=>{
+            const c=r.personal_finance_category?.primary||r.category?.[0]||"";
+            return c?<Tag label={c.replace(/_/g," ")} color={T.blue}/>:<span style={{color:T.muted}}>—</span>;
+          }},
+          {l:"Account",r_:r=>{
+            const a=accounts.find(x=>x.account_id===r.account_id);
+            return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{a?`${a.name} ····${a.mask}`:r.institution_name||"—"}</span>;
+          }},
+          {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{fmtUSD(Math.abs(r.amount))}</span>;}},
+        ]} rows={visibleTxns}/>
+        {/* Footer: counter + Load more. Empty state when filters wipe results. */}
+        {filteredTxns.length===0?(
+          <div style={{padding:`${T.s5} ${T.s4}`,fontFamily:FM,fontSize:11,color:T.muted,textAlign:"center",borderTop:`1px solid ${T.border}`}}>
+            No transactions match the current filters.
+          </div>
+        ):(
+          <div style={{padding:`${T.s3} ${T.s4}`,display:"flex",flexDirection:"column",alignItems:"center",gap:T.s2,borderTop:`1px solid ${T.border}`}}>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.06em",textAlign:"center"}}>
+              Showing {visibleTxns.length} of {filteredTxns.length} filtered · {bankTxns.length} total
+            </div>
+            {filteredTxns.length>visibleTxns.length&&(
+              <button onClick={()=>setTxnLimit(n=>n+PAGE_SIZE)} style={{
+                padding:`6px ${T.s4}`,borderRadius:T.rMd,
+                background:T.surface,border:`1px solid ${T.borderHi}`,
+                color:T.textHi,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
+                cursor:"pointer",transition:"background 0.12s",
+              }}>Load more</button>
+            )}
+          </div>
+        )}
+      </BentoTile>;
+    })()}
   </div>;
 }
 
