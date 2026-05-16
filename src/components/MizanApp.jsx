@@ -1568,31 +1568,38 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
             border:`1px solid ${dim?T.border:T.border}`,
             borderLeft:`3px solid ${a.color}`,
             borderRadius:T.rMd,
-            padding:`${T.s3} ${T.s4}`,
+            padding:`${T.s3} ${T.s4} 28px`,
             position:"relative",
             opacity:dim?0.4:1,
             transition:"all 0.18s",
+            minHeight:120,
           }}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s1}}>
-              <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,textDecoration:dim?"line-through":"none"}}>{(a.type||"").toUpperCase()}</div>
-              <div style={{fontFamily:FM,fontSize:8,color:isPlaid?T.gold:T.blue,letterSpacing:"0.1em",fontWeight:600,padding:`1px ${T.s1}`,border:`1px solid ${(isPlaid?T.gold:T.blue)+"40"}`,borderRadius:T.rSm,marginRight:onDisconnectAcct&&!isPlaid?28:0}}>{isPlaid?"PLAID":"SNAPTRADE"}</div>
-            </div>
+            {/* Type label — top-left. Sits below the action button row so
+                the two never collide regardless of card width. */}
+            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1,paddingRight:64,textDecoration:dim?"line-through":"none"}}>{(a.type||"").toUpperCase()}</div>
             <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:valColor,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",textDecoration:dim?"line-through":"none"}}>{mask(fmtUSD(a.val||0))}</div>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2,letterSpacing:"0.04em"}}>{a.kind}{a.mask?` · ••${a.mask}`:""}</div>
             {a.cash>0&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>{mask(fmtUSD(a.cash))} cash</div>}
             <div style={{fontFamily:FU,fontSize:11,color:T.muted,marginTop:T.s1,letterSpacing:"-0.005em"}}>{a.nm}</div>
+
+            {/* Action buttons — top-right. SnapTrade gets toggle + disconnect;
+                Plaid gets a "Manage →" jump to the Finances tab. */}
             {!isPlaid&&<div style={{position:"absolute",top:T.s2,right:T.s2,display:"flex",gap:4}}>
               {onToggleAcct&&<button onClick={()=>onToggleAcct(a.id)} title={dim?"Include in totals":"Hide from totals"}
                 style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
                   background:dim?"transparent":`${T.muted}14`,border:`1px solid ${dim?T.gain+"40":T.border}`,
                   color:dim?T.gain:T.muted,cursor:"pointer"}}>{dim?"ON":"OFF"}</button>}
               {onDisconnectAcct&&<button onClick={()=>onDisconnectAcct(a.id,a.authId,a.nm)} title="Permanently disconnect"
-                style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,
+                style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,lineHeight:1,
                   background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}>✕</button>}
             </div>}
             {isPlaid&&onNav&&<button onClick={()=>onNav("finances")} title="Manage in Finances tab"
-              style={{position:"absolute",top:T.s2,right:T.s2,padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
+              style={{position:"absolute",top:T.s2,right:T.s2,padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",lineHeight:1.4,
                 background:`${T.gold}14`,border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>MANAGE →</button>}
+
+            {/* Source badge — anchored to the bottom-right. Small, low-contrast,
+                purely informational. Out of the action buttons' lane. */}
+            <div style={{position:"absolute",bottom:6,right:T.s3,fontFamily:FM,fontSize:8,color:isPlaid?T.gold:T.blue,opacity:0.7,letterSpacing:"0.12em",fontWeight:600}}>{isPlaid?"PLAID":"SNAPTRADE"}</div>
           </div>;
         })}
       </div>
