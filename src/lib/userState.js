@@ -39,6 +39,8 @@ const USER_SCOPED_CACHE_KEYS = [
   'mizan_activities_cache',   // SnapTrade /activities response
   'mizan_documents_cache',    // SnapTrade /documents response
   'mizan_live_cache',         // live price snapshot
+  'mizan_plaid_accounts',     // Plaid /accounts response (institutions + balances)
+  'mizan_bank_balance',       // derived Plaid net (depository − credit/loan)
   'mizan_has_real_data',      // "has connections" flag (controls demo auto-hide)
   'mizan_demo',               // demo mode toggle (per-user)
   'mizan_auto',               // auto-sync toggle (per-user pref)

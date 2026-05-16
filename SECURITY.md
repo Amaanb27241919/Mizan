@@ -106,21 +106,32 @@ for the full data-handling disclosure to end users.
 - **Plaid account metadata:** institution name, account name, masked
   number, current and available balances, currency. Stored in
   `plaid_accounts` with RLS.
-- **Plaid transactions:** not persisted. Fetched live per request via
-  `/transactions/sync` to avoid stale data and reduce storage growth.
+- **Plaid transactions:** persisted in `plaid_transactions` (RLS-protected,
+  one row per Plaid transaction) using Plaid's cursor-based
+  `/transactions/sync` workflow. Each `plaid_tokens` row stores an opaque
+  `transactions_cursor`; after a sync, only the diff (added / modified /
+  removed) is upserted, and a deleted-by-Plaid row is removed by
+  `(user_id, transaction_id)` so a stale cursor can never produce a
+  cross-user write. Reads are served from this table and never proxied
+  back through Plaid; writes happen exclusively on the server via the
+  service-role key. Transactions inherit the same disconnect-and-delete
+  retention rules as account metadata (below).
 - **SnapTrade user mapping:** opaque user-id and user-secret pair per
   Supabase user, stored in `user_snaptrade`.
 
 ### Retention and deletion
 
-- Account metadata and tokens persist until (a) the user disconnects the
-  institution, or (b) the user deletes their MĪZAN account.
+- Account metadata, tokens, and transactions persist until (a) the user
+  disconnects the institution, or (b) the user deletes their MĪZAN account.
 - Disconnection: the application calls Plaid `/item/remove` to revoke
   the access token on Plaid's side, then deletes the corresponding rows
-  from `plaid_tokens` and `plaid_accounts`.
+  from `plaid_transactions`, `plaid_accounts`, and `plaid_tokens` (in
+  that order — transactions are scoped to a `(user_id, item_id)` pair so
+  they only ever leave with the institution they belong to).
 - Account deletion: cascade rules on `user_id` (`ON DELETE CASCADE`)
-  remove all associated Plaid/SnapTrade rows. The full GDPR-compliant
-  delete flow additionally revokes access tokens at Plaid and SnapTrade.
+  remove all associated Plaid/SnapTrade rows, including
+  `plaid_transactions`. The full GDPR-compliant delete flow additionally
+  revokes access tokens at Plaid and SnapTrade.
 - Retention review is performed at least annually as part of policy
   review.
 
