@@ -1,0 +1,694 @@
+// Goals — savings goals tied to specific accounts or to net-worth.
+// Renders per-goal cards with a progress bar and a projected completion
+// date based on the last 30 days of trajectory (linear regression on
+// the relevant series). Supports three track modes:
+//   - account   → sum of current balance across selected accounts
+//   - networth  → most recent total from netWorthHistory
+//   - manual    → user-entered manual_progress column
+//
+// Backed by /api/goals (GET/POST/PUT/DELETE).
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { apiFetch } from "../lib/apiFetch.js";
+
+// Reuse the global theme tokens by reading the CSS custom properties so
+// this file stays decoupled from MizanApp's `T`/`FU`/`FM` constants. The
+// values resolve to the same dark/light surfaces.
+const T = {
+  bg: "var(--mz-bg)", card: "var(--mz-card)", surface: "var(--mz-surface)",
+  border: "var(--mz-border)", borderHi: "var(--mz-borderHi)",
+  text: "var(--mz-text)", textHi: "var(--mz-textHi)", muted: "var(--mz-muted)",
+  blue: "#7B61FF", gain: "#10B981", gold: "#FF9F6A", loss: "#FF6B6B",
+  s1: "var(--s-1)", s2: "var(--s-2)", s3: "var(--s-3)", s4: "var(--s-4)",
+  s5: "var(--s-5)", s6: "var(--s-6)", s8: "var(--s-8)",
+  rSm: "var(--r-sm)", rMd: "var(--r-md)", rLg: "var(--r-lg)",
+};
+const FU = "'SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+const FM = "'SF Mono',ui-monospace,'JetBrains Mono','Menlo','Monaco',monospace";
+
+const fmtUSD = (v) => `$${(+v || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const fmtDate = (s) => {
+  if (!s) return "—";
+  try {
+    return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch { return String(s); }
+};
+
+// Compute current progress for a single goal given the live account /
+// net-worth context. Pure — keep it in module scope so it's trivial to
+// unit-test later if we add coverage for goals.
+function computeCurrent(goal, snapAccounts, plaidAccounts, netWorthHistory) {
+  const mode = goal.track_mode || "account";
+  if (mode === "manual") return Number(goal.manual_progress) || 0;
+  if (mode === "networth") {
+    const hist = [...(netWorthHistory || [])].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    const last = hist[hist.length - 1];
+    return Number(last?.total) || 0;
+  }
+  // "account" mode — sum balances across snap + plaid by id.
+  const ids = new Set((goal.account_ids || []).map(String));
+  if (ids.size === 0) return 0;
+  let sum = 0;
+  (snapAccounts || []).forEach((a) => {
+    if (ids.has(String(a.accountId))) sum += Number(a.balance) || 0;
+  });
+  (plaidAccounts || []).forEach((a) => {
+    if (ids.has(String(a.account_id))) sum += Number(a.current_bal) || 0;
+  });
+  return sum;
+}
+
+// Linear regression on `points` (array of {x, y}) → returns slope and
+// intercept. `x` is in days, `y` is dollars. Used both for projecting
+// when the goal completes and for refusing to project when the trend
+// is non-positive ("Insufficient progress").
+function linearRegression(points) {
+  const n = points.length;
+  if (n < 2) return { slope: 0, intercept: 0 };
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const p of points) {
+    sx += p.x; sy += p.y; sxx += p.x * p.x; sxy += p.x * p.y;
+  }
+  const denom = n * sxx - sx * sx;
+  if (denom === 0) return { slope: 0, intercept: sy / n };
+  const slope = (n * sxy - sx * sy) / denom;
+  const intercept = (sy - slope * sx) / n;
+  return { slope, intercept };
+}
+
+// Build a (x=days_ago, y=$value) series for the last 30 days from
+// netWorthHistory. Returns oldest→newest so the slope reads "per day".
+function buildNetWorthSeries(netWorthHistory) {
+  const hist = [...(netWorthHistory || [])]
+    .filter((h) => h && h.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (hist.length < 2) return [];
+  const last = hist[hist.length - 1];
+  const lastDate = new Date(last.date);
+  const cutoff = new Date(lastDate); cutoff.setDate(cutoff.getDate() - 30);
+  const recent = hist.filter((h) => new Date(h.date) >= cutoff);
+  const t0 = new Date(recent[0].date).getTime();
+  return recent.map((h) => ({
+    x: (new Date(h.date).getTime() - t0) / 86_400_000,
+    y: Number(h.total) || 0,
+  }));
+}
+
+// Project an ETA string given current + target + slope ($/day). When
+// the slope is non-positive we cannot project — display the matching
+// "insufficient progress" message instead.
+function projectionLabel(current, target, slope) {
+  if (current >= target) return "Goal reached";
+  if (!Number.isFinite(slope) || slope <= 0) return "Insufficient progress";
+  const daysToGo = (target - current) / slope;
+  if (!Number.isFinite(daysToGo) || daysToGo <= 0) return "Insufficient progress";
+  // Cap projection at ~100 years to avoid nonsense dates from a flat trend.
+  if (daysToGo > 365 * 100) return "Over a century away";
+  const eta = new Date();
+  eta.setDate(eta.getDate() + Math.ceil(daysToGo));
+  return `Projected: ${fmtDate(eta.toISOString().slice(0, 10))}`;
+}
+
+function ProgressBar({ pct, color }) {
+  const safe = Math.max(0, Math.min(100, pct));
+  return (
+    <div style={{
+      width: "100%", height: 10, background: T.surface,
+      borderRadius: 999, overflow: "hidden",
+      border: `1px solid ${T.border}`,
+    }}>
+      <div style={{
+        width: `${safe}%`, height: "100%",
+        background: `linear-gradient(90deg, ${color}, ${color}aa)`,
+        transition: "width 0.4s ease",
+      }} />
+    </div>
+  );
+}
+
+function AccountPickerRow({ acct, selected, onToggle }) {
+  return (
+    <label style={{
+      display: "flex", alignItems: "center", gap: T.s2,
+      padding: `6px ${T.s2}`,
+      borderRadius: T.rSm,
+      cursor: "pointer",
+      background: selected ? `${T.blue}18` : "transparent",
+      border: `1px solid ${selected ? T.blue + "60" : T.border}`,
+    }}>
+      <input type="checkbox" checked={selected} onChange={onToggle} style={{ cursor: "pointer" }} />
+      <span style={{ fontFamily: FU, fontSize: 12, color: T.text, flex: 1 }}>
+        {acct.label}
+      </span>
+      <span style={{ fontFamily: FM, fontSize: 11, color: T.muted }}>
+        {fmtUSD(acct.balance)}
+      </span>
+    </label>
+  );
+}
+
+function GoalForm({ initial, accountChoices, onSave, onCancel }) {
+  const [name, setName] = useState(initial?.name || "");
+  const [targetAmount, setTargetAmount] = useState(
+    initial?.target_amount != null ? String(initial.target_amount) : ""
+  );
+  const [targetDate, setTargetDate] = useState(initial?.target_date || "");
+  const [trackMode, setTrackMode] = useState(initial?.track_mode || "account");
+  const [selectedIds, setSelectedIds] = useState(
+    new Set((initial?.account_ids || []).map(String))
+  );
+  const [manualProgress, setManualProgress] = useState(
+    initial?.manual_progress != null ? String(initial.manual_progress) : "0"
+  );
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const toggleId = (id) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const submit = async () => {
+    setErr(null);
+    const nm = name.trim();
+    const amt = Number(targetAmount);
+    if (!nm) { setErr("Name is required."); return; }
+    if (!Number.isFinite(amt) || amt <= 0) { setErr("Target must be a positive number."); return; }
+    if (trackMode === "account" && selectedIds.size === 0) {
+      setErr("Pick at least one account for account-tracked goals.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await onSave({
+        name: nm,
+        target_amount: amt,
+        target_date: targetDate || null,
+        account_ids: Array.from(selectedIds),
+        track_mode: trackMode,
+        manual_progress: trackMode === "manual" ? Number(manualProgress) || 0 : 0,
+      });
+    } catch (e) {
+      setErr(e?.message || "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{
+      background: T.card,
+      border: `1px solid ${T.borderHi}`,
+      borderRadius: T.rLg,
+      padding: T.s5,
+      display: "flex", flexDirection: "column", gap: T.s4,
+    }}>
+      <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
+        {initial ? "EDIT GOAL" : "NEW GOAL"}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>NAME</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Emergency fund"
+            style={inputStyle}
+          />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TARGET ($)</span>
+          <input
+            value={targetAmount}
+            onChange={(e) => setTargetAmount(e.target.value)}
+            inputMode="decimal"
+            placeholder="25000"
+            style={inputStyle}
+          />
+        </label>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TARGET DATE</span>
+          <input
+            type="date"
+            value={targetDate || ""}
+            onChange={(e) => setTargetDate(e.target.value)}
+            style={inputStyle}
+          />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TRACK MODE</span>
+          <select
+            value={trackMode}
+            onChange={(e) => setTrackMode(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="account">Account total</option>
+            <option value="networth">Net worth</option>
+            <option value="manual">Manual</option>
+          </select>
+        </label>
+      </div>
+
+      {trackMode === "account" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: T.s2 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>
+            ACCOUNTS ({selectedIds.size} SELECTED)
+          </span>
+          <div style={{
+            display: "flex", flexDirection: "column", gap: 4,
+            maxHeight: 220, overflowY: "auto",
+            padding: T.s2,
+            background: T.surface,
+            border: `1px solid ${T.border}`,
+            borderRadius: T.rMd,
+          }}>
+            {accountChoices.length === 0 && (
+              <div style={{ fontFamily: FU, fontSize: 12, color: T.muted, padding: T.s3, textAlign: "center" }}>
+                No accounts connected. Switch track mode to Manual or Net worth, or connect an account first.
+              </div>
+            )}
+            {accountChoices.map((a) => (
+              <AccountPickerRow
+                key={a.id}
+                acct={a}
+                selected={selectedIds.has(String(a.id))}
+                onToggle={() => toggleId(String(a.id))}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {trackMode === "manual" && (
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>MANUAL PROGRESS ($)</span>
+          <input
+            value={manualProgress}
+            onChange={(e) => setManualProgress(e.target.value)}
+            inputMode="decimal"
+            placeholder="0"
+            style={inputStyle}
+          />
+        </label>
+      )}
+
+      {err && (
+        <div style={{
+          fontFamily: FU, fontSize: 12, color: T.loss,
+          padding: T.s2, background: `${T.loss}15`,
+          border: `1px solid ${T.loss}40`, borderRadius: T.rSm,
+        }}>{err}</div>
+      )}
+
+      <div style={{ display: "flex", gap: T.s2, justifyContent: "flex-end" }}>
+        <button onClick={onCancel} disabled={busy} style={ghostBtnStyle}>Cancel</button>
+        <button onClick={submit} disabled={busy} style={primaryBtnStyle}>
+          {busy ? "Saving…" : (initial ? "Save" : "Create goal")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const inputStyle = {
+  fontFamily: FU, fontSize: 13, color: T.textHi,
+  background: T.surface, border: `1px solid ${T.border}`,
+  borderRadius: 8, padding: "8px 10px",
+  outline: "none",
+};
+const primaryBtnStyle = {
+  fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
+  color: "#fff", background: `linear-gradient(135deg, ${T.blue}, #5A3FE0)`,
+  border: "none", borderRadius: 999, padding: "9px 18px",
+  cursor: "pointer",
+};
+const ghostBtnStyle = {
+  fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
+  color: T.text, background: "transparent",
+  border: `1px solid ${T.border}`, borderRadius: 999, padding: "9px 18px",
+  cursor: "pointer",
+};
+const smallBtnStyle = {
+  fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+  color: T.muted, background: "transparent",
+  border: `1px solid ${T.border}`, borderRadius: T.rSm,
+  padding: "4px 10px", cursor: "pointer",
+};
+
+function GoalCard({ goal, current, slope, accountLabels, onEdit, onDelete, onManualEdit }) {
+  const pct = goal.target_amount > 0
+    ? (current / Number(goal.target_amount)) * 100 : 0;
+  const color = pct >= 90 ? T.gain : T.blue;
+  const projection = projectionLabel(current, Number(goal.target_amount), slope);
+  const accLabel = (goal.account_ids || [])
+    .map((id) => accountLabels.get(String(id)) || `#${String(id).slice(-4)}`)
+    .join(", ");
+  const [manualDraft, setManualDraft] = useState(String(goal.manual_progress || 0));
+  const [editingManual, setEditingManual] = useState(false);
+
+  const saveManual = async () => {
+    const n = Number(manualDraft);
+    if (!Number.isFinite(n)) return;
+    await onManualEdit(goal.id, n);
+    setEditingManual(false);
+  };
+
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${color}10, transparent 60%), ${T.card}`,
+      border: `1px solid ${color}30`,
+      borderRadius: T.rLg,
+      padding: T.s5,
+      display: "flex", flexDirection: "column", gap: T.s3,
+      position: "relative", overflow: "hidden",
+      boxShadow: "var(--sh-md)",
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: T.s3 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+          <div style={{ fontFamily: FU, fontSize: 18, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
+            {goal.name}
+          </div>
+          <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.04em" }}>
+            {fmtUSD(goal.target_amount)} by {fmtDate(goal.target_date)}
+            {goal.track_mode === "account" && accLabel && <> · {accLabel}</>}
+            {goal.track_mode === "networth" && <> · Net worth</>}
+            {goal.track_mode === "manual" && <> · Manual</>}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button onClick={() => onEdit(goal)} style={smallBtnStyle}>Edit</button>
+          <button onClick={() => onDelete(goal)} style={{ ...smallBtnStyle, color: T.loss, borderColor: T.loss + "40" }}>Delete</button>
+        </div>
+      </div>
+
+      <ProgressBar pct={pct} color={color} />
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: T.s3, flexWrap: "wrap" }}>
+        <div style={{ fontFamily: FM, fontSize: 13, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>
+          {fmtUSD(current)} <span style={{ color: T.muted }}>/ {fmtUSD(goal.target_amount)}</span>
+          <span style={{ marginLeft: 8, color: color, fontWeight: 600 }}>
+            ({pct.toFixed(1)}%)
+          </span>
+        </div>
+        <div style={{ fontFamily: FM, fontSize: 11, color: projection.startsWith("Insufficient") ? T.loss : T.muted, letterSpacing: "0.04em" }}>
+          {projection}
+        </div>
+      </div>
+
+      {goal.track_mode === "manual" && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: T.s2,
+          paddingTop: T.s2,
+          borderTop: `1px solid ${T.border}`,
+        }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>MANUAL PROGRESS</span>
+          {editingManual ? (
+            <>
+              <input
+                value={manualDraft}
+                onChange={(e) => setManualDraft(e.target.value)}
+                inputMode="decimal"
+                style={{ ...inputStyle, fontSize: 12, padding: "4px 8px", width: 120 }}
+              />
+              <button onClick={saveManual} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>Save</button>
+              <button onClick={() => { setEditingManual(false); setManualDraft(String(goal.manual_progress || 0)); }} style={smallBtnStyle}>Cancel</button>
+            </>
+          ) : (
+            <button onClick={() => setEditingManual(true)} style={smallBtnStyle}>Update</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Goals({
+  snapAccounts = [],
+  plaidAccounts = [],
+  netWorthHistory = [],
+  demoMode = false,
+}) {
+  const [goals, setGoals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  // Demo fixtures so the tab is meaningful before the user creates anything
+  // when demoMode is on. Mirrors the live-state shape exactly.
+  const demoGoals = useMemo(() => {
+    if (!demoMode) return [];
+    const accIds = snapAccounts.slice(0, 1).map((a) => a.accountId).filter(Boolean);
+    return [
+      {
+        id: "demo-1",
+        name: "Emergency Fund",
+        target_amount: 25000,
+        target_date: new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10),
+        account_ids: accIds,
+        track_mode: accIds.length ? "account" : "networth",
+        manual_progress: 0,
+      },
+      {
+        id: "demo-2",
+        name: "House Down Payment",
+        target_amount: 200000,
+        target_date: new Date(Date.now() + 3 * 365 * 86_400_000).toISOString().slice(0, 10),
+        account_ids: [],
+        track_mode: "networth",
+        manual_progress: 0,
+      },
+    ];
+  }, [demoMode, snapAccounts]);
+
+  const load = useCallback(async () => {
+    if (demoMode) {
+      setGoals(demoGoals);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await apiFetch("/api/goals");
+      if (!r.ok) {
+        if (r.status === 401) {
+          setGoals([]);
+          return;
+        }
+        throw new Error(`HTTP ${r.status}`);
+      }
+      const json = await r.json();
+      setGoals(Array.isArray(json?.goals) ? json.goals : []);
+    } catch (e) {
+      setErr(e?.message || "Failed to load goals");
+    } finally {
+      setLoading(false);
+    }
+  }, [demoMode, demoGoals]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Combined account choices for the picker. Stable id so the form can
+  // track selections regardless of provider.
+  const accountChoices = useMemo(() => {
+    const fromSnap = (snapAccounts || []).map((a) => ({
+      id: String(a.accountId || ""),
+      label: `${a.brokerage || "Broker"} — ${a.accountName || ""}`,
+      balance: Number(a.balance) || 0,
+    })).filter((a) => a.id);
+    const fromPlaid = (plaidAccounts || []).map((a) => ({
+      id: String(a.account_id || ""),
+      label: `${a.institution_name || "Bank"} — ${a.name || a.subtype || a.type || ""}`,
+      balance: Number(a.current_bal) || 0,
+    })).filter((a) => a.id);
+    return [...fromSnap, ...fromPlaid];
+  }, [snapAccounts, plaidAccounts]);
+
+  const accountLabels = useMemo(() => {
+    const m = new Map();
+    accountChoices.forEach((a) => m.set(a.id, a.label));
+    return m;
+  }, [accountChoices]);
+
+  // Net-worth derived slope is the same for every networth-mode goal —
+  // compute once per render.
+  const networthSlope = useMemo(() => {
+    const series = buildNetWorthSeries(netWorthHistory);
+    return linearRegression(series).slope;
+  }, [netWorthHistory]);
+
+  // For account-mode goals we don't have a per-account daily history
+  // here, so fall back to "monthly average contribution" derived from
+  // the netWorthHistory slope * fraction of net worth the account
+  // represents. That is a deliberate approximation — when we wire in
+  // plaid_transactions running balances in a future migration we'll
+  // upgrade this to a real per-account regression.
+  const accountSlopeFor = useCallback((goal, current) => {
+    if (current <= 0) return networthSlope;
+    const hist = [...(netWorthHistory || [])].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    const last = hist[hist.length - 1];
+    const nw = Number(last?.total) || 0;
+    if (nw <= 0) return networthSlope;
+    // Slope proportional to the goal's share of net worth.
+    return networthSlope * (current / nw);
+  }, [netWorthHistory, networthSlope]);
+
+  const createGoal = async (payload) => {
+    if (demoMode) {
+      const id = `demo-${Date.now()}`;
+      setGoals((prev) => [...prev, { id, ...payload, manual_progress: payload.manual_progress || 0 }]);
+      setCreating(false);
+      return;
+    }
+    const r = await apiFetch("/api/goals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j?.error || `HTTP ${r.status}`);
+    }
+    const saved = await r.json();
+    setGoals((prev) => [...prev, saved]);
+    setCreating(false);
+  };
+
+  const updateGoal = async (id, payload) => {
+    if (demoMode) {
+      setGoals((prev) => prev.map((g) => g.id === id ? { ...g, ...payload } : g));
+      setEditingId(null);
+      return;
+    }
+    const r = await apiFetch(`/api/goals/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j?.error || `HTTP ${r.status}`);
+    }
+    const saved = await r.json();
+    setGoals((prev) => prev.map((g) => g.id === id ? saved : g));
+    setEditingId(null);
+  };
+
+  const deleteGoal = async (goal) => {
+    if (!confirm(`Delete goal "${goal.name}"?`)) return;
+    if (demoMode) {
+      setGoals((prev) => prev.filter((g) => g.id !== goal.id));
+      return;
+    }
+    const r = await apiFetch(`/api/goals/${encodeURIComponent(goal.id)}`, { method: "DELETE" });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      setErr(j?.error || `HTTP ${r.status}`);
+      return;
+    }
+    setGoals((prev) => prev.filter((g) => g.id !== goal.id));
+  };
+
+  const editManual = (id, n) => updateGoal(id, { manual_progress: n });
+
+  // ── Render ──────────────────────────────────────────
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: T.s5, maxWidth: 1080, margin: "0 auto", paddingBottom: T.s8 }}>
+      {/* Header tile */}
+      <div style={{
+        background: `radial-gradient(circle at 0% 0%, ${T.blue}18, transparent 55%), ${T.card}`,
+        border: `1px solid ${T.blue}30`,
+        borderRadius: T.rLg,
+        padding: `${T.s6} ${T.s5}`,
+        display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: T.s3,
+        boxShadow: "var(--sh-md)",
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 11, color: T.blue, letterSpacing: "0.18em", fontWeight: 600 }}>
+            GOALS · {goals.length} ACTIVE
+          </span>
+          <span style={{ fontFamily: FU, fontSize: 22, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
+            Save toward specific targets
+          </span>
+          <span style={{ fontFamily: FU, fontSize: 13, color: T.muted, letterSpacing: "-0.005em" }}>
+            Track account balances, total net worth, or manual milestones. Projections use the last 30 days.
+          </span>
+        </div>
+        <button onClick={() => { setCreating(true); setEditingId(null); }} style={primaryBtnStyle}>+ New goal</button>
+      </div>
+
+      {err && (
+        <div style={{
+          fontFamily: FU, fontSize: 12, color: T.loss,
+          padding: T.s3, background: `${T.loss}15`,
+          border: `1px solid ${T.loss}40`, borderRadius: T.rMd,
+        }}>{err}</div>
+      )}
+
+      {creating && (
+        <GoalForm
+          accountChoices={accountChoices}
+          onSave={createGoal}
+          onCancel={() => setCreating(false)}
+        />
+      )}
+
+      {loading && !creating && goals.length === 0 && (
+        <div style={{
+          fontFamily: FU, fontSize: 14, color: T.muted,
+          padding: T.s6, textAlign: "center",
+          border: `1px dashed ${T.border}`, borderRadius: T.rLg,
+        }}>Loading goals…</div>
+      )}
+
+      {!loading && !creating && goals.length === 0 && (
+        <div style={{
+          fontFamily: FU, fontSize: 14, color: T.muted,
+          padding: T.s8, textAlign: "center",
+          border: `1px dashed ${T.border}`, borderRadius: T.rLg,
+        }}>
+          No goals yet. Click <strong style={{ color: T.text }}>+ New goal</strong> to create one.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: T.s4 }}>
+        {goals.map((g) => {
+          if (editingId === g.id) {
+            return (
+              <GoalForm
+                key={g.id}
+                initial={g}
+                accountChoices={accountChoices}
+                onSave={(p) => updateGoal(g.id, p)}
+                onCancel={() => setEditingId(null)}
+              />
+            );
+          }
+          const current = computeCurrent(g, snapAccounts, plaidAccounts, netWorthHistory);
+          const slope = g.track_mode === "networth"
+            ? networthSlope
+            : g.track_mode === "manual"
+              ? 0  // manual goals have no trajectory → "Insufficient progress" until user updates
+              : accountSlopeFor(g, current);
+          return (
+            <GoalCard
+              key={g.id}
+              goal={g}
+              current={current}
+              slope={slope}
+              accountLabels={accountLabels}
+              onEdit={() => { setEditingId(g.id); setCreating(false); }}
+              onDelete={deleteGoal}
+              onManualEdit={editManual}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
