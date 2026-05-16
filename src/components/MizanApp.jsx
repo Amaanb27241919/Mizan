@@ -7,6 +7,7 @@ import { downloadCSV } from "../lib/exportCSV.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Skeleton, SkeletonCard, SkeletonTable } from "./Skeleton.jsx";
+import Budgeting from "./Budgeting.jsx";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
 // Savium-inspired palette: deep navy base, vibrant purple primary, soft
@@ -6118,6 +6119,8 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
         })}
       </div>
     </BentoTile>}
+
+    <Budgeting txns={bankTxns} demoMode={demoMode}/>
 
     {/* ─── RECURRING SUBSCRIPTIONS ─────────────── */}
     {recurring.length>0&&<BentoTile accent={T.gold}>
