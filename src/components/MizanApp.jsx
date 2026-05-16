@@ -1135,8 +1135,70 @@ function EyeToggle({ hidden, toggle, size = 18, color }){
   );
 }
 
+/* ─── ACCOUNT NICKNAME EDITOR ────────────────────────── */
+// Inline editor for per-account display names. Used in both the Overview
+// account cards and the Finances institution cards. When `nickname` is
+// set, the rename takes over as the primary line and `defaultName`
+// drops to a smaller subtitle so users can still see the broker label
+// for cross-reference. Click ✎ → swap to an input pre-populated with
+// the current display. Enter / blur saves; Esc / cancel discards.
+function NicknameEditor({accountId,defaultName,nickname,onSetNickname,
+  primaryStyle,subtitleStyle,pencilStyle,emptyHint="—"}){
+  const[editing,setEditing]=useState(false);
+  const[draft,setDraft]=useState(nickname||defaultName||"");
+  const inputRef=useRef(null);
+  useEffect(()=>{if(editing&&inputRef.current){try{inputRef.current.focus();inputRef.current.select();}catch{}}},[editing]);
+  const startEdit=()=>{setDraft(nickname||defaultName||"");setEditing(true);};
+  const commit=()=>{
+    if(!onSetNickname){setEditing(false);return;}
+    const trimmed=(draft||"").trim();
+    // Treat unchanged value or "same as broker default" as no-op.
+    const next=trimmed===(defaultName||"")?"":trimmed;
+    onSetNickname(accountId,next);
+    setEditing(false);
+  };
+  const cancel=()=>{setDraft(nickname||defaultName||"");setEditing(false);};
+  if(editing){
+    return<div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={e=>setDraft(e.target.value)}
+        onKeyDown={e=>{
+          if(e.key==="Enter"){e.preventDefault();commit();}
+          else if(e.key==="Escape"){e.preventDefault();cancel();}
+        }}
+        onBlur={commit}
+        maxLength={80}
+        aria-label="Account nickname"
+        style={{
+          flex:"1 1 auto",minWidth:0,
+          fontFamily:FU,fontSize:(primaryStyle&&primaryStyle.fontSize)||13,
+          color:T.textHi,letterSpacing:"-0.005em",
+          background:T.surface,border:`1px solid ${T.blue}60`,borderRadius:T.rSm,
+          padding:"3px 6px",outline:"none",
+        }}
+      />
+    </div>;
+  }
+  const display=nickname||defaultName||emptyHint;
+  return<div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+    <span style={{...(primaryStyle||{}),minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{display}</span>
+    {onSetNickname&&<button
+      type="button"
+      onClick={startEdit}
+      title={nickname?"Edit nickname":"Add nickname"}
+      aria-label={nickname?"Edit account nickname":"Add account nickname"}
+      style={{
+        background:"transparent",border:"none",cursor:"pointer",padding:2,
+        color:T.muted,lineHeight:1,fontSize:12,
+        ...(pencilStyle||{}),
+      }}>✎</button>}
+  </div>;
+}
+
 /* ─── OVERVIEW ───────────────────────────────────────── */
-function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0}){
+function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0,nicknames={},onSetNickname}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[range,setRange]=useState("All");
   const liveSrc=snapAccounts.length>0
@@ -1589,7 +1651,20 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
             <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:valColor,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",textDecoration:dim?"line-through":"none"}}>{mask(fmtUSD(a.val||0))}</div>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2,letterSpacing:"0.04em"}}>{a.kind}{a.mask?` · ••${a.mask}`:""}</div>
             {a.cash>0&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>{mask(fmtUSD(a.cash))} cash</div>}
-            <div style={{fontFamily:FU,fontSize:11,color:T.muted,marginTop:T.s1,letterSpacing:"-0.005em"}}>{a.nm}</div>
+            {/* Account name — shows user nickname if set, with the broker
+                default as a small subtitle. Pencil button opens an inline
+                editor; Enter commits, Esc cancels. */}
+            <div style={{marginTop:T.s1}}>
+              <NicknameEditor
+                accountId={a.id}
+                defaultName={a.nm}
+                nickname={nicknames?.[a.id]||""}
+                onSetNickname={onSetNickname}
+                primaryStyle={{fontFamily:FU,fontSize:11,color:nicknames?.[a.id]?T.textHi:T.muted,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.id]?600:400}}
+                pencilStyle={{fontSize:12}}
+              />
+              {nicknames?.[a.id]&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{a.nm}</div>}
+            </div>
 
             {/* Action buttons — top-right. SnapTrade gets toggle + disconnect;
                 Plaid gets a "Manage →" jump to the Finances tab. */}
@@ -5599,7 +5674,7 @@ function PlaidLinker({ usePlaidLinkHook, linkToken, onSuccess, onExit, shouldOpe
   return null;
 }
 
-function Finances({onBankBalanceChange,demoMode=false,onNav}){
+function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNickname}){
   const{user}=useAuth();
   // In demo mode short-circuit straight to the local fixtures so the
   // tab is fully populated without ever talking to Plaid. Toggle off
@@ -6088,7 +6163,20 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
           }}>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{(a.subtype||a.type||"").toUpperCase()}{a.mask?` · ····${a.mask}`:""}</div>
             {isInv&&<div style={{position:"absolute",top:T.s2,right:T.s2,fontFamily:FM,fontSize:8,color:T.gold,letterSpacing:"0.1em",fontWeight:600,padding:`1px ${T.s1}`,border:`1px solid ${T.gold}40`,borderRadius:T.rSm}}>INVESTMENT</div>}
-            <div style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em",marginBottom:T.s1}}>{a.name||a.official_name||"Account"}</div>
+            {/* Display name — nickname wins when set, broker default
+                becomes the smaller subtitle so users can still tell which
+                physical account this is. */}
+            <div style={{marginBottom:T.s1}}>
+              <NicknameEditor
+                accountId={a.account_id}
+                defaultName={a.name||a.official_name||"Account"}
+                nickname={nicknames?.[a.account_id]||""}
+                onSetNickname={onSetNickname}
+                primaryStyle={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.account_id]?600:400}}
+                pencilStyle={{fontSize:13}}
+              />
+              {nicknames?.[a.account_id]&&<div style={{fontSize:10,color:T.muted,marginTop:2,fontFamily:FM}}>{a.name||a.official_name||"Account"}</div>}
+            </div>
             <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:isLiability?T.loss:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{isLiability?"−":""}{fmtUSD(a.current_bal)}</div>
             {a.available_bal!=null&&a.available_bal!==a.current_bal&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(a.available_bal)} available</div>}
             {isInv&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,lineHeight:1.4}}>Excluded from Bank Net Position — counted as brokerage on Overview / Portfolio.</div>}
@@ -6148,7 +6236,14 @@ function Finances({onBankBalanceChange,demoMode=false,onNav}){
         }},
         {l:"Account",r_:r=>{
           const a=accounts.find(x=>x.account_id===r.account_id);
-          return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{a?`${a.name} ····${a.mask}`:r.institution_name||"—"}</span>;
+          // Prefer the user-defined nickname when present so the
+          // transactions table reads consistently with the institution
+          // cards above. Falls back to the broker default + last-4 mask.
+          const nick=nicknames?.[r.account_id];
+          const label=nick
+            ? (a?.mask?`${nick} ····${a.mask}`:nick)
+            : (a?`${a.name} ····${a.mask}`:r.institution_name||"—");
+          return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{label}</span>;
         }},
         {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{fmtUSD(Math.abs(r.amount))}</span>;}},
       ]} rows={txns.slice(0,200)}/>
@@ -6606,6 +6701,51 @@ export default function Mizan(){
     const tick=setInterval(pull,90*1000);
     return()=>{cancel=true;clearInterval(tick);};
   },[]);
+
+  // ── Account nicknames ─────────────────────────────────
+  // Per-user, per-account-id display overrides. Hydrated from
+  // localStorage for an instant first paint, then refreshed from
+  // /api/account-nicknames once the session is ready. `onSetNickname`
+  // commits via PUT (empty/null removes the row) and updates the
+  // in-memory map optimistically; consumers re-render through props.
+  const[nicknames,setNicknames]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_account_nicknames")||"{}");}catch{return{};}});
+  useEffect(()=>{try{localStorage.setItem("mizan_account_nicknames",JSON.stringify(nicknames));}catch{}},[nicknames]);
+  useEffect(()=>{
+    let cancel=false;
+    (async()=>{
+      try{
+        const r=await apiFetch("/api/account-nicknames");
+        if(!r.ok||cancel)return;
+        const d=await r.json();
+        if(!cancel&&d&&typeof d.nicknames==="object"&&d.nicknames)setNicknames(d.nicknames);
+      }catch{/* offline / unauthenticated — keep cached map */}
+    })();
+    return()=>{cancel=true;};
+  },[]);
+  const onSetNickname=useCallback(async(accountId,nickname)=>{
+    if(!accountId)return;
+    const trimmed=(typeof nickname==="string"?nickname:"").trim();
+    // Optimistic update — UI reflects the rename immediately, even on
+    // slow networks. Server failure rolls back via the catch below.
+    const prev=nicknames;
+    setNicknames(curr=>{
+      const next={...curr};
+      if(!trimmed)delete next[accountId]; else next[accountId]=trimmed;
+      return next;
+    });
+    try{
+      const r=await apiFetch("/api/account-nicknames",{
+        method:"PUT",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({account_id:accountId,nickname:trimmed||null}),
+      });
+      if(!r.ok)throw new Error(`PUT /api/account-nicknames ${r.status}`);
+    }catch{
+      // Rollback to whatever the server-confirmed state was.
+      setNicknames(prev);
+    }
+  },[nicknames]);
+
   const[fetching,setFetch]=useState(false);
   const[lastSync,setSync]=useState(null);
   const[showConn,setConn]=useState(false);
@@ -7563,8 +7703,8 @@ export default function Mizan(){
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
       <div className="page">
-        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance}/>}
-        {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav}/>}
+        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname}/>}
+        {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} bankBalance={bankBalance}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
