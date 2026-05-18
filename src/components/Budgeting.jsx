@@ -99,9 +99,25 @@ export default function Budgeting({ txns = [], demoMode = false }) {
         return;
       }
       try {
+        // apiFetch returns a Response; parse JSON explicitly. Earlier draft
+        // treated `r` as already-parsed and silently set an empty list.
         const r = await apiFetch("/api/budgets");
         if (cancelled) return;
-        const list = Array.isArray(r?.budgets) ? r.budgets : [];
+        if (!r.ok) {
+          // 503 + hint:"MIGRATION_PENDING" → table not provisioned yet.
+          if (r.status === 503) {
+            const body = await r.json().catch(() => ({}));
+            if (body?.hint === "MIGRATION_PENDING") {
+              setErr({ pending: true, migration: body.migration || "013_budgets.sql" });
+              setBudgets([]);
+              return;
+            }
+          }
+          if (r.status === 401) { setBudgets([]); return; }
+          throw new Error(`HTTP ${r.status}`);
+        }
+        const json = await r.json();
+        const list = Array.isArray(json?.budgets) ? json.budgets : [];
         setBudgets(list.map(b => ({
           category:      b.category,
           monthly_limit: Number(b.monthly_limit) || 0,
@@ -231,9 +247,19 @@ export default function Budgeting({ txns = [], demoMode = false }) {
         )}
       </div>
 
-      {err && (
+      {err && err.pending ? (
+        <div style={{
+          fontFamily: FU, fontSize: 12, color: TT.gold,
+          padding: TT.s3, marginBottom: TT.s3,
+          background: `${TT.gold}12`, border: `1px solid ${TT.gold}40`, borderRadius: TT.rMd,
+          lineHeight: 1.5,
+        }}>
+          <strong style={{ fontFamily: FM, fontSize: 10, letterSpacing: "0.16em", color: TT.gold, display: "block", marginBottom: TT.s1 }}>SETUP PENDING</strong>
+          Budgets table not provisioned yet. Apply <code style={{ fontFamily: FM, background: `${TT.gold}22`, padding: "1px 6px", borderRadius: 3 }}>{err.migration}</code> in the Supabase SQL editor and refresh.
+        </div>
+      ) : err && (
         <div style={{ fontFamily: FM, fontSize: 11, color: TT.loss, marginBottom: TT.s3 }}>
-          {err}
+          {typeof err === "string" ? err : (err.message || "Failed to load budgets")}
         </div>
       )}
 

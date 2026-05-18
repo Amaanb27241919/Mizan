@@ -480,6 +480,17 @@ export default function Goals({
           setGoals([]);
           return;
         }
+        // Server returns 503 + hint:"MIGRATION_PENDING" when the goals
+        // table hasn't been provisioned yet. Surface a clear pending-setup
+        // state instead of a scary HTTP error.
+        if (r.status === 503) {
+          const body = await r.json().catch(() => ({}));
+          if (body?.hint === "MIGRATION_PENDING") {
+            setGoals([]);
+            setErr({ pending: true, migration: body.migration || "014_goals.sql" });
+            return;
+          }
+        }
         throw new Error(`HTTP ${r.status}`);
       }
       const json = await r.json();
@@ -622,12 +633,22 @@ export default function Goals({
         <button onClick={() => { setCreating(true); setEditingId(null); }} style={primaryBtnStyle}>+ New goal</button>
       </div>
 
-      {err && (
+      {err && err.pending ? (
+        <div style={{
+          fontFamily: FU, fontSize: 13, color: T.gold,
+          padding: T.s4, background: `${T.gold}12`,
+          border: `1px solid ${T.gold}40`, borderRadius: T.rMd,
+          lineHeight: 1.55,
+        }}>
+          <strong style={{ fontFamily: FM, fontSize: 10, letterSpacing: "0.16em", color: T.gold, display: "block", marginBottom: T.s2 }}>SETUP PENDING</strong>
+          Goals are ready in code but the database table hasn't been provisioned yet on this Supabase project. The operator needs to apply migration <code style={{ fontFamily: FM, background: `${T.gold}22`, padding: "1px 6px", borderRadius: 3 }}>{err.migration}</code> (under <code style={{ fontFamily: FM, background: `${T.gold}22`, padding: "1px 6px", borderRadius: 3 }}>supabase/migrations/</code>) via the Supabase SQL editor or CLI. Goals will load automatically once the table exists.
+        </div>
+      ) : err && (
         <div style={{
           fontFamily: FU, fontSize: 12, color: T.loss,
           padding: T.s3, background: `${T.loss}15`,
           border: `1px solid ${T.loss}40`, borderRadius: T.rMd,
-        }}>{err}</div>
+        }}>{typeof err === "string" ? err : (err.message || "Failed to load goals")}</div>
       )}
 
       {creating && (
