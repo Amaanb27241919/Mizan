@@ -3119,7 +3119,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
   })();
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["holdings","Holdings"],["watchlist","Watchlist"],["activity","Activity"],["rebalance","Rebalance"],["tax","Tax"],["backtest","Backtest"],["screener","Screener"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["holdings","Holdings"],["activity","Activity"],["rebalance","Rebalance"],["tax","Tax"],["backtest","Backtest"],["screener","Screener"]]} active={sub} onChange={setSub}/>
 
     {sub==="holdings"&&<>
       {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}
@@ -3254,9 +3254,15 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
             ?<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No positions match these filters.</div>
             :null}
       </BentoTile>
-    </>}
 
-    {sub==="watchlist"&&<Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>}
+      {/* ─── Watchlist section ─ merged in from the dropped sub-tab so
+          tracked tickers live alongside owned positions in one pane. */}
+      <div style={{display:"flex",alignItems:"center",gap:T.s3,marginTop:T.s3}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TRACKED SYMBOLS</span>
+        <div style={{flex:1,height:1,background:T.border}}/>
+      </div>
+      <Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>
+    </>}
 
     {sub==="activity"&&<ActivityPanel activities={activities} accounts={snapAccounts}/>}
 
