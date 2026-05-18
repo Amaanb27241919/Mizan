@@ -10,6 +10,7 @@ import { Skeleton, SkeletonCard, SkeletonTable } from "./Skeleton.jsx";
 import Budgeting from "./Budgeting.jsx";
 import BillsCalendar from "./BillsCalendar.jsx";
 import Goals from "./Goals.jsx";
+import ComingSoon from "./ComingSoon.jsx";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
 // Savium-inspired palette: deep navy base, vibrant purple primary, soft
@@ -3629,8 +3630,12 @@ function HistoricalBacktest(){
   </div>;
 }
 
-function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities=[]}){
-  const[sub,setSub]=useState("order");
+function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities=[],onNav}){
+  // Order Ticket is currently behind a "Coming Soon" gate — real trading
+  // requires Alpaca prod keys + a polished risk/preview flow we haven't
+  // shipped yet. Default to the FIRE calculator so the tab opens onto
+  // something useful instead of a placeholder.
+  const[sub,setSub]=useState("fire");
   const[side,setSide]=useState("buy");
   const[sym,setSym]=useState("AAPL");
   const[otype,setOtype]=useState("limit");
@@ -3745,8 +3750,19 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
     {sub==="fire"&&<FireCalculator currentNW={currentNW} ytdContrib={ytdContrib}/>}
     {sub==="backtest"&&<HistoricalBacktest/>}
 
-    {sub==="order"&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
-    {sub==="order"&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
+    {/* Order Ticket lives behind a Coming Soon banner. We still render the
+        TabBar entry so users discover it's planned, but the actual order-
+        placement UI (real-money via SnapTrade, paper via Alpaca) is gated
+        until the risk/preview flow is finished and the Alpaca production
+        keys are provisioned. */}
+    {sub==="order"&&<ComingSoon
+      title="Order Ticket"
+      description="Place halal-screened buy/sell orders against your connected SnapTrade brokerage or against a free Alpaca paper account. The interface, AAOIFI pre-check, and order preview are built — they're behind a Coming Soon gate until the risk-of-loss UX and Alpaca production keys finish review."
+      hint="Want early access? Use the AI Advisor tab to research positions while this ships."
+      action={onNav ? { label: "Open AI Advisor", onClick: () => onNav("advisor") } : null}
+    />}
+    {false&&sub==="order"&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
+    {false&&sub==="order"&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
       {/* ─── Order Ticket bento ────────────────────────── */}
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
@@ -6331,6 +6347,18 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     {/* ─── UPCOMING BILLS · list view + 3-day push reminders (cron) ─── */}
     {recurring.length>0&&<BillsCalendar recurring={recurring} txns={bankTxns} accounts={accounts} demoMode={demoMode}/>}
 
+    {/* Empty-state for the three transaction-driven tiles. Shown only when
+        a bank is connected but no transactions are on file yet — gives the
+        user one place to click "Sync now" instead of staring at a quiet
+        page wondering whether Spending / Recurring / Bills disappeared. */}
+    {institutions.length>0&&bankTxns.length===0&&!demoMode&&<ComingSoon
+      pending
+      title="No transactions on file yet"
+      description="Your bank is connected. Run a sync to pull in spending, recurring detection, bills, and the searchable transactions table — all of those tiles fill in once data lands."
+      hint={syncMsg?(syncMsg.ok?`Last sync: ${syncMsg.msg}`:`Last sync error: ${syncMsg.msg}`):"Plaid's cursor-based sync is fast on the first call and only pulls diffs after that."}
+      action={{ label: "↻ Sync now", onClick: syncTransactions, busy: syncBusy }}
+    />}
+
     {/* ─── RECENT TRANSACTIONS — search + filter + paged, nickname-aware ─── */}
     {txns.length>0&&(()=>{
       // Chip styling helper — keep visual style consistent with the rest of
@@ -7893,7 +7921,7 @@ export default function Mizan(){
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} bankBalance={bankBalance}/>}
         {nav==="goals"     &&<Goals snapAccounts={visibleAccounts} plaidAccounts={plaidAccounts} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} demoMode={demoMode}/>}
-        {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings}/>}
+        {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings} onNav={setNav}/>}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
         {nav==="about"     &&<About/>}
