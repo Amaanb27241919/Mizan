@@ -1225,17 +1225,22 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     .filter(a=>a.liability && a.zakatable !== false)
     .reduce((s,a)=>s+(+a.value||0),0);
   const brokerageTot=snapAccounts.length>0?balanceSum:equityValue;
-  // Plaid investment / brokerage balances are NOT in `bankBalance` (which is
-  // depository − credit/loan only) and NOT in `brokerageTot` (which is
-  // SnapTrade-derived). Surface them as a separate addend so they still
-  // contribute to net worth — without inflating the bank or brokerage tiles.
-  const plaidInvestmentTot=plaidAccounts
-    .filter(isBrokeragePlaid)
-    .reduce((s,a)=>s+(+a.current_bal||0),0);
+  // Plaid investment-type balances ONLY contribute to Net Worth as a
+  // fallback when SnapTrade isn't connected at all. When SnapTrade IS
+  // connected, it is the canonical brokerage source — including Plaid
+  // investments on top would double-count any broker the user happens
+  // to link via both providers (e.g. Robinhood appears as both a
+  // SnapTrade brokerage account AND a Plaid investment account with the
+  // same underlying balance, ~$13k in both lists).
+  //
+  // Plaid depository / credit / loan accounts always count via
+  // bankBalance — they don't overlap with SnapTrade.
+  const plaidInvestmentTot = snapAccounts.length === 0
+    ? plaidAccounts.filter(isBrokeragePlaid).reduce((s,a)=>s+(+a.current_bal||0),0)
+    : 0;
   const tot=brokerageTot+(bankBalance||0)+plaidInvestmentTot+manualAssetTotal;
-  // Net zakatable wealth = positive brokerage + positive bank + Plaid
-  // investments + manual assets − manual liabilities. Mirrors
-  // ZakatSadaqah's computation so both surfaces show consistent figures.
+  // Net zakatable wealth — same dedup rule applies: SnapTrade wins,
+  // Plaid investment is fallback-only.
   const zakatableForOverview=Math.max(0,
     Math.max(0,brokerageTot)
     + Math.max(0,bankBalance||0)
@@ -6107,13 +6112,28 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       });
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);
-      setStatus({ok:true,msg:`Linked ${d.institution_name}.`});
+      setStatus({ok:true,msg:`Linked ${d.institution_name}. Pulling transactions…`});
       setPlaidReady(false);setLinkToken(null);
       await refresh();
-      // Kick off the first /transactions/sync so cursor is established
-      // and the user sees transactions on next render. Best-effort —
-      // the daily cron will pick it up regardless.
+
+      // Plaid's transactions API is asynchronous for newly-linked Items:
+      // the access_token works immediately for /accounts but /transactions/sync
+      // returns empty until Plaid finishes the initial pull (typically
+      // 10-60 s; can be longer for large histories). The server-side
+      // webhook handler will trigger sync when Plaid signals
+      // SYNC_UPDATES_AVAILABLE, but webhooks can also be slow/missed, so
+      // belt-and-braces this with three client-side sync attempts at
+      // staggered intervals. didBackfillRef stays false during this
+      // window so each attempt actually fires.
+      didBackfillRef.current = false;
       apiFetch("/api/plaid/transactions?sync=1").catch(()=>{});
+      [15_000, 60_000, 180_000].forEach((delay)=>{
+        setTimeout(()=>{
+          apiFetch("/api/plaid/transactions?sync=1").catch(()=>{});
+          // Pull the refreshed table into the UI right after each retry.
+          setTimeout(()=>refresh().catch(()=>{}), 1500);
+        }, delay);
+      });
     }catch(err){
       setStatus({ok:false,msg:err.message||"Bank link failed"});
     }finally{
