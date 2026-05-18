@@ -2948,13 +2948,19 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
     }
   });
 
+  // Trade tab is gone in the consolidated nav; in-app Order Ticket is
+  // Coming Soon. Best-effort "copy" now writes the ticker to the
+  // clipboard so the user can paste it directly into their broker UI.
   const copyToOrder=s=>{
+    const text=`${s.side?.toUpperCase()||""} ${s.qty||""} ${s.sym||""}`.trim();
     try{
+      if(typeof navigator!=="undefined"&&navigator.clipboard?.writeText){
+        navigator.clipboard.writeText(text).catch(()=>{});
+      }
       localStorage.setItem("mizan_pending_order",JSON.stringify({
         sym:s.sym,side:s.side,qty:String(s.qty),at:Date.now(),
       }));
     }catch{}
-    if(onNav)onNav("trade");
   };
 
   const haramSellTotal=suggestions.filter(s=>s.kind==="haram").reduce((s,r)=>s+r.amount,0);
@@ -3065,8 +3071,8 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
           {l:"",r:true,r_:r=><button
             onClick={()=>copyToOrder(r)}
             style={{padding:`5px ${T.s3}`,borderRadius:T.rSm,background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,cursor:"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",whiteSpace:"nowrap"}}
-            title="Pre-fill the Order Ticket with this trade"
-          >COPY TO ORDER →</button>},
+            title="Copy this trade to the clipboard — paste into your broker"
+          >COPY</button>},
         ]} rows={suggestions}/>}
     </BentoTile>
   </div>;
@@ -3113,7 +3119,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
   })();
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["holdings","Holdings"],["watchlist","Watchlist"],["activity","Activity"],["rebalance","Rebalance"],["tax","Tax Planning"],["zakat","Zakat & Sadaqah"],["etfs","ETFs & Funds"],["screener","Sharia Screener"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["holdings","Holdings"],["watchlist","Watchlist"],["activity","Activity"],["rebalance","Rebalance"],["tax","Tax"],["backtest","Backtest"],["screener","Screener"]]} active={sub} onChange={setSub}/>
 
     {sub==="holdings"&&<>
       {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}
@@ -3258,20 +3264,9 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
 
     {sub==="tax"&&<TaxPlanner holdings={merged} activities={activities} snapAccounts={snapAccounts}/>}
 
-    {sub==="zakat"&&<ZakatSadaqah accounts={snapAccounts} demoMode={demoMode} bankBalance={bankBalance}/>}
-
-    {sub==="etfs"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
-      <Tbl cols={[
-        {l:"Ticker",   r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</span>},
-        {l:"Name",     r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text}}>{r.nm}</span>},
-        {l:"Category", r_:r=><Tag label={r.cat} color={r.cat==="Sukuk"?T.gold:r.cat==="Global"?T.gain:T.blue}/>},
-        {l:"Expense",  r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.exp}</span>},
-        {l:"Div. Yield",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{r.div}</span>},
-        {l:"Frequency",r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.freq}</span>},
-        {l:"Min",      r_:r=><span style={{fontFamily:FM,fontSize:11,color:r.avail?T.gain:T.loss,fontVariantNumeric:"tabular-nums"}}>{r.min}</span>},
-        {l:"Fidelity", r_:r=><Tag label={r.avail?"Available":"$2,500 Min"} color={r.avail?T.gain:T.muted}/>},
-      ]} rows={ETF_LIST}/>
-    </BentoTile>}
+    {/* Backtest moved here from the dropped Trade tab — it's a Portfolio
+        research tool by nature, not a trading one. Uses Polygon for OHLC. */}
+    {sub==="backtest"&&<HistoricalBacktest/>}
 
     {sub==="screener"&&<AAOIFIScreener holdings={merged}/>}
   </div>;
@@ -4609,6 +4604,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
         ["assets","Manual Assets"],
         ["docs","Documents"],
         ["privacy","Privacy & Data"],
+        ["about","About"],
         ...(isRoot?[["admin","Admin"]]:[]),
       ]}
       active={sub}
@@ -4737,6 +4733,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
     {sub==="notifications"&&<NotificationsPanel/>}
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
     {sub==="privacy"&&<PrivacyPanel/>}
+    {sub==="about"&&<About/>}
     {sub==="admin"&&isRoot&&<AdminPanel/>}
   </div>;
 }
@@ -5721,6 +5718,27 @@ function PlaidLinker({ usePlaidLinkHook, linkToken, onSuccess, onExit, shouldOpe
   return null;
 }
 
+// ── GoalsHub ──────────────────────────────────────────────────
+// Single top-level "Plan" tab that consolidates the three forward-looking
+// surfaces previously scattered across Portfolio (Zakat) and the dropped
+// Trade tab (FIRE calculator). One place to project, plan, and dispense.
+//
+//   Goals    — savings targets + projected completion
+//   Zakat    — religious obligation + sadaqah ledger
+//   FIRE     — retirement / financial-independence math
+//
+// Each sub-tab is a self-contained component; this wrapper just owns the
+// active-tab state and the TabBar. No new schema, no new endpoints.
+function GoalsHub({snapAccounts=[],plaidAccounts=[],netWorthHistory=[],demoMode=false,currentNW=0,ytdContrib=0,bankBalance=0}){
+  const[sub,setSub]=useState("goals");
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    <TabBar tabs={[["goals","Goals"],["zakat","Zakat & Sadaqah"],["fire","Retirement / FIRE"]]} active={sub} onChange={setSub}/>
+    {sub==="goals"&&<Goals snapAccounts={snapAccounts} plaidAccounts={plaidAccounts} netWorthHistory={netWorthHistory} demoMode={demoMode}/>}
+    {sub==="zakat"&&<ZakatSadaqah accounts={snapAccounts} demoMode={demoMode} bankBalance={bankBalance}/>}
+    {sub==="fire"&&<FireCalculator currentNW={currentNW} ytdContrib={ytdContrib}/>}
+  </div>;
+}
+
 function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNickname}){
   const{user}=useAuth();
   // In demo mode short-circuit straight to the local fixtures so the
@@ -6667,9 +6685,9 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
   // ───── STEP 5 — Tour complete ──────────
   const navItems=[
     {n:"Overview",   d:"Net worth, performance, allocation, top holdings — all in one bento."},
-    {n:"Finances",   d:"Bank balances, recurring subscriptions, spending by category (Plaid)."},
-    {n:"Portfolio",  d:"Holdings, activity, tax-loss planning, Zakat, ETFs, Sharia screener."},
-    {n:"Trade & Bot",d:"Order ticket with Sharia pre-check. SMA backtest. FIRE projection."},
+    {n:"Finances",   d:"Bank balances, transactions, spending by category, recurring (Plaid)."},
+    {n:"Portfolio",  d:"Holdings, activity, tax planning, backtest, rebalance, Sharia screener."},
+    {n:"Goals",      d:"Savings goals, Zakat & Sadaqah ledger, retirement (FIRE) projection."},
     {n:"AI Advisor", d:"Sharia-aware, context-rich chat (you just tried this)."},
     {n:"Settings",   d:"Brokers, 2FA, manual assets, documents, demo mode."},
   ];
@@ -6796,7 +6814,7 @@ function KeyboardShortcuts({ onNav, onSync, onConnect, onHelp, onCommand }) {
       "g o": "overview",
       "g p": "portfolio",
       "g f": "finances",
-      "g t": "trade",
+      "g g": "goals",
       "g a": "advisor",
       "g s": "settings",
       "r": "sync",
@@ -6804,7 +6822,7 @@ function KeyboardShortcuts({ onNav, onSync, onConnect, onHelp, onCommand }) {
       "/": "command",
     },
     onShortcut: (name) => {
-      const NAV_TARGETS = new Set(["overview","portfolio","finances","trade","advisor","settings"]);
+      const NAV_TARGETS = new Set(["overview","portfolio","finances","goals","advisor","settings"]);
       if (NAV_TARGETS.has(name)) { onNav(name); return; }
       if (name === "sync")    { onSync?.(); return; }
       if (name === "help")    { onHelp?.(); return; }
@@ -6861,8 +6879,14 @@ export default function Mizan(){
     try{
       const v=localStorage.getItem("mizan_nav");
       // Guard against a stale value that no longer maps to a real tab.
-      const valid=new Set(["overview","finances","portfolio","trade","advisor","settings","about"]);
-      return v&&valid.has(v)?v:"overview";
+      // After the consolidation, "trade" + "about" map to other tabs:
+      // "trade" → "portfolio" (Backtest lives there now); "about" → "settings"
+      // (under the About sub-tab). Keeps stale localStorage from crashing.
+      const valid=new Set(["overview","finances","portfolio","goals","advisor","settings"]);
+      if (v && valid.has(v)) return v;
+      if (v === "trade") return "portfolio";
+      if (v === "about") return "settings";
+      return "overview";
     }catch{return"overview";}
   });
   const setNav=v=>{setNavState(v);try{localStorage.setItem("mizan_nav",v);}catch{}};
@@ -7763,7 +7787,11 @@ export default function Mizan(){
   const hr=nyc.minutes/60;
   const sessionLabel=nyc.status,sessionColor=nyc.color;
 
-  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},{id:"goals",l:"Goals"},{id:"trade",l:"Trade & Bot"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"},{id:"about",l:"About"}];
+  // Six-tab dock. About moved into Settings, Trade redistributed
+  // (FIRE → Goals, Backtest → Portfolio, Sharia → Screener, Order Ticket
+  // Coming Soon and reachable via CommandPalette only). Keeps the dock
+  // un-crowded so first-time users aren't decision-fatigued.
+  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},{id:"goals",l:"Goals"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"}];
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     <style>{`
@@ -7920,11 +7948,17 @@ export default function Mizan(){
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} bankBalance={bankBalance}/>}
-        {nav==="goals"     &&<Goals snapAccounts={visibleAccounts} plaidAccounts={plaidAccounts} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} demoMode={demoMode}/>}
-        {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onOrderPlaced={fetchSnapHoldings} onNav={setNav}/>}
+        {nav==="goals"     &&<GoalsHub
+          snapAccounts={visibleAccounts}
+          plaidAccounts={plaidAccounts}
+          netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()}
+          demoMode={demoMode}
+          currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)}
+          ytdContrib={performanceMetrics.ytdContrib||0}
+          bankBalance={bankBalance}
+        />}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
-        {nav==="about"     &&<About/>}
       </div>
     </main>
 
@@ -7984,10 +8018,8 @@ export default function Mizan(){
         {id:"nav-portfolio",label:"Go to Portfolio",     group:"Navigate", hint:"g p", icon:"▣", action:()=>setNav("portfolio")},
         {id:"nav-finances", label:"Go to Finances",      group:"Navigate", hint:"g f", icon:"$", action:()=>setNav("finances")},
         {id:"nav-goals",    label:"Go to Goals",         group:"Navigate", hint:"g g", icon:"◉", action:()=>setNav("goals")},
-        {id:"nav-trade",    label:"Go to Trade & Bot",   group:"Navigate", hint:"g t", icon:"⤢", action:()=>setNav("trade")},
         {id:"nav-advisor",  label:"Go to AI Advisor",    group:"Navigate", hint:"g a", icon:"✦", action:()=>setNav("advisor")},
         {id:"nav-settings", label:"Go to Settings",      group:"Navigate", hint:"g s", icon:"⚙", action:()=>setNav("settings")},
-        {id:"nav-about",    label:"About MIZAN",         group:"Navigate", icon:"ⓘ",            action:()=>setNav("about")},
         // Actions
         {id:"act-sync",     label:"Sync All",            group:"Actions",  hint:"r",   icon:"↻", action:()=>sync()},
         {id:"act-connect",  label:"Connect Account",     group:"Actions",  icon:"+",             action:()=>setConn(true)},
