@@ -11,6 +11,8 @@ import Budgeting from "./Budgeting.jsx";
 import BillsCalendar from "./BillsCalendar.jsx";
 import Goals from "./Goals.jsx";
 import ComingSoon from "./ComingSoon.jsx";
+import ConnectionHealth from "./ConnectionHealth.jsx";
+import BugReportButton from "./BugReportButton.jsx";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
 // Savium-inspired palette: deep navy base, vibrant purple primary, soft
@@ -4544,7 +4546,7 @@ function SessionsPanel(){
   </div>;
 }
 
-function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[]}){
+function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[],onNav}){
   const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
   const[keys,setKeys]=useState({...apiKeys});
   const[saved,setSaved]=useState(false);
@@ -4609,6 +4611,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
       tabs={[
         ...(isRoot?[["keys","API Keys"]]:[]),
         ["brokers","Connect Accounts"],
+        ["connections","Connections"],
         ["account","Account"],
         ["security","Security"],
         ["notifications","Notifications"],
@@ -4621,6 +4624,8 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
       active={sub}
       onChange={setSub}
     />
+
+    {sub==="connections"&&<ConnectionHealth onNav={onNav}/>}
 
     {sub==="assets"&&<ManualAssets demoMode={demoMode}/>}
 
@@ -5690,6 +5695,24 @@ function About(){
         </div>)}
       </div>
     </BentoTile>
+
+    {/* ─── REPORT A BUG ───────────────────────────── */}
+    {/* Surfaces the floating BugReportButton modal via custom event so
+        users who land here looking for "contact us" have a direct CTA. */}
+    <div style={{textAlign:"center",padding:`${T.s2} 0`}}>
+      <button
+        type="button"
+        onClick={()=>{try{window.dispatchEvent(new Event("mizan:open-bug-report"));}catch{}}}
+        style={{
+          fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.08em",
+          color:T.muted,
+          background:"transparent",
+          border:`1px solid ${T.border}`,
+          borderRadius:T.rMd,
+          padding:`8px ${T.s4}`,
+          cursor:"pointer",
+        }}>FOUND A BUG?  →  REPORT IT</button>
+    </div>
 
     {/* ─── DISCLAIMER ─────────────────────────────── */}
     <div style={{textAlign:"center",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",padding:`${T.s4} 0 ${T.s6}`,lineHeight:1.8,fontWeight:500}}>
@@ -7984,7 +8007,7 @@ export default function Mizan(){
           bankBalance={bankBalance}
         />}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} onNav={setNav}/>}
       </div>
     </main>
 
@@ -8020,6 +8043,11 @@ export default function Mizan(){
     </nav>
 
     {showConn&&<ConnectModal onClose={()=>setConn(false)} snapId={apiKeys.snapId} onConnected={()=>{ try{forceRefresh();}catch{} }}/>}
+
+    {/* Always-on bug-report affordance. Self-positioned bottom-right above
+        the dock; also listens for the "mizan:open-bug-report" custom event
+        so the About panel link can pop the same modal. */}
+    <BugReportButton/>
 
     {/* Keyboard shortcuts + command palette. Both global at the root so
         every nav target and action is one keystroke away. */}
