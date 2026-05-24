@@ -5781,10 +5781,6 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   const[accounts,setAccounts]=useState(()=>demoMode?DEMO_BANK_ACCOUNTS:[]);
   const[txns,setTxns]=useState(()=>demoMode?DEMO_TRANSACTIONS:[]);
   const[loading,setLoading]=useState(false);
-  // One-shot backfill guard: only attempt /transactions/sync once per mount
-  // if the read returns empty. Stops the 90s auto-poll from hammering sync
-  // when the user has a brand-new account with no transactions yet.
-  const didBackfillRef=useRef(false);
   const[linkToken,setLinkToken]=useState(null);
   const[plaidReady,setPlaidReady]=useState(false);
   const[busy,setBusy]=useState(false);
@@ -5954,18 +5950,19 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         txnList=Array.isArray(td.transactions)?td.transactions:[];
         collectReauth(td.item_errors);
       }
-      if(txnList.length===0&&acctCount>0&&!didBackfillRef.current){
+      if(txnList.length===0&&acctCount>0){
+        // No didBackfillRef guard here on purpose. Plaid's initial pull
+        // for a new bank takes 1-15 minutes — sync calls during that
+        // window succeed but return 0 added. If we flipped a "we tried"
+        // flag on first call, the 90s auto-poll would never fire sync
+        // again, and the user would be stuck on an empty Transactions
+        // tile even after Plaid finished pulling. The plaid.sync rate
+        // limit (10/hr per user) is the real throttle.
         try{
           const sr=await apiFetch("/api/plaid/transactions?sync=1");
           if(sr.ok){
             const sd=await sr.json();
             collectReauth(sd.errors);
-            // Only set the guard AFTER the sync call succeeds. If the sync
-            // failed (rate-limited, network blip, Plaid down), leave the
-            // ref false so the next refresh/poll/visibilitychange can try
-            // again — a transient failure shouldn't permanently disable
-            // backfill until page reload.
-            didBackfillRef.current=true;
             // Re-read after sync so the freshly upserted rows reach the UI.
             tr=await apiFetch("/api/plaid/transactions");
             if(tr.ok){
@@ -6003,7 +6000,6 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         return;
       }
       const{added=0,modified=0,removed=0,failed=0}=sd;
-      didBackfillRef.current=true;
       // Re-read the table after sync so the new rows render.
       const tr=await apiFetch("/api/plaid/transactions");
       if(tr.ok){
@@ -6148,15 +6144,13 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       // Plaid's transactions API is asynchronous for newly-linked Items:
       // the access_token works immediately for /accounts but /transactions/sync
       // returns empty until Plaid finishes the initial pull (typically
-      // 10-60 s; can be longer for large histories). The server-side
-      // webhook handler will trigger sync when Plaid signals
-      // SYNC_UPDATES_AVAILABLE, but webhooks can also be slow/missed, so
-      // belt-and-braces this with three client-side sync attempts at
-      // staggered intervals. didBackfillRef stays false during this
-      // window so each attempt actually fires.
-      didBackfillRef.current = false;
+      // 10-60 s; can be longer — some banks take 5-15 min for large histories).
+      // The server-side webhook handler triggers sync when Plaid signals
+      // SYNC_UPDATES_AVAILABLE; webhooks can be slow/missed so we belt-and-
+      // braces with a wider client retry burst spanning 15 minutes. The
+      // plaid.sync rate-limit bucket (10/hr) caps abuse.
       apiFetch("/api/plaid/transactions?sync=1").catch(()=>{});
-      [15_000, 60_000, 180_000].forEach((delay)=>{
+      [15_000, 45_000, 90_000, 180_000, 300_000, 480_000, 720_000, 900_000].forEach((delay)=>{
         setTimeout(()=>{
           apiFetch("/api/plaid/transactions?sync=1").catch(()=>{});
           // Pull the refreshed table into the UI right after each retry.
@@ -6420,9 +6414,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         page wondering whether Spending / Recurring / Bills disappeared. */}
     {institutions.length>0&&bankTxns.length===0&&!demoMode&&<ComingSoon
       pending
-      title="No transactions on file yet"
-      description="Your bank is connected. Run a sync to pull in spending, recurring detection, bills, and the searchable transactions table — all of those tiles fill in once data lands."
-      hint={syncMsg?(syncMsg.ok?`Last sync: ${syncMsg.msg}`:`Last sync error: ${syncMsg.msg}`):"Plaid's cursor-based sync is fast on the first call and only pulls diffs after that."}
+      title="Plaid is pulling your transactions"
+      description="Your bank is connected. Plaid's initial pull usually finishes in 30-60 seconds, but some banks take 5-15 minutes for the full history. The Spending, Recurring, Bills, and Transactions tiles fill in automatically once the data lands — no need to refresh."
+      hint={syncMsg?(syncMsg.ok?`Last sync: ${syncMsg.msg}`:`Last sync: ${syncMsg.msg}`):"We're retrying every few minutes in the background. Click Sync now to force a check."}
       action={{ label: "↻ Sync now", onClick: syncTransactions, busy: syncBusy }}
     />}
 
