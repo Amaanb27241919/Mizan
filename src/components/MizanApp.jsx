@@ -3890,6 +3890,10 @@ function AIAdvisor({accounts=[],activities=[],metrics={},hasKey=false}){
   const[msgs,setMsgs]=useState([]);
   const[input,setInput]=useState("");
   const[busy,setBusy]=useState(false);
+  // Pre-flight token notice — null when no warning. {kind:"warn"|"err", text}.
+  // Cleared whenever a new turn starts so the warning never sticks around for
+  // an unrelated question.
+  const[tokenNotice,setTokenNotice]=useState(null);
   const scrollRef=useRef(null);
 
   // Build a tight portfolio summary (string) sent as system context. Keep small
@@ -3914,10 +3918,33 @@ Activity rows on file: ${activities.length}.`;
   const send=async(question)=>{
     const q=(question||input).trim();
     if(!q||busy)return;
+    setTokenNotice(null);
+    const sys=`You are MIZAN's Sharia-aware personal finance advisor. Use AAOIFI screening rules. Be specific, numeric, and concise (under 150 words unless asked). Use the portfolio summary below to answer.\n\n${context}`;
+    // Pre-flight token count. We send the same {messages, system, model}
+    // shape the chat call will use, so the server's count matches the bytes
+    // it'll actually forward to Anthropic (incl. the server-owned advisor
+    // prefix). If the count call itself fails for an unexpected reason
+    // (network, server bug), we fall through and let the real call proceed
+    // so a broken pre-flight never blocks the user.
+    try{
+      const cr=await apiFetch("/api/advisor/count",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({system:sys,messages:[{role:"user",content:q}]}),
+      });
+      const cd=await cr.json().catch(()=>({}));
+      if(cr.status===400){
+        // Server rejected the context as too large — show inline and abort.
+        setTokenNotice({kind:"err",text:cd.error||"Context too large to send."});
+        return;
+      }
+      if(cr.ok&&Number(cd.input_tokens)>6000){
+        setTokenNotice({kind:"warn",text:`Long context (${cd.input_tokens.toLocaleString()} tokens) — answer may be slower.`});
+      }
+    }catch{/* pre-flight is best-effort; proceed on transport failure */}
     setMsgs(m=>[...m,{role:"user",text:q}]);
     setInput("");setBusy(true);
     try{
-      const sys=`You are MIZAN's Sharia-aware personal finance advisor. Use AAOIFI screening rules. Be specific, numeric, and concise (under 150 words unless asked). Use the portfolio summary below to answer.\n\n${context}`;
       const r=await apiFetch("/api/advisor",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
@@ -4078,6 +4105,17 @@ Activity rows on file: ${activities.length}.`;
         </div>}
       </div>
 
+      {tokenNotice&&<div style={{
+        borderTop:`1px solid ${tokenNotice.kind==="err"?T.loss+"40":T.gold+"40"}`,
+        padding:`${T.s2} ${T.s4}`,
+        background:tokenNotice.kind==="err"?T.lossBg:`${T.gold}10`,
+        fontFamily:FM,fontSize:11,
+        color:tokenNotice.kind==="err"?T.loss:T.gold,
+        display:"flex",alignItems:"center",gap:T.s2,letterSpacing:"0.01em",
+      }}>
+        <span style={{fontWeight:700}}>{tokenNotice.kind==="err"?"✕":"⚠"}</span>
+        <span>{tokenNotice.text}</span>
+      </div>}
       <form onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:`1px solid ${T.border}`,padding:T.s3,display:"flex",gap:T.s2,background:T.surface}}>
         <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about your portfolio…" disabled={busy}
           className="field" style={{flex:1,fontFamily:FU,fontSize:14,padding:`10px ${T.s4}`}}/>
