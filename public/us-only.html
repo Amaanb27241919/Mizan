@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="MĪZAN is currently available to US residents only." />
+    <meta name="theme-color" content="#06080D" />
+    <meta name="robots" content="noindex" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <title>MĪZAN — US only</title>
+
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      html, body {
+        height: 100%;
+        background: #07080E;
+        color: #C8CCE4;
+        font-family: 'Sora', 'Trebuchet MS', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 20% 10%, rgba(82, 109, 255, 0.08), transparent 50%),
+          radial-gradient(circle at 80% 90%, rgba(255, 160, 60, 0.05), transparent 55%),
+          #07080E;
+      }
+
+      .card {
+        width: 100%;
+        max-width: 520px;
+        background: linear-gradient(180deg, #0D1020 0%, #0A0C18 100%);
+        border: 1px solid #1C2040;
+        border-radius: 18px;
+        padding: 40px 36px;
+        box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6);
+      }
+
+      .brand {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        letter-spacing: 0.32em;
+        color: #6C71A0;
+        text-transform: uppercase;
+        margin-bottom: 28px;
+      }
+
+      .brand .dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #FFA03C;
+        margin-right: 10px;
+        vertical-align: middle;
+      }
+
+      h1 {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.18;
+        color: #F2F4FF;
+        margin-bottom: 18px;
+        letter-spacing: -0.01em;
+      }
+
+      h1 .accent { color: #FFA03C; }
+
+      p {
+        font-size: 15.5px;
+        line-height: 1.6;
+        color: #A2A7CC;
+        margin-bottom: 16px;
+      }
+
+      .footnote {
+        margin-top: 28px;
+        padding-top: 24px;
+        border-top: 1px solid #1C2040;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: #6C71A0;
+        line-height: 1.6;
+      }
+
+      a {
+        color: #8FA7FF;
+        text-decoration: none;
+        border-bottom: 1px dashed #3A4480;
+        transition: color 150ms ease, border-color 150ms ease;
+      }
+
+      a:hover, a:focus {
+        color: #B5C3FF;
+        border-bottom-color: #8FA7FF;
+        outline: none;
+      }
+
+      a:focus-visible {
+        outline: 2px solid #8FA7FF;
+        outline-offset: 4px;
+        border-radius: 2px;
+      }
+
+      .row {
+        margin-top: 20px;
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        font-size: 13px;
+      }
+
+      .row a { border-bottom: none; }
+      .row a:hover { color: #B5C3FF; }
+
+      @media (max-width: 480px) {
+        .card { padding: 32px 24px; }
+        h1 { font-size: 24px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card" role="main" aria-labelledby="us-only-heading">
+      <div class="brand"><span class="dot" aria-hidden="true"></span>MĪZAN</div>
+
+      <h1 id="us-only-heading">
+        MĪZAN is currently <span class="accent">US&#8209;only</span>.
+      </h1>
+
+      <p>
+        Our brokerage and bank connections run through Plaid, which today
+        onboards US residents only (including Puerto Rico, USVI, Guam, the
+        Northern Mariana Islands, and American Samoa).
+      </p>
+
+      <p>
+        International support is on the roadmap. If you'd like to be notified
+        when it ships, drop us a line at
+        <a href="mailto:khanstyle02@gmail.com?subject=MIZAN%20international%20waitlist">
+          khanstyle02@gmail.com</a>.
+      </p>
+
+      <div class="row">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/security">Security</a>
+      </div>
+
+      <div class="footnote">
+        If you're a US resident seeing this page, you may be on a VPN or your
+        IP isn't geolocating correctly. Disable any VPN and reload.
+      </div>
+    </main>
+  </body>
+</html>
