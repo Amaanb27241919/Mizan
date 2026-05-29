@@ -5819,6 +5819,14 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   const[accounts,setAccounts]=useState(()=>demoMode?DEMO_BANK_ACCOUNTS:[]);
   const[txns,setTxns]=useState(()=>demoMode?DEMO_TRANSACTIONS:[]);
   const[loading,setLoading]=useState(false);
+  // Throttle the empty-state auto-sync inside refresh(). Server-side
+  // plaid.sync is capped at 10/hr per user; the 90s interval + visibility
+  // poll + post-link retry burst together can blow that budget within
+  // minutes and 429 every subsequent /sync — including the user's manual
+  // click. Gate auto-fires behind a ≥ 6 min gap so we leave headroom for
+  // the burst (8 calls) and one manual sync. Burst syncs and manual clicks
+  // bump this ref so they all share the same throttle window.
+  const lastAutoSyncAtRef=useRef(0);
   const[linkToken,setLinkToken]=useState(null);
   const[plaidReady,setPlaidReady]=useState(false);
   const[busy,setBusy]=useState(false);
@@ -5948,7 +5956,12 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   useEffect(()=>{onBankBalanceChange?.(totalBank);},[totalBank]); // eslint-disable-line
 
   // Load existing accounts + transactions on mount.
-  const refresh=useCallback(async()=>{
+  // opts.skipAutoSync — when true, skip the empty-state /sync fire. Used
+  // by the post-link retry burst, which fires its own explicit syncs at
+  // a tuned schedule; the trailing refresh() exists only to pull the
+  // updated read into the UI, not to re-trigger sync.
+  const refresh=useCallback(async(opts={})=>{
+    const{skipAutoSync=false}=opts;
     // Demo mode is a pure local fixture — never hit the Plaid API.
     if(demoMode){setAccounts(DEMO_BANK_ACCOUNTS);setTxns(DEMO_TRANSACTIONS);setItemsNeedingReauth([]);return;}
     setLoading(true);
@@ -5988,14 +6001,18 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         txnList=Array.isArray(td.transactions)?td.transactions:[];
         collectReauth(td.item_errors);
       }
-      if(txnList.length===0&&acctCount>0){
-        // No didBackfillRef guard here on purpose. Plaid's initial pull
-        // for a new bank takes 1-15 minutes — sync calls during that
-        // window succeed but return 0 added. If we flipped a "we tried"
-        // flag on first call, the 90s auto-poll would never fire sync
-        // again, and the user would be stuck on an empty Transactions
-        // tile even after Plaid finished pulling. The plaid.sync rate
-        // limit (10/hr per user) is the real throttle.
+      const AUTO_SYNC_MIN_GAP_MS=6*60*1000;
+      if(txnList.length===0&&acctCount>0&&!skipAutoSync&&Date.now()-lastAutoSyncAtRef.current>=AUTO_SYNC_MIN_GAP_MS){
+        // Plaid's initial pull for a new bank takes 1-15 minutes — sync
+        // calls during that window succeed but return 0 added. We can't
+        // flip a permanent "we tried" flag (the user would be stuck on
+        // empty if Plaid finishes later), but we also can't fire on
+        // every 90s interval/visibility tick — that blows the 10/hr
+        // plaid.sync budget within minutes. The 6-min gap below caps
+        // auto-fires at ~10/hr in steady state and leaves headroom for
+        // the post-link burst and one manual click. Burst + manual paths
+        // also bump the ref so they share the throttle window.
+        lastAutoSyncAtRef.current=Date.now();
         try{
           const sr=await apiFetch("/api/plaid/transactions?sync=1");
           if(sr.ok){
@@ -6026,6 +6043,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   const syncTransactions=useCallback(async()=>{
     if(demoMode||syncBusy)return;
     setSyncBusy(true);setSyncMsg(null);
+    lastAutoSyncAtRef.current=Date.now();
     try{
       const sr=await apiFetch("/api/plaid/transactions?sync=1");
       const sd=await sr.json().catch(()=>({}));
@@ -6177,7 +6195,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);
       setStatus({ok:true,msg:`Linked ${d.institution_name}. Pulling transactions…`});
       setPlaidReady(false);setLinkToken(null);
-      await refresh();
+      // The burst below fires its own explicit syncs; tell refresh() to
+      // skip its empty-state auto-fire so we don't double-spend the
+      // plaid.sync budget.
+      await refresh({skipAutoSync:true});
 
       // Plaid's transactions API is asynchronous for newly-linked Items:
       // the access_token works immediately for /accounts but /transactions/sync
@@ -6186,13 +6207,19 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       // The server-side webhook handler triggers sync when Plaid signals
       // SYNC_UPDATES_AVAILABLE; webhooks can be slow/missed so we belt-and-
       // braces with a wider client retry burst spanning 15 minutes. The
-      // plaid.sync rate-limit bucket (10/hr) caps abuse.
+      // burst stamps lastAutoSyncAtRef on each tick so refresh()'s own
+      // empty-state auto-sync (driven by the 90s interval / visibility
+      // poll) stays throttled and doesn't double-fire alongside us.
+      lastAutoSyncAtRef.current=Date.now();
       apiFetch("/api/plaid/transactions?sync=1").catch(()=>{});
       [15_000, 45_000, 90_000, 180_000, 300_000, 480_000, 720_000, 900_000].forEach((delay)=>{
         setTimeout(()=>{
+          lastAutoSyncAtRef.current=Date.now();
           apiFetch("/api/plaid/transactions?sync=1").catch(()=>{});
           // Pull the refreshed table into the UI right after each retry.
-          setTimeout(()=>refresh().catch(()=>{}), 1500);
+          // skipAutoSync so we don't fire another sync on top of the one
+          // we just dispatched above.
+          setTimeout(()=>refresh({skipAutoSync:true}).catch(()=>{}), 1500);
         }, delay);
       });
     }catch(err){
