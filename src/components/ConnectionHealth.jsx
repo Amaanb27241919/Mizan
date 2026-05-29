@@ -98,6 +98,50 @@ export default function ConnectionHealth({ onNav } = {}) {
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr]         = useState(null);
+  // Per-item busy state for Force Re-sync. Keyed by item_id so multiple
+  // Plaid connections can re-sync independently without blocking each other.
+  const [resyncingId, setResyncingId] = useState(null);
+  const [resyncMsg,   setResyncMsg]   = useState(null);
+
+  // Force a full re-sync for one Plaid Item: clears the stored cursor on the
+  // server and re-walks /transactions/sync from scratch. Use when the user's
+  // Transactions tab is empty but manual sync reports "Up to date" — the
+  // cursor is stuck past data we never persisted. Idempotent: a no-op when
+  // the table already matches Plaid's state. Rate-limited via plaid.sync.
+  const forceResync = useCallback(async (itemId, institution) => {
+    if (resyncingId) return;
+    if (!window.confirm(`Force a full re-sync for ${institution}? This clears our cursor and re-pulls every transaction from Plaid.`)) return;
+    setResyncingId(itemId);
+    setResyncMsg(null);
+    try {
+      const r = await apiFetch(`/api/plaid/transactions?sync=1&reset=1&item_id=${encodeURIComponent(itemId)}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setResyncMsg({ ok: false, itemId, msg: r.status === 429 ? "Rate-limited — try again later (10/hr cap)" : (d.error || `Failed (${r.status})`) });
+        return;
+      }
+      const { added = 0, modified = 0, removed = 0, failed = 0 } = d;
+      const total = added + modified + removed;
+      setResyncMsg({
+        ok: failed === 0,
+        itemId,
+        msg: failed > 0
+          ? `Re-sync hit ${failed} item error${failed === 1 ? "" : "s"}`
+          : total === 0
+            ? "Re-sync complete — Plaid returned no transactions (account may genuinely have none)"
+            : `Re-sync complete · +${added} added, ~${modified} updated, −${removed} removed`,
+      });
+      // Refresh the connection health view to show the updated last-sync.
+      load();
+    } catch (e) {
+      setResyncMsg({ ok: false, itemId, msg: e?.message || "Re-sync failed" });
+    } finally {
+      setResyncingId(null);
+      setTimeout(() => setResyncMsg(null), 8000);
+    }
+  // load is defined below; safe to use because forceResync isn't called during render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resyncingId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -230,7 +274,23 @@ export default function ConnectionHealth({ onNav } = {}) {
                   )}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: T.s2, flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: T.s2, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {it.provider === "plaid" && it.status !== "reauth" && (
+                  <button
+                    onClick={() => forceResync(it.item_id, it.institution || "this bank")}
+                    disabled={resyncingId === it.item_id}
+                    title="Clear our sync cursor and re-pull every transaction from Plaid. Use when transactions are missing but manual sync reports 'Up to date'."
+                    style={{
+                      padding: `6px ${T.s3}`,
+                      background: "transparent",
+                      border: `1px solid ${T.blue}55`,
+                      color: T.blue,
+                      fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+                      borderRadius: T.rSm,
+                      cursor: resyncingId === it.item_id ? "wait" : "pointer",
+                      opacity: resyncingId === it.item_id ? 0.6 : 1,
+                    }}>{resyncingId === it.item_id ? "RE-SYNCING…" : "↻ FORCE RESYNC"}</button>
+                )}
                 {it.provider === "plaid" && onNav && (
                   <button onClick={() => onNav("finances")} style={{
                     padding: `6px ${T.s3}`,
@@ -254,6 +314,18 @@ export default function ConnectionHealth({ onNav } = {}) {
                   }}>VIEW</button>
                 )}
               </div>
+              {resyncMsg && resyncMsg.itemId === it.item_id && (
+                <div style={{
+                  gridColumn: "1 / -1",
+                  fontFamily: FM, fontSize: 11,
+                  color: resyncMsg.ok ? T.gain : T.loss,
+                  background: `${resyncMsg.ok ? T.gain : T.loss}12`,
+                  border: `1px solid ${resyncMsg.ok ? T.gain : T.loss}40`,
+                  borderRadius: T.rSm,
+                  padding: `${T.s2} ${T.s3}`,
+                  marginTop: T.s2,
+                }}>{resyncMsg.msg}</div>
+              )}
             </div>
           ))}
         </div>
