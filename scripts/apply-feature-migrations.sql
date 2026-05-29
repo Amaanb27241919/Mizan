@@ -4,15 +4,59 @@
 -- query) and run. It's idempotent — safe to re-run; every CREATE uses
 -- IF NOT EXISTS and every CREATE POLICY is preceded by DROP POLICY IF EXISTS.
 --
--- Covers the three migrations the new features depend on:
---   012  account_nicknames  → P3-B  per-account display nicknames
---   013  budgets            → P2-A  per-category monthly spending caps
---   014  goals              → P2-C  savings goals + projections
+-- Covers the migrations the cursor-based Plaid sync and the new features
+-- depend on. Apply in order:
+--   010  plaid_transactions  → Plaid /transactions/sync persistence
+--                              (table) + plaid_tokens.transactions_cursor
+--                              column. WITHOUT THIS, /transactions/sync
+--                              silently returns "no tokens" because the
+--                              fat SELECT errors on the missing column
+--                              and supabase-js drops the error.
+--   012  account_nicknames   → P3-B  per-account display nicknames
+--   013  budgets             → P2-A  per-category monthly spending caps
+--   014  goals               → P2-C  savings goals + projections
 --
 -- After running, verify the tables landed with the SELECT at the bottom.
 -- Goals/Budgets/Nicknames will start working immediately — the app already
 -- returns a friendly "setup pending" message when these tables are absent,
--- and will load real data automatically once the tables exist.
+-- and will load real data automatically once the tables exist. Transactions
+-- start syncing on the next /api/plaid/transactions?sync=1 call once 010
+-- is applied.
+
+-- ════════════════════════════════════════════════════════════════
+-- 010  plaid_transactions — cursor-based Plaid /transactions/sync
+-- ════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS public.plaid_transactions (
+  id                  bigserial PRIMARY KEY,
+  user_id             uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  item_id             text NOT NULL,
+  account_id          text NOT NULL,
+  transaction_id      text NOT NULL UNIQUE,
+  amount              numeric,
+  iso_currency_code   text,
+  name                text,
+  merchant_name       text,
+  category_primary    text,
+  category_detailed   text,
+  date                date,
+  pending             boolean DEFAULT false,
+  payment_channel     text,
+  raw_data            jsonb,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS plaid_transactions_user_idx              ON public.plaid_transactions (user_id);
+CREATE INDEX IF NOT EXISTS plaid_transactions_item_idx              ON public.plaid_transactions (item_id);
+CREATE INDEX IF NOT EXISTS plaid_transactions_account_idx           ON public.plaid_transactions (account_id);
+CREATE INDEX IF NOT EXISTS plaid_transactions_date_desc_idx         ON public.plaid_transactions (date DESC);
+CREATE INDEX IF NOT EXISTS plaid_transactions_user_date_desc_idx    ON public.plaid_transactions (user_id, date DESC);
+ALTER TABLE public.plaid_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "plaid_transactions_select_own" ON public.plaid_transactions;
+CREATE POLICY "plaid_transactions_select_own"
+  ON public.plaid_transactions FOR SELECT
+  USING (auth.uid() = user_id);
+ALTER TABLE public.plaid_tokens
+  ADD COLUMN IF NOT EXISTS transactions_cursor text;
 
 -- ════════════════════════════════════════════════════════════════
 -- 012  account_nicknames — per-user, per-account rename overrides
