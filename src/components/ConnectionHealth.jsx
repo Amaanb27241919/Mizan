@@ -122,7 +122,22 @@ function DetailsPanel({ state }) {
         borderRadius: T.rSm,
         padding: `${T.s2} ${T.s3}`,
         marginTop: T.s2,
-      }}>Diagnostic failed: {state.err}</div>
+      }}>
+        <div>Diagnostic failed: {state.err}</div>
+        {state.debug && (
+          <pre style={{
+            margin: `${T.s2} 0 0 0`,
+            padding: T.s2,
+            background: T.surface,
+            border: `1px solid ${T.border}`,
+            borderRadius: T.rSm,
+            color: T.text,
+            fontSize: 10,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-all",
+          }}>{JSON.stringify(state.debug, null, 2)}</pre>
+        )}
+      </div>
     );
   }
   const d = state.data || {};
@@ -229,7 +244,7 @@ export default function ConnectionHealth({ onNav } = {}) {
       const r = await apiFetch(`/api/plaid/item-status?item_id=${encodeURIComponent(itemId)}`);
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setItemDetails(prev => ({ ...prev, [itemId]: { err: d.error || `HTTP ${r.status}` } }));
+        setItemDetails(prev => ({ ...prev, [itemId]: { err: d.error || `HTTP ${r.status}`, debug: d.debug || null } }));
         return;
       }
       setItemDetails(prev => ({ ...prev, [itemId]: { data: d } }));
