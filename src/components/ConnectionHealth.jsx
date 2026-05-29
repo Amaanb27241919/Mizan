@@ -94,6 +94,73 @@ function ProviderBadge({ provider }) {
   );
 }
 
+// Renders the Plaid /item/get diagnostic for one Item. The aim is to make
+// "why is /transactions/sync empty?" answerable at a glance: did the user
+// consent to transactions, did Plaid record a last_successful_update, is
+// there an item-level error?
+function DetailsPanel({ state }) {
+  if (state.loading) {
+    return (
+      <div style={{
+        gridColumn: "1 / -1",
+        fontFamily: FM, fontSize: 11, color: T.muted,
+        background: T.surface,
+        border: `1px solid ${T.border}`,
+        borderRadius: T.rSm,
+        padding: `${T.s2} ${T.s3}`,
+        marginTop: T.s2,
+      }}>Loading Plaid item status…</div>
+    );
+  }
+  if (state.err) {
+    return (
+      <div style={{
+        gridColumn: "1 / -1",
+        fontFamily: FM, fontSize: 11, color: T.loss,
+        background: `${T.loss}12`,
+        border: `1px solid ${T.loss}40`,
+        borderRadius: T.rSm,
+        padding: `${T.s2} ${T.s3}`,
+        marginTop: T.s2,
+      }}>Diagnostic failed: {state.err}</div>
+    );
+  }
+  const d = state.data || {};
+  const consented = Array.isArray(d.consented_products) ? d.consented_products : null;
+  const txConsented = consented ? consented.includes("transactions") : null;
+  const txStatus = d.transactions_status || {};
+  const lwh = d.last_webhook || {};
+  const Row = ({ label, value, accent }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: T.s3, padding: "2px 0" }}>
+      <span style={{ color: T.muted }}>{label}</span>
+      <span style={{ color: accent || T.text, textAlign: "right", fontFamily: FM, fontSize: 11 }}>{value ?? "—"}</span>
+    </div>
+  );
+  return (
+    <div style={{
+      gridColumn: "1 / -1",
+      fontFamily: FM, fontSize: 11,
+      background: T.surface,
+      border: `1px solid ${T.border}`,
+      borderRadius: T.rSm,
+      padding: `${T.s3} ${T.s3}`,
+      marginTop: T.s2,
+      display: "flex", flexDirection: "column", gap: 2,
+    }}>
+      <Row label="Plaid error"            value={d.error?.error_code || "none"} accent={d.error ? T.loss : T.gain} />
+      <Row label="Consent on transactions" value={txConsented === null ? "(not reported)" : (txConsented ? "yes" : "NO")} accent={txConsented === false ? T.loss : null} />
+      <Row label="Available products"     value={(d.available_products || []).join(", ") || "—"} />
+      <Row label="Billed products"        value={(d.billed_products    || []).join(", ") || "—"} />
+      <Row label="Tx last successful"     value={txStatus.last_successful_update || "(never)"} accent={txStatus.last_successful_update ? T.gain : T.loss} />
+      <Row label="Tx last failed"         value={txStatus.last_failed_update     || "—"} />
+      <Row label="Last webhook code"      value={lwh.code_sent || "—"} />
+      <Row label="Last webhook at"        value={lwh.sent_at   || "—"} />
+      <Row label="Our cursor"             value={d.cursor_set ? "set" : "null"} />
+      <Row label="Consent expires"        value={d.consent_expiration_time || "—"} />
+    </div>
+  );
+}
+
 export default function ConnectionHealth({ onNav } = {}) {
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -102,6 +169,8 @@ export default function ConnectionHealth({ onNav } = {}) {
   // Plaid connections can re-sync independently without blocking each other.
   const [resyncingId, setResyncingId] = useState(null);
   const [resyncMsg,   setResyncMsg]   = useState(null);
+  // Per-item Plaid /item/get diagnostic. itemDetails[item_id] = { loading, data, err }.
+  const [itemDetails, setItemDetails] = useState({});
 
   // Force a full re-sync for one Plaid Item: clears the stored cursor on the
   // server and re-walks /transactions/sync from scratch. Use when the user's
@@ -142,6 +211,32 @@ export default function ConnectionHealth({ onNav } = {}) {
   // load is defined below; safe to use because forceResync isn't called during render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resyncingId]);
+
+  // Toggle the per-item diagnostic panel. First open fetches /item/get from
+  // Plaid (via our server proxy), subsequent opens just re-show cached data.
+  const toggleDetails = useCallback(async (itemId) => {
+    setItemDetails(prev => {
+      const cur = prev[itemId];
+      if (cur && (cur.data || cur.err)) {
+        // Already loaded — just toggle visibility.
+        return { ...prev, [itemId]: { ...cur, hidden: !cur.hidden } };
+      }
+      return { ...prev, [itemId]: { loading: true } };
+    });
+    const cached = itemDetails[itemId];
+    if (cached && (cached.data || cached.err)) return;
+    try {
+      const r = await apiFetch(`/api/plaid/item-status?item_id=${encodeURIComponent(itemId)}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setItemDetails(prev => ({ ...prev, [itemId]: { err: d.error || `HTTP ${r.status}` } }));
+        return;
+      }
+      setItemDetails(prev => ({ ...prev, [itemId]: { data: d } }));
+    } catch (e) {
+      setItemDetails(prev => ({ ...prev, [itemId]: { err: e?.message || "Failed" } }));
+    }
+  }, [itemDetails]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -275,6 +370,20 @@ export default function ConnectionHealth({ onNav } = {}) {
                 </div>
               </div>
               <div style={{ display: "flex", gap: T.s2, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {it.provider === "plaid" && (
+                  <button
+                    onClick={() => toggleDetails(it.item_id)}
+                    title="Show Plaid's view of this Item: consented products, last successful transactions update, and any item-level error."
+                    style={{
+                      padding: `6px ${T.s3}`,
+                      background: "transparent",
+                      border: `1px solid ${T.muted}55`,
+                      color: T.muted,
+                      fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+                      borderRadius: T.rSm,
+                      cursor: "pointer",
+                    }}>{itemDetails[it.item_id]?.hidden ? "DETAILS" : (itemDetails[it.item_id]?.data || itemDetails[it.item_id]?.err) ? "HIDE" : "DETAILS"}</button>
+                )}
                 {it.provider === "plaid" && it.status !== "reauth" && (
                   <button
                     onClick={() => forceResync(it.item_id, it.institution || "this bank")}
@@ -325,6 +434,9 @@ export default function ConnectionHealth({ onNav } = {}) {
                   padding: `${T.s2} ${T.s3}`,
                   marginTop: T.s2,
                 }}>{resyncMsg.msg}</div>
+              )}
+              {itemDetails[it.item_id] && !itemDetails[it.item_id].hidden && (
+                <DetailsPanel state={itemDetails[it.item_id]} />
               )}
             </div>
           ))}
