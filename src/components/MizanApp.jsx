@@ -1248,24 +1248,25 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     ? plaidAccounts.filter(isBrokeragePlaid).reduce((s,a)=>s+(+a.current_bal||0),0)
     : 0;
   const tot=brokerageTot+(bankBalance||0)+plaidInvestmentTot+manualAssetTotal;
-  // Net zakatable wealth — same dedup rule applies: SnapTrade wins,
-  // Plaid investment is fallback-only. Uses manualAssetZakatable (filtered
-  // to zakatable:true) instead of manualAssetTotal so non-zakatable manual
-  // entries (primary residence, daily-driver car, etc.) don't inflate the
-  // tile.
+  // Net zakatable wealth — honours the user's chosen Islamic-finance
+  // methodology (silver vs gold nisab, full vs 30% long-term investment
+  // valuation). Investment-class wealth (brokerage holdings, Plaid
+  // investment-type accounts) is scaled by investmentFactor: 1.0 for
+  // active traders, 0.30 for long-term holders per AAOIFI / contemporary
+  // fatwa guidance. Cash (bank, brokerage cash) is always full value.
+  // manualAssetZakatable already filters out personal-use exempt items
+  // (primary residence, daily-driver car).
+  const zakatSettings = useZakatSettings();
+  const invFactor = investmentFactor(zakatSettings);
   const zakatableForOverview=Math.max(0,
-    Math.max(0,brokerageTot)
+    Math.max(0,brokerageTot) * invFactor
     + Math.max(0,bankBalance||0)
-    + plaidInvestmentTot
+    + plaidInvestmentTot * invFactor
     + manualAssetZakatable
     - manualLiabilities
   );
-  // Nisab gate: no zakat is due below the threshold (currently ~$8,310,
-  // 87.48g gold). Without this gate the tile would show a non-zero "ZAKAT
-  // DUE" figure even for users with $100 of cash, which is religiously
-  // incorrect. Keep the constant in sync with NISAB_USD inside ZakatSadaqah.
-  const NISAB_OVERVIEW_USD = 8310;
-  const overviewAboveNisab = zakatableForOverview >= NISAB_OVERVIEW_USD;
+  const nisabOverview = nisabValueFor(zakatSettings);
+  const overviewAboveNisab = zakatableForOverview >= nisabOverview;
   const zakatDueOverview = overviewAboveNisab ? zakatableForOverview * 0.025 : 0;
   const totCost=merged.reduce((s,h)=>s+cost(h),0);
   // Gain is computed against position cost basis only (cash isn't a "gain")
@@ -1555,7 +1556,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         <BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKAT DUE</div>
           <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(zakatDueOverview))}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{overviewAboveNisab?"2.5% of net zakatable wealth":`Below nisab (${fmtUSD(NISAB_OVERVIEW_USD)} threshold)`}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{overviewAboveNisab?`2.5% of net zakatable wealth${zakatSettings.investmentMethod==="longterm_30"?" (30% rule on investments)":""}`:`Below nisab (${zakatSettings.nisabStandard} standard, ${fmtUSD(nisabOverview)})`}</div>
         </BentoTile>
         <BentoTile>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANCE</div>
@@ -2489,11 +2490,73 @@ function ActivityPanel({activities=[],accounts=[]}){
 // rendered the owner's figures to every user. Sums real brokerage balances
 // + zakatable manual assets, applies 2.5%, and shows nisab threshold.
 // Sadaqah is a user-entered ledger persisted to mizan_sadaqah (synced).
-// Gold-standard nisab threshold = 87.48 g × spot price USD/g. Refresh
-// periodically; under-stating it makes the "Below nisab" gate trip late
-// (user thinks zakat is due when it isn't), over-stating it hides real
-// zakat obligations. Last refreshed: 2026-05-31 (~$95/g spot).
-const NISAB_USD = 8310; // 87.48g × ~$95/g
+// ── Islamic finance — Zakat principles encoded here ──────────────────────
+//
+// Two recognized nisab (threshold) standards:
+//   · Gold:   87.48 g (20 mithqal). Majority view — Shafi'i, Maliki, Hanbali.
+//   · Silver: 612.36 g (200 dirham). Hanafi view. Lower threshold,
+//             more inclusive of zakat obligation. Used by many contemporary
+//             fatwa councils for cash-rich modern populations.
+// Refresh spot price periodically; the constants below are 2026-05-31 spot.
+const NISAB_GOLD_USD   = 8310;  // 87.48 g × ~$95/g
+const NISAB_SILVER_USD = 670;   // 612.36 g × ~$1.09/g
+
+// Investment portfolio methodology — two scholarly approaches for users who
+// hold stocks/ETFs/mutual funds (not actively trading):
+//   · "full"        : 2.5% of full market value. Treats user as trader.
+//   · "longterm_30" : 2.5% of 30% of market value. Per AAOIFI guidance +
+//                     contemporary fatwas — approximates the share of
+//                     company assets that are zakatable (cash, receivables,
+//                     inventory) vs. exempt fixed assets (buildings, plant,
+//                     equipment). Appropriate for retirement / buy-and-hold.
+const INVESTMENT_FACTOR_FULL    = 1.0;
+const INVESTMENT_FACTOR_LONGTERM = 0.30;
+
+const DEFAULT_ZAKAT_SETTINGS = {
+  nisabStandard:    "silver",        // "gold" | "silver"
+  investmentMethod: "longterm_30",   // "full" | "longterm_30"
+};
+
+function loadZakatSettings(){
+  try{
+    const raw=localStorage.getItem("mizan_zakat_settings");
+    if(!raw)return DEFAULT_ZAKAT_SETTINGS;
+    const p=JSON.parse(raw);
+    return {
+      nisabStandard:    p.nisabStandard==="gold" ? "gold" : "silver",
+      investmentMethod: p.investmentMethod==="full" ? "full" : "longterm_30",
+    };
+  }catch{ return DEFAULT_ZAKAT_SETTINGS; }
+}
+function saveZakatSettings(s){
+  try{ localStorage.setItem("mizan_zakat_settings", JSON.stringify(s)); }catch{}
+  // Broadcast so the Overview tile re-reads without a page reload.
+  try{ window.dispatchEvent(new CustomEvent("mizan-zakat-settings")); }catch{}
+}
+function nisabValueFor(s){
+  return s.nisabStandard==="gold" ? NISAB_GOLD_USD : NISAB_SILVER_USD;
+}
+function investmentFactor(s){
+  return s.investmentMethod==="full" ? INVESTMENT_FACTOR_FULL : INVESTMENT_FACTOR_LONGTERM;
+}
+// Subscribe a component to setting changes — returns the live settings and
+// re-renders on save (from either the Zakat tab or another tab via storage event).
+function useZakatSettings(){
+  const[settings,setSettings]=useState(loadZakatSettings);
+  useEffect(()=>{
+    const re=()=>setSettings(loadZakatSettings());
+    window.addEventListener("storage", re);
+    window.addEventListener("mizan-zakat-settings", re);
+    return()=>{
+      window.removeEventListener("storage", re);
+      window.removeEventListener("mizan-zakat-settings", re);
+    };
+  },[]);
+  return settings;
+}
+
+// Back-compat alias for any leftover references during this refactor.
+const NISAB_USD = NISAB_GOLD_USD;
 
 function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   // The previous owner-only seed has been removed — it leaked the owner's
@@ -2523,11 +2586,22 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   const[fAccount,setFAccount]=useState("all");
   const[fYear,setFYear]=useState("all");
 
+  const settings = useZakatSettings();
+  const invFactor = investmentFactor(settings);
+  const nisabUsd  = nisabValueFor(settings);
+
   const manualAssets=demoMode
     ?DEMO_MANUAL_ASSETS
     :(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
   const acctTotal       = accounts.reduce((s,a)=>s+(a.balance||0),0);
-  const zakatableManual = manualAssets.filter(a=>a.zakatable).reduce((s,a)=>s+(a.value||0),0);
+  // Brokerage holdings are scaled by the user's chosen investment method:
+  //   · full:        treat as trading inventory → 2.5% of full value
+  //   · longterm_30: per AAOIFI / contemporary fatwa, ~30% of a public
+  //                  company's assets are zakatable (cash, receivables,
+  //                  inventory); the rest (fixed assets) is exempt
+  // Default is longterm_30 — most retail users buy and hold.
+  const acctZakatable   = acctTotal * invFactor;
+  const zakatableManual = manualAssets.filter(a=>a.zakatable && !a.liability).reduce((s,a)=>s+(a.value||0),0);
   // Deduct short-term debt from zakatable wealth per AAOIFI guidance.
   // Bank credit/loan balances flow in via bankBalance (negative component).
   // Manual assets with a `liability:true` flag are user-flagged short-term debts.
@@ -2535,9 +2609,9 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
     .filter(a=>a.liability && a.zakatable !== false)
     .reduce((s,a)=>s+(+a.value||0),0);
   const negativeBank   = bankBalance < 0 ? Math.abs(bankBalance) : 0;
-  const zakatable      = Math.max(0, acctTotal + zakatableManual - liabilityTotal - negativeBank);
+  const zakatable      = Math.max(0, acctZakatable + zakatableManual - liabilityTotal - negativeBank);
   const zakatDue        = zakatable*0.025;
-  const aboveNisab      = zakatable >= NISAB_USD;
+  const aboveNisab      = zakatable >= nisabUsd;
   const given           = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
   const pledged         = sadaqah.filter(s=>!s.done).reduce((a,b)=>a+(+b.amt||0),0);
   const fmtUSD          = v=>`$${(+v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -2694,11 +2768,11 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"}</div>
         <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
           {[
-            ["Brokerage",fmtUSD(acctTotal)],
+            [settings.investmentMethod==="longterm_30"?"Brokerage × 30%":"Brokerage",fmtUSD(acctZakatable)],
             ["Manual zakatable",fmtUSD(zakatableManual)],
             ["Short-term debt", `− ${fmtUSD(liabilityTotal+negativeBank)}`],
             ["Net zakatable wealth (assets minus short-term debt)",fmtUSD(zakatable),true],
-            ["Nisab threshold",fmtUSD(NISAB_USD)],
+            [`Nisab (${settings.nisabStandard})`,fmtUSD(nisabUsd)],
           ].map(([l,v,b])=><div key={l}>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
             <div style={{fontFamily:FU,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
@@ -2720,6 +2794,73 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         </BentoTile>}
       </div>
     </div>
+
+    {/* ─── ROW 1.5: Methodology selector ────────────── */}
+    {/* Lets the user pick the scholarly basis for the calc:
+        nisab standard (gold vs silver) and investment-zakat method
+        (full market value vs 30% long-term rule). Saved to
+        localStorage and broadcast so the Overview tile re-renders. */}
+    <BentoTile>
+      <div style={{display:"flex",flexWrap:"wrap",gap:T.s4,alignItems:"flex-start",justifyContent:"space-between"}}>
+        <div style={{minWidth:0,flex:"1 1 240px"}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NISAB STANDARD</div>
+          <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+            {[
+              {k:"silver",label:`Silver (${fmtUSD(NISAB_SILVER_USD)})`,note:"612.36g · Hanafi"},
+              {k:"gold",  label:`Gold (${fmtUSD(NISAB_GOLD_USD)})`,    note:"87.48g · Jumhur"},
+            ].map(o=>(
+              <button key={o.k}
+                onClick={()=>!demoMode&&saveZakatSettings({...settings,nisabStandard:o.k})}
+                disabled={demoMode}
+                style={{
+                  padding:`${T.s2} ${T.s3}`,
+                  fontFamily:FM,fontSize:12,fontWeight:500,
+                  textAlign:"left",
+                  borderRadius:T.rSm,
+                  border:`1px solid ${settings.nisabStandard===o.k?T.gold:T.border}`,
+                  background:settings.nisabStandard===o.k?`${T.gold}1A`:"transparent",
+                  color:settings.nisabStandard===o.k?T.gold:T.text,
+                  cursor:demoMode?"not-allowed":"pointer",
+                  opacity:demoMode?0.55:1,
+                }}>
+                <div>{o.label}</div>
+                <div style={{fontSize:10,color:T.muted,marginTop:2}}>{o.note}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{minWidth:0,flex:"1 1 240px"}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>INVESTMENT ZAKAT METHOD</div>
+          <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+            {[
+              {k:"longterm_30",label:"Long-term (30% rule)",note:"AAOIFI · buy & hold"},
+              {k:"full",       label:"Full market value",    note:"Active trader"},
+            ].map(o=>(
+              <button key={o.k}
+                onClick={()=>!demoMode&&saveZakatSettings({...settings,investmentMethod:o.k})}
+                disabled={demoMode}
+                style={{
+                  padding:`${T.s2} ${T.s3}`,
+                  fontFamily:FM,fontSize:12,fontWeight:500,
+                  textAlign:"left",
+                  borderRadius:T.rSm,
+                  border:`1px solid ${settings.investmentMethod===o.k?T.gold:T.border}`,
+                  background:settings.investmentMethod===o.k?`${T.gold}1A`:"transparent",
+                  color:settings.investmentMethod===o.k?T.gold:T.text,
+                  cursor:demoMode?"not-allowed":"pointer",
+                  opacity:demoMode?0.55:1,
+                }}>
+                <div>{o.label}</div>
+                <div style={{fontSize:10,color:T.muted,marginTop:2}}>{o.note}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{marginTop:T.s3,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
+        Silver nisab is more inclusive (lower threshold); gold is the majority view. The 30% rule treats public-equity holdings as ~30% zakatable to approximate the share of company assets that are cash/receivables/inventory (vs. exempt fixed assets) — appropriate for long-term holders. Active traders should pick full value.
+      </div>
+    </BentoTile>
 
     {/* ─── ROW 2: Log entry + import ───────────────── */}
     <BentoTile>
