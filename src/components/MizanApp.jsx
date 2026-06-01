@@ -1220,6 +1220,13 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   const balanceSum=snapAccounts.reduce((s,a)=>s+(a.balance||0),0);
   const manualAssetsRaw=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
   const manualAssetTotal=manualAssetsRaw.reduce((s,a)=>s+(+a.value||0),0);
+  // Zakatable manual assets only — primary residence, daily-driver car,
+  // and other personal-use items have `zakatable:false` and must NOT
+  // appear in the Overview ZAKAT DUE tile. Mirrors the filter in the
+  // ZakatSadaqah Portfolio tab so both surfaces report the same figure.
+  const manualAssetZakatable=manualAssetsRaw
+    .filter(a=>!a.liability && a.zakatable)
+    .reduce((s,a)=>s+(+a.value||0),0);
   // Manual liabilities (entries flagged `liability:true`) — used to deduct from
   // zakatable wealth on the Overview tile so it stays consistent with the
   // Portfolio → Zakat & Sadaqah tab's calculation.
@@ -1242,14 +1249,24 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     : 0;
   const tot=brokerageTot+(bankBalance||0)+plaidInvestmentTot+manualAssetTotal;
   // Net zakatable wealth — same dedup rule applies: SnapTrade wins,
-  // Plaid investment is fallback-only.
+  // Plaid investment is fallback-only. Uses manualAssetZakatable (filtered
+  // to zakatable:true) instead of manualAssetTotal so non-zakatable manual
+  // entries (primary residence, daily-driver car, etc.) don't inflate the
+  // tile.
   const zakatableForOverview=Math.max(0,
     Math.max(0,brokerageTot)
     + Math.max(0,bankBalance||0)
     + plaidInvestmentTot
-    + manualAssetTotal
+    + manualAssetZakatable
     - manualLiabilities
   );
+  // Nisab gate: no zakat is due below the threshold (currently ~$8,310,
+  // 87.48g gold). Without this gate the tile would show a non-zero "ZAKAT
+  // DUE" figure even for users with $100 of cash, which is religiously
+  // incorrect. Keep the constant in sync with NISAB_USD inside ZakatSadaqah.
+  const NISAB_OVERVIEW_USD = 8310;
+  const overviewAboveNisab = zakatableForOverview >= NISAB_OVERVIEW_USD;
+  const zakatDueOverview = overviewAboveNisab ? zakatableForOverview * 0.025 : 0;
   const totCost=merged.reduce((s,h)=>s+cost(h),0);
   // Gain is computed against position cost basis only (cash isn't a "gain")
   const gain=equityValue-totCost;
@@ -1537,8 +1554,8 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKAT DUE</div>
-          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(zakatableForOverview*0.025))}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>2.5% of net zakatable wealth</div>
+          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(zakatDueOverview))}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{overviewAboveNisab?"2.5% of net zakatable wealth":`Below nisab (${fmtUSD(NISAB_OVERVIEW_USD)} threshold)`}</div>
         </BentoTile>
         <BentoTile>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANCE</div>
@@ -2472,7 +2489,11 @@ function ActivityPanel({activities=[],accounts=[]}){
 // rendered the owner's figures to every user. Sums real brokerage balances
 // + zakatable manual assets, applies 2.5%, and shows nisab threshold.
 // Sadaqah is a user-entered ledger persisted to mizan_sadaqah (synced).
-const NISAB_USD = 5765; // 87.48g gold @ ~$66/g — updated periodically.
+// Gold-standard nisab threshold = 87.48 g × spot price USD/g. Refresh
+// periodically; under-stating it makes the "Below nisab" gate trip late
+// (user thinks zakat is due when it isn't), over-stating it hides real
+// zakat obligations. Last refreshed: 2026-05-31 (~$95/g spot).
+const NISAB_USD = 8310; // 87.48g × ~$95/g
 
 function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   // The previous owner-only seed has been removed — it leaked the owner's
