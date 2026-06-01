@@ -1257,6 +1257,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   // manualAssetZakatable already filters out personal-use exempt items
   // (primary residence, daily-driver car).
   const zakatSettings = useZakatSettings();
+  const liveNisab     = useLiveNisab();
   const invFactor = investmentFactor(zakatSettings);
   const zakatableForOverview=Math.max(0,
     Math.max(0,brokerageTot) * invFactor
@@ -1265,7 +1266,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     + manualAssetZakatable
     - manualLiabilities
   );
-  const nisabOverview = nisabValueFor(zakatSettings);
+  const nisabOverview = nisabValueFor(zakatSettings, liveNisab);
   const overviewAboveNisab = zakatableForOverview >= nisabOverview;
   const zakatDueOverview = overviewAboveNisab ? zakatableForOverview * 0.025 : 0;
   const totCost=merged.reduce((s,h)=>s+cost(h),0);
@@ -2533,8 +2534,13 @@ function saveZakatSettings(s){
   // Broadcast so the Overview tile re-reads without a page reload.
   try{ window.dispatchEvent(new CustomEvent("mizan-zakat-settings")); }catch{}
 }
-function nisabValueFor(s){
-  return s.nisabStandard==="gold" ? NISAB_GOLD_USD : NISAB_SILVER_USD;
+function nisabValueFor(s, live){
+  // live is { nisab_gold_usd, nisab_silver_usd, source } from useLiveNisab,
+  // or null. When live data is present and successful, prefer it over the
+  // static fallback so spot-price drift doesn't silently mislead the user.
+  const gold   = (live && live.source !== "static" && Number.isFinite(live.nisab_gold_usd))   ? live.nisab_gold_usd   : NISAB_GOLD_USD;
+  const silver = (live && live.source !== "static" && Number.isFinite(live.nisab_silver_usd)) ? live.nisab_silver_usd : NISAB_SILVER_USD;
+  return s.nisabStandard==="gold" ? gold : silver;
 }
 function investmentFactor(s){
   return s.investmentMethod==="full" ? INVESTMENT_FACTOR_FULL : INVESTMENT_FACTOR_LONGTERM;
@@ -2553,6 +2559,33 @@ function useZakatSettings(){
     };
   },[]);
   return settings;
+}
+// Fetch live gold + silver spot prices from /api/metals/spot once per mount.
+// Server caches 12 h; client just needs it for the lifetime of the page.
+// Falls back to the static NISAB_*_USD constants when the endpoint is
+// unconfigured (no FINNHUB_KEY) or the upstream fetch fails — same shape,
+// source: "static", null refreshed_at.
+function useLiveNisab(){
+  const[data,setData]=useState({
+    nisab_gold_usd:   NISAB_GOLD_USD,
+    nisab_silver_usd: NISAB_SILVER_USD,
+    refreshed_at:     null,
+    source:           "static",
+  });
+  useEffect(()=>{
+    let cancelled=false;
+    apiFetch("/api/metals/spot").then(r=>r.ok?r.json():null).then(d=>{
+      if(cancelled || !d?.ok)return;
+      setData({
+        nisab_gold_usd:   Number(d.nisab_gold_usd),
+        nisab_silver_usd: Number(d.nisab_silver_usd),
+        refreshed_at:     d.refreshed_at,
+        source:           d.source,
+      });
+    }).catch(()=>{});
+    return()=>{cancelled=true;};
+  },[]);
+  return data;
 }
 
 // Back-compat alias for any leftover references during this refactor.
@@ -2586,9 +2619,15 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   const[fAccount,setFAccount]=useState("all");
   const[fYear,setFYear]=useState("all");
 
-  const settings = useZakatSettings();
+  const settings  = useZakatSettings();
+  const liveNisab = useLiveNisab();
   const invFactor = investmentFactor(settings);
-  const nisabUsd  = nisabValueFor(settings);
+  const nisabUsd  = nisabValueFor(settings, liveNisab);
+  // Surface live nisab values in the methodology buttons so the user can
+  // see the current threshold without leaving the page. Fall back to the
+  // static constants when /api/metals/spot isn't reachable.
+  const liveGold   = liveNisab.source!=="static" ? liveNisab.nisab_gold_usd   : NISAB_GOLD_USD;
+  const liveSilver = liveNisab.source!=="static" ? liveNisab.nisab_silver_usd : NISAB_SILVER_USD;
 
   const manualAssets=demoMode
     ?DEMO_MANUAL_ASSETS
@@ -2806,8 +2845,8 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NISAB STANDARD</div>
           <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
             {[
-              {k:"silver",label:`Silver (${fmtUSD(NISAB_SILVER_USD)})`,note:"612.36g · Hanafi"},
-              {k:"gold",  label:`Gold (${fmtUSD(NISAB_GOLD_USD)})`,    note:"87.48g · Jumhur"},
+              {k:"silver",label:`Silver (${fmtUSD(liveSilver)})`,note:"612.36g · Hanafi"},
+              {k:"gold",  label:`Gold (${fmtUSD(liveGold)})`,    note:"87.48g · Jumhur"},
             ].map(o=>(
               <button key={o.k}
                 onClick={()=>!demoMode&&saveZakatSettings({...settings,nisabStandard:o.k})}
@@ -2859,6 +2898,11 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
       </div>
       <div style={{marginTop:T.s3,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
         Silver nisab is more inclusive (lower threshold); gold is the majority view. The 30% rule treats public-equity holdings as ~30% zakatable to approximate the share of company assets that are cash/receivables/inventory (vs. exempt fixed assets) — appropriate for long-term holders. Active traders should pick full value.
+      </div>
+      <div style={{marginTop:T.s2,fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.05em"}}>
+        {liveNisab.source==="static"
+          ? "Spot prices unavailable — using static fallback values."
+          : `Live spot via ${liveNisab.source} · refreshed ${liveNisab.refreshed_at?new Date(liveNisab.refreshed_at).toLocaleString():"recently"}`}
       </div>
     </BentoTile>
 
