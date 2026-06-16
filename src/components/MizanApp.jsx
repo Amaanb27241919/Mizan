@@ -6040,6 +6040,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   // /transactions responses so we can show a yellow banner above the
   // affected institution's account list.
   const[itemsNeedingReauth,setItemsNeedingReauth]=useState([]);
+  // Plaid's native recurring-transactions endpoint. null = not yet fetched.
+  // Falls back to the local heuristic when the API returns an error or when
+  // the user is in demo mode.
+  const[plaidRecurring,setPlaidRecurring]=useState(null);
 
   const fmtUSD=v=>`$${(+v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const fmtDate=s=>{try{return new Date(s).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}catch{return s;}};
@@ -6269,6 +6273,26 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     finally{setLoading(false);}
   },[demoMode]);
   useEffect(()=>{refresh();},[refresh]);
+
+  // Fetch Plaid's native recurring-transactions after accounts load.
+  // Runs once on mount (and whenever demoMode toggles). Best-effort —
+  // on any error we leave plaidRecurring null and fall back to the
+  // local heuristic so the tile never goes empty.
+  useEffect(()=>{
+    if(demoMode){setPlaidRecurring(null);return;}
+    let cancelled=false;
+    (async()=>{
+      try{
+        const r=await apiFetch("/api/plaid/recurring");
+        if(cancelled)return;
+        if(r.ok){
+          const d=await r.json();
+          setPlaidRecurring(d);
+        }
+      }catch{/* fall back to heuristic */}
+    })();
+    return()=>{cancelled=true;};
+  },[demoMode]);
 
   // Explicit "Sync transactions" — bypasses didBackfillRef so the user can
   // always force a re-sync even when the auto-backfill already fired.
@@ -6698,13 +6722,51 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     })()}
 
     {/* ─── RECURRING SUBSCRIPTIONS ─────────────── */}
-    {recurring.length>0&&(()=>{
-      const active=recurring.filter(r=>r.active);
-      const inactive=recurring.filter(r=>!r.active);
+    {(()=>{
+      // Prefer Plaid's native recurring-transactions data when available.
+      // Plaid's API classifies properly (subscriptions vs groceries vs rent),
+      // provides a real `is_active` flag, and reports exact frequency.
+      // Fall back to the local heuristic only when Plaid hasn't returned yet
+      // or when in demo mode.
+      const FREQ_LABEL={WEEKLY:"weekly",BIWEEKLY:"biweekly",SEMI_MONTHLY:"biweekly",MONTHLY:"monthly",ANNUALLY:"annual",UNKNOWN:"irregular"};
+      const plaidRows=plaidRecurring?.outflow_streams;
+      let rows;
+      let usingPlaid=false;
+      if(Array.isArray(plaidRows)&&plaidRows.length>0){
+        usingPlaid=true;
+        rows=plaidRows
+          .map(s=>{
+            const avg=Math.abs(Number(s.average_amount?.amount)||0);
+            const freq=FREQ_LABEL[s.frequency]||"irregular";
+            const estMonthly=freq==="weekly"?avg*4.33:freq==="biweekly"?avg*2:freq==="annual"?avg/12:avg;
+            return{
+              merchant:s.merchant_name||s.description||"Unknown",
+              cadence:freq,
+              avgPerCharge:avg,
+              estMonthly,
+              lastDate:s.last_date||"",
+              active:s.is_active!==false,
+              institution:s._institution||null,
+              status:s.status||null,
+            };
+          })
+          .sort((a,b)=>{
+            if(a.active!==b.active)return a.active?-1:1;
+            return b.estMonthly-a.estMonthly;
+          });
+      } else {
+        rows=recurring;
+      }
+      if(rows.length===0)return null;
+      const active=rows.filter(r=>r.active);
+      const inactive=rows.filter(r=>!r.active);
       const totalMonthly=active.reduce((s,r)=>s+r.estMonthly,0);
       return<BentoTile accent={T.gold}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>RECURRING SUBSCRIPTIONS · {active.length} active</span>
+          <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
+            <span style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>RECURRING SUBSCRIPTIONS · {active.length} active</span>
+            {usingPlaid&&<span style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>}
+          </div>
           <span style={{fontFamily:FU,fontSize:14,fontWeight:700,color:T.gold,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalMonthly)}<span style={{fontFamily:FM,fontSize:10,fontWeight:400,color:T.muted,marginLeft:4}}>/mo</span></span>
         </div>
         <div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
@@ -6717,7 +6779,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgPerCharge)}</span>},
             {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.estMonthly)}</span>},
             {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
-          ]} rows={[...active,...inactive].slice(0,20)}/>
+          ]} rows={[...active,...inactive].slice(0,25)}/>
         </div>
       </BentoTile>;
     })()}
