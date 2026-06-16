@@ -7,8 +7,6 @@ import { downloadCSV } from "../lib/exportCSV.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Skeleton, SkeletonCard, SkeletonTable } from "./Skeleton.jsx";
-import Budgeting from "./Budgeting.jsx";
-import BillsCalendar from "./BillsCalendar.jsx";
 import Goals from "./Goals.jsx";
 import ComingSoon from "./ComingSoon.jsx";
 import ConnectionHealth from "./ConnectionHealth.jsx";
@@ -6123,40 +6121,72 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   },[bankTxns,txnSearchDebounced,txnType,txnRange,txnAccount]);
   const visibleTxns=useMemo(()=>filteredTxns.slice(0,txnLimit),[filteredTxns,txnLimit]);
 
-  // Spending by category (positive amount = outflow per Plaid convention)
+  // Spending by category — current calendar month only, outflows only.
   const spendingByCategory=useMemo(()=>{
+    const now=new Date();
+    const monthStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
     const map={};
     bankTxns.forEach(t=>{
-      if(t.amount<=0)return; // refunds/credits → skip from spending view
+      if(t.amount<=0)return;
+      if(!t.date||t.date<monthStart)return;
       const cat=t.personal_finance_category?.primary||t.category?.[0]||"Other";
       map[cat]=(map[cat]||0)+t.amount;
     });
-    return Object.entries(map).map(([cat,total])=>({cat,total})).sort((a,b)=>b.total-a.total);
+    const entries=Object.entries(map).map(([cat,total])=>({cat,total})).sort((a,b)=>b.total-a.total);
+    const monthTotal=entries.reduce((s,e)=>s+e.total,0);
+    return{entries,monthTotal};
   },[bankTxns]);
 
-  // Recurring detection: same merchant_name appears 2+ times across distinct months
+  // Recurring subscription detection: same merchant 2+ distinct months.
+  // Cadence is derived from the median gap between charge dates so we
+  // can label weekly/biweekly/monthly/quarterly correctly and compute
+  // an accurate per-month cost instead of a raw average.
   const recurring=useMemo(()=>{
     const byMerchant={};
     bankTxns.forEach(t=>{
       const m=(t.merchant_name||t.name||"").trim();
       if(!m||t.amount<=0)return;
       const month=(t.date||"").slice(0,7);
-      if(!byMerchant[m])byMerchant[m]={merchant:m,months:new Set(),amounts:[],lastDate:t.date};
+      if(!byMerchant[m])byMerchant[m]={merchant:m,months:new Set(),amounts:[],dates:[]};
       byMerchant[m].months.add(month);
       byMerchant[m].amounts.push(t.amount);
-      if(t.date>byMerchant[m].lastDate)byMerchant[m].lastDate=t.date;
+      byMerchant[m].dates.push(t.date);
     });
+    const today=new Date();
+    const cutoff=new Date(today);cutoff.setDate(today.getDate()-45);
+    const cutoffStr=cutoff.toISOString().slice(0,10);
+    const medianOf=arr=>{if(!arr.length)return NaN;const s=[...arr].sort((a,b)=>a-b);const m=Math.floor(s.length/2);return s.length%2===0?(s[m-1]+s[m])/2:s[m];};
+    const cadenceLabel=g=>!isFinite(g)?"irregular":g<=10?"weekly":g<=18?"biweekly":g<=45?"monthly":g<=100?"quarterly":"irregular";
     return Object.values(byMerchant)
       .filter(x=>x.months.size>=2)
-      .map(x=>({
-        merchant:x.merchant,
-        monthCount:x.months.size,
-        totalSpent:x.amounts.reduce((s,n)=>s+n,0),
-        avgPerCharge:x.amounts.reduce((s,n)=>s+n,0)/x.amounts.length,
-        estMonthly:x.amounts.reduce((s,n)=>s+n,0)/x.months.size,
-        lastDate:x.lastDate,
-      }))
-      .sort((a,b)=>b.monthCount-a.monthCount);
+      .map(x=>{
+        const sorted=[...x.dates].filter(Boolean).sort();
+        const gaps=[];
+        for(let i=1;i<sorted.length;i++){
+          const a=new Date(sorted[i-1]+"T00:00:00Z").getTime();
+          const b=new Date(sorted[i]+"T00:00:00Z").getTime();
+          const d=Math.round((b-a)/86400000);
+          if(d>0)gaps.push(d);
+        }
+        const mg=medianOf(gaps);
+        const cadence=cadenceLabel(mg);
+        const avg=x.amounts.reduce((s,n)=>s+n,0)/x.amounts.length;
+        const estMonthly=cadence==="weekly"?avg*4.33:cadence==="biweekly"?avg*2:cadence==="quarterly"?avg/3:avg;
+        const lastDate=sorted[sorted.length-1]||"";
+        return{
+          merchant:x.merchant,
+          monthCount:x.months.size,
+          cadence,
+          avgPerCharge:avg,
+          estMonthly,
+          lastDate,
+          active:lastDate>=cutoffStr,
+        };
+      })
+      .sort((a,b)=>{
+        if(a.active!==b.active)return a.active?-1:1;
+        return b.estMonthly-a.estMonthly;
+      });
   },[bankTxns]);
 
   useEffect(()=>{onBankBalanceChange?.(totalBank);},[totalBank]); // eslint-disable-line
@@ -6640,53 +6670,63 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     })}
 
     {/* ─── SPENDING BY CATEGORY ─────────────────── */}
-    {spendingByCategory.length>0&&<BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SPENDING BY CATEGORY</span>
-        <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{bankTxns.filter(t=>t.amount>0).length} outflows in window</span>
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
-        {spendingByCategory.slice(0,8).map(s=>{
-          const max=spendingByCategory[0]?.total||1;
-          const pct=(s.total/max)*100;
-          return<div key={s.cat} style={{display:"grid",gridTemplateColumns:"160px 1fr 100px",gap:T.s3,alignItems:"center"}}>
-            <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{s.cat.replace(/_/g," ")}</span>
-            <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
-              <div style={{height:"100%",width:`${pct}%`,background:`linear-gradient(90deg, ${T.blue}, ${T.blueDim})`,borderRadius:2}}/>
-            </div>
-            <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(s.total)}</span>
-          </div>;
-        })}
-      </div>
-    </BentoTile>}
-
-    <Budgeting txns={bankTxns} demoMode={demoMode}/>
+    {spendingByCategory.entries.length>0&&(()=>{
+      const{entries,monthTotal}=spendingByCategory;
+      const now=new Date();
+      const monthLabel=now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+      const fmtCat=s=>s.split("_").map(w=>w==="AND"?"&":w[0].toUpperCase()+w.slice(1).toLowerCase()).join(" ");
+      return<BentoTile>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SPENDING BY CATEGORY · {monthLabel}</span>
+          <span style={{fontFamily:FU,fontSize:14,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(monthTotal)}</span>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+          {entries.map(s=>{
+            const pct=monthTotal>0?(s.total/monthTotal)*100:0;
+            const barPct=(s.total/(entries[0]?.total||1))*100;
+            return<div key={s.cat} style={{display:"grid",gridTemplateColumns:"minmax(130px,1.4fr) 1fr 90px 52px",gap:T.s3,alignItems:"center"}}>
+              <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{fmtCat(s.cat)}</span>
+              <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${barPct}%`,background:`linear-gradient(90deg, ${T.blue}, ${T.blueDim})`,borderRadius:2}}/>
+              </div>
+              <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(s.total)}</span>
+              <span style={{fontFamily:FM,fontSize:11,color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
+            </div>;
+          })}
+        </div>
+      </BentoTile>;
+    })()}
 
     {/* ─── RECURRING SUBSCRIPTIONS ─────────────── */}
-    {recurring.length>0&&<BentoTile accent={T.gold}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>RECURRING SUBSCRIPTIONS</div>
-      <div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
-        <Tbl cols={[
-          {l:"Merchant",r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.merchant}</span>},
-          {l:"Frequency",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.monthCount} month{r.monthCount===1?"":"s"}</span>},
-          {l:"Avg / charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgPerCharge)}</span>},
-          {l:"Est. monthly",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.gold,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.estMonthly)}</span>},
-          {l:"Last seen",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
-        ]} rows={recurring.slice(0,12)}/>
-      </div>
-    </BentoTile>}
+    {recurring.length>0&&(()=>{
+      const active=recurring.filter(r=>r.active);
+      const inactive=recurring.filter(r=>!r.active);
+      const totalMonthly=active.reduce((s,r)=>s+r.estMonthly,0);
+      return<BentoTile accent={T.gold}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>RECURRING SUBSCRIPTIONS · {active.length} active</span>
+          <span style={{fontFamily:FU,fontSize:14,fontWeight:700,color:T.gold,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalMonthly)}<span style={{fontFamily:FM,fontSize:10,fontWeight:400,color:T.muted,marginLeft:4}}>/mo</span></span>
+        </div>
+        <div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
+          <Tbl cols={[
+            {l:"Merchant",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
+              <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:r.active?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{r.merchant}</span>
+              {!r.active&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.border}`,borderRadius:T.rSm}}>INACTIVE</span>}
+            </div>},
+            {l:"Cadence",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,textTransform:"capitalize"}}>{r.cadence}</span>},
+            {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgPerCharge)}</span>},
+            {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.estMonthly)}</span>},
+            {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
+          ]} rows={[...active,...inactive].slice(0,20)}/>
+        </div>
+      </BentoTile>;
+    })()}
 
-    {/* ─── UPCOMING BILLS · list view + 3-day push reminders (cron) ─── */}
-    {recurring.length>0&&<BillsCalendar recurring={recurring} txns={bankTxns} accounts={accounts} demoMode={demoMode}/>}
-
-    {/* Empty-state for the three transaction-driven tiles. Shown only when
-        a bank is connected but no transactions are on file yet — gives the
-        user one place to click "Sync now" instead of staring at a quiet
-        page wondering whether Spending / Recurring / Bills disappeared. */}
+    {/* Empty-state when a bank is connected but transactions haven't landed yet. */}
     {institutions.length>0&&bankTxns.length===0&&!demoMode&&<ComingSoon
       pending
       title="Plaid is pulling your transactions"
-      description="Your bank is connected. Plaid's initial pull usually finishes in 30-60 seconds, but some banks take 5-15 minutes for the full history. The Spending, Recurring, Bills, and Transactions tiles fill in automatically once the data lands — no need to refresh."
+      description="Your bank is connected. Plaid's initial pull usually finishes in 30-60 seconds, but some banks take 5-15 minutes for the full history. The Spending and Recurring tiles fill in automatically once the data lands — no need to refresh."
       hint={syncMsg?(syncMsg.ok?`Last sync: ${syncMsg.msg}`:`Last sync: ${syncMsg.msg}`):"We're retrying every few minutes in the background. Click Sync now to force a check."}
       action={{ label: "↻ Sync now", onClick: syncTransactions, busy: syncBusy }}
     />}
