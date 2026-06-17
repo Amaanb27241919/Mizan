@@ -896,7 +896,7 @@ function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto",WebkitOverfl
       {cols[0]?.r_?cols[0].r_(r):r[cols[0]?.k]}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
-      {cols.slice(1).map(c=><div key={c.l} style={{minWidth:0}}>
+      {cols.slice(1).filter(c=>!c.mobileHide).map(c=><div key={c.l} style={{minWidth:0}}>
         <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:2}}>{c.l}</div>
         <div style={{fontFamily:FM,fontSize:12,color:T.text,fontVariantNumeric:"tabular-nums",...(c.s?.(r)||{})}}>
           {c.r_?c.r_(r):r[c.k]}
@@ -2104,12 +2104,12 @@ function AAOIFIScreener({holdings=[]}){
         {l:"Symbol",r_:r=><div><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r._screen.status==="haram"?T.loss:T.textHi}}>{r.tk}</div><div style={{fontFamily:FM,fontSize:9,color:T.muted}}>{r._screen.industry||r.ty||"—"}</div></div>},
         {l:"Mkt Value",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.textHi}}>{f$(mv(r))}</span>},
         {l:"Sector",r_:r=>{const c=classifyIndustry(r._screen.industry);return<Tag label={c==="haram"?"Excluded":c==="review"?"Review":c==="halal"?"OK":"—"} color={c==="haram"?T.loss:c==="review"?T.gold:c==="halal"?T.gain:T.muted}/>;}},
-        {l:"Debt/Cap",r:true,r_:r=>{const v=r._screen.debtR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
-        {l:"Cash/Cap",r:true,r_:r=>{const v=r._screen.cashR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
-        {l:"A/R/Cap",r:true,r_:r=>{const v=r._screen.recvR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<49?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
+        {l:"Debt/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.debtR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
+        {l:"Cash/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.cashR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
+        {l:"A/R/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.recvR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<49?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
         {l:"Status",r_:r=><Tag label={r._screen.status==="halal"?"✓ Halal":r._screen.status==="haram"?"✗ Non-Compliant":r._screen.status==="review"?"⚠ Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>},
-        {l:"Pass / 7",r:true,r_:r=>{const bs=r._screen.byStandard;if(!bs)return<span style={{color:T.muted}}>—</span>;const pass=Object.values(bs).filter(s=>s.pass===true).length;return<span style={{fontFamily:FM,fontSize:11,color:pass>=6?T.gain:pass>=4?T.gold:T.loss}} title={Object.entries(bs).map(([k,v])=>`${STANDARDS[k]?.name||k}: ${v.pass===true?"pass":v.pass===false?"fail":"n/a"}`).join("\n")}>{pass}/{Object.keys(STANDARDS).length}</span>;}},
-        {l:"Primary",r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return<Tag label={v.pass===true?"✓":v.pass===false?"✗":"…"} color={v.pass===true?T.gain:v.pass===false?T.loss:T.muted}/>;}},
+        {l:"Pass / 7",r:true,mobileHide:true,r_:r=>{const bs=r._screen.byStandard;if(!bs)return<span style={{color:T.muted}}>—</span>;const pass=Object.values(bs).filter(s=>s.pass===true).length;return<span style={{fontFamily:FM,fontSize:11,color:pass>=6?T.gain:pass>=4?T.gold:T.loss}} title={Object.entries(bs).map(([k,v])=>`${STANDARDS[k]?.name||k}: ${v.pass===true?"pass":v.pass===false?"fail":"n/a"}`).join("\n")}>{pass}/{Object.keys(STANDARDS).length}</span>;}},
+        {l:"Primary",mobileHide:true,r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return<Tag label={v.pass===true?"✓":v.pass===false?"✗":"…"} color={v.pass===true?T.gain:v.pass===false?T.loss:T.muted}/>;}},
         {l:"Action",r_:r=>r._screen.status==="haram"?<Tag label="Exit + purify" color={T.loss}/>:r._screen.status==="review"?<Tag label="Verify" color={T.gold}/>:r._screen.status==="halal"?<Tag label="Hold" color={T.gain}/>:<Tag label="—" color={T.muted}/>},
       ]} rows={[...enriched].sort((a,b)=>{const o={haram:0,review:1,unknown:2,halal:3};return(o[a._screen.status]??9)-(o[b._screen.status]??9);})}/>
     </BentoTile>
@@ -2272,11 +2272,11 @@ function TaxPlanner({holdings=[],activities=[],snapAccounts=[]}){
               <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{r.ac_}</div>
             </div>},
             {l:"Shares",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.sh.toFixed(3)}</span>},
-            {l:"Avg Cost",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{f$(r.ac)}</span>},
-            {l:"Current",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}>{f$(r.px)}</span>},
+            {l:"Avg Cost",r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{f$(r.ac)}</span>},
+            {l:"Current",r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}>{f$(r.px)}</span>},
             {l:"Loss $",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.loss,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(Math.abs(r._loss))}</span>},
             {l:"Loss %",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.loss,fontVariantNumeric:"tabular-nums"}}>{fp(r._lossPct)}</span>},
-            {l:"Wash Risk",r_:r=>recentSells.has(r.tk)?<Tag label="< 30d sold" color={T.loss}/>:<Tag label="Clear" color={T.gain}/>},
+            {l:"Wash Risk",mobileHide:true,r_:r=>recentSells.has(r.tk)?<Tag label="< 30d sold" color={T.loss}/>:<Tag label="Clear" color={T.gain}/>},
             {l:"Replace With",r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:r.sh_==="haram"?T.loss:T.gold}}>{r._replacement}</span>},
           ]} rows={losers}/>
         </BentoTile>
@@ -2606,9 +2606,9 @@ function ActivityPanel({activities=[],accounts=[]}){
           {l:"Date",   r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.trade_date||r.settlement_date||"—"}</span>},
           {l:"Type",   r_:r=>{const t=(r.type||"").toUpperCase();return<Tag label={t||"—"} color={colorOf(t)}/>;}},
           {l:"Symbol", r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{fmtSym(r.symbol)}</span>},
-          {l:"Account",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{acctNameById[r.account?.id]||r.institution_name||"—"}</span>},
+          {l:"Account",mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{acctNameById[r.account?.id]||r.institution_name||"—"}</span>},
           {l:"Quantity",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.units?(+r.units).toLocaleString("en-US",{maximumFractionDigits:4}):"—"}</span>},
-          {l:"Price",   r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.price?f$(r.price):"—"}</span>},
+          {l:"Price",   r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.price?f$(r.price):"—"}</span>},
           {l:"Amount",  r:true,r_:r=>{const v=+r.amount||0;return<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:v>0?T.gain:v<0?T.loss:T.text,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{v>0?"+":v<0?"−":""}{f$(Math.abs(v))}</span>;}},
         ]} rows={rows.slice(0,500)}/>
         {rows.length>500&&<div style={{padding:`${T.s2} ${T.s4}`,fontFamily:FM,fontSize:10,color:T.muted,textAlign:"center",borderTop:`1px solid ${T.border}`}}>Showing first 500 of {rows.length} — narrow filters to see more.</div>}
@@ -3451,10 +3451,10 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
             {l:"Organization",r_:r=>editingId===r.id
               ?<input value={editDraft.org} onChange={e=>setEditDraft({...editDraft,org:e.target.value})} className="field" style={{fontSize:12,padding:`4px ${T.s2}`}}/>
               :<span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.org}</span>},
-            {l:"Method",      r_:r=>editingId===r.id
+            {l:"Method",mobileHide:true,r_:r=>editingId===r.id
               ?<input list="dn-methods" value={editDraft.method} onChange={e=>setEditDraft({...editDraft,method:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
               :<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.method||"—"}</span>},
-            {l:"Account",     r_:r=>editingId===r.id
+            {l:"Account",mobileHide:true,r_:r=>editingId===r.id
               ?<input list="dn-accts" value={editDraft.account} onChange={e=>setEditDraft({...editDraft,account:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
               :<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.account||"—"}</span>},
             {l:"Amount",r:true,r_:r=>editingId===r.id
@@ -4462,7 +4462,7 @@ function BotDashboard({activities=[],accounts=[]}){
           {l:"Side",r_:r=><Tag label={(r.type||"").toUpperCase()} color={(r.type||"").toUpperCase()==="BUY"?T.blue:T.gold}/>},
           {l:"Symbol",r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>{r.symbol?.symbol||r.symbol||"—"}</span>},
           {l:"Qty",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text}}>{r.units?(+r.units).toLocaleString("en-US",{maximumFractionDigits:4}):"—"}</span>},
-          {l:"Price",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.price?f$(r.price):"—"}</span>},
+          {l:"Price",r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.price?f$(r.price):"—"}</span>},
           {l:"Amount",r:true,r_:r=>{const v=+r.amount||0;return<span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:v>0?T.gain:v<0?T.loss:T.text}}>{v>=0?"+":"−"}{f$(Math.abs(v))}</span>;}},
         ]} rows={recentTrades}/>
       </div>}
