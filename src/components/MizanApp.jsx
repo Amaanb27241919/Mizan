@@ -3297,6 +3297,296 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
   </div>;
 }
 
+/* ─── HOLDINGS EXPAND: caches + helpers ─────────────── */
+// Per-ticker news cache (5-min TTL) and earnings calendar cache (30-min TTL).
+// Module-level so they survive re-renders without a React ref.
+const _holdingNewsCache = new Map();       // tk → { news: [], ts: number }
+const _earningsCalCache = { data: null, ts: 0 };
+
+async function _fetchHoldingNews(tk) {
+  const c = _holdingNewsCache.get(tk);
+  if (c && Date.now() - c.ts < 5 * 60_000) return c.news;
+  try {
+    const today = new Date();
+    const from = new Date(today); from.setDate(from.getDate() - 7);
+    const r = await apiFetch(
+      `/api/finnhub/news?symbol=${encodeURIComponent(tk)}&from=${encodeURIComponent(from.toISOString().slice(0,10))}&to=${encodeURIComponent(today.toISOString().slice(0,10))}`
+    );
+    if (!r.ok) { _holdingNewsCache.set(tk, { news: [], ts: Date.now() }); return []; }
+    const d = await r.json().catch(() => ({}));
+    const news = Array.isArray(d?.news) ? d.news : [];
+    _holdingNewsCache.set(tk, { news, ts: Date.now() });
+    return news;
+  } catch { return []; }
+}
+
+async function _fetchEarningsCal() {
+  if (_earningsCalCache.data && Date.now() - _earningsCalCache.ts < 30 * 60_000)
+    return _earningsCalCache.data;
+  try {
+    const r = await apiFetch("/api/finnhub/earnings");
+    if (!r.ok) return [];
+    const d = await r.json().catch(() => ({}));
+    const arr = Array.isArray(d?.earningsCalendar) ? d.earningsCalendar : [];
+    _earningsCalCache.data = arr;
+    _earningsCalCache.ts = Date.now();
+    return arr;
+  } catch { return []; }
+}
+
+function _daysUntil(dateStr) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d = new Date(dateStr + "T00:00:00");
+  return Math.round((d - today) / 86_400_000);
+}
+
+function _relTime(unix) {
+  const diff = Math.floor(Date.now() / 1000 - unix);
+  if (diff < 60) return "just now";
+  if (diff < 3_600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86_400) return `${Math.floor(diff / 3_600)}h ago`;
+  return `${Math.floor(diff / 86_400)}d ago`;
+}
+
+function _buildEarningsMap(arr) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const map = {};
+  arr.forEach(e => {
+    if (!e.date || !e.symbol) return;
+    const d = new Date(e.date + "T00:00:00");
+    if (d < today) return;
+    if (!map[e.symbol] || e.date < map[e.symbol].date) map[e.symbol] = e;
+  });
+  return map;
+}
+
+const _SENT_CLR = { positive: T.gain, negative: T.loss, neutral: T.muted };
+
+// Expanded content rendered below the row when a holding is open.
+function HoldingExpanded({ tk, state }) {
+  if (!state || state.loading) {
+    return (
+      <div style={{ padding: `${T.s4} ${T.s5}`, display: "flex", flexDirection: "column", gap: T.s2, background: `${T.blue}06`, borderTop: `1px solid ${T.border}` }}>
+        <Skeleton w={110} h={11} />
+        <Skeleton w="88%" h={13} />
+        <Skeleton w="72%" h={13} />
+        <Skeleton w="80%" h={13} />
+      </div>
+    );
+  }
+  const { news = [], earnings } = state;
+  const daysAway = earnings ? _daysUntil(earnings.date) : null;
+  const soonLabel = daysAway != null && daysAway >= 0 && daysAway <= 7
+    ? (daysAway === 0 ? "Today" : daysAway === 1 ? "Tomorrow" : `In ${daysAway} days`)
+    : null;
+
+  return (
+    <div style={{ padding: `${T.s4} ${T.s5}`, background: `${T.blue}06`, borderTop: `1px solid ${T.border}`, display: "flex", flexDirection: "column", gap: T.s4 }}>
+      {/* Earnings row */}
+      <div style={{ display: "flex", alignItems: "center", gap: T.s3, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>NEXT EARNINGS</span>
+        {earnings ? (
+          <div style={{ display: "flex", alignItems: "center", gap: T.s2, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: FU, fontSize: 13, fontWeight: 600, color: T.textHi }}>
+              {earnings.date}
+              {earnings.hour && (
+                <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, marginLeft: T.s1, fontWeight: 400 }}>
+                  · {earnings.hour === "bmo" ? "Before Open" : earnings.hour === "amc" ? "After Close" : earnings.hour}
+                </span>
+              )}
+            </span>
+            {earnings.epsEstimate != null && +earnings.epsEstimate !== 0 && (
+              <span style={{ fontFamily: FM, fontSize: 11, color: T.gold }}>Est. EPS ${(+earnings.epsEstimate).toFixed(2)}</span>
+            )}
+            {soonLabel && <Tag label={soonLabel} color={daysAway <= 1 ? T.loss : T.gold} />}
+          </div>
+        ) : (
+          <span style={{ fontFamily: FM, fontSize: 11, color: T.muted }}>None in next 30 days</span>
+        )}
+      </div>
+
+      {/* News */}
+      <div>
+        <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>RECENT NEWS</div>
+        {news.length === 0 ? (
+          <span style={{ fontFamily: FM, fontSize: 12, color: T.muted }}>No recent coverage found for {tk}.</span>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: T.s3 }}>
+            {news.slice(0, 3).map((n, j) => (
+              <a key={j} href={n.url} target="_blank" rel="noopener noreferrer"
+                style={{ textDecoration: "none", display: "flex", gap: T.s2, alignItems: "flex-start" }}>
+                <span style={{
+                  flexShrink: 0, marginTop: 5,
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: _SENT_CLR[n.s] || T.muted,
+                  display: "inline-block",
+                }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: FU, fontSize: 13, fontWeight: 500, color: T.textHi, lineHeight: 1.4,
+                    overflow: "hidden", display: "-webkit-box",
+                    WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                  }}>
+                    {n.h}
+                  </div>
+                  <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, marginTop: 3 }}>
+                    {n.src} · {_relTime(n.datetime)}
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Accordion holdings table — replaces the generic Tbl in the holdings section.
+// Clicking a row expands it to show earnings + news; clicking again collapses.
+function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp }) {
+  const [openTk, setOpenTk] = useState(null);
+  const [rowData, setRowData] = useState({});       // { [tk]: { news, earnings, loading } }
+  const [earningsMap, setEarningsMap] = useState({}); // { [symbol]: nearest future entry }
+
+  // Pre-fetch the earnings calendar once so collapsed badges show immediately.
+  useEffect(() => {
+    if (_earningsCalCache.data) {
+      setEarningsMap(_buildEarningsMap(_earningsCalCache.data));
+      return;
+    }
+    let cancelled = false;
+    _fetchEarningsCal().then(arr => { if (!cancelled) setEarningsMap(_buildEarningsMap(arr)); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function toggleRow(tk) {
+    if (openTk === tk) { setOpenTk(null); return; }
+    setOpenTk(tk);
+    const existing = rowData[tk];
+    if (existing && !existing.loading) return; // already cached
+    setRowData(s => ({ ...s, [tk]: { news: null, earnings: null, loading: true } }));
+    const [newsRes, earningsRes] = await Promise.allSettled([
+      _fetchHoldingNews(tk),
+      _fetchEarningsCal(),
+    ]);
+    const news = newsRes.status === "fulfilled" ? newsRes.value : [];
+    const earningsArr = earningsRes.status === "fulfilled" ? earningsRes.value : [];
+    // Refresh map in case it wasn't loaded yet
+    setEarningsMap(_buildEarningsMap(earningsArr));
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const nextEarnings = earningsArr
+      .filter(e => e.symbol === tk && e.date && new Date(e.date + "T00:00:00") >= today)
+      .sort((a, b) => a.date.localeCompare(b.date))[0] || null;
+    setRowData(s => ({ ...s, [tk]: { news, earnings: nextEarnings, loading: false } }));
+  }
+
+  const COL_COUNT = 8;
+  const tdBase = (isOpen) => ({ padding: `${T.s3} ${T.s4}`, borderBottom: isOpen ? "none" : `1px solid ${T.border}` });
+
+  return (
+    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+      <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontVariantNumeric: "tabular-nums" }}>
+        <thead>
+          <tr>
+            {["Symbol", "Shares", "Avg Cost", "Price", "Today", "Mkt Value", "Gain/Loss", "Sharia"].map((h, i) => (
+              <th key={h} style={{
+                padding: `${T.s3} ${T.s4}`, textAlign: (i === 0 || h === "Sharia") ? "left" : "right",
+                fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.14em",
+                textTransform: "uppercase", borderBottom: `1px solid ${T.border}`,
+                fontWeight: 600, whiteSpace: "nowrap", background: T.surface,
+              }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((r, i) => {
+            const isOpen = openTk === r.tk;
+            const nextE = earningsMap[r.tk];
+            const daysAway = nextE ? _daysUntil(nextE.date) : null;
+            const earningsSoon = daysAway != null && daysAway >= 0 && daysAway <= 7;
+            return (
+              <React.Fragment key={i}>
+                <tr onClick={() => toggleRow(r.tk)} className="trow" style={{
+                  borderBottom: isOpen ? "none" : `1px solid ${T.border}`,
+                  cursor: "pointer", transition: "background 0.12s",
+                  background: isOpen ? `${T.blue}08` : undefined,
+                }}>
+                  {/* Symbol */}
+                  <td style={tdBase(isOpen)}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{
+                        fontSize: 8, color: isOpen ? T.blue : T.muted,
+                        display: "inline-block", transition: "transform 0.15s",
+                        transform: isOpen ? "rotate(90deg)" : "none",
+                        lineHeight: 1, userSelect: "none",
+                      }}>▶</span>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: T.s1 }}>
+                          <span style={{ fontFamily: FU, fontSize: 14, fontWeight: 600, color: r.sh_ === "haram" ? T.loss : T.textHi, letterSpacing: "-0.01em" }}>{r.tk}</span>
+                          {earningsSoon && (
+                            <span title={`Earnings ${nextE.date}`} style={{
+                              fontFamily: FM, fontSize: 9, fontWeight: 600, letterSpacing: "0.04em",
+                              color: T.gold, background: `${T.gold}18`, border: `1px solid ${T.gold}30`,
+                              borderRadius: 999, padding: "1px 5px", whiteSpace: "nowrap",
+                            }}>📅 {daysAway}d</span>
+                          )}
+                        </div>
+                        <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, marginTop: 2 }}>{r.ac_}</div>
+                      </div>
+                    </div>
+                  </td>
+                  {/* Shares */}
+                  <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
+                    <span style={{ fontFamily: FM, fontSize: 12, color: T.text, fontVariantNumeric: "tabular-nums" }}>{valuesHidden ? "••••" : r.sh.toFixed(3)}</span>
+                  </td>
+                  {/* Avg Cost */}
+                  <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
+                    <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, fontVariantNumeric: "tabular-nums" }}>{mask(f$(r.ac))}</span>
+                  </td>
+                  {/* Price */}
+                  <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontFamily: FM, fontSize: 13, fontWeight: 500, color: r._live ? T.textHi : T.text, fontVariantNumeric: "tabular-nums" }}>{mask(f$(r.px))}</div>
+                      {r._live && <div style={{ fontFamily: FM, fontSize: 9, color: T.gain, letterSpacing: "0.06em", marginTop: 1 }}>● LIVE</div>}
+                    </div>
+                  </td>
+                  {/* Today */}
+                  <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
+                    <span style={{ fontFamily: FM, fontSize: 11, fontWeight: 500, color: fc(r._p), fontVariantNumeric: "tabular-nums" }}>{valuesHidden ? "••" : (r._p ? fp(r._p) : "—")}</span>
+                  </td>
+                  {/* Mkt Value */}
+                  <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
+                    <span style={{ fontFamily: FU, fontSize: 14, fontWeight: 600, color: T.textHi, letterSpacing: "-0.005em", fontVariantNumeric: "tabular-nums" }}>{mask(f$(mv(r)))}</span>
+                  </td>
+                  {/* Gain/Loss */}
+                  <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontFamily: FM, fontSize: 12, fontWeight: 500, color: fc(gv(r)), fontVariantNumeric: "tabular-nums" }}>{mask(`${gv(r) >= 0 ? "+" : ""}${f$(gv(r))}`)}</div>
+                      <div style={{ fontFamily: FM, fontSize: 10, color: fc(gp(r)), marginTop: 1 }}>{valuesHidden ? "••" : fp(gp(r))}</div>
+                    </div>
+                  </td>
+                  {/* Sharia */}
+                  <td style={tdBase(isOpen)}>
+                    <Tag label={r.sh_ === "halal" ? "Halal" : r.sh_ === "haram" ? "Non-Compliant" : "Review"} color={r.sh_ === "halal" ? T.gain : r.sh_ === "haram" ? T.loss : T.gold} />
+                  </td>
+                </tr>
+                {isOpen && (
+                  <tr style={{ borderBottom: `1px solid ${T.border}` }}>
+                    <td colSpan={COL_COUNT} style={{ padding: 0, borderBottom: `1px solid ${T.border}` }}>
+                      <HoldingExpanded tk={r.tk} state={rowData[r.tk]} />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* ─── PORTFOLIO ──────────────────────────────────────── */
 function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav,bankBalance=0}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
@@ -3453,16 +3743,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
 
       {/* ─── Holdings table ───────────────────────────── */}
       <BentoTile style={{padding:0,overflow:"hidden"}}>
-        <Tbl cols={[
-          {l:"Symbol", r_:r=><div><div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:r.sh_==="haram"?T.loss:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</div><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{r.ac_}</div></div>},
-          {l:"Shares",  r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.text,fontVariantNumeric:"tabular-nums"}}>{valuesHidden?"••••":r.sh.toFixed(3)}</span>},
-          {l:"Avg Cost",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{mask(f$(r.ac))}</span>},
-          {l:"Price",   r:true,r_:r=><div style={{textAlign:"right"}}><div style={{fontFamily:FM,fontSize:13,fontWeight:500,color:r._live?T.textHi:T.text,fontVariantNumeric:"tabular-nums"}}>{mask(f$(r.px))}</div>{r._live&&<div style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.06em",marginTop:1}}>● LIVE</div>}</div>},
-          {l:"Today",   r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:fc(r._p),fontVariantNumeric:"tabular-nums"}}>{valuesHidden?"••":(r._p?fp(r._p):"—")}</span>},
-          {l:"Mkt Value",r:true,r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(mv(r)))}</span>},
-          {l:"Gain/Loss",r:true,r_:r=><div style={{textAlign:"right"}}><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:fc(gv(r)),fontVariantNumeric:"tabular-nums"}}>{mask(`${gv(r)>=0?"+":""}${f$(gv(r))}`)}</div><div style={{fontFamily:FM,fontSize:10,color:fc(gp(r)),marginTop:1}}>{valuesHidden?"••":fp(gp(r))}</div></div>},
-          {l:"Sharia",  r_:r=><Tag label={r.sh_==="halal"?"Halal":r.sh_==="haram"?"Non-Compliant":"Review"} color={r.sh_==="halal"?T.gain:r.sh_==="haram"?T.loss:T.gold}/>},
-        ]} rows={filtered}/>
+        <HoldingsTable filtered={filtered} valuesHidden={valuesHidden} mask={mask} f$={f$} fp={fp} fc={fc} mv={mv} gv={gv} gp={gp}/>
         {filtered.length===0&&merged.length===0&&snapAccounts.length===0
           // No accounts connected → genuine empty state, show skeleton rows
           // so users sense the table shape while their first sync runs in
