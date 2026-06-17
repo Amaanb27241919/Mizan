@@ -872,21 +872,39 @@ function TT2({active,payload}){if(!active||!payload?.length)return null;return<d
 
 // Data table — fintech-style. Tabular numerics, hover row highlight,
 // sticky header optional (not on by default to keep nested tables simple).
-function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}><table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontVariantNumeric:"tabular-nums"}}>
-  <thead><tr>{cols.map(c=><th key={c.l} style={{
-    padding:`${T.s3} ${T.s4}`,textAlign:c.r?"right":"left",
-    fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",
-    borderBottom:`1px solid ${T.border}`,fontWeight:600,whiteSpace:"nowrap",
-    background:T.surface,
-  }}>{c.l}</th>)}</tr></thead>
-  <tbody>{rows.map((r,i)=><tr key={i} onClick={()=>onRow?.(r,i)} className="trow" style={{
-    borderBottom:`1px solid ${T.border}`,cursor:onRow?"pointer":"default",transition:"background 0.12s",
-  }}>{cols.map(c=><td key={c.l} style={{
-    padding:`${T.s3} ${T.s4}`,textAlign:c.r?"right":"left",
-    borderBottom:`1px solid ${T.border}`,
-    ...(c.s?.(r)||{}),
-  }}>{c.r_?c.r_(r):r[c.k]}</td>)}</tr>)}</tbody>
-</table></div>;}
+function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+  <table className="mz-tbl-desktop" style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontVariantNumeric:"tabular-nums"}}>
+    <thead><tr>{cols.map(c=><th key={c.l} style={{
+      padding:`${T.s3} ${T.s4}`,textAlign:c.r?"right":"left",
+      fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",
+      borderBottom:`1px solid ${T.border}`,fontWeight:600,whiteSpace:"nowrap",
+      background:T.surface,
+    }}>{c.l}</th>)}</tr></thead>
+    <tbody>{rows.map((r,i)=><tr key={i} onClick={()=>onRow?.(r,i)} className="trow" style={{
+      borderBottom:`1px solid ${T.border}`,cursor:onRow?"pointer":"default",transition:"background 0.12s",
+    }}>{cols.map(c=><td key={c.l} style={{
+      padding:`${T.s3} ${T.s4}`,textAlign:c.r?"right":"left",
+      borderBottom:`1px solid ${T.border}`,
+      ...(c.s?.(r)||{}),
+    }}>{c.r_?c.r_(r):r[c.k]}</td>)}</tr>)}</tbody>
+  </table>
+  <div className="mz-tbl-mobile">{rows.map((r,i)=><div key={i} className="mz-tbl-card" onClick={()=>onRow?.(r,i)} style={{
+    background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rMd,
+    padding:T.s4,cursor:onRow?"pointer":"default",
+  }}>
+    <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,marginBottom:T.s2,...(cols[0]?.s?.(r)||{})}}>
+      {cols[0]?.r_?cols[0].r_(r):r[cols[0]?.k]}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
+      {cols.slice(1).map(c=><div key={c.l} style={{minWidth:0}}>
+        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:2}}>{c.l}</div>
+        <div style={{fontFamily:FM,fontSize:12,color:T.text,fontVariantNumeric:"tabular-nums",...(c.s?.(r)||{})}}>
+          {c.r_?c.r_(r):r[c.k]}
+        </div>
+      </div>)}
+    </div>
+  </div>)}</div>
+</div>;}
 
 // Tab bar — pill-style segmented control. Active pill gets a soft purple
 // halo. Scrolls horizontally on mobile via .mz-tabbar overflow handling.
@@ -5514,6 +5532,18 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
   // the server (env vars), not in user-entered fields. Default the sub-tab
   // to brokers for everyone else.
   const[sub,setSub]=useState(isRoot?"keys":"brokers");
+  // Local install prompt detection for the Settings card.
+  const[settingsInstallEvt,setSettingsInstallEvt]=useState(null);
+  const[settingsInstalled,setSettingsInstalled]=useState(()=>{try{return window.matchMedia('(display-mode: standalone)').matches||!!navigator.standalone;}catch{return false;}});
+  useEffect(()=>{
+    const h=(e)=>{e.preventDefault();setSettingsInstallEvt(e);};
+    window.addEventListener('beforeinstallprompt',h);
+    const mq=window.matchMedia('(display-mode: standalone)');
+    const onMQ=(e)=>{if(e.matches){setSettingsInstalled(true);setSettingsInstallEvt(null);}};
+    mq.addEventListener('change',onMQ);
+    return()=>{window.removeEventListener('beforeinstallprompt',h);mq.removeEventListener('change',onMQ);};
+  },[]);
+  const doSettingsInstall=async()=>{if(!settingsInstallEvt)return;settingsInstallEvt.prompt();const{outcome}=await settingsInstallEvt.userChoice;if(outcome==='accepted'){setSettingsInstalled(true);setSettingsInstallEvt(null);}};
   const save=()=>{setApiKeys(keys);setGlobalKeys(keys);try{localStorage.setItem("mizan_keys",JSON.stringify(keys));}catch{}persistUserState("mizan_keys",keys);recordAudit("settings.api_keys_saved",{metadata:{keysPresent:Object.keys(keys).filter(k=>(keys[k]||"").length>0)}});setSaved(true);setTimeout(()=>setSaved(false),2500);};
   const has=k=>(keys[k]||"").length>8;
 
@@ -5559,11 +5589,15 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
           </div>
         </div>
         {isSupabaseConfigured
-          ?<div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
+          ?<div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
             {onReplayOnboarding&&<button onClick={onReplayOnboarding} className="btn-ghost" title="Re-run the 5-step welcome tour">Replay tour</button>}
+            {settingsInstallEvt&&!settingsInstalled&&<button onClick={doSettingsInstall} className="btn-ghost" title="Install MĪZAN as a standalone app on this device">⬇ Install App</button>}
             <button onClick={async()=>{if(confirm("Sign out of MIZAN?"))await signOut();}} className="btn-danger">Sign out</button>
           </div>
-          :<span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>Set VITE_SUPABASE_URL to enable accounts</span>}
+          :<div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
+            {settingsInstallEvt&&!settingsInstalled&&<button onClick={doSettingsInstall} className="btn-ghost" title="Install MĪZAN as a standalone app">⬇ Install App</button>}
+            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>Set VITE_SUPABASE_URL to enable accounts</span>
+          </div>}
       </div>
     </BentoTile>
 
@@ -8112,6 +8146,29 @@ export default function Mizan(){
   // closure of those handlers.
   const palette=useCommandPalette();
   const[shortcutHelpOpen,setShortcutHelpOpen]=useState(false);
+
+  // ── PWA install prompt ──────────────────────────────────────────────────
+  // Capture beforeinstallprompt so we can show a button instead of relying
+  // on the browser's ambient mini-infobar. iOS Safari never fires this event;
+  // those users see the iosHint banner instead.
+  const[installEvt,setInstallEvt]=useState(null);
+  const[isInstalled,setIsInstalled]=useState(()=>{try{return window.matchMedia('(display-mode: standalone)').matches||!!navigator.standalone;}catch{return false;}});
+  const[iosHintDismissed,setIosHintDismissed]=useState(()=>{try{return localStorage.getItem("mizan_ios_hint")==="1";}catch{return true;}});
+  const isIosSafari=typeof navigator!=="undefined"&&/iP(hone|ad|od)/.test(navigator.userAgent)&&/Safari/.test(navigator.userAgent)&&!/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
+  useEffect(()=>{
+    const h=(e)=>{e.preventDefault();setInstallEvt(e);};
+    window.addEventListener('beforeinstallprompt',h);
+    const mq=window.matchMedia('(display-mode: standalone)');
+    const onMQ=(e)=>{if(e.matches){setIsInstalled(true);setInstallEvt(null);}};
+    mq.addEventListener('change',onMQ);
+    return()=>{window.removeEventListener('beforeinstallprompt',h);mq.removeEventListener('change',onMQ);};
+  },[]);
+  const doInstall=async()=>{if(!installEvt)return;installEvt.prompt();const{outcome}=await installEvt.userChoice;if(outcome==='accepted'){setIsInstalled(true);setInstallEvt(null);}};
+  const dismissIosHint=()=>{setIosHintDismissed(true);try{localStorage.setItem("mizan_ios_hint","1");}catch{}};
+  // ── Pull-to-refresh ──────────────────────────────────────────────────────
+  const[ptrActive,setPtrActive]=useState(false);
+  const[ptrReady,setPtrReady]=useState(false);
+  const syncRef=useRef(null);
   const[live,setLive]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_live_cache")||"[]");}catch{return[];}});
   // Plaid net cash position (depository minus credit/loan), seeded from
   // localStorage so the Overview hero can include it on first paint
@@ -8807,6 +8864,33 @@ export default function Mizan(){
     }finally{setFetch(false);}
   },[fetchSnapHoldings]);
 
+  // Keep a stable ref to sync so pull-to-refresh can call it without
+  // re-registering touch listeners every time sync changes.
+  useEffect(()=>{syncRef.current=sync;},[sync]);
+  useEffect(()=>{
+    let startY=null;
+    const ptrReadyRef={current:false};
+    const onStart=(e)=>{if(window.scrollY===0)startY=e.touches[0].clientY;};
+    const onMove=(e)=>{
+      if(startY===null)return;
+      const dy=e.touches[0].clientY-startY;
+      if(dy>0){setPtrActive(dy>16);const r=dy>64;setPtrReady(r);ptrReadyRef.current=r;}
+      else{startY=null;}
+    };
+    const onEnd=()=>{
+      if(ptrReadyRef.current&&syncRef.current)syncRef.current();
+      setPtrActive(false);setPtrReady(false);ptrReadyRef.current=false;startY=null;
+    };
+    document.addEventListener('touchstart',onStart,{passive:true});
+    document.addEventListener('touchmove',onMove,{passive:true});
+    document.addEventListener('touchend',onEnd,{passive:true});
+    return()=>{
+      document.removeEventListener('touchstart',onStart);
+      document.removeEventListener('touchmove',onMove);
+      document.removeEventListener('touchend',onEnd);
+    };
+  },[]);
+
   // Force broker-side refresh — pushes a manualRefresh signal to SnapTrade
   // so balances + activity reflect what's on the brokerage UI right now.
   // SnapTrade caps this server-side (~few per hour per connection); we layer
@@ -9091,7 +9175,7 @@ export default function Mizan(){
         .mz-side-by-side{grid-template-columns:1fr!important;height:auto!important;}
         .mz-table-scroll{overflow-x:auto!important;}
         .mz-form-row{grid-template-columns:1fr 1fr!important;}
-        main{padding-left:16px!important;padding-right:16px!important;padding-bottom:120px!important;}
+        main{padding-left:16px!important;padding-right:16px!important;padding-bottom:calc(120px + env(safe-area-inset-bottom,0px))!important;}
       }
       @media (max-width: 600px) {
         .mz-hide-sm{display:none!important;}
@@ -9100,14 +9184,51 @@ export default function Mizan(){
         .mz-grid-3{grid-template-columns:1fr!important;}
         .mz-grid-2{grid-template-columns:1fr!important;}
         .mz-form-row{grid-template-columns:1fr!important;}
-        .mz-dock{padding:4px!important;gap:2px!important;border-radius:14px!important;bottom:10px!important;left:8px!important;right:8px!important;transform:none!important;justify-content:space-around;}
-        .mz-dock button{padding:8px 6px!important;font-size:10px!important;border-radius:10px!important;flex:1;letter-spacing:0.02em!important;}
+        .mz-dock{padding:4px!important;gap:2px!important;border-radius:14px!important;bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;left:8px!important;right:8px!important;transform:none!important;justify-content:space-around;}
+        .mz-dock button{padding:8px 6px!important;font-size:10px!important;border-radius:10px!important;flex:1;letter-spacing:0.02em!important;min-height:44px;}
         .mz-status{padding:0 12px!important;gap:8px!important;}
         .mz-status-mid{display:none!important;}
         .mz-status-right{gap:4px!important;}
-        .mz-status-right button{padding:5px 8px!important;font-size:9px!important;}
+        .mz-status-right button{padding:5px 8px!important;font-size:9px!important;min-height:40px;}
         .mz-status-sync{padding:6px 10px!important;font-size:10px!important;}
-        .mz-page-content{padding-bottom:130px!important;}
+        .mz-page-content{padding-bottom:calc(130px + env(safe-area-inset-bottom,0px))!important;}
+      }
+
+      /* ── Safe-area insets ─────────────────────────────────────── */
+      /* Status bar: extend height by notch/Dynamic Island inset */
+      .mz-status{
+        padding-top:env(safe-area-inset-top,0px);
+        min-height:calc(48px + env(safe-area-inset-top,0px))!important;
+      }
+      /* Dock: lift above home indicator on iPhone */
+      .mz-dock{bottom:calc(var(--s-5) + env(safe-area-inset-bottom,0px))!important;}
+
+      /* ── Overflow prevention ──────────────────────────────────── */
+      html,body{overflow-x:hidden;max-width:100%;}
+
+      /* ── Responsive card tables ──────────────────────────────── */
+      /* Desktop: normal table visible, card list hidden */
+      .mz-tbl-mobile{display:none;}
+      /* Mobile: swap to card list */
+      @media(max-width:640px){
+        .mz-tbl-desktop{display:none!important;}
+        .mz-tbl-mobile{display:flex;flex-direction:column;gap:8px;}
+      }
+
+      /* ── Touch targets ───────────────────────────────────────── */
+      @media(max-width:640px){
+        .btn-primary,.btn-ghost,.btn-danger{min-height:44px;padding-top:11px!important;padding-bottom:11px!important;}
+        /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
+        .field{font-size:16px!important;}
+        input,select,textarea{font-size:16px!important;}
+      }
+
+      /* ── CommandPalette mobile: full-width sheet ─────────────── */
+      @media(max-width:640px){
+        /* The palette card inside the fixed overlay */
+        .mz-palette-card{max-width:100%!important;border-radius:20px 20px 0 0!important;}
+        /* Shift the overlay align to flex-end so it slides up from bottom */
+        .mz-palette-overlay{align-items:flex-end!important;padding-top:0!important;}
       }
     `}</style>
 
@@ -9159,10 +9280,22 @@ export default function Mizan(){
           const title=cooling?`Broker refresh on cooldown — try again in ${mins} min`:"Push a refresh signal to SnapTrade so balances + activity catch up to what your brokerage shows.";
           return<button onClick={forceRefresh} disabled={disabled} title={title} style={{fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.04em",padding:`7px ${T.s3}`,borderRadius:T.rMd,border:`1px solid ${cooling?T.border:T.gold+"40"}`,background:cooling?"transparent":`${T.gold}14`,color:disabled?T.muted:T.gold,cursor:disabled?"not-allowed":"pointer",transition:"all 0.15s"}}>{label}</button>;
         })()}
+        {installEvt&&!isInstalled&&<button onClick={doInstall} className="btn-ghost mz-hide-sm" title="Install MĪZAN as an app on this device" style={{fontFamily:FM,fontSize:9,letterSpacing:"0.06em"}}>⬇ Install</button>}
         <button onClick={sync} disabled={fetching} className="btn-primary mz-status-sync">{fetching?"Syncing…":"Sync All"}</button>
       </div>
       {forceMsg&&<div style={{position:"absolute",top:50,right:T.s3,background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--mz-glass-shadow)",zIndex:101,maxWidth:340,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>{forceMsg.msg}</div>}
     </header>
+
+    {/* Pull-to-refresh indicator — appears above status bar when dragging down from top */}
+    {ptrActive&&<div style={{
+      position:"fixed",top:`calc(48px + env(safe-area-inset-top,0px) + 8px)`,
+      left:"50%",transform:"translateX(-50%)",zIndex:95,
+      background:"var(--mz-glass)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",
+      border:"1px solid var(--mz-glass-border)",borderRadius:999,
+      padding:"6px 16px",fontFamily:FM,fontSize:11,color:ptrReady?T.blue:T.muted,
+      boxShadow:"var(--mz-glass-shadow)",whiteSpace:"nowrap",pointerEvents:"none",
+      transition:"color 0.15s",
+    }}>{ptrReady?"↑ Release to refresh":"↓ Pull to refresh"}</div>}
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
       <div className="page">
@@ -9182,6 +9315,25 @@ export default function Mizan(){
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} onNav={setNav}/>}
       </div>
     </main>
+
+    {/* iOS Safari install hint — one-time, dismissible, shown only on
+        iOS Safari outside standalone mode (no beforeinstallprompt on iOS). */}
+    {isIosSafari&&!isInstalled&&!iosHintDismissed&&<div style={{
+      position:"fixed",bottom:`calc(80px + env(safe-area-inset-bottom,0px))`,
+      left:"50%",transform:"translateX(-50%)",zIndex:89,
+      background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",
+      border:"1px solid var(--mz-glass-border)",borderRadius:T.rLg,
+      padding:`${T.s3} ${T.s4}`,display:"flex",alignItems:"center",gap:T.s3,
+      boxShadow:"var(--mz-glass-shadow)",maxWidth:"calc(100vw - 32px)",
+      animation:"glassFadeUp 0.25s cubic-bezier(.34,1.56,.64,1)",
+    }}>
+      <span style={{fontSize:18,color:T.blue}}>⬆</span>
+      <div style={{flex:1}}>
+        <div style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,marginBottom:2}}>Install MĪZAN</div>
+        <div style={{fontFamily:FP,fontSize:11,color:T.muted}}>Tap Share → "Add to Home Screen"</div>
+      </div>
+      <button onClick={dismissIosHint} style={{background:"transparent",border:"none",color:T.muted,cursor:"pointer",fontSize:16,padding:T.s2,minHeight:44,minWidth:44,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+    </div>}
 
     {/* DOCK — Mac-style floating nav at the bottom. Glass surface, rounded
         pill, lifted with shadow. Active item highlighted with accent gradient. */}

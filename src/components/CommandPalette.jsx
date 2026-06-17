@@ -199,6 +199,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
     <div
       onClick={() => onClose && onClose()}
       onKeyDown={onKeyDown}
+      className="mz-palette-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -214,6 +215,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="mz-palette-card"
         style={{
           width: "100%",
           maxWidth: 600,
