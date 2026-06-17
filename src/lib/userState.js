@@ -28,6 +28,8 @@ export const TRACKED_KEYS = [
   'mizan_sadaqah_seeded',             // one-time owner backfill marker
   'mizan_onboarded',                  // "1" once the user finishes the 5-step tour
   'mizan_rebalance_targets',          // target allocation % per asset class
+  'mizan_purification_log',           // { [fingerprint]: { purified_at, amount, ticker, dividend_amount, purification_owed } }
+  'mizan_purification_overrides',     // { [ticker]: impurityPct } — user-set ratio overrides
 ];
 
 // User-scoped *local caches* — not synced (regenerated on next sync), but

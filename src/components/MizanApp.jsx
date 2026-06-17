@@ -1267,6 +1267,24 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   const nisabOverview = nisabValueFor(zakatSettings, liveNisab);
   const overviewAboveNisab = zakatableForOverview >= nisabOverview;
   const zakatDueOverview = overviewAboveNisab ? zakatableForOverview * 0.025 : 0;
+
+  // Purification owed — lazy-loaded once from API for the summary line
+  const [purificationOwedTotal, setPurificationOwedTotal] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const log = (() => { try { return JSON.parse(localStorage.getItem("mizan_purification_log") || "{}"); } catch { return {}; } })();
+    apiFetch(`/api/purification/calculate?year=${new Date().getFullYear()}`)
+      .then(async r => {
+        if (cancelled || !r.ok) return;
+        const d = await r.json().catch(() => ({}));
+        const items = Array.isArray(d?.items) ? d.items : [];
+        const pending = items.filter(it => !log[it.fingerprint]);
+        if (!cancelled) setPurificationOwedTotal(pending.reduce((s, it) => s + it.purificationOwed, 0));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const totCost=merged.reduce((s,h)=>s+cost(h),0);
   // Gain is computed against position cost basis only (cash isn't a "gain")
   const gain=equityValue-totCost;
@@ -1556,6 +1574,12 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
           <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKAT DUE</div>
           <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(zakatDueOverview))}</div>
           <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{overviewAboveNisab?`2.5% of net zakatable wealth${zakatSettings.investmentMethod==="longterm_30"?" (30% rule on investments)":""}`:`Below nisab (${zakatSettings.nisabStandard} standard, ${fmtUSD(nisabOverview)})`}</div>
+          {purificationOwedTotal != null && purificationOwedTotal > 0 && (
+            <button onClick={() => onNav?.("goals")} style={{display:"flex",alignItems:"center",gap:4,marginTop:T.s2,background:`${T.gold}10`,border:`1px solid ${T.gold}30`,borderRadius:T.rSm,padding:`3px ${T.s2}`,cursor:"pointer",fontFamily:FM,fontSize:10,color:T.gold,fontWeight:600,letterSpacing:"0.06em",textDecoration:"none",width:"100%",justifyContent:"flex-start"}}>
+              <span style={{fontSize:12}}>🌿</span>
+              <span>Purify {fmtUSD(purificationOwedTotal)} → Zakat tab</span>
+            </button>
+          )}
         </BentoTile>
         <BentoTile>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANCE</div>
@@ -2597,6 +2621,310 @@ function useLiveNisab(){
 // Back-compat alias for any leftover references during this refactor.
 const NISAB_USD = NISAB_GOLD_USD;
 
+/* ─── PURIFICATION PANEL ─────────────────────────────── */
+// AAOIFI-compliant dividend purification ledger. Each halal holding may
+// carry a small percentage of impure income; that fraction of any dividend
+// received must be donated to charity (without expectation of reward).
+//
+// Data flow:
+//   /api/purification/calculate  → computed items for the current year
+//   mizan_purification_log       → { [fingerprint]: {...} } marks purified
+//   mizan_purification_overrides → { [ticker]: pct } user-set ratio overrides
+//   mizan_sadaqah               → purified entries added here automatically
+//
+// Purification ratios are estimates. Consult your scholar or the fund's
+// annual purification report for exact figures.
+
+const DEMO_PURIFICATION_ITEMS = [
+  { fingerprint:"SPUS_2026-03-28_12.40", ticker:"SPUS", date:"2026-03-28", dividendAmount:12.40, impurityPct:1.70, purificationOwed:0.2108, ratioSource:"SP Funds annual report — verify at spfunds.com" },
+  { fingerprint:"HLAL_2026-03-15_8.75",  ticker:"HLAL", date:"2026-03-15", dividendAmount:8.75,  impurityPct:2.80, purificationOwed:0.245,  ratioSource:"Wahed FTSE USA Shariah ETF — issuer estimate" },
+  { fingerprint:"SPUS_2025-12-30_11.90", ticker:"SPUS", date:"2025-12-30", dividendAmount:11.90, impurityPct:1.70, purificationOwed:0.2023, ratioSource:"SP Funds annual report — verify at spfunds.com" },
+  { fingerprint:"UMMA_2025-09-19_6.20",  ticker:"UMMA", date:"2025-09-19", dividendAmount:6.20,  impurityPct:2.20, purificationOwed:0.1364, ratioSource:"Wahed EM Sharia ETF — issuer estimate" },
+];
+
+function PurificationPanel({ demoMode = false, onPurified }) {
+  const [items, setItems]         = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState(null);
+  const [year, setYear]           = useState(String(new Date().getFullYear()));
+  const [overrides, setOverrides] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("mizan_purification_overrides") || "{}"); } catch { return {}; }
+  });
+  const [log, setLog]             = useState(() => {
+    try { return JSON.parse(localStorage.getItem("mizan_purification_log") || "{}"); } catch { return {}; }
+  });
+  const [editOverride, setEditOverride] = useState(null); // { ticker, value }
+  const [busy, setBusy]           = useState({}); // { [fingerprint]: true }
+
+  const fmtUSD = v => `$${(+v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtPct = v => `${(+v || 0).toFixed(2)}%`;
+
+  useEffect(() => {
+    if (demoMode) { setItems(DEMO_PURIFICATION_ITEMS); return; }
+    let cancelled = false;
+    setLoading(true); setError(null);
+    apiFetch(`/api/purification/calculate?year=${encodeURIComponent(year)}`)
+      .then(async r => {
+        if (cancelled) return;
+        if (!r.ok) { setError("Could not load purification data."); return; }
+        const d = await r.json().catch(() => ({}));
+        setItems(Array.isArray(d?.items) ? d.items : []);
+      })
+      .catch(() => { if (!cancelled) setError("Network error — check your connection."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [demoMode, year]);
+
+  const persistOverrides = updated => {
+    setOverrides(updated);
+    localStorage.setItem("mizan_purification_overrides", JSON.stringify(updated));
+    persistUserState("mizan_purification_overrides", updated);
+  };
+  const persistLog = updated => {
+    setLog(updated);
+    localStorage.setItem("mizan_purification_log", JSON.stringify(updated));
+    persistUserState("mizan_purification_log", updated);
+  };
+
+  const markPurified = (item, bulk = false) => {
+    if (demoMode || log[item.fingerprint]) return;
+    setBusy(b => ({ ...b, [item.fingerprint]: true }));
+    const purifiedAt = new Date().toISOString();
+    const sadaqahEntry = {
+      id:      `purif-${Date.now()}-${item.ticker}`,
+      dt:      item.date,
+      org:     `Purification — ${item.ticker} dividend`,
+      method:  "Purification",
+      account: "",
+      amt:     +item.purificationOwed.toFixed(4),
+      done:    true,
+    };
+    // Append to sadaqah log
+    const sadaqah = (() => { try { return JSON.parse(localStorage.getItem("mizan_sadaqah") || "[]"); } catch { return []; } })();
+    const newSadaqah = [sadaqahEntry, ...sadaqah];
+    localStorage.setItem("mizan_sadaqah", JSON.stringify(newSadaqah));
+    persistUserState("mizan_sadaqah", newSadaqah);
+
+    const newLog = { ...log, [item.fingerprint]: { purified_at: purifiedAt, ticker: item.ticker, dividend_amount: item.dividendAmount, purification_owed: item.purificationOwed } };
+    persistLog(newLog);
+    setBusy(b => { const n = { ...b }; delete n[item.fingerprint]; return n; });
+    onPurified?.();
+  };
+
+  const purifyAll = () => {
+    const pending = items.filter(it => !log[it.fingerprint]);
+    pending.forEach(it => markPurified(it, true));
+  };
+
+  const saveOverride = () => {
+    if (!editOverride) return;
+    const val = parseFloat(editOverride.value);
+    if (!Number.isFinite(val) || val < 0 || val > 100) { setEditOverride(null); return; }
+    persistOverrides({ ...overrides, [editOverride.ticker]: val });
+    setEditOverride(null);
+    // Refresh computed items with new ratio applied locally
+    setItems(prev => prev.map(it =>
+      it.ticker === editOverride.ticker
+        ? { ...it, impurityPct: val, purificationOwed: +(it.dividendAmount * val / 100).toFixed(4), ratioSource: "user override" }
+        : it
+    ));
+  };
+
+  const thisYear = String(new Date().getFullYear());
+  const years    = [thisYear, String(+thisYear - 1), String(+thisYear - 2)];
+
+  const pending       = items.filter(it => !log[it.fingerprint]);
+  const purified      = items.filter(it =>  log[it.fingerprint]);
+  const totalOwed     = pending.reduce((s, it) => s + it.purificationOwed, 0);
+  const totalPurified = purified.reduce((s, it) => s + it.purificationOwed, 0);
+  const hasPending    = pending.length > 0;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: T.s4 }}>
+      {/* ── Disclaimer ──────────────────────────────────── */}
+      <div style={{
+        padding: `${T.s3} ${T.s4}`,
+        background: `${T.gold}0C`,
+        border: `1px solid ${T.gold}30`,
+        borderRadius: T.rMd,
+        fontFamily: FM, fontSize: 11, color: T.muted, lineHeight: 1.6,
+      }}>
+        <span style={{ color: T.gold, fontWeight: 600 }}>ℹ Sharia note — </span>
+        Purification ratios are estimates. Consult your scholar or the fund's annual purification report for exact figures.
+        {" "}<strong style={{ color: T.text }}>MĪZAN is not a religious authority.</strong>
+        {" "}Published reports: SP Funds (spfunds.com) · Wahed (wahedinvest.com) · Amana (saturna.com).
+      </div>
+
+      {/* ── Summary row ─────────────────────────────────── */}
+      <div className="bento-row" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: T.s3 }}>
+        <BentoTile accent={hasPending ? T.gold : T.gain}>
+          <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PURIFICATION OWED</div>
+          <div style={{ fontFamily: FU, fontSize: 24, fontWeight: 700, color: hasPending ? T.gold : T.muted, letterSpacing: "-0.025em", fontVariantNumeric: "tabular-nums" }}>{fmtUSD(totalOwed)}</div>
+          <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, marginTop: T.s1 }}>{pending.length} dividend{pending.length !== 1 ? "s" : ""} pending · {year}</div>
+        </BentoTile>
+        <BentoTile accent={T.gain}>
+          <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PURIFIED YTD</div>
+          <div style={{ fontFamily: FU, fontSize: 24, fontWeight: 700, color: T.gain, letterSpacing: "-0.025em", fontVariantNumeric: "tabular-nums" }}>{fmtUSD(totalPurified)}</div>
+          <div style={{ fontFamily: FM, fontSize: 11, color: T.gain, marginTop: T.s1 }}>{purified.length} dividend{purified.length !== 1 ? "s" : ""} purified</div>
+        </BentoTile>
+      </div>
+
+      {/* ── Controls: year picker + bulk action ─────────── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: T.s2 }}>
+        <div style={{ display: "flex", gap: T.s2, alignItems: "center" }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>YEAR</span>
+          {years.map(y => (
+            <button key={y} onClick={() => !demoMode && setYear(y)} style={{
+              padding: `4px ${T.s3}`, borderRadius: T.rSm,
+              fontFamily: FM, fontSize: 11, fontWeight: year === y ? 600 : 400,
+              background: year === y ? `${T.blue}18` : "transparent",
+              border: `1px solid ${year === y ? T.blue : T.border}`,
+              color: year === y ? T.blue : T.muted,
+              cursor: demoMode ? "not-allowed" : "pointer",
+            }}>{y}</button>
+          ))}
+        </div>
+        {hasPending && !demoMode && (
+          <button
+            onClick={purifyAll}
+            style={{
+              padding: `6px ${T.s4}`, borderRadius: T.rMd,
+              fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+              background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain, cursor: "pointer",
+            }}
+          >
+            Purify all pending ({pending.length})
+          </button>
+        )}
+      </div>
+
+      {/* ── Dividends table ──────────────────────────────── */}
+      <BentoTile style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: `${T.s3} ${T.s5}`, borderBottom: `1px solid ${T.border}`, fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>
+          DIVIDEND PURIFICATION · {year}
+        </div>
+        {loading ? (
+          <div style={{ padding: `${T.s6} ${T.s5}`, display: "flex", flexDirection: "column", gap: T.s3 }}>
+            <Skeleton w="60%" h={13} /><Skeleton w="80%" h={13} /><Skeleton w="50%" h={13} />
+          </div>
+        ) : error ? (
+          <div style={{ padding: `${T.s6} ${T.s5}`, fontFamily: FU, fontSize: 13, color: T.muted, textAlign: "center" }}>{error}</div>
+        ) : items.length === 0 ? (
+          <div style={{ padding: `${T.s8} ${T.s5}`, textAlign: "center", fontFamily: FU, fontSize: 13, color: T.muted }}>
+            {demoMode ? "No purification data." : "No dividend activity found for this year. Connect a brokerage account to track dividends."}
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontVariantNumeric: "tabular-nums" }}>
+              <thead>
+                <tr>
+                  {["Ticker", "Date", "Dividend", "Impurity %", "Owed", "Status", ""].map((h, i) => (
+                    <th key={h || i} style={{
+                      padding: `${T.s3} ${T.s4}`, textAlign: i >= 2 ? "right" : "left",
+                      fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.14em",
+                      textTransform: "uppercase", borderBottom: `1px solid ${T.border}`,
+                      fontWeight: 600, whiteSpace: "nowrap", background: T.surface,
+                      ...(i === 5 || i === 6 ? { textAlign: "center" } : {}),
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, i) => {
+                  const done = !!log[it.fingerprint];
+                  const isEditing = editOverride?.ticker === it.ticker;
+                  return (
+                    <tr key={it.fingerprint} className="trow" style={{ borderBottom: `1px solid ${T.border}`, opacity: done ? 0.62 : 1 }}>
+                      {/* Ticker */}
+                      <td style={{ padding: `${T.s3} ${T.s4}`, borderBottom: `1px solid ${T.border}` }}>
+                        <div style={{ fontFamily: FU, fontSize: 14, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>{it.ticker}</div>
+                      </td>
+                      {/* Date */}
+                      <td style={{ padding: `${T.s3} ${T.s4}`, borderBottom: `1px solid ${T.border}` }}>
+                        <span style={{ fontFamily: FM, fontSize: 11, color: T.muted }}>{it.date}</span>
+                      </td>
+                      {/* Dividend amount */}
+                      <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "right", borderBottom: `1px solid ${T.border}` }}>
+                        <span style={{ fontFamily: FM, fontSize: 12, color: T.text, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(it.dividendAmount)}</span>
+                      </td>
+                      {/* Impurity % — click to override */}
+                      <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "right", borderBottom: `1px solid ${T.border}` }}>
+                        {isEditing ? (
+                          <div style={{ display: "flex", gap: T.s1, justifyContent: "flex-end", alignItems: "center" }}>
+                            <input
+                              type="number" step="0.01" min="0" max="100"
+                              value={editOverride.value}
+                              onChange={e => setEditOverride(v => ({ ...v, value: e.target.value }))}
+                              className="field"
+                              style={{ width: 60, fontSize: 11, padding: `3px ${T.s2}`, textAlign: "right" }}
+                              autoFocus
+                              onKeyDown={e => { if (e.key === "Enter") saveOverride(); if (e.key === "Escape") setEditOverride(null); }}
+                            />
+                            <button onClick={saveOverride} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain, cursor: "pointer", fontFamily: FM, fontSize: 10, fontWeight: 600 }}>✓</button>
+                            <button onClick={() => setEditOverride(null)} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: "transparent", border: `1px solid ${T.border}`, color: T.muted, cursor: "pointer", fontFamily: FM, fontSize: 11 }}>✕</button>
+                          </div>
+                        ) : (
+                          <span
+                            title={`Source: ${it.ratioSource}\nClick to override for ${it.ticker}`}
+                            onClick={() => !done && !demoMode && setEditOverride({ ticker: it.ticker, value: String(it.impurityPct) })}
+                            style={{
+                              fontFamily: FM, fontSize: 11, fontVariantNumeric: "tabular-nums",
+                              color: overrides[it.ticker] != null ? T.blue : T.muted,
+                              cursor: done || demoMode ? "default" : "pointer",
+                              borderBottom: done || demoMode ? "none" : `1px dashed ${T.border}`,
+                            }}
+                          >
+                            {fmtPct(it.impurityPct)}
+                            {overrides[it.ticker] != null && <span style={{ fontSize: 9, marginLeft: 3, color: T.blue }}>override</span>}
+                          </span>
+                        )}
+                      </td>
+                      {/* Purification owed */}
+                      <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "right", borderBottom: `1px solid ${T.border}` }}>
+                        <span style={{ fontFamily: FU, fontSize: 13, fontWeight: 600, color: done ? T.muted : T.gold, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(it.purificationOwed)}</span>
+                      </td>
+                      {/* Status */}
+                      <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "center", borderBottom: `1px solid ${T.border}` }}>
+                        <Tag label={done ? "✓ Purified" : "Pending"} color={done ? T.gain : T.gold} />
+                      </td>
+                      {/* Action */}
+                      <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "center", borderBottom: `1px solid ${T.border}` }}>
+                        {done ? (
+                          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>—</span>
+                        ) : (
+                          <button
+                            onClick={() => markPurified(it)}
+                            disabled={!!busy[it.fingerprint] || demoMode}
+                            style={{
+                              padding: `4px ${T.s3}`, borderRadius: T.rSm,
+                              fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em",
+                              background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain,
+                              cursor: busy[it.fingerprint] || demoMode ? "not-allowed" : "pointer",
+                              opacity: busy[it.fingerprint] ? 0.6 : 1,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {busy[it.fingerprint] ? "…" : "Mark Purified"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </BentoTile>
+
+      {/* ── Help row ─────────────────────────────────────── */}
+      <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, lineHeight: 1.6, padding: `0 ${T.s1}` }}>
+        <strong style={{ color: T.text }}>How purification works:</strong> Halal-screened funds may still earn a small portion of revenue from impermissible sources (interest, prohibited industries) below the AAOIFI 5% threshold. The impure fraction of any dividend you receive is computed as <em>dividend × impurity%</em> and must be donated to charity — not as a reward, but as purification of income. Click any impurity % to override it with the figure from the fund's latest annual report.
+      </div>
+    </div>
+  );
+}
+
 function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   // The previous owner-only seed has been removed — it leaked the owner's
   // actual donation list into the JS bundle. Owner's existing donations are
@@ -2910,6 +3238,24 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
           ? "Spot prices unavailable — using static fallback values."
           : `Live spot via ${liveNisab.source} · refreshed ${liveNisab.refreshed_at?new Date(liveNisab.refreshed_at).toLocaleString():"recently"}`}
       </div>
+    </BentoTile>
+
+    {/* ─── ROW 1.75: Dividend Purification ─────────── */}
+    <BentoTile accent={T.gold}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s2,marginBottom:T.s4}}>
+        <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
+          <span style={{fontSize:20,lineHeight:1}}>🌿</span>
+          <div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>DIVIDEND PURIFICATION</div>
+            <div style={{fontFamily:FU,fontSize:12,color:T.muted}}>AAOIFI-compliant — purify impure income from halal-screened funds</div>
+          </div>
+        </div>
+        {demoMode&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
+      </div>
+      <PurificationPanel demoMode={demoMode} onPurified={()=>{
+        // Refresh sadaqah total from localStorage so the donation tally updates
+        try{setSadaqah(JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]"))}catch{}
+      }}/>
     </BentoTile>
 
     {/* ─── ROW 2: Log entry + import ───────────────── */}
