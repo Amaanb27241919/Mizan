@@ -45,7 +45,12 @@ const THEME_CSS = `
     --mz-muted: #7d8079; --mz-dim: #2a3a33;
     --mz-gainBg: #0e1e18; --mz-lossBg: #1e1210;
     --mz-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 28px rgba(0,0,0,0.6);
-    --mz-glass: rgba(13,19,17,0.76);
+    /* Glass material — chrome elements only (nav, modals, overlays) */
+    --mz-glass: rgba(13,19,17,0.68);
+    --mz-glass-strong: rgba(13,19,17,0.91);
+    --mz-glass-border: rgba(58,79,69,0.65);
+    --mz-glass-shadow: inset 0 1px 0 0 rgba(255,255,255,0.07), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 8px 32px rgba(0,0,0,0.45);
+    --mz-glass-shadow-lg: inset 0 1px 0 0 rgba(255,255,255,0.07), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 20px 60px rgba(0,0,0,0.60);
     color-scheme: dark;
   }
   :root[data-theme="light"] {
@@ -56,7 +61,12 @@ const THEME_CSS = `
     --mz-muted: #7d8079; --mz-dim: #ece8e0;
     --mz-gainBg: #f0faf5; --mz-lossBg: #fdf2ef;
     --mz-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 6px 20px rgba(15,18,12,0.06);
-    --mz-glass: rgba(245,242,235,0.82);
+    /* Glass material — light theme variants */
+    --mz-glass: rgba(248,245,238,0.72);
+    --mz-glass-strong: rgba(255,252,246,0.93);
+    --mz-glass-border: rgba(200,190,175,0.60);
+    --mz-glass-shadow: inset 0 1px 0 0 rgba(255,255,255,0.75), inset 0 -1px 0 0 rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.09);
+    --mz-glass-shadow-lg: inset 0 1px 0 0 rgba(255,255,255,0.75), inset 0 -1px 0 0 rgba(0,0,0,0.04), 0 20px 60px rgba(0,0,0,0.14);
     color-scheme: light;
   }
   :root {
@@ -77,6 +87,59 @@ const THEME_CSS = `
     pointer-events:none;z-index:0;}
   /* Base body font — elements without explicit fontFamily inherit IBM Plex Sans */
   body{font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;}
+
+  /* ─── LIQUID GLASS UTILITIES ──────────────────────────────────────────────
+     Apply ONLY to chrome: nav bars, modals, overlays, tooltips, input bars.
+     NEVER on data tables, charts, or stat cards — glass kills legibility. */
+
+  /* Base glass — nav bars, tab bars, floating chrome */
+  .glass {
+    background: var(--mz-glass);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid var(--mz-glass-border);
+    box-shadow: var(--mz-glass-shadow);
+  }
+  /* Strong glass — modals and sheets where background must be obscured */
+  .glass-strong {
+    background: var(--mz-glass-strong);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid var(--mz-glass-border);
+    box-shadow: var(--mz-glass-shadow-lg);
+  }
+  /* Graceful degradation when backdrop-filter is unsupported */
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass { background: var(--mz-surface); border-color: var(--mz-border); box-shadow: var(--sh-md); }
+    .glass-strong { background: var(--mz-card); border-color: var(--mz-borderHi); box-shadow: var(--sh-lg); }
+  }
+
+  /* Dock inactive tab: subtle glass brightening + gentle lift on hover */
+  .dock-off:hover {
+    background: rgba(255,255,255,0.07) !important;
+    transform: scale(1.05) !important;
+    color: var(--mz-textHi) !important;
+  }
+  :root[data-theme="light"] .dock-off:hover {
+    background: rgba(0,0,0,0.06) !important;
+  }
+
+  /* Modal entry animation — blur-in from 0→40px, card slides up */
+  @keyframes glassOverlayIn {
+    from { opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
+    to   { opacity: 1; backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%); }
+  }
+  @keyframes glassFadeUp {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Reduced-motion: disable transforms and animations */
+  @media (prefers-reduced-motion: reduce) {
+    .dock-off:hover { transform: none !important; }
+    .glass, .glass-strong { transition: none !important; }
+    * { animation-duration: 0.01ms !important; }
+  }
 `;
 // Fraunces (serif display) — big titles, section headings, card titles, stat numbers
 const FU = "'Fraunces','Georgia','Times New Roman',serif";
@@ -829,19 +892,26 @@ function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto",WebkitOverfl
 // halo. Scrolls horizontally on mobile via .mz-tabbar overflow handling.
 function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar-wrap" style={{marginBottom:T.s5}}><div className="mz-tabbar" style={{
   display:"flex",gap:T.s1,padding:T.s1,
-  background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rLg,
+  background:"var(--mz-glass)",border:"1px solid var(--mz-glass-border)",borderRadius:T.rLg,
+  boxShadow:"inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.14)",
   overflowX:"auto",WebkitOverflowScrolling:"touch",
 }}>{tabs.map(([id,l])=>{
   const on=active===id;const acc=accent||T.blue;
   return<button key={id} onClick={()=>onChange(id)} style={{
-    padding:`8px ${T.s4}`,background:on?T.card:"transparent",
+    padding:`8px ${T.s4}`,
+    background:on?"var(--mz-glass-strong, rgba(13,19,17,0.91))":"transparent",
+    backdropFilter:on?"blur(20px) saturate(160%)":undefined,
+    WebkitBackdropFilter:on?"blur(20px) saturate(160%)":undefined,
     border:"none",borderRadius:T.rMd,
     color:on?T.textHi:T.muted,
     fontFamily:FP,fontSize:13,fontWeight:on?600:500,letterSpacing:"-0.005em",
     cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,
-    boxShadow:on?`0 1px 3px rgba(0,0,0,0.18), 0 0 0 1px ${acc}24`:"none",
-    transition:"all 0.15s ease",
-  }}>{l}</button>;
+    boxShadow:on?`inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.20), 0 1px 4px rgba(0,0,0,0.22), 0 0 0 1px ${acc}28`:"none",
+    transition:"all 0.18s cubic-bezier(.34,1.56,.64,1)",
+  }}
+  onMouseEnter={e=>{if(!on){e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color=T.text;}}}
+  onMouseLeave={e=>{if(!on){e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.muted;}}}
+  >{l}</button>;
 })}</div></div>;}
 
 /* ─── CSV PARSER (Fidelity / Robinhood / Coinbase) ───── */
@@ -4298,8 +4368,8 @@ function OrderPreviewModal({preview={},onConfirm,onCancel,busy,side,sym,qty}){
   const remaining=trade.remaining_buying_power?.amount??null;
   const warnings=trade.warnings||trade.warnings_messages||[];
 
-  return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-    <div style={{background:T.surface,border:`1px solid ${T.borderHi}`,borderRadius:14,width:"100%",maxWidth:480,boxShadow:T.shadow,overflow:"hidden"}}>
+  return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.60)",backdropFilter:"blur(24px) saturate(160%)",WebkitBackdropFilter:"blur(24px) saturate(160%)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+    <div style={{background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:14,width:"100%",maxWidth:480,boxShadow:"var(--mz-glass-shadow-lg)",overflow:"hidden",animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
       <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi}}>Confirm {side==="buy"?"Buy":"Sell"} {sym}</div>
@@ -4968,7 +5038,7 @@ Activity rows on file: ${activities.length}.`;
         <span style={{fontWeight:700}}>{tokenNotice.kind==="err"?"✕":"⚠"}</span>
         <span>{tokenNotice.text}</span>
       </div>}
-      <form onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:`1px solid ${T.border}`,padding:T.s3,display:"flex",gap:T.s2,background:T.surface}}>
+      <form onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:"1px solid var(--mz-glass-border)",padding:T.s3,display:"flex",gap:T.s2,background:"var(--mz-glass)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)"}}>
         <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about your portfolio…" disabled={busy}
           className="field" style={{flex:1,fontFamily:FP,fontSize:14,padding:`10px ${T.s4}`}}/>
         <button type="submit" disabled={busy||!input.trim()} className="btn-primary" style={{padding:`10px ${T.s5}`}}>{busy?"…":"Send"}</button>
@@ -6255,11 +6325,11 @@ function ConnectModal({onClose,snapId,onConnected}){
   const maxW = step==="iframe" ? 640 : 480;
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:1000,
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",backdropFilter:"blur(24px) saturate(160%)",WebkitBackdropFilter:"blur(24px) saturate(160%)",zIndex:1000,
       display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{background:T.surface,border:`1px solid ${T.borderHi}`,borderRadius:14,
-        width:"100%",maxWidth:maxW,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:14,
+        width:"100%",maxWidth:maxW,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"var(--mz-glass-shadow-lg)",animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
 
         {/* Header */}
         <div style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,
@@ -7861,9 +7931,9 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
 
   return<div style={{
     position:"fixed",inset:0,zIndex:1000,
-    background:"rgba(11,15,30,0.78)",
-    backdropFilter:"blur(20px) saturate(160%)",
-    WebkitBackdropFilter:"blur(20px) saturate(160%)",
+    background:"rgba(0,0,0,0.65)",
+    backdropFilter:"blur(28px) saturate(160%)",
+    WebkitBackdropFilter:"blur(28px) saturate(160%)",
     display:"flex",alignItems:"center",justifyContent:"center",
     padding:T.s5,
     opacity:mounted?1:0,
@@ -7871,13 +7941,16 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
   }}>
     <div style={{
       width:"100%",maxWidth:720,
-      background:`radial-gradient(circle at 0% 0%, ${T.blue}14, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gold}10, transparent 50%), ${T.card}`,
-      border:`1px solid ${T.borderHi}`,
+      background:`radial-gradient(circle at 0% 0%, ${T.blue}12, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gold}08, transparent 50%), var(--mz-glass-strong)`,
+      backdropFilter:"blur(40px) saturate(180%)",
+      WebkitBackdropFilter:"blur(40px) saturate(180%)",
+      border:"1px solid var(--mz-glass-border)",
       borderRadius:T.rLg,
-      boxShadow:"var(--sh-lg)",
+      boxShadow:"var(--mz-glass-shadow-lg)",
       padding:`${T.s8} ${T.s8} ${T.s6}`,
       position:"relative",
       overflow:"hidden",
+      animation:"glassFadeUp 0.28s cubic-bezier(.34,1.56,.64,1)",
     }}>
       {/* Progress dots */}
       <div style={{display:"flex",justifyContent:"center",gap:T.s2,marginBottom:T.s6}}>
@@ -9040,7 +9113,7 @@ export default function Mizan(){
 
     {/* TOP BAR */}
     {/* STATUS BAR — slim, glanceable, single row. Brand left, info middle, actions right. */}
-    <header className="mz-status" style={{height:48,background:T.glass,backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",padding:`0 ${T.s5}`,gap:T.s4,position:"sticky",top:0,zIndex:100}}>
+    <header className="mz-status glass" style={{height:48,borderBottom:`1px solid var(--mz-glass-border)`,display:"flex",alignItems:"center",padding:`0 ${T.s5}`,gap:T.s4,position:"sticky",top:0,zIndex:100}}>
       <div style={{display:"flex",alignItems:"center",gap:T.s2,flexShrink:0}}>
         <svg width={18} height={18} viewBox="0 0 16 16" fill="none"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs><path d="M8 1L15 7L8 13L1 7Z" stroke="url(#lg)" strokeWidth={1.5} fill="none"/><circle cx="8" cy="7" r="2" fill={T.blue} opacity={0.9}/></svg>
         <span style={{fontFamily:FU,fontSize:15,fontWeight:700,color:T.textHi,letterSpacing:"0.04em"}}>MĪZAN</span>
@@ -9088,7 +9161,7 @@ export default function Mizan(){
         })()}
         <button onClick={sync} disabled={fetching} className="btn-primary mz-status-sync">{fetching?"Syncing…":"Sync All"}</button>
       </div>
-      {forceMsg&&<div style={{position:"absolute",top:50,right:T.s3,background:T.card,border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)",zIndex:101,maxWidth:340}}>{forceMsg.msg}</div>}
+      {forceMsg&&<div style={{position:"absolute",top:50,right:T.s3,background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--mz-glass-shadow)",zIndex:101,maxWidth:340,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>{forceMsg.msg}</div>}
     </header>
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
@@ -9116,12 +9189,12 @@ export default function Mizan(){
       position:"fixed",bottom:T.s5,left:"50%",transform:"translateX(-50%)",
       display:"flex",alignItems:"center",gap:T.s1,
       padding:`${T.s1} ${T.s2}`,
-      background:T.glass,
-      backdropFilter:"blur(28px) saturate(180%)",
-      WebkitBackdropFilter:"blur(28px) saturate(180%)",
-      border:`1px solid ${T.borderHi}`,
+      background:"var(--mz-glass)",
+      backdropFilter:"blur(28px) saturate(190%)",
+      WebkitBackdropFilter:"blur(28px) saturate(190%)",
+      border:"1px solid var(--mz-glass-border)",
       borderRadius:999,
-      boxShadow:"var(--sh-lg)",
+      boxShadow:"inset 0 1px 0 rgba(255,255,255,0.09), inset 0 -1px 0 rgba(0,0,0,0.22), 0 20px 60px rgba(0,0,0,0.55), 0 4px 16px rgba(0,0,0,0.30)",
       zIndex:90,
     }}>
       {NAV.map(n=>{

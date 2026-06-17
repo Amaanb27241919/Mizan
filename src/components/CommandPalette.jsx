@@ -202,9 +202,9 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.6)",
-        backdropFilter: "blur(4px)",
-        WebkitBackdropFilter: "blur(4px)",
+        background: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(24px) saturate(160%)",
+        WebkitBackdropFilter: "blur(24px) saturate(160%)",
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
@@ -217,14 +217,17 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
         style={{
           width: "100%",
           maxWidth: 600,
-          background: TT.card,
-          border: `1px solid ${TT.borderHi}`,
+          background: "var(--mz-glass-strong, rgba(13,19,17,0.91))",
+          backdropFilter: "blur(40px) saturate(180%)",
+          WebkitBackdropFilter: "blur(40px) saturate(180%)",
+          border: "1px solid var(--mz-glass-border, rgba(58,79,69,0.65))",
           borderRadius: TT.rLg,
-          boxShadow: "var(--sh-lg)",
+          boxShadow: "var(--mz-glass-shadow-lg, inset 0 1px 0 rgba(255,255,255,0.07), 0 20px 60px rgba(0,0,0,0.60))",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
           maxHeight: "70vh",
+          animation: "glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)",
         }}
       >
         <div
@@ -233,7 +236,8 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
             alignItems: "center",
             gap: TT.s3,
             padding: `${TT.s4} ${TT.s5}`,
-            borderBottom: `1px solid ${TT.border}`,
+            borderBottom: "1px solid var(--mz-glass-border, rgba(58,79,69,0.65))",
+            background: "rgba(255,255,255,0.03)",
           }}
         >
           <span
