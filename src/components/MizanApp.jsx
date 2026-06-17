@@ -6130,6 +6130,30 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   // ACH description patterns that identify credit-card or loan payments.
   const PAYMENT_RE=/credit\s*card\s*pay|crcardpmt|autopay|card\s*pmnt|loan\s*pay|mortgage\s*pay|bill\s*pay|heloc|student\s*loan/i;
 
+  // Payment flows tile — current month breakdown of excluded categories
+  // (debt repayments, transfers, bank fees) plus income/inflow summary.
+  const paymentFlows=useMemo(()=>{
+    const now=new Date();
+    const monthStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+    const PAYMENT_CATS=["LOAN_PAYMENTS","TRANSFER_OUT","BANK_FEES"];
+    const outMap={};
+    let incomeTotal=0;
+    bankTxns.forEach(t=>{
+      if(!t.date||t.date<monthStart)return;
+      const cat=t.personal_finance_category?.primary||t.category?.[0]||"";
+      if(t.amount>0&&PAYMENT_CATS.includes(cat)){
+        outMap[cat]=(outMap[cat]||0)+t.amount;
+      }
+      // Inflows: INCOME or TRANSFER_IN with negative amount (Plaid convention)
+      if(t.amount<0&&(cat==="INCOME"||cat==="TRANSFER_IN")){
+        incomeTotal+=Math.abs(t.amount);
+      }
+    });
+    const outEntries=Object.entries(outMap).map(([cat,total])=>({cat,total})).sort((a,b)=>b.total-a.total);
+    const outTotal=outEntries.reduce((s,e)=>s+e.total,0);
+    return{outEntries,outTotal,incomeTotal};
+  },[bankTxns]);
+
   // Spending by category — current calendar month only, outflows only.
   const spendingByCategory=useMemo(()=>{
     const now=new Date();
@@ -6731,6 +6755,38 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             </div>;
           })}
         </div>
+      </BentoTile>;
+    })()}
+
+    {/* ─── DEBT PAYMENTS & TRANSFERS ──────────── */}
+    {paymentFlows.outEntries.length>0&&(()=>{
+      const{outEntries,outTotal,incomeTotal}=paymentFlows;
+      const now=new Date();
+      const monthLabel=now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+      const CAT_LABEL={LOAN_PAYMENTS:"Loan & Card Payments",TRANSFER_OUT:"Outbound Transfers",BANK_FEES:"Bank Fees"};
+      return<BentoTile>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DEBT PAYMENTS & TRANSFERS · {monthLabel}</span>
+          <span style={{fontFamily:FU,fontSize:14,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(outTotal)}</span>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+          {outEntries.map(e=>{
+            const pct=outTotal>0?(e.total/outTotal)*100:0;
+            const barPct=(e.total/(outEntries[0]?.total||1))*100;
+            return<div key={e.cat} style={{display:"grid",gridTemplateColumns:"minmax(160px,1.6fr) 1fr 90px 52px",gap:T.s3,alignItems:"center"}}>
+              <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{CAT_LABEL[e.cat]||e.cat.replace(/_/g," ")}</span>
+              <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${barPct}%`,background:`linear-gradient(90deg,${T.loss}88,${T.loss}44)`,borderRadius:2}}/>
+              </div>
+              <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(e.total)}</span>
+              <span style={{fontFamily:FM,fontSize:11,color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
+            </div>;
+          })}
+        </div>
+        {incomeTotal>0&&<div style={{marginTop:T.s4,paddingTop:T.s3,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.14em",fontWeight:600}}>INCOME & INFLOWS THIS MONTH</span>
+          <span style={{fontFamily:FU,fontSize:14,fontWeight:700,color:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(incomeTotal)}</span>
+        </div>}
       </BentoTile>;
     })()}
 
