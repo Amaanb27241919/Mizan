@@ -21,8 +21,9 @@ const tokens = {
   textHi:   "var(--mz-textHi)",
   text:     "var(--mz-text)",
   muted:    "var(--mz-muted)",
-  blue:     "#5B8DEF",
-  gold:     "#D4AF37",
+  blue:     "#7B61FF",   // matches MizanApp T.blue
+  gold:     "#FF9F6A",   // matches MizanApp T.gold
+  rLg:      "var(--r-lg)",
   rMd:      "var(--r-md)",
   rSm:      "var(--r-sm)",
   s2:       "var(--s-2)",
@@ -46,15 +47,21 @@ export default function ComingSoon({
   const pillLabel = pending ? "AWAITING DATA" : "COMING SOON";
 
   return (
-    <div style={{
-      background: `radial-gradient(circle at 0% 0%, ${accent}10, transparent 55%), ${tokens.bg}`,
+    <div className="bento-tile" style={{
+      background: `radial-gradient(circle at 0% 0%, ${accent}12, transparent 55%), ${tokens.bg}`,
       border: `1px solid ${tokens.border}`,
-      borderRadius: tokens.rMd,
+      borderTop: `2px solid ${accent}`,
+      borderLeft: `1px solid ${accent}30`,
+      borderRadius: tokens.rLg,
       padding: `${tokens.s6} ${tokens.s5}`,
       display: "flex",
       flexDirection: "column",
       alignItems: "flex-start",
       gap: tokens.s3,
+      boxShadow: "var(--sh-md)",
+      position: "relative",
+      overflow: "hidden",
+      transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
     }}>
       <div style={{
         display: "inline-flex",

@@ -22,6 +22,7 @@ const T = {
   textHi:  "var(--mz-textHi)",
   text:    "var(--mz-text)",
   muted:   "var(--mz-muted)",
+  rLg:     "var(--r-lg)",
   rMd:     "var(--r-md)",
   rSm:     "var(--r-sm)",
   s1:      "var(--s-1)",
@@ -29,9 +30,9 @@ const T = {
   s3:      "var(--s-3)",
   s4:      "var(--s-4)",
   s5:      "var(--s-5)",
-  blue:    "#5B8DEF",
-  gold:    "#D4AF37",
-  gain:    "#0FB07A",
+  blue:    "#7B61FF",   // matches MizanApp T.blue
+  gold:    "#FF9F6A",   // matches MizanApp T.gold
+  gain:    "#10B981",   // matches MizanApp T.gain
   loss:    "#FF6B6B",
 };
 const FM = "var(--font-mono, ui-monospace, Menlo, monospace)";
@@ -298,16 +299,22 @@ export default function ConnectionHealth({ onNav } = {}) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: T.s4 }}>
       {/* Header tile */}
-      <div style={{
+      <div className="bento-tile" style={{
         background: `radial-gradient(circle at 0% 0%, ${T.blue}14, transparent 55%), ${T.card}`,
         border: `1px solid ${T.border}`,
-        borderRadius: T.rMd,
+        borderTop: `2px solid ${T.blue}`,
+        borderLeft: `1px solid ${T.blue}30`,
+        borderRadius: T.rLg,
         padding: `${T.s5} ${T.s5}`,
         display: "flex",
         justifyContent: "space-between",
         alignItems: "flex-start",
         flexWrap: "wrap",
         gap: T.s3,
+        boxShadow: "var(--sh-md)",
+        position: "relative",
+        overflow: "hidden",
+        transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
       }}>
         <div>
           <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s1 }}>

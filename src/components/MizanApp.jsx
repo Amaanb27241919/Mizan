@@ -772,24 +772,28 @@ function Donut({slices,size=180,thickness=22,centerLabel,centerValue}){
 
 // Bento tile wrapper. Adds glass surface, hover lift, optional gradient
 // background, and flexible grid-area placement via `span`.
+// When `accent` is set: 2px colored top bar + tinted left border.
+// When `onClick` is set: pointer cursor + scale hint in CSS.
 function BentoTile({children,span="auto",accent,gradient,glass,style,onClick}){
   const baseStyle={
     background:gradient||(glass?T.glass:T.card),
-    border:`1px solid ${accent?accent+"40":T.border}`,
+    border:`1px solid ${T.border}`,
+    borderTop: accent ? `2px solid ${accent}` : `1px solid ${T.border}`,
+    borderLeft: accent ? `1px solid ${accent}30` : `1px solid ${T.border}`,
     borderRadius:T.rLg,
     padding:`${T.s5} ${T.s5}`,
     boxShadow:"var(--sh-md)",
     backdropFilter:glass?"blur(16px) saturate(160%)":undefined,
     WebkitBackdropFilter:glass?"blur(16px) saturate(160%)":undefined,
-    gridColumn:span.col||undefined,
-    gridRow:span.row||undefined,
-    transition:"transform 0.18s, box-shadow 0.2s, border-color 0.2s",
+    gridColumn:span&&span.col||undefined,
+    gridRow:span&&span.row||undefined,
+    transition:"transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
     cursor:onClick?"pointer":"default",
     position:"relative",
     overflow:"hidden",
     ...(style||{}),
   };
-  return<div className="bento-tile" onClick={onClick} style={baseStyle}>{children}</div>;
+  return<div className={`bento-tile${onClick?" bento-tile--click":""}`} onClick={onClick} style={baseStyle}>{children}</div>;
 }
 
 function TT2({active,payload}){if(!active||!payload?.length)return null;return<div style={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:8,padding:"6px 12px",fontFamily:FM,fontSize:11,color:T.textHi}}>${payload[0]?.value?.toLocaleString?.("en-US",{minimumFractionDigits:2})}</div>;}
@@ -8941,8 +8945,14 @@ export default function Mizan(){
       /* Design-system primitives. Used by KV stat cards, buttons, inputs. */
       .kv-card:hover{border-color:${T.borderHi}!important;transform:translateY(-1px);box-shadow:var(--sh-md);}
       .bento-tile{position:relative;}
-      .bento-tile:hover{border-color:${T.borderHi}!important;box-shadow:var(--sh-lg);}
-      @media (max-width: 900px) { .bento-row { grid-template-columns: 1fr !important; } }
+      .bento-tile:hover{border-color:${T.borderHi}!important;box-shadow:var(--sh-lg);transform:translateY(-1px);}
+      .bento-tile--click:hover{transform:translateY(-2px) scale(1.003);}
+      .bento-tile--click:active{transform:translateY(0) scale(0.998);box-shadow:var(--sh-sm)!important;}
+      @media (max-width: 900px) {
+        .bento-row { grid-template-columns: 1fr !important; }
+        /* Disable lift on touch devices — no hover intent */
+        .bento-tile:hover{transform:none;}
+      }
       .btn-primary{background:linear-gradient(135deg,${T.blue},${T.blueDim});color:#fff;border:none;font-family:${FM};font-size:11px;font-weight:600;letter-spacing:0.04em;padding:8px 16px;border-radius:var(--r-md);cursor:pointer;box-shadow:0 2px 10px ${T.blue}50;transition:transform 0.15s,box-shadow 0.2s;}
       .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 14px ${T.blue}66;}
       .btn-primary:active:not(:disabled){transform:translateY(0);box-shadow:0 1px 6px ${T.blue}40;}

@@ -61,12 +61,15 @@ function Tile({ children, accent, style }) {
       className="bento-tile"
       style={{
         background: TT.card,
-        border: `1px solid ${accent ? accent + "40" : TT.border}`,
+        border: `1px solid ${TT.border}`,
+        borderTop: accent ? `2px solid ${accent}` : `1px solid ${TT.border}`,
+        borderLeft: accent ? `1px solid ${accent}30` : `1px solid ${TT.border}`,
         borderRadius: TT.rLg,
         padding: `${TT.s5} ${TT.s5}`,
         boxShadow: "var(--sh-md)",
         position: "relative",
         overflow: "hidden",
+        transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
         ...(style || {}),
       }}
     >

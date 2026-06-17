@@ -453,14 +453,17 @@ function GoalCard({ goal, current, slope, accountLabels, onEdit, onDelete, onMan
   };
 
   return (
-    <div style={{
+    <div className="bento-tile" style={{
       background: `linear-gradient(135deg, ${color}10, transparent 60%), ${T.card}`,
-      border: `1px solid ${color}30`,
+      border: `1px solid ${T.border}`,
+      borderTop: `2px solid ${color}`,
+      borderLeft: `1px solid ${color}30`,
       borderRadius: T.rLg,
       padding: T.s5,
       display: "flex", flexDirection: "column", gap: T.s3,
       position: "relative", overflow: "hidden",
       boxShadow: "var(--sh-md)",
+      transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: T.s3 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
@@ -708,13 +711,16 @@ export default function Goals({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: T.s5, maxWidth: 1080, margin: "0 auto", paddingBottom: T.s8 }}>
       {/* Header tile */}
-      <div style={{
+      <div className="bento-tile" style={{
         background: `radial-gradient(circle at 0% 0%, ${T.blue}18, transparent 55%), ${T.card}`,
-        border: `1px solid ${T.blue}30`,
+        border: `1px solid ${T.border}`,
+        borderTop: `2px solid ${T.blue}`,
+        borderLeft: `1px solid ${T.blue}30`,
         borderRadius: T.rLg,
         padding: `${T.s6} ${T.s5}`,
         display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: T.s3,
         boxShadow: "var(--sh-md)",
+        transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
       }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontFamily: FM, fontSize: 11, color: T.blue, letterSpacing: "0.18em", fontWeight: 600 }}>
@@ -881,13 +887,16 @@ export function GoalsOverviewWidget({
   if (!loaded) return null;
 
   return (
-    <div style={{
+    <div className="bento-tile" style={{
       background: T.card,
       border: `1px solid ${T.border}`,
+      borderTop: `2px solid ${T.blue}`,
+      borderLeft: `1px solid ${T.blue}30`,
       borderRadius: T.rLg,
       padding: T.s5,
       display: "flex", flexDirection: "column", gap: T.s4,
-      boxShadow: "var(--sh-sm)",
+      boxShadow: "var(--sh-md)",
+      transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
     }}>
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
