@@ -6125,6 +6125,11 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   },[bankTxns,txnSearchDebounced,txnType,txnRange,txnAccount]);
   const visibleTxns=useMemo(()=>filteredTxns.slice(0,txnLimit),[filteredTxns,txnLimit]);
 
+  // Categories that are transfers / payments, not real spending or subscriptions.
+  const EXCLUDE_CATS=new Set(["LOAN_PAYMENTS","TRANSFER_OUT","TRANSFER_IN","BANK_FEES","INCOME"]);
+  // ACH description patterns that identify credit-card or loan payments.
+  const PAYMENT_RE=/credit\s*card\s*pay|crcardpmt|autopay|card\s*pmnt|loan\s*pay|mortgage\s*pay|bill\s*pay|heloc|student\s*loan/i;
+
   // Spending by category — current calendar month only, outflows only.
   const spendingByCategory=useMemo(()=>{
     const now=new Date();
@@ -6134,6 +6139,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       if(t.amount<=0)return;
       if(!t.date||t.date<monthStart)return;
       const cat=t.personal_finance_category?.primary||t.category?.[0]||"Other";
+      // Exclude transfers and loan/credit-card payments — they're balance
+      // movements, not real spending categories.
+      if(EXCLUDE_CATS.has(cat))return;
       map[cat]=(map[cat]||0)+t.amount;
     });
     const entries=Object.entries(map).map(([cat,total])=>({cat,total})).sort((a,b)=>b.total-a.total);
@@ -6150,6 +6158,11 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     bankTxns.forEach(t=>{
       const m=(t.merchant_name||t.name||"").trim();
       if(!m||t.amount<=0)return;
+      // Skip transfers, loan repayments, and credit-card payments — these
+      // are balance movements, not subscription charges.
+      const cat=t.personal_finance_category?.primary||t.category?.[0]||"";
+      if(EXCLUDE_CATS.has(cat))return;
+      if(PAYMENT_RE.test(m))return;
       const month=(t.date||"").slice(0,7);
       if(!byMerchant[m])byMerchant[m]={merchant:m,months:new Set(),amounts:[],dates:[]};
       byMerchant[m].months.add(month);
@@ -6735,6 +6748,15 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       if(Array.isArray(plaidRows)&&plaidRows.length>0){
         usingPlaid=true;
         rows=plaidRows
+          .filter(s=>{
+            // Drop credit-card payments, transfers, and loan repayments
+            // that Plaid may surface as recurring outflows.
+            const cat=s.personal_finance_category?.primary||"";
+            if(EXCLUDE_CATS.has(cat))return false;
+            const name=s.merchant_name||s.description||"";
+            if(PAYMENT_RE.test(name))return false;
+            return true;
+          })
           .map(s=>{
             const avg=Math.abs(Number(s.average_amount?.amount)||0);
             const freq=FREQ_LABEL[s.frequency]||"irregular";
