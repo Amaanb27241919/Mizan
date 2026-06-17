@@ -7,7 +7,7 @@ import { downloadCSV } from "../lib/exportCSV.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Skeleton, SkeletonCard, SkeletonTable } from "./Skeleton.jsx";
-import Goals from "./Goals.jsx";
+import Goals, { GoalsOverviewWidget } from "./Goals.jsx";
 import ComingSoon from "./ComingSoon.jsx";
 import ConnectionHealth from "./ConnectionHealth.jsx";
 import BugReportButton from "./BugReportButton.jsx";
@@ -1716,6 +1716,14 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         })}
       </div>
     </BentoTile>}
+
+    {/* Savings goals — compact overview widget */}
+    <GoalsOverviewWidget
+      snapAccounts={snapAccounts}
+      plaidAccounts={plaidAccounts}
+      netWorthHistory={netWorthHistory}
+      onNav={onNav}
+    />
 
     {/* Sector breakdown — keep as a standalone card */}
     <SectorBreakdown holdings={merged} total={equityValue}/>

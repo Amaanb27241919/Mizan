@@ -7,6 +7,7 @@
 //   - manual    → user-entered manual_progress column
 //
 // Backed by /api/goals (GET/POST/PUT/DELETE).
+// Named exports: GoalsOverviewWidget (used by Overview tab)
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/apiFetch.js";
 
@@ -32,6 +33,90 @@ const fmtDate = (s) => {
     return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   } catch { return String(s); }
 };
+
+// ── Islamic goal templates ───────────────────────────────────────────────────
+// Pre-filled defaults users can choose before the blank form.
+// `target: null` means "compute at render time" (Emergency Fund uses
+// avgMonthlySpend × 4, falling back to 15000 when spend data isn't ready).
+const TEMPLATES = [
+  { id: "hajj",      icon: "🕋", name: "Hajj Fund",         target: 10000, note: null },
+  { id: "umrah",     icon: "🌙", name: "Umrah Fund",         target: 4000,  note: null },
+  { id: "home",      icon: "🏠", name: "Home Down Payment",  target: 60000,
+    note: "Consider a halal financing structure (Ijara/Murabaha) vs. a conventional mortgage" },
+  { id: "emergency", icon: "🛡", name: "Emergency Fund",     target: null,
+    note: "3-6 months of expenses. Suggested target is 4× your avg monthly spend." },
+  { id: "education", icon: "📚", name: "Education Fund",     target: 20000, note: null },
+  { id: "custom",    icon: "✏️",  name: "Custom",             target: null,  note: null },
+];
+
+function TemplatePicker({ avgMonthlySpend, onPick, onCancel }) {
+  return (
+    <div style={{
+      background: T.card,
+      border: `1px solid ${T.borderHi}`,
+      borderRadius: T.rLg,
+      padding: T.s5,
+      display: "flex", flexDirection: "column", gap: T.s4,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
+          CHOOSE A TEMPLATE
+        </div>
+        <button onClick={onCancel} style={ghostBtnStyle}>Cancel</button>
+      </div>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+        gap: T.s3,
+      }}>
+        {TEMPLATES.map((tmpl) => {
+          const suggestedTarget = tmpl.id === "emergency"
+            ? (avgMonthlySpend > 0 ? Math.round(avgMonthlySpend * 4 / 100) * 100 : 15000)
+            : tmpl.target;
+          return (
+            <button
+              key={tmpl.id}
+              onClick={() => onPick({ ...tmpl, target: suggestedTarget })}
+              style={{
+                display: "flex", flexDirection: "column", gap: T.s2,
+                background: T.surface,
+                border: `1px solid ${T.border}`,
+                borderRadius: T.rMd,
+                padding: T.s4,
+                cursor: "pointer",
+                textAlign: "left",
+                transition: "border-color 0.15s, background 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = T.blue + "80";
+                e.currentTarget.style.background = T.blue + "08";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = T.border;
+                e.currentTarget.style.background = T.surface;
+              }}
+            >
+              <span style={{ fontSize: 22 }}>{tmpl.icon}</span>
+              <span style={{ fontFamily: FU, fontSize: 13, fontWeight: 600, color: T.textHi }}>
+                {tmpl.name}
+              </span>
+              {suggestedTarget != null && (
+                <span style={{ fontFamily: FM, fontSize: 11, color: T.muted }}>
+                  Suggested: {fmtUSD(suggestedTarget)}
+                </span>
+              )}
+              {tmpl.note && (
+                <span style={{ fontFamily: FU, fontSize: 11, color: T.muted, lineHeight: 1.4 }}>
+                  {tmpl.note}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // Compute current progress for a single goal given the live account /
 // net-worth context. Pure — keep it in module scope so it's trivial to
@@ -146,7 +231,7 @@ function AccountPickerRow({ acct, selected, onToggle }) {
   );
 }
 
-function GoalForm({ initial, accountChoices, onSave, onCancel }) {
+function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
   const [name, setName] = useState(initial?.name || "");
   const [targetAmount, setTargetAmount] = useState(
     initial?.target_amount != null ? String(initial.target_amount) : ""
@@ -204,8 +289,18 @@ function GoalForm({ initial, accountChoices, onSave, onCancel }) {
       display: "flex", flexDirection: "column", gap: T.s4,
     }}>
       <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
-        {initial ? "EDIT GOAL" : "NEW GOAL"}
+        {initial?.name && !initial?.id ? `NEW GOAL · ${initial.name.toUpperCase()}` : initial ? "EDIT GOAL" : "NEW GOAL"}
       </div>
+      {templateNote && (
+        <div style={{
+          fontFamily: FU, fontSize: 12, color: T.gold, lineHeight: 1.5,
+          padding: `${T.s2} ${T.s3}`,
+          background: `${T.gold}10`, border: `1px solid ${T.gold}30`,
+          borderRadius: T.rSm,
+        }}>
+          ℹ️ {templateNote}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -431,11 +526,13 @@ export default function Goals({
   plaidAccounts = [],
   netWorthHistory = [],
   demoMode = false,
+  avgMonthlySpend = 0,
 }) {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
-  const [creating, setCreating] = useState(false);
+  // null = idle, "picker" = template picker open, {template} = GoalForm with preset
+  const [creating, setCreating] = useState(null);
   const [editingId, setEditingId] = useState(null);
 
   // Demo fixtures so the tab is meaningful before the user creates anything
@@ -553,7 +650,7 @@ export default function Goals({
     if (demoMode) {
       const id = `demo-${Date.now()}`;
       setGoals((prev) => [...prev, { id, ...payload, manual_progress: payload.manual_progress || 0 }]);
-      setCreating(false);
+      setCreating(null);
       return;
     }
     const r = await apiFetch("/api/goals", {
@@ -567,7 +664,7 @@ export default function Goals({
     }
     const saved = await r.json();
     setGoals((prev) => [...prev, saved]);
-    setCreating(false);
+    setCreating(null);
   };
 
   const updateGoal = async (id, payload) => {
@@ -630,7 +727,7 @@ export default function Goals({
             Track account balances, total net worth, or manual milestones. Projections use the last 30 days.
           </span>
         </div>
-        <button onClick={() => { setCreating(true); setEditingId(null); }} style={primaryBtnStyle}>+ New goal</button>
+        <button onClick={() => { setCreating("picker"); setEditingId(null); }} style={primaryBtnStyle}>+ New goal</button>
       </div>
 
       {err && err.pending ? (
@@ -651,11 +748,25 @@ export default function Goals({
         }}>{typeof err === "string" ? err : (err.message || "Failed to load goals")}</div>
       )}
 
-      {creating && (
+      {creating === "picker" && (
+        <TemplatePicker
+          avgMonthlySpend={avgMonthlySpend}
+          onPick={(tmpl) => setCreating({ template: tmpl })}
+          onCancel={() => setCreating(null)}
+        />
+      )}
+
+      {creating && creating !== "picker" && (
         <GoalForm
+          initial={creating.template ? {
+            name: creating.template.name,
+            target_amount: creating.template.target || "",
+            track_mode: "manual",
+          } : undefined}
           accountChoices={accountChoices}
           onSave={createGoal}
-          onCancel={() => setCreating(false)}
+          onCancel={() => setCreating(null)}
+          templateNote={creating.template?.note || null}
         />
       )}
 
@@ -672,8 +783,16 @@ export default function Goals({
           fontFamily: FU, fontSize: 14, color: T.muted,
           padding: T.s8, textAlign: "center",
           border: `1px dashed ${T.border}`, borderRadius: T.rLg,
+          display: "flex", flexDirection: "column", alignItems: "center", gap: T.s3,
         }}>
-          No goals yet. Click <strong style={{ color: T.text }}>+ New goal</strong> to create one.
+          <span style={{ fontSize: 28 }}>🎯</span>
+          <span>No goals yet.</span>
+          <button
+            onClick={() => { setCreating("picker"); setEditingId(null); }}
+            style={primaryBtnStyle}
+          >
+            Set your first goal →
+          </button>
         </div>
       )}
 
@@ -703,13 +822,152 @@ export default function Goals({
               current={current}
               slope={slope}
               accountLabels={accountLabels}
-              onEdit={() => { setEditingId(g.id); setCreating(false); }}
+              onEdit={() => { setEditingId(g.id); setCreating(null); }}
               onDelete={deleteGoal}
               onManualEdit={editManual}
             />
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── GoalsOverviewWidget ───────────────────────────────────────────────────────
+// Compact widget rendered in the Overview tab. Self-fetches goals, shows up
+// to 3 active goals as mini-cards with progress bars and projected completion.
+// Navigates to the Goals tab via onNav("goals").
+export function GoalsOverviewWidget({
+  snapAccounts = [],
+  plaidAccounts = [],
+  netWorthHistory = [],
+  demoMode = false,
+  onNav,
+  mask = (v) => v,
+}) {
+  const [goals, setGoals] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const demoPreviews = useMemo(() => [
+    { id: "d1", name: "Hajj Fund",        target_amount: 10000, track_mode: "manual", manual_progress: 3200, account_ids: [] },
+    { id: "d2", name: "Home Down Payment", target_amount: 60000, track_mode: "networth", manual_progress: 0, account_ids: [] },
+    { id: "d3", name: "Emergency Fund",    target_amount: 15000, track_mode: "manual", manual_progress: 8700, account_ids: [] },
+  ], []);
+
+  useEffect(() => {
+    if (demoMode) { setGoals(demoPreviews); setLoaded(true); return; }
+    let cancelled = false;
+    apiFetch("/api/goals").then(async (r) => {
+      if (cancelled) return;
+      if (r.ok) {
+        const json = await r.json().catch(() => ({}));
+        setGoals(Array.isArray(json?.goals) ? json.goals : []);
+      }
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+    return () => { cancelled = true; };
+  }, [demoMode, demoPreviews]);
+
+  const networthSlope = useMemo(
+    () => linearRegression(buildNetWorthSeries(netWorthHistory)).slope,
+    [netWorthHistory],
+  );
+
+  const previews = goals.slice(0, 3);
+
+  // Map template name → icon for display
+  const iconFor = (g) => (TEMPLATES.find((t) => t.name === g.name)?.icon ?? g.icon ?? "◎");
+
+  if (!loaded) return null;
+
+  return (
+    <div style={{
+      background: T.card,
+      border: `1px solid ${T.border}`,
+      borderRadius: T.rLg,
+      padding: T.s5,
+      display: "flex", flexDirection: "column", gap: T.s4,
+      boxShadow: "var(--sh-sm)",
+    }}>
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
+          SAVINGS GOALS
+          {goals.length > 0 && <span style={{ marginLeft: 6 }}>· {goals.length}</span>}
+        </span>
+        <button
+          onClick={() => onNav?.("goals")}
+          style={{
+            fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+            color: T.blue, background: "transparent", border: "none", cursor: "pointer", padding: 0,
+          }}
+        >
+          View all →
+        </button>
+      </div>
+
+      {goals.length === 0 ? (
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: T.s2,
+          padding: `${T.s4} 0`, textAlign: "center",
+        }}>
+          <span style={{ fontSize: 24 }}>🎯</span>
+          <span style={{ fontFamily: FU, fontSize: 13, color: T.muted }}>No savings goals yet</span>
+          <button
+            onClick={() => onNav?.("goals")}
+            style={{
+              fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+              color: T.blue, background: `${T.blue}18`,
+              border: `1px solid ${T.blue}30`, borderRadius: 999,
+              padding: "6px 14px", cursor: "pointer", marginTop: T.s1,
+            }}
+          >
+            Set a savings goal
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: T.s3 }}>
+          {previews.map((g) => {
+            const current = computeCurrent(g, snapAccounts, plaidAccounts, netWorthHistory);
+            const pct = Number(g.target_amount) > 0 ? (current / Number(g.target_amount)) * 100 : 0;
+            const color = pct >= 90 ? T.gain : T.blue;
+            const slope = g.track_mode === "networth" ? networthSlope : 0;
+            const proj = projectionLabel(current, Number(g.target_amount), slope);
+            return (
+              <div key={g.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: T.s2 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: T.s2, minWidth: 0 }}>
+                    <span style={{ fontSize: 16, flexShrink: 0 }}>{iconFor(g)}</span>
+                    <span style={{
+                      fontFamily: FU, fontSize: 13, fontWeight: 600, color: T.textHi,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {g.name}
+                    </span>
+                  </div>
+                  <span style={{ fontFamily: FM, fontSize: 11, color, fontWeight: 600, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+                    {Math.min(pct, 100).toFixed(0)}%
+                  </span>
+                </div>
+                <ProgressBar pct={pct} color={color} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, fontVariantNumeric: "tabular-nums" }}>
+                    {mask(fmtUSD(current))} <span style={{ opacity: 0.6 }}>/ {mask(fmtUSD(g.target_amount))}</span>
+                  </span>
+                  {slope > 0 && (
+                    <span style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>{proj}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {goals.length > 3 && (
+            <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, textAlign: "center" }}>
+              +{goals.length - 3} more goal{goals.length - 3 !== 1 ? "s" : ""}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
