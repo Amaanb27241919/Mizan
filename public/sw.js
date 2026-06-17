@@ -6,7 +6,7 @@
  *  - Network-first for /api/* and HTML navigations (with cache fallback)
  */
 
-const CACHE_NAME = "mizan-v1";
+const CACHE_NAME = "mizan-v3";
 
 const STATIC_ASSET_EXTS = [
   ".js",
@@ -30,6 +30,7 @@ const PRECACHE_URLS = [
   "/icon-192.png",
   "/icon-512.png",
   "/favicon.svg",
+  "/offline.html",
 ];
 
 self.addEventListener("install", (event) => {
@@ -103,8 +104,8 @@ async function networkFirst(request) {
     const cached = await caches.match(request);
     if (cached) return cached;
     if (isHtmlRequest(request)) {
-      const fallback = await caches.match("/");
-      if (fallback) return fallback;
+      const offline = await caches.match("/offline.html");
+      if (offline) return offline;
     }
     return Response.error();
   }
