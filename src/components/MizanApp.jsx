@@ -9204,7 +9204,14 @@ export default function Mizan(){
       .mz-dock{bottom:calc(var(--s-5) + env(safe-area-inset-bottom,0px))!important;}
 
       /* ── Overflow prevention ──────────────────────────────────── */
-      html,body{overflow-x:hidden;max-width:100%;}
+      /* Use clip on html only — overflow-x:hidden on body breaks iOS WebKit
+         inner horizontal scroll containers (e.g. the Settings TabBar). */
+      html{overflow-x:clip;}
+      /* Ensure the TabBar scroll container is properly bounded by its parent.
+         Without width:100%, a display:flex container can size to its content
+         and push past the viewport on some layout contexts. */
+      .mz-tabbar-wrap{overflow:hidden;width:100%;}
+      .mz-tabbar{width:100%;}
 
       /* ── Responsive card tables ──────────────────────────────── */
       /* Desktop: normal table visible, card list hidden */
@@ -9217,7 +9224,8 @@ export default function Mizan(){
 
       /* ── Touch targets ───────────────────────────────────────── */
       @media(max-width:640px){
-        .btn-primary,.btn-ghost,.btn-danger{min-height:44px;padding-top:11px!important;padding-bottom:11px!important;}
+        /* min-height only — don't force padding so custom button styles survive */
+        .btn-primary,.btn-ghost,.btn-danger{min-height:44px;}
         /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
         .field{font-size:16px!important;}
         input,select,textarea{font-size:16px!important;}
