@@ -42,9 +42,9 @@ export default function LegalLayout({ title, updated, children }) {
 const styles = `
 .mz-legal-root {
   min-height: 100vh;
-  background: #0B0F1E;
-  color: #E7E9EC;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  background: #0d1311;
+  color: #e9e4d6;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 15px;
   line-height: 1.7;
   display: flex;
@@ -116,12 +116,12 @@ const styles = `
   margin-bottom: 28px;
 }
 .mz-legal-main a {
-  color: #7B61FF;
+  color: #c9a24b;
   text-decoration: none;
-  border-bottom: 1px solid rgba(123, 97, 255, 0.4);
+  border-bottom: 1px solid rgba(201, 162, 75, 0.4);
 }
 .mz-legal-main a:hover {
-  border-bottom-color: #7B61FF;
+  border-bottom-color: #c9a24b;
 }
 .mz-legal-main ul, .mz-legal-main ol {
   padding-left: 22px;

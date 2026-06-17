@@ -25,13 +25,14 @@ const T = {
   s3:      "var(--s-3)",
   s4:      "var(--s-4)",
   s5:      "var(--s-5)",
-  blue:    "#5B8DEF",
-  gold:    "#D4AF37",
-  gain:    "#0FB07A",
-  loss:    "#FF6B6B",
+  blue:    "#c9a24b",   // gold — primary accent
+  gold:    "#cf9e54",   // amber
+  gain:    "#6fae8e",   // jade
+  loss:    "#c46a52",   // rust
 };
-const FM = "var(--font-mono, ui-monospace, Menlo, monospace)";
-const FU = "var(--font-ui, system-ui, sans-serif)";
+const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
+const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
+const FU = FP;
 
 function buildContext() {
   let nav = ""; let theme = "";

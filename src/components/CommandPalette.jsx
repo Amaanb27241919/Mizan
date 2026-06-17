@@ -19,7 +19,7 @@ const TT = {
   textHi: "var(--mz-textHi)",
   muted: "var(--mz-muted)",
   dim: "var(--mz-dim)",
-  blue: "#7B61FF",
+  blue: "#c9a24b",   // gold — primary accent
   rMd: "var(--r-md)",
   rLg: "var(--r-lg)",
   s2: "var(--s-2)",
@@ -28,9 +28,9 @@ const TT = {
   s5: "var(--s-5)",
 };
 
-const FU =
-  "'SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
-const FM = "'SF Mono',ui-monospace,'JetBrains Mono','Menlo','Monaco',monospace";
+const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
+const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
+const FU = FP;
 
 function isTypingTarget(el) {
   if (!el) return false;

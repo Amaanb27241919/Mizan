@@ -18,13 +18,14 @@ const T = {
   bg: "var(--mz-bg)", card: "var(--mz-card)", surface: "var(--mz-surface)",
   border: "var(--mz-border)", borderHi: "var(--mz-borderHi)",
   text: "var(--mz-text)", textHi: "var(--mz-textHi)", muted: "var(--mz-muted)",
-  blue: "#7B61FF", gain: "#10B981", gold: "#FF9F6A", loss: "#FF6B6B",
+  blue: "#c9a24b", gain: "#6fae8e", gold: "#cf9e54", loss: "#c46a52",
   s1: "var(--s-1)", s2: "var(--s-2)", s3: "var(--s-3)", s4: "var(--s-4)",
   s5: "var(--s-5)", s6: "var(--s-6)", s8: "var(--s-8)",
   rSm: "var(--r-sm)", rMd: "var(--r-md)", rLg: "var(--r-lg)",
 };
-const FU = "'SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
-const FM = "'SF Mono',ui-monospace,'JetBrains Mono','Menlo','Monaco',monospace";
+const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
+const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
+const FU = FP;
 
 const fmtUSD = (v) => `$${(+v || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const fmtDate = (s) => {
@@ -97,7 +98,7 @@ function TemplatePicker({ avgMonthlySpend, onPick, onCancel }) {
               }}
             >
               <span style={{ fontSize: 22 }}>{tmpl.icon}</span>
-              <span style={{ fontFamily: FU, fontSize: 13, fontWeight: 600, color: T.textHi }}>
+              <span style={{ fontFamily: FP, fontSize: 13, fontWeight: 600, color: T.textHi }}>
                 {tmpl.name}
               </span>
               {suggestedTarget != null && (
@@ -106,7 +107,7 @@ function TemplatePicker({ avgMonthlySpend, onPick, onCancel }) {
                 </span>
               )}
               {tmpl.note && (
-                <span style={{ fontFamily: FU, fontSize: 11, color: T.muted, lineHeight: 1.4 }}>
+                <span style={{ fontFamily: FP, fontSize: 11, color: T.muted, lineHeight: 1.4 }}>
                   {tmpl.note}
                 </span>
               )}
@@ -221,7 +222,7 @@ function AccountPickerRow({ acct, selected, onToggle }) {
       border: `1px solid ${selected ? T.blue + "60" : T.border}`,
     }}>
       <input type="checkbox" checked={selected} onChange={onToggle} style={{ cursor: "pointer" }} />
-      <span style={{ fontFamily: FU, fontSize: 12, color: T.text, flex: 1 }}>
+      <span style={{ fontFamily: FP, fontSize: 12, color: T.text, flex: 1 }}>
         {acct.label}
       </span>
       <span style={{ fontFamily: FM, fontSize: 11, color: T.muted }}>
@@ -293,7 +294,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
       </div>
       {templateNote && (
         <div style={{
-          fontFamily: FU, fontSize: 12, color: T.gold, lineHeight: 1.5,
+          fontFamily: FP, fontSize: 12, color: T.gold, lineHeight: 1.5,
           padding: `${T.s2} ${T.s3}`,
           background: `${T.gold}10`, border: `1px solid ${T.gold}30`,
           borderRadius: T.rSm,
@@ -362,7 +363,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
             borderRadius: T.rMd,
           }}>
             {accountChoices.length === 0 && (
-              <div style={{ fontFamily: FU, fontSize: 12, color: T.muted, padding: T.s3, textAlign: "center" }}>
+              <div style={{ fontFamily: FP, fontSize: 12, color: T.muted, padding: T.s3, textAlign: "center" }}>
                 No accounts connected. Switch track mode to Manual or Net worth, or connect an account first.
               </div>
             )}
@@ -393,7 +394,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
 
       {err && (
         <div style={{
-          fontFamily: FU, fontSize: 12, color: T.loss,
+          fontFamily: FP, fontSize: 12, color: T.loss,
           padding: T.s2, background: `${T.loss}15`,
           border: `1px solid ${T.loss}40`, borderRadius: T.rSm,
         }}>{err}</div>
@@ -410,7 +411,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
 }
 
 const inputStyle = {
-  fontFamily: FU, fontSize: 13, color: T.textHi,
+  fontFamily: FP, fontSize: 13, color: T.textHi,
   background: T.surface, border: `1px solid ${T.border}`,
   borderRadius: 8, padding: "8px 10px",
   outline: "none",
@@ -729,7 +730,7 @@ export default function Goals({
           <span style={{ fontFamily: FU, fontSize: 22, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
             Save toward specific targets
           </span>
-          <span style={{ fontFamily: FU, fontSize: 13, color: T.muted, letterSpacing: "-0.005em" }}>
+          <span style={{ fontFamily: FP, fontSize: 13, color: T.muted, letterSpacing: "-0.005em" }}>
             Track account balances, total net worth, or manual milestones. Projections use the last 30 days.
           </span>
         </div>
@@ -738,7 +739,7 @@ export default function Goals({
 
       {err && err.pending ? (
         <div style={{
-          fontFamily: FU, fontSize: 13, color: T.gold,
+          fontFamily: FP, fontSize: 13, color: T.gold,
           padding: T.s4, background: `${T.gold}12`,
           border: `1px solid ${T.gold}40`, borderRadius: T.rMd,
           lineHeight: 1.55,
@@ -748,7 +749,7 @@ export default function Goals({
         </div>
       ) : err && (
         <div style={{
-          fontFamily: FU, fontSize: 12, color: T.loss,
+          fontFamily: FP, fontSize: 12, color: T.loss,
           padding: T.s3, background: `${T.loss}15`,
           border: `1px solid ${T.loss}40`, borderRadius: T.rMd,
         }}>{typeof err === "string" ? err : (err.message || "Failed to load goals")}</div>
@@ -778,7 +779,7 @@ export default function Goals({
 
       {loading && !creating && goals.length === 0 && (
         <div style={{
-          fontFamily: FU, fontSize: 14, color: T.muted,
+          fontFamily: FP, fontSize: 14, color: T.muted,
           padding: T.s6, textAlign: "center",
           border: `1px dashed ${T.border}`, borderRadius: T.rLg,
         }}>Loading goals…</div>
@@ -786,7 +787,7 @@ export default function Goals({
 
       {!loading && !creating && goals.length === 0 && (
         <div style={{
-          fontFamily: FU, fontSize: 14, color: T.muted,
+          fontFamily: FP, fontSize: 14, color: T.muted,
           padding: T.s8, textAlign: "center",
           border: `1px dashed ${T.border}`, borderRadius: T.rLg,
           display: "flex", flexDirection: "column", alignItems: "center", gap: T.s3,
@@ -921,7 +922,7 @@ export function GoalsOverviewWidget({
           padding: `${T.s4} 0`, textAlign: "center",
         }}>
           <span style={{ fontSize: 24 }}>🎯</span>
-          <span style={{ fontFamily: FU, fontSize: 13, color: T.muted }}>No savings goals yet</span>
+          <span style={{ fontFamily: FP, fontSize: 13, color: T.muted }}>No savings goals yet</span>
           <button
             onClick={() => onNav?.("goals")}
             style={{
@@ -948,7 +949,7 @@ export function GoalsOverviewWidget({
                   <div style={{ display: "flex", alignItems: "center", gap: T.s2, minWidth: 0 }}>
                     <span style={{ fontSize: 16, flexShrink: 0 }}>{iconFor(g)}</span>
                     <span style={{
-                      fontFamily: FU, fontSize: 13, fontWeight: 600, color: T.textHi,
+                      fontFamily: FP, fontSize: 13, fontWeight: 600, color: T.textHi,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>
                       {g.name}

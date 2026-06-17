@@ -13,52 +13,52 @@ import ConnectionHealth from "./ConnectionHealth.jsx";
 import BugReportButton from "./BugReportButton.jsx";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
-// Savium-inspired palette: deep navy base, vibrant purple primary, soft
-// coral for highlights, soft red for warnings/losses. Theme-variable colors
-// live as CSS vars; accent hexes stay constant across light/dark.
-// `T.blue` and `T.gold` keep their property names for codebase stability —
-// values shifted to the new direction.
+// Editorial-finance palette: dark forest base, gold primary, warm paper text.
+// Halal-screened status colors follow Islamic jurisprudence conventions:
+//   jade → compliant, rust → non-compliant, amber → verify/warn,
+//   slate → unscreened, violet → crypto.
 const T = {
   bg:"var(--mz-bg)", surface:"var(--mz-surface)", card:"var(--mz-card)",
   border:"var(--mz-border)", borderHi:"var(--mz-borderHi)",
-  blue:"#7B61FF", blueDim:"#5A3FE0",        // vibrant purple (primary)
-  gold:"#FF9F6A", goldDim:"#D9764A",        // soft coral (secondary)
-  gain:"#10B981", gainBg:"var(--mz-gainBg)",
-  loss:"#FF6B6B", lossBg:"var(--mz-lossBg)", // soft red
+  blue:"#c9a24b",  blueDim:"#9a7a35",    // gold — primary accent, active chips, links
+  gold:"#cf9e54",  goldDim:"#a07e30",    // amber — warnings, zakat, secondary
+  gain:"#6fae8e",  gainBg:"var(--mz-gainBg)",  // jade — compliant
+  loss:"#c46a52",  lossBg:"var(--mz-lossBg)",  // rust — non-compliant
+  slate:"#7b94a6",   // unscreened holdings
+  violet:"#9d86b8",  // crypto holdings
   text:"var(--mz-text)", textHi:"var(--mz-textHi)",
   muted:"var(--mz-muted)", dim:"var(--mz-dim)",
-  // Surface effects (theme-variable)
   shadow:"var(--mz-shadow)", glass:"var(--mz-glass)",
-  // Token shortcuts (resolve to CSS vars set in THEME_CSS).
   s1:"var(--s-1)", s2:"var(--s-2)", s3:"var(--s-3)", s4:"var(--s-4)",
   s5:"var(--s-5)", s6:"var(--s-6)", s8:"var(--s-8)", s10:"var(--s-10)",
   s12:"var(--s-12)",
   rSm:"var(--r-sm)", rMd:"var(--r-md)", rLg:"var(--r-lg)",
 };
 const THEME_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
   :root, :root[data-theme="dark"] {
-    --mz-bg: #0B0F1E; --mz-surface: #141930; --mz-card: #1A1F35;
-    --mz-border: #252B40; --mz-borderHi: #353C55;
-    --mz-text: #C5CCDE; --mz-textHi: #ECEFF7;
-    --mz-muted: #6F7997; --mz-dim: #252B40;
-    --mz-gainBg: #0A1F18; --mz-lossBg: #1F1015;
-    --mz-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 28px rgba(0,0,0,0.5);
-    --mz-glass: rgba(20,25,48,0.72);
+    /* Forest-green dark editorial palette */
+    --mz-bg: #0d1311; --mz-surface: #111a17; --mz-card: #15201c;
+    --mz-border: #2a3a33; --mz-borderHi: #3a4f45;
+    --mz-text: #b7b3a6; --mz-textHi: #e9e4d6;
+    --mz-muted: #7d8079; --mz-dim: #2a3a33;
+    --mz-gainBg: #0e1e18; --mz-lossBg: #1e1210;
+    --mz-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 28px rgba(0,0,0,0.6);
+    --mz-glass: rgba(13,19,17,0.76);
     color-scheme: dark;
   }
   :root[data-theme="light"] {
-    --mz-bg: #F6F7FB; --mz-surface: #FFFFFF; --mz-card: #FFFFFF;
-    --mz-border: #E2E6EE; --mz-borderHi: #C6CCD9;
-    --mz-text: #1F2540; --mz-textHi: #0B0F1E;
-    --mz-muted: #6F7997; --mz-dim: #EEF0F5;
-    --mz-gainBg: #F0FBF4; --mz-lossBg: #FFF1F1;
-    --mz-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 20px rgba(15,18,30,0.06);
-    --mz-glass: rgba(255,255,255,0.78);
+    /* Warm paper light theme */
+    --mz-bg: #f5f2eb; --mz-surface: #ffffff; --mz-card: #ffffff;
+    --mz-border: #e4ddd1; --mz-borderHi: #c8beaf;
+    --mz-text: #3d3a35; --mz-textHi: #1a1714;
+    --mz-muted: #7d8079; --mz-dim: #ece8e0;
+    --mz-gainBg: #f0faf5; --mz-lossBg: #fdf2ef;
+    --mz-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 6px 20px rgba(15,18,12,0.06);
+    --mz-glass: rgba(245,242,235,0.82);
     color-scheme: light;
   }
-  /* Spacing scale — 4 px base. Reach for these instead of magic numbers
-     when laying out new surfaces; existing inline styles can adopt them
-     incrementally. */
   :root {
     --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
     --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
@@ -68,14 +68,23 @@ const THEME_CSS = `
     --sh-md: 0 4px 14px rgba(0,0,0,0.18);
     --sh-lg: 0 12px 36px rgba(0,0,0,0.32);
   }
+  /* Ambient glows — gold top-right, jade bottom-left — keep dark from feeling void */
+  body::before{content:"";position:fixed;top:-30%;right:-20%;width:60%;height:60%;
+    background:radial-gradient(ellipse,#c9a24b09 0%,transparent 65%);
+    pointer-events:none;z-index:0;}
+  body::after{content:"";position:fixed;bottom:-20%;left:-15%;width:50%;height:50%;
+    background:radial-gradient(ellipse,#6fae8e07 0%,transparent 65%);
+    pointer-events:none;z-index:0;}
+  /* Base body font — elements without explicit fontFamily inherit IBM Plex Sans */
+  body{font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;}
 `;
-// SF Pro Display + SF Mono are first-party on macOS / iOS; on other
-// platforms fall back to the platform UI stack (Segoe UI on Windows,
-// Roboto on Android, system sans elsewhere). Avoid the Google-Fonts
-// preconnect entirely — CSP no longer needs to allow it for fonts.
-const FU = "'SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
-const FM = "'SF Mono',ui-monospace,'JetBrains Mono','Menlo','Monaco',monospace";
-const GF = ""; // unused — kept as an export shim in case other code references it.
+// Fraunces (serif display) — big titles, section headings, card titles, stat numbers
+const FU = "'Fraunces','Georgia','Times New Roman',serif";
+// IBM Plex Sans — all paragraph / description / body text
+const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
+// IBM Plex Mono — every label, ticker symbol, chip, eyebrow, meta tag, number
+const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
+const GF = ""; // unused shim
 
 /* ─── DATA ───────────────────────────────────────────── */
 const HOLDINGS = [
@@ -828,7 +837,7 @@ function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar-w
     padding:`8px ${T.s4}`,background:on?T.card:"transparent",
     border:"none",borderRadius:T.rMd,
     color:on?T.textHi:T.muted,
-    fontFamily:FU,fontSize:13,fontWeight:on?600:500,letterSpacing:"-0.005em",
+    fontFamily:FP,fontSize:13,fontWeight:on?600:500,letterSpacing:"-0.005em",
     cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,
     boxShadow:on?`0 1px 3px rgba(0,0,0,0.18), 0 0 0 1px ${acc}24`:"none",
     transition:"all 0.15s ease",
@@ -1052,11 +1061,11 @@ function SectorBreakdown({holdings=[],total=0}){
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
       <div>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s1}}>SECTOR ALLOCATION</div>
-        <div style={{fontFamily:FU,fontSize:13,color:T.muted,letterSpacing:"-0.005em"}}>{sorted.length} sector{sorted.length===1?"":"s"} · {kf(tracked)} tracked</div>
+        <div style={{fontFamily:FP,fontSize:13,color:T.muted,letterSpacing:"-0.005em"}}>{sorted.length} sector{sorted.length===1?"":"s"} · {kf(tracked)} tracked</div>
       </div>
       {topSector&&<div style={{textAlign:"right"}}>
         <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>TOP SECTOR</div>
-        <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginTop:2}}>{topSector[0]}</div>
+        <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginTop:2}}>{topSector[0]}</div>
         <div style={{fontFamily:FM,fontSize:11,color:T.blue,fontVariantNumeric:"tabular-nums",marginTop:2}}>{(total>0?(topSector[1]/total)*100:0).toFixed(1)}%</div>
       </div>}
     </div>
@@ -1067,7 +1076,7 @@ function SectorBreakdown({holdings=[],total=0}){
           const pct=total>0?(val/total)*100:0;
           return<div key={sec} style={{display:"grid",gridTemplateColumns:"12px 1fr auto auto",gap:T.s2,alignItems:"center",padding:`${T.s1} 0`,borderBottom:i===sorted.length-1?"none":`1px solid ${T.border}`}}>
             <span style={{width:8,height:8,borderRadius:2,background:colorOf(sec,i)}}/>
-            <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sec}</span>
+            <span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sec}</span>
             <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums",marginRight:T.s3}}>{kf(val)}</span>
             <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:48,textAlign:"right"}}>{pct.toFixed(1)}%</span>
           </div>;
@@ -1181,7 +1190,7 @@ function NicknameEditor({accountId,defaultName,nickname,onSetNickname,
         aria-label="Account nickname"
         style={{
           flex:"1 1 auto",minWidth:0,
-          fontFamily:FU,fontSize:(primaryStyle&&primaryStyle.fontSize)||13,
+          fontFamily:FP,fontSize:(primaryStyle&&primaryStyle.fontSize)||13,
           color:T.textHi,letterSpacing:"-0.005em",
           background:T.surface,border:`1px solid ${T.blue}60`,borderRadius:T.rSm,
           padding:"3px 6px",outline:"none",
@@ -1508,7 +1517,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     {isEmpty&&<BentoTile glass style={{textAlign:"center",padding:`${T.s10} ${T.s8}`}}>
       <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.22em",fontWeight:600,marginBottom:T.s3}}>WELCOME TO MĪZAN</div>
       <div style={{fontFamily:FU,fontSize:30,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s2}}>Connect your first brokerage</div>
-      <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:540,margin:`0 auto ${T.s6}`}}>
+      <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:540,margin:`0 auto ${T.s6}`}}>
         Link Fidelity, Robinhood, Schwab, Coinbase, or any of 60+ brokers via SnapTrade. Your real holdings, activity, and Sharia screening will appear here.
       </div>
       <div style={{display:"flex",gap:T.s2,justifyContent:"center",flexWrap:"wrap"}}>
@@ -1615,12 +1624,12 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
               const pct=t>0?(s.value/t*100):0;
               return<div key={s.label} style={{display:"flex",alignItems:"center",gap:T.s2}}>
                 <span style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/>
-                <span style={{fontFamily:FU,fontSize:13,color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
+                <span style={{fontFamily:FP,fontSize:13,color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
                 <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{valuesHidden?"••":`${pct.toFixed(1)}%`}</span>
               </div>;
             })}
           </div>
-        </div>:<div style={{fontFamily:FU,fontSize:13,color:T.muted,padding:`${T.s5} 0`,textAlign:"center"}}>Connect a brokerage to see your allocation.</div>}
+        </div>:<div style={{fontFamily:FP,fontSize:13,color:T.muted,padding:`${T.s5} 0`,textAlign:"center"}}>Connect a brokerage to see your allocation.</div>}
       </BentoTile>
 
       <BentoTile>
@@ -1656,7 +1665,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
           const gpct=gp(h),pof=tot>0?mv(h)/tot*100:0;
           return<div key={h.tk+(h.ac_||"")} style={{display:"flex",alignItems:"center",gap:T.s4,padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
             <div style={{width:56}}>
-              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{h.tk}</div>
+              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{h.tk}</div>
               <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2,letterSpacing:"0.02em"}}>{h.br}</div>
             </div>
             <div style={{flex:1,minWidth:50}}>
@@ -1666,7 +1675,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
               <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginTop:T.s1,letterSpacing:"0.04em"}}>{valuesHidden?"••% of book":`${pof.toFixed(1)}% of book`}</div>
             </div>
             <div style={{width:90,textAlign:"right"}}>
-              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(mv(h)))}</div>
+              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(mv(h)))}</div>
               <div style={{fontFamily:FM,fontSize:10,fontWeight:500,color:fc(gpct),marginTop:2}}>{valuesHidden?"••":fp(gpct)}</div>
             </div>
             <Sk vals={Array.from({length:24},()=>mv(h)*(1+(Math.random()-.48)*.02))} color={fc(gpct)} w={80} h={28} fill/>
@@ -1716,7 +1725,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
                 defaultName={a.nm}
                 nickname={nicknames?.[a.id]||""}
                 onSetNickname={onSetNickname}
-                primaryStyle={{fontFamily:FU,fontSize:11,color:nicknames?.[a.id]?T.textHi:T.muted,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.id]?600:400}}
+                primaryStyle={{fontFamily:FP,fontSize:11,color:nicknames?.[a.id]?T.textHi:T.muted,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.id]?600:400}}
                 pencilStyle={{fontSize:12}}
               />
               {nicknames?.[a.id]&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{a.nm}</div>}
@@ -1957,7 +1966,7 @@ function AAOIFIScreener({holdings=[]}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
         <div style={{maxWidth:680}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SHARIA COMPLIANCE</div>
-          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,letterSpacing:"-0.005em"}}>
             Live screening across {Object.keys(STANDARDS).length} frameworks. Pick a primary standard for row badges; every standard runs in the background so you see a per-position pass count. Data: Finnhub fundamentals.
           </p>
         </div>
@@ -2029,7 +2038,7 @@ function AAOIFIScreener({holdings=[]}){
             borderRadius:T.rMd,
           }}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s1}}>
-              <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{s.name}</span>
+              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{s.name}</span>
               <span style={{fontFamily:FM,fontSize:10,fontWeight:500,color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
             </div>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
@@ -2037,18 +2046,18 @@ function AAOIFIScreener({holdings=[]}){
             </div>
           </div>)}
         </div>
-        <div style={{marginTop:T.s3,fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+        <div style={{marginTop:T.s3,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
           <strong style={{color:T.text,fontWeight:600}}>Universal:</strong> Sector exclusion across all standards (banking, alcohol, tobacco, gambling, weapons, conventional insurance, adult entertainment, pork).
         </div>
       </BentoTile>
       <BentoTile accent={T.gold}>
         <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PURIFICATION GUIDE</div>
-        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,letterSpacing:"-0.005em"}}>
+        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,letterSpacing:"-0.005em"}}>
           Income from non-compliant or mixed-revenue companies must be purified — the impure portion is donated to charity (Sadaqah), without expectation of reward. The estimate above is a conservative proxy; for precision, multiply each holding's dividend by the company's non-permissible-income ratio.
         </p>
         <div style={{marginTop:T.s4,padding:`${T.s3} ${T.s4}`,background:`linear-gradient(135deg, ${T.gold}10, transparent 70%), ${T.surface}`,borderRadius:T.rMd,border:`1px solid ${T.gold}30`}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>EXIT GUIDANCE</div>
-          <div style={{fontFamily:FU,fontSize:13,color:T.text,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+          <div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.55,letterSpacing:"-0.005em"}}>
             For Non-Compliant positions: sell at the next reasonable opportunity, donate any gains realized after purification to charity, and replace with a Sharia-screened equivalent (SPUS / HLAL / UMMA / SPSK).
           </div>
         </div>
@@ -2147,7 +2156,7 @@ function TaxPlanner({holdings=[],activities=[],snapAccounts=[]}){
 
     {/* ─── Bracket controls + intro ────────────────── */}
     <BentoTile>
-      <div style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.55,maxWidth:680,marginBottom:T.s3,letterSpacing:"-0.005em"}}>
+      <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,maxWidth:680,marginBottom:T.s3,letterSpacing:"-0.005em"}}>
         Surfaces unrealized losses you could harvest to offset taxable gains. Wash-sale rule: a position sold at a loss can't be repurchased within 30 days. Estimates assume your combined federal + state marginal rate.
       </div>
       <div style={{display:"flex",gap:T.s3,alignItems:"center",fontFamily:FM,fontSize:11,color:T.muted,flexWrap:"wrap"}}>
@@ -2165,19 +2174,19 @@ function TaxPlanner({holdings=[],activities=[],snapAccounts=[]}){
     {/* ─── Losers table ────────────────────────────── */}
     {losers.length===0
       ?<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
-        <div style={{fontFamily:FU,fontSize:14,fontWeight:500,color:T.muted}}>No unrealized losses across visible accounts.</div>
-        <div style={{fontFamily:FU,fontSize:12,color:T.muted,marginTop:T.s1}}>Nothing to harvest right now.</div>
+        <div style={{fontFamily:FP,fontSize:14,fontWeight:500,color:T.muted}}>No unrealized losses across visible accounts.</div>
+        <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:T.s1}}>Nothing to harvest right now.</div>
       </BentoTile>
       :<BentoTile style={{padding:0,overflow:"hidden"}}>
           <Tbl cols={[
             {l:"Symbol",r_:r=><div>
-              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:r.sh_==="haram"?T.loss:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</div>
+              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:r.sh_==="haram"?T.loss:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</div>
               <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{r.ac_}</div>
             </div>},
             {l:"Shares",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.sh.toFixed(3)}</span>},
             {l:"Avg Cost",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{f$(r.ac)}</span>},
             {l:"Current",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}>{f$(r.px)}</span>},
-            {l:"Loss $",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.loss,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(Math.abs(r._loss))}</span>},
+            {l:"Loss $",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.loss,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(Math.abs(r._loss))}</span>},
             {l:"Loss %",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.loss,fontVariantNumeric:"tabular-nums"}}>{fp(r._lossPct)}</span>},
             {l:"Wash Risk",r_:r=>recentSells.has(r.tk)?<Tag label="< 30d sold" color={T.loss}/>:<Tag label="Clear" color={T.gain}/>},
             {l:"Replace With",r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:r.sh_==="haram"?T.loss:T.gold}}>{r._replacement}</span>},
@@ -2288,7 +2297,7 @@ function DocumentsPanel({documents=[],accounts=[]}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap",marginBottom:T.s4}}>
         <div>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YOUR FILES</div>
-          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
             Upload CSVs, PDFs, DOCX, images — any file up to 2 MB. Stored privately to your account, synced across devices, with duplicate detection by name + size.
           </p>
         </div>
@@ -2299,14 +2308,14 @@ function DocumentsPanel({documents=[],accounts=[]}){
       </div>
       {uploadStatus&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:uploadStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(uploadStatus.ok?T.gain:T.loss)+"30"}`,color:uploadStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{uploadStatus.ok?"✓ ":"✗ "}{uploadStatus.msg}</div>}
       {userDocs.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
           No files yet. Click <strong style={{color:T.text}}>Upload Files</strong> to add CSVs, PDFs, or DOCX. Files sync to your account so they appear on every device you sign in from.
         </div>
         :<div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
             {l:"Uploaded",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.uploadedAt)}</span>},
             {l:"Name",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-              <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>
+              <span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>
               {r.duplicate&&<Tag label="Duplicate" color={T.gold}/>}
             </div>},
             {l:"Type",r_:r=>{
@@ -2328,7 +2337,7 @@ function DocumentsPanel({documents=[],accounts=[]}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap",marginBottom:T.s4}}>
         <div>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FROM YOUR BROKERS</div>
-          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:600}}>
+          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:600}}>
             Statements, 1099s, trade confirmations, and broker notices pulled from SnapTrade. Coverage varies by broker — Fidelity + Robinhood expose statements + tax docs; Coinbase exports trade confirms.
           </p>
         </div>
@@ -2362,14 +2371,14 @@ function DocumentsPanel({documents=[],accounts=[]}){
       </div>
 
       {filtered.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
           {documents.length===0?"No documents yet — SnapTrade syncs broker documents on a delay. Fidelity and Robinhood usually populate within 24 hours of connection.":"No documents match these filters."}
         </div>
         :<div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
             <Tbl cols={[
               {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.date||r.created_at||"—"}</span>},
               {l:"Type",r_:r=>{const t=(r.type||r.document_type||"OTHER").toUpperCase();return<Tag label={t.replace(/_/g," ")} color={colorOf(t)}/>;}},
-              {l:"Name",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name||r.title||r.description||r.id||"—"}</span>},
+              {l:"Name",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name||r.title||r.description||r.id||"—"}</span>},
               {l:"Account",r_:r=>{const id=r.account?.id||r.accountId||r.account_id;return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{acctNameById[id]||r.institution_name||"—"}</span>;}},
               {l:"",r:true,r_:r=>{const url=r.downloadUrl||r.download_url||r.url;return url?<a href={url} target="_blank" rel="noreferrer" style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,textDecoration:"none"}}>Download ↗</a>:<span style={{color:T.muted,fontSize:10}}>—</span>;}},
             ]} rows={filtered}/>
@@ -2500,19 +2509,19 @@ function ActivityPanel({activities=[],accounts=[]}){
 
     {rows.length===0?
       <BentoTile style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
-        <div style={{fontFamily:FU,fontSize:14,fontWeight:500,color:T.muted}}>No activity in this range.</div>
-        <div style={{fontFamily:FU,fontSize:12,color:T.muted,marginTop:T.s1}}>Widen the date filter or run Sync All.</div>
+        <div style={{fontFamily:FP,fontSize:14,fontWeight:500,color:T.muted}}>No activity in this range.</div>
+        <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:T.s1}}>Widen the date filter or run Sync All.</div>
       </BentoTile>
       :
       <BentoTile style={{padding:0,overflow:"hidden"}}>
         <Tbl cols={[
           {l:"Date",   r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.trade_date||r.settlement_date||"—"}</span>},
           {l:"Type",   r_:r=>{const t=(r.type||"").toUpperCase();return<Tag label={t||"—"} color={colorOf(t)}/>;}},
-          {l:"Symbol", r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{fmtSym(r.symbol)}</span>},
+          {l:"Symbol", r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{fmtSym(r.symbol)}</span>},
           {l:"Account",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{acctNameById[r.account?.id]||r.institution_name||"—"}</span>},
           {l:"Quantity",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.units?(+r.units).toLocaleString("en-US",{maximumFractionDigits:4}):"—"}</span>},
           {l:"Price",   r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.price?f$(r.price):"—"}</span>},
-          {l:"Amount",  r:true,r_:r=>{const v=+r.amount||0;return<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:v>0?T.gain:v<0?T.loss:T.text,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{v>0?"+":v<0?"−":""}{f$(Math.abs(v))}</span>;}},
+          {l:"Amount",  r:true,r_:r=>{const v=+r.amount||0;return<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:v>0?T.gain:v<0?T.loss:T.text,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{v>0?"+":v<0?"−":""}{f$(Math.abs(v))}</span>;}},
         ]} rows={rows.slice(0,500)}/>
         {rows.length>500&&<div style={{padding:`${T.s2} ${T.s4}`,fontFamily:FM,fontSize:10,color:T.muted,textAlign:"center",borderTop:`1px solid ${T.border}`}}>Showing first 500 of {rows.length} — narrow filters to see more.</div>}
       </BentoTile>
@@ -2812,9 +2821,9 @@ function PurificationPanel({ demoMode = false, onPurified }) {
             <Skeleton w="60%" h={13} /><Skeleton w="80%" h={13} /><Skeleton w="50%" h={13} />
           </div>
         ) : error ? (
-          <div style={{ padding: `${T.s6} ${T.s5}`, fontFamily: FU, fontSize: 13, color: T.muted, textAlign: "center" }}>{error}</div>
+          <div style={{ padding: `${T.s6} ${T.s5}`, fontFamily: FP, fontSize: 13, color: T.muted, textAlign: "center" }}>{error}</div>
         ) : items.length === 0 ? (
-          <div style={{ padding: `${T.s8} ${T.s5}`, textAlign: "center", fontFamily: FU, fontSize: 13, color: T.muted }}>
+          <div style={{ padding: `${T.s8} ${T.s5}`, textAlign: "center", fontFamily: FP, fontSize: 13, color: T.muted }}>
             {demoMode ? "No purification data." : "No dividend activity found for this year. Connect a brokerage account to track dividends."}
           </div>
         ) : (
@@ -2841,7 +2850,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                     <tr key={it.fingerprint} className="trow" style={{ borderBottom: `1px solid ${T.border}`, opacity: done ? 0.62 : 1 }}>
                       {/* Ticker */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, borderBottom: `1px solid ${T.border}` }}>
-                        <div style={{ fontFamily: FU, fontSize: 14, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>{it.ticker}</div>
+                        <div style={{ fontFamily: FP, fontSize: 14, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>{it.ticker}</div>
                       </td>
                       {/* Date */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, borderBottom: `1px solid ${T.border}` }}>
@@ -2885,7 +2894,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                       </td>
                       {/* Purification owed */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "right", borderBottom: `1px solid ${T.border}` }}>
-                        <span style={{ fontFamily: FU, fontSize: 13, fontWeight: 600, color: done ? T.muted : T.gold, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(it.purificationOwed)}</span>
+                        <span style={{ fontFamily: FP, fontSize: 13, fontWeight: 600, color: done ? T.muted : T.gold, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(it.purificationOwed)}</span>
                       </td>
                       {/* Status */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "center", borderBottom: `1px solid ${T.border}` }}>
@@ -3152,10 +3161,10 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
             [`Nisab (${settings.nisabStandard})`,fmtUSD(nisabUsd)],
           ].map(([l,v,b])=><div key={l}>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
-            <div style={{fontFamily:FU,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
+            <div style={{fontFamily:FP,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
           </div>)}
         </div>
-        {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55}}>Connect a brokerage or add manual assets to populate these figures.</div>}
+        {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55}}>Connect a brokerage or add manual assets to populate these figures.</div>}
       </BentoTile>
 
       <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -3251,7 +3260,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
           <span style={{fontSize:20,lineHeight:1}}>🌿</span>
           <div>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>DIVIDEND PURIFICATION</div>
-            <div style={{fontFamily:FU,fontSize:12,color:T.muted}}>AAOIFI-compliant — purify impure income from halal-screened funds</div>
+            <div style={{fontFamily:FP,fontSize:12,color:T.muted}}>AAOIFI-compliant — purify impure income from halal-screened funds</div>
           </div>
         </div>
         {demoMode&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
@@ -3344,16 +3353,16 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         </div>
       </div>
       {sadaqah.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No donations logged yet. Add one with the form above, or import a CSV.</div>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No donations logged yet. Add one with the form above, or import a CSV.</div>
         :filtered.length===0
-          ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No donations match these filters. <button onClick={()=>{setFSearch("");setFStatus("all");setFMethod("all");setFAccount("all");setFYear("all");}} style={{background:"none",border:"none",color:T.blue,cursor:"pointer",textDecoration:"underline",font:"inherit"}}>Clear filters</button></div>
+          ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No donations match these filters. <button onClick={()=>{setFSearch("");setFStatus("all");setFMethod("all");setFAccount("all");setFYear("all");}} style={{background:"none",border:"none",color:T.blue,cursor:"pointer",textDecoration:"underline",font:"inherit"}}>Clear filters</button></div>
           :<Tbl cols={[
             {l:"Date",        r_:r=>editingId===r.id
               ?<input type="date" value={editDraft.dt} onChange={e=>setEditDraft({...editDraft,dt:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
               :<span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.dt||"—"}</span>},
             {l:"Organization",r_:r=>editingId===r.id
               ?<input value={editDraft.org} onChange={e=>setEditDraft({...editDraft,org:e.target.value})} className="field" style={{fontSize:12,padding:`4px ${T.s2}`}}/>
-              :<span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.org}</span>},
+              :<span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.org}</span>},
             {l:"Method",      r_:r=>editingId===r.id
               ?<input list="dn-methods" value={editDraft.method} onChange={e=>setEditDraft({...editDraft,method:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
               :<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.method||"—"}</span>},
@@ -3362,7 +3371,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
               :<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.account||"—"}</span>},
             {l:"Amount",r:true,r_:r=>editingId===r.id
               ?<input type="number" step="0.01" value={editDraft.amt} onChange={e=>setEditDraft({...editDraft,amt:e.target.value})} className="field" style={{fontSize:12,padding:`4px ${T.s2}`,fontVariantNumeric:"tabular-nums",textAlign:"right"}}/>
-              :<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.gold,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.amt)}</span>},
+              :<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.gold,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.amt)}</span>},
             {l:"Status",      r_:r=>editingId===r.id
               ?<select value={editDraft.done?"done":"pledged"} onChange={e=>setEditDraft({...editDraft,done:e.target.value==="done"})} className="field" style={{fontSize:10,padding:`4px ${T.s2}`,cursor:"pointer"}}>
                 <option value="done">Given</option>
@@ -3548,13 +3557,13 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PORTFOLIO REBALANCE</div>
         <div style={{fontFamily:FU,fontSize:34,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmt$(targetedTotal)}</div>
         <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>rebalanceable · total NAV {fmt$(total)} {byClass.other>0?<>· <span style={{color:T.dim}}>{fmt$(byClass.other)} held outside</span></>:null}</div>
-        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
+        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
           Set target weights per asset class. Mizan compares to your live allocation, flags drift, and proposes trades — one click pre-fills the Order Ticket.
         </p>
       </BentoTile>
       <BentoTile accent={halalOnly?T.gold:undefined} style={halalOnly?{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}:undefined}>
         <div style={{fontFamily:FM,fontSize:10,color:halalOnly?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>HALAL-ONLY REBALANCE</div>
-        <p style={{fontFamily:FU,fontSize:12,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.5}}>
+        <p style={{fontFamily:FP,fontSize:12,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.5}}>
           Liquidates every non-compliant holding first, then buys only screened halal proxies (SPUS, HLAL, SPSK, SPRE).
         </p>
         <button onClick={toggleHalal} style={{
@@ -3601,11 +3610,11 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>green ≤ 5% · yellow ≤ 10% · red &gt; 10%</span>
       </div>
       <Tbl cols={[
-        {l:"Asset Class",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.cls.label}</span>},
-        {l:"Target %",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.tgt.toFixed(1)}%</span>},
-        {l:"Current %",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{r.cur.toFixed(1)}%</span>},
+        {l:"Asset Class",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.cls.label}</span>},
+        {l:"Target %",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.tgt.toFixed(1)}%</span>},
+        {l:"Current %",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{r.cur.toFixed(1)}%</span>},
         {l:"Current $",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmt$(r.currentValue)}</span>},
-        {l:"Drift",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,fontVariantNumeric:"tabular-nums",color:r.drift>0?T.gain:r.drift<0?T.loss:T.muted}}>{r.drift>0?"+":""}{r.drift.toFixed(1)}%</span>},
+        {l:"Drift",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,fontVariantNumeric:"tabular-nums",color:r.drift>0?T.gain:r.drift<0?T.loss:T.muted}}>{r.drift>0?"+":""}{r.drift.toFixed(1)}%</span>},
         {l:"$ Move",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.drift>0?"−":"+"}{fmt$(Math.abs(r.dollarDrift))}</span>},
         {l:"Status",r_:r=><Tag label={r.status==="ok"?"OK":r.status==="warn"?"Warning":"Alert"} color={r.status==="ok"?T.gain:r.status==="warn"?T.gold:T.loss}/>},
       ]} rows={driftRows}/>
@@ -3623,7 +3632,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         </span>
       </div>
       {suggestions.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>
           {total===0
             ?"Connect a brokerage or enable demo mode to see rebalance suggestions."
             :sumOK
@@ -3632,10 +3641,10 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         </div>
         :<Tbl cols={[
           {l:"Action",r_:r=><Tag label={r.side.toUpperCase()} color={r.side==="sell"?T.loss:T.gain}/>},
-          {l:"Symbol",r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.sym}</span>},
-          {l:"Qty",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontVariantNumeric:"tabular-nums",color:T.text}}>{r.qty.toLocaleString()}</span>},
+          {l:"Symbol",r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.sym}</span>},
+          {l:"Qty",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontVariantNumeric:"tabular-nums",color:T.text}}>{r.qty.toLocaleString()}</span>},
           {l:"~Price",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.muted,fontVariantNumeric:"tabular-nums"}}>${r.price.toFixed(2)}</span>},
-          {l:"~Amount",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:r.side==="sell"?T.loss:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmt$(r.amount)}</span>},
+          {l:"~Amount",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.side==="sell"?T.loss:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmt$(r.amount)}</span>},
           {l:"Reason",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.4}}>{r.reason}</span>},
           {l:"",r:true,r_:r=><button
             onClick={()=>copyToOrder(r)}
@@ -3737,7 +3746,7 @@ function HoldingExpanded({ tk, state }) {
         <span style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>NEXT EARNINGS</span>
         {earnings ? (
           <div style={{ display: "flex", alignItems: "center", gap: T.s2, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FU, fontSize: 13, fontWeight: 600, color: T.textHi }}>
+            <span style={{ fontFamily: FP, fontSize: 13, fontWeight: 600, color: T.textHi }}>
               {earnings.date}
               {earnings.hour && (
                 <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, marginLeft: T.s1, fontWeight: 400 }}>
@@ -3773,7 +3782,7 @@ function HoldingExpanded({ tk, state }) {
                 }} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{
-                    fontFamily: FU, fontSize: 13, fontWeight: 500, color: T.textHi, lineHeight: 1.4,
+                    fontFamily: FP, fontSize: 13, fontWeight: 500, color: T.textHi, lineHeight: 1.4,
                     overflow: "hidden", display: "-webkit-box",
                     WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                   }}>
@@ -3873,7 +3882,7 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp })
                       }}>▶</span>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: T.s1 }}>
-                          <span style={{ fontFamily: FU, fontSize: 14, fontWeight: 600, color: r.sh_ === "haram" ? T.loss : T.textHi, letterSpacing: "-0.01em" }}>{r.tk}</span>
+                          <span style={{ fontFamily: FP, fontSize: 14, fontWeight: 600, color: r.sh_ === "haram" ? T.loss : T.textHi, letterSpacing: "-0.01em" }}>{r.tk}</span>
                           {earningsSoon && (
                             <span title={`Earnings ${nextE.date}`} style={{
                               fontFamily: FM, fontSize: 9, fontWeight: 600, letterSpacing: "0.04em",
@@ -3907,7 +3916,7 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp })
                   </td>
                   {/* Mkt Value */}
                   <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
-                    <span style={{ fontFamily: FU, fontSize: 14, fontWeight: 600, color: T.textHi, letterSpacing: "-0.005em", fontVariantNumeric: "tabular-nums" }}>{mask(f$(mv(r)))}</span>
+                    <span style={{ fontFamily: FP, fontSize: 14, fontWeight: 600, color: T.textHi, letterSpacing: "-0.005em", fontVariantNumeric: "tabular-nums" }}>{mask(f$(mv(r)))}</span>
                   </td>
                   {/* Gain/Loss */}
                   <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
@@ -4041,7 +4050,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
               const pct=tt>0?(s.value/tt*100):0;
               return<div key={s.label} style={{display:"flex",alignItems:"center",gap:T.s2}}>
                 <span style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/>
-                <span style={{fontFamily:FU,fontSize:13,color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
+                <span style={{fontFamily:FP,fontSize:13,color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
                 <span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{mask(kf(s.value))}</span>
                 <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:45,textAlign:"right"}}>{valuesHidden?"••":`${pct.toFixed(1)}%`}</span>
               </div>;
@@ -4101,7 +4110,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
           // state below replaces this only if filters knocked everything out.
           ?<div style={{padding:T.s4}}><SkeletonTable rows={8} cols={6}/></div>
           :filtered.length===0
-            ?<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No positions match these filters.</div>
+            ?<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No positions match these filters.</div>
             :null}
       </BentoTile>
 
@@ -4149,13 +4158,13 @@ function Watchlist({live=[],watchlist=[],onAdd,onRemove,onSetAlert,onAlertPermis
       </div>
     </div>
     {watchlist.length===0
-      ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+      ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
           No symbols yet. Add a ticker above to track price + set alerts.
         </div>
       :<div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
-            {l:"Symbol",r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.symbol}</span>},
-            {l:"Price",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;return<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:px?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{px?f$(px):"—"}</span>;}},
+            {l:"Symbol",r_:r=><span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.symbol}</span>},
+            {l:"Price",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;return<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:px?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{px?f$(px):"—"}</span>;}},
             {l:"Change",r:true,r_:r=>{const p=live.find(l=>l.tk===r.symbol)?.pct;return<span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:fc(p),fontVariantNumeric:"tabular-nums"}}>{p?fp(p):"—"}</span>;}},
             {l:"Trend",r_:r=>{
               const px=live.find(l=>l.tk===r.symbol)?.price;
@@ -4229,7 +4238,7 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
         ].map(s=><div key={s.l}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:T.s1}}>
             <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>{s.l.toUpperCase()}</span>
-            <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{s.fmt(s.v)}</span>
+            <span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{s.fmt(s.v)}</span>
           </div>
           <input type="range" min={s.min} max={s.max} step={s.step} value={s.v} onChange={e=>s.set(+e.target.value)} style={{width:"100%",accentColor:T.blue,cursor:"pointer",height:4}}/>
         </div>)}
@@ -4294,7 +4303,7 @@ function OrderPreviewModal({preview={},onConfirm,onCancel,busy,side,sym,qty}){
       <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi}}>Confirm {side==="buy"?"Buy":"Sell"} {sym}</div>
-          <div style={{fontFamily:FU,fontSize:11,color:T.muted,marginTop:2}}>SnapTrade preview · review before placing</div>
+          <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:2}}>SnapTrade preview · review before placing</div>
         </div>
         <button onClick={onCancel} style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
       </div>
@@ -4314,7 +4323,7 @@ function OrderPreviewModal({preview={},onConfirm,onCancel,busy,side,sym,qty}){
         {warnings.length>0&&<div style={{padding:"10px 12px",background:`${T.gold}0E`,border:`1px solid ${T.gold}30`,borderRadius:8,fontFamily:FM,fontSize:10,color:T.gold,lineHeight:1.5}}>
           ⚠ {Array.isArray(warnings)?warnings.join(" · "):String(warnings)}
         </div>}
-        <div style={{padding:"10px 12px",background:`${T.gain}0E`,border:`1px solid ${T.gain}25`,borderRadius:8,fontFamily:FU,fontSize:11,color:T.text,lineHeight:1.5}}>
+        <div style={{padding:"10px 12px",background:`${T.gain}0E`,border:`1px solid ${T.gain}25`,borderRadius:8,fontFamily:FP,fontSize:11,color:T.text,lineHeight:1.5}}>
           ✓ Sharia pre-check: spot equity, no margin, no derivatives. Run the screener after placing if {sym} isn't classified yet.
         </div>
       </div>
@@ -4348,7 +4357,7 @@ function BotDashboard({activities=[],accounts=[]}){
   }
   const recentTrades=[...buys,...sells].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")).slice(0,20);
   return<div style={{display:"flex",flexDirection:"column",gap:14}}>
-    <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:680}}>
+    <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:680}}>
       Live trading state. Once you place orders via the Order Ticket, fills flow into Activity and surface here as P&L, win rate, and current streak.
     </p>
     <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
@@ -4431,7 +4440,7 @@ function HistoricalBacktest(){
           <div><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>TO</div>
             <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="field" style={{fontSize:12}}/></div>
         </div>
-        <div style={{padding:`${T.s3} ${T.s3}`,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`,fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+        <div style={{padding:`${T.s3} ${T.s3}`,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
           <strong style={{color:T.text,fontWeight:600}}>Strategy:</strong> SMA-50 / SMA-200 crossover. Buy when 50-day crosses above 200-day; sell on cross below. Free-tier Polygon caps at 2 years of daily bars.
         </div>
         <button onClick={run} disabled={busy} className="btn-primary" style={{padding:`10px ${T.s4}`}}>{busy?"Fetching bars…":"Run Backtest"}</button>
@@ -4457,7 +4466,7 @@ function HistoricalBacktest(){
     <BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>{symbol} · CLOSE / SMA-50 / SMA-200</div>
       {bars.length===0
-        ?<div style={{height:320,display:"flex",alignItems:"center",justifyContent:"center",border:`1px dashed ${T.border}`,borderRadius:T.rMd,fontFamily:FU,fontSize:13,color:T.muted}}>Run a backtest to load bars from Polygon</div>
+        ?<div style={{height:320,display:"flex",alignItems:"center",justifyContent:"center",border:`1px dashed ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:13,color:T.muted}}>Run a backtest to load bars from Polygon</div>
         :<ResponsiveContainer width="100%" height={320}>
           <ComposedChart data={series} margin={{top:6,right:14,bottom:8,left:14}}>
             <CartesianGrid stroke={T.border} strokeDasharray="2 4" vertical={false}/>
@@ -4631,7 +4640,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
         </div>
         <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
           {["buy","sell"].map(s=><button key={s} onClick={()=>setSide(s)} style={{
-            flex:1,padding:"10px",fontFamily:FU,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
+            flex:1,padding:"10px",fontFamily:FP,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
             textTransform:"capitalize",border:"none",cursor:"pointer",borderRadius:T.rSm,
             background:side===s?(s==="buy"?T.gain:T.loss):"transparent",
             color:side===s?"#fff":T.muted,
@@ -4661,11 +4670,11 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
         </div>
         <div style={{background:`linear-gradient(135deg, ${T.gain}12, transparent 70%), ${T.surface}`,border:`1px solid ${T.gain}28`,borderRadius:T.rMd,padding:`${T.s2} ${T.s3}`}}>
           <div style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>● SHARIA PRE-CHECK</div>
-          <div style={{fontFamily:FU,fontSize:12,color:T.text,letterSpacing:"-0.005em"}}>{sym} — screening against AAOIFI criteria</div>
+          <div style={{fontFamily:FP,fontSize:12,color:T.text,letterSpacing:"-0.005em"}}>{sym} — screening against AAOIFI criteria</div>
         </div>
         <button onClick={submit} disabled={orderBusy||(venue==="snaptrade"&&!acctId)} style={{
           padding:`12px ${T.s4}`,borderRadius:T.rMd,
-          fontFamily:FU,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
+          fontFamily:FP,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
           border:"none",cursor:orderBusy||(venue==="snaptrade"&&!acctId)?"not-allowed":"pointer",
           background:done?`${T.gain}22`:orderBusy?T.dim:`linear-gradient(135deg, ${side==="buy"?T.gain:T.loss}, ${side==="buy"?"#0A8A65":"#D85555"})`,
           color:done?T.gain:orderBusy?T.muted:"#fff",
@@ -4698,8 +4707,8 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
               fontFamily:FM,fontSize:10,color:ok?T.gain:T.loss,fontWeight:700,
             }}>{ok?"✓":"✕"}</div>
             <div>
-              <div style={{fontFamily:FU,fontSize:13,fontWeight:600,color:ok?T.textHi:T.muted,letterSpacing:"-0.005em",marginBottom:T.s1}}>{nm}</div>
-              <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{desc}</div>
+              <div style={{fontFamily:FP,fontSize:13,fontWeight:600,color:ok?T.textHi:T.muted,letterSpacing:"-0.005em",marginBottom:T.s1}}>{nm}</div>
+              <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{desc}</div>
             </div>
           </div>)}
         </div>
@@ -4718,10 +4727,10 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
         {t:"No Margin",ok:false,d:"Borrowed capital with interest charges is Riba — absolutely prohibited."},
       ].map(r=><BentoTile key={r.t} style={{borderLeft:`3px solid ${r.ok?T.gain:T.loss}`}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s2,marginBottom:T.s2}}>
-          <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:r.ok?T.textHi:T.muted,letterSpacing:"-0.01em"}}>{r.t}</span>
+          <span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:r.ok?T.textHi:T.muted,letterSpacing:"-0.01em"}}>{r.t}</span>
           <Tag label={r.ok?"Required":"Prohibited"} color={r.ok?T.gain:T.loss}/>
         </div>
-        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,letterSpacing:"-0.005em"}}>{r.d}</p>
+        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,letterSpacing:"-0.005em"}}>{r.d}</p>
       </BentoTile>)}
     </div>}
   </div>;
@@ -4844,7 +4853,7 @@ Activity rows on file: ${activities.length}.`;
           boxShadow:`0 4px 14px ${T.blue}55`,
         }}>M</div>
         <div>
-          <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>Mizan Advisor</div>
+          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>Mizan Advisor</div>
           <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:2}}>Sharia-aware · powered by Claude</div>
         </div>
       </div>
@@ -4863,7 +4872,7 @@ Activity rows on file: ${activities.length}.`;
         {msgs.length===0&&<div style={{margin:"auto 0",display:"flex",flexDirection:"column",gap:T.s5}}>
           <div style={{textAlign:"center"}}>
             <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s2}}>How can I help with your portfolio?</div>
-            <div style={{fontFamily:FU,fontSize:14,color:T.muted,maxWidth:480,margin:"0 auto",lineHeight:1.55}}>
+            <div style={{fontFamily:FP,fontSize:14,color:T.muted,maxWidth:480,margin:"0 auto",lineHeight:1.55}}>
               The advisor has your real account context — balances, top positions, Sharia compliance, contributions, dividends, and activity. Ask anything, or pick one of the suggestions below.
             </div>
           </div>
@@ -4875,7 +4884,7 @@ Activity rows on file: ${activities.length}.`;
               border:`1px solid ${T.border}`,
               borderLeft:`3px solid ${p.color}`,
               borderRadius:T.rMd,
-              fontFamily:FU,fontSize:13,color:T.text,cursor:busy?"not-allowed":"pointer",
+              fontFamily:FP,fontSize:13,color:T.text,cursor:busy?"not-allowed":"pointer",
               lineHeight:1.5,letterSpacing:"-0.005em",
               transition:"transform 0.15s, border-color 0.15s, box-shadow 0.2s",
               display:"flex",flexDirection:"column",gap:T.s1,
@@ -4904,7 +4913,7 @@ Activity rows on file: ${activities.length}.`;
               width:32,height:32,borderRadius:T.rMd,flexShrink:0,
               background:isErr?`${T.loss}22`:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontFamily:FU,fontSize:13,fontWeight:700,color:isErr?T.loss:"#fff",letterSpacing:"-0.02em",
+              fontFamily:FP,fontSize:13,fontWeight:700,color:isErr?T.loss:"#fff",letterSpacing:"-0.02em",
               boxShadow:isErr?"none":`0 2px 8px ${T.blue}40`,
             }}>{isErr?"!":"M"}</div>}
             <div style={{
@@ -4914,7 +4923,7 @@ Activity rows on file: ${activities.length}.`;
               background:isUser?`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`:isErr?T.lossBg:T.surface,
               border:isUser?"none":`1px solid ${isErr?T.loss+"40":T.border}`,
               color:isUser?"#fff":isErr?T.loss:T.text,
-              fontFamily:FU,fontSize:14,lineHeight:1.6,letterSpacing:"-0.005em",
+              fontFamily:FP,fontSize:14,lineHeight:1.6,letterSpacing:"-0.005em",
               whiteSpace:"pre-wrap",wordBreak:"break-word",
               boxShadow:isUser?`0 4px 14px ${T.blue}40`:"none",
               position:"relative",
@@ -4935,13 +4944,13 @@ Activity rows on file: ${activities.length}.`;
               width:32,height:32,borderRadius:T.rMd,flexShrink:0,
               background:T.surface,border:`1px solid ${T.border}`,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontFamily:FU,fontSize:13,fontWeight:600,color:T.text,
+              fontFamily:FP,fontSize:13,fontWeight:600,color:T.text,
             }}>Y</div>}
           </div>;
         })}
 
         {busy&&<div style={{display:"flex",gap:T.s3,alignItems:"center"}}>
-          <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FU,fontSize:13,fontWeight:700,color:"#fff"}}>M</div>
+          <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FP,fontSize:13,fontWeight:700,color:"#fff"}}>M</div>
           <div style={{display:"flex",gap:T.s1,padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rLg}}>
             {[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:T.muted,animation:`blink 1.4s infinite`,animationDelay:`${i*0.15}s`}}/>)}
           </div>
@@ -4961,7 +4970,7 @@ Activity rows on file: ${activities.length}.`;
       </div>}
       <form onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:`1px solid ${T.border}`,padding:T.s3,display:"flex",gap:T.s2,background:T.surface}}>
         <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about your portfolio…" disabled={busy}
-          className="field" style={{flex:1,fontFamily:FU,fontSize:14,padding:`10px ${T.s4}`}}/>
+          className="field" style={{flex:1,fontFamily:FP,fontSize:14,padding:`10px ${T.s4}`}}/>
         <button type="submit" disabled={busy||!input.trim()} className="btn-primary" style={{padding:`10px ${T.s5}`}}>{busy?"…":"Send"}</button>
       </form>
     </BentoTile>
@@ -5008,7 +5017,7 @@ function ManualAssets({demoMode=false}={}){
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>MANUAL ASSETS TOTAL</div>
         <div style={{fontFamily:FU,fontSize:34,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{kf(total)}</div>
         <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{assets.length} entr{assets.length===1?"y":"ies"}</div>
-        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
+        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
           Track assets your brokerage can't see — physical gold, real estate equity, private business stake, vehicles, collectibles. Toggle Zakat-eligibility per asset.
         </p>
       </BentoTile>
@@ -5044,8 +5053,8 @@ function ManualAssets({demoMode=false}={}){
       ?<BentoTile style={{padding:0,overflow:"hidden"}}>
         <Tbl cols={[
           {l:"Type",r_:r=><Tag label={r.type} color={r.type==="Gold"||r.type==="Silver"?T.gold:r.type.includes("Real")?T.blue:r.type==="Business Equity"?T.gain:T.muted}/>},
-          {l:"Name",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>},
-          {l:"Value",r:true,r_:r=><span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(r.value)}</span>},
+          {l:"Name",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>},
+          {l:"Value",r:true,r_:r=><span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(r.value)}</span>},
           {l:"Zakat",r_:r=><Tag label={r.zakatable?"Included":"Excluded"} color={r.zakatable?T.gold:T.muted}/>},
           {l:"Added",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.added}</span>},
           {l:"",r_:r=>demoMode
@@ -5054,8 +5063,8 @@ function ManualAssets({demoMode=false}={}){
         ]} rows={assets}/>
       </BentoTile>
       :<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
-        <div style={{fontFamily:FU,fontSize:14,fontWeight:500,color:T.muted}}>No manual assets yet.</div>
-        <div style={{fontFamily:FU,fontSize:12,color:T.muted,marginTop:T.s1}}>Add gold, real estate, or business equity above to include them in net-worth + Zakat math.</div>
+        <div style={{fontFamily:FP,fontSize:14,fontWeight:500,color:T.muted}}>No manual assets yet.</div>
+        <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:T.s1}}>Add gold, real estate, or business equity above to include them in net-worth + Zakat math.</div>
       </BentoTile>}
   </div>;
 }
@@ -5153,8 +5162,8 @@ function CSVImporter({onImport,onDedupe,onRetag}){
   return<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rLg,padding:`${T.s4} ${T.s5}`,marginTop:T.s4,boxShadow:"var(--sh-sm)"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
       <div>
-        <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,marginBottom:T.s1,letterSpacing:"-0.01em"}}>CSV Import — Historical Backfill</div>
-        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:480}}>
+        <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,marginBottom:T.s1,letterSpacing:"-0.01em"}}>CSV Import — Historical Backfill</div>
+        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:480}}>
           SnapTrade only backfills 1–2 years for some brokers. Export your full activity CSV from Fidelity / Robinhood / Coinbase and import it here for complete YTD + lifetime contribution numbers.
         </p>
       </div>
@@ -5238,7 +5247,7 @@ function SecurityPanel(){
   if(!isSupabaseConfigured){
     return<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"24px 28px"}}>
       <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>SECURITY</div>
-      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6}}>Multi-factor authentication requires Supabase Auth. Configure VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY to enable.</p>
+      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6}}>Multi-factor authentication requires Supabase Auth. Configure VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY to enable.</p>
     </div>;
   }
 
@@ -5247,7 +5256,7 @@ function SecurityPanel(){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,marginBottom:10}}>
         <div>
           <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>TWO-FACTOR AUTHENTICATION</div>
-          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
             Add a TOTP authenticator (1Password, Authy, Google Authenticator) so a stolen password isn't enough to sign in.
           </p>
         </div>
@@ -5380,7 +5389,7 @@ function SessionsPanel(){
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,marginBottom:T.s3,flexWrap:"wrap"}}>
       <div>
         <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>ACTIVE SESSIONS</div>
-        <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
           Every device currently signed into MIZAN with your account. Revoke any that you don't recognize.
         </p>
       </div>
@@ -5393,7 +5402,7 @@ function SessionsPanel(){
     {loading
       ?<div style={{fontFamily:FM,fontSize:11,color:T.muted,padding:`${T.s3} 0`}}>Loading…</div>
       :sessions.length===0
-        ?<div style={{fontFamily:FU,fontSize:13,color:T.muted,padding:`${T.s3} 0`}}>No active sessions found.</div>
+        ?<div style={{fontFamily:FP,fontSize:13,color:T.muted,padding:`${T.s3} 0`}}>No active sessions found.</div>
         :<div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {sessions.map(s=>{
             const ua=parseUA(s.user_agent);
@@ -5404,7 +5413,7 @@ function SessionsPanel(){
               <div style={{display:"flex",alignItems:"center",gap:T.s3,minWidth:0,flex:1}}>
                 <span style={{fontSize:24,color:s.current?T.gain:T.muted,lineHeight:1}}>{deviceIcon(ua.device)}</span>
                 <div style={{minWidth:0}}>
-                  <div style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+                  <div style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
                     {ua.browser} · {ua.os}
                     {s.current&&<Tag label="CURRENT" color={T.gain}/>}
                   </div>
@@ -5516,7 +5525,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
           <div>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>API KEYS · ADMIN</div>
-            <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+            <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
               Add keys in order. Finnhub activates real prices immediately. Keys save to localStorage — no re-entry needed. End-user accounts don't see this page.
             </p>
           </div>
@@ -5527,7 +5536,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
       {APIS.map(api=><BentoTile key={api.id} accent={api.color}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
           <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{api.l}</span>
+            <span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{api.l}</span>
             <Tag label={api.tier} color={api.color}/>
             <Tag label={api.cost} color={T.muted}/>
           </div>
@@ -5553,14 +5562,14 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
       <BentoTile>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
           <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>FEATURES ACTIVE</span>
-          <span style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{FEATURES.filter(f=>f.alwaysOn||f.req.every(r=>has(r))).length}<span style={{color:T.muted,fontWeight:400}}> / {FEATURES.length}</span></span>
+          <span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{FEATURES.filter(f=>f.alwaysOn||f.req.every(r=>has(r))).length}<span style={{color:T.muted,fontWeight:400}}> / {FEATURES.length}</span></span>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:T.s2}}>
           {FEATURES.map(f=>{
             const on=f.alwaysOn||f.req.every(r=>has(r));
             return<div key={f.f} style={{display:"flex",gap:T.s2,alignItems:"center",padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${on?T.gain+"30":T.border}`,borderRadius:T.rMd}}>
               <LiveDot on={on}/>
-              <span style={{fontFamily:FU,fontSize:12,color:on?T.text:T.muted,letterSpacing:"-0.005em"}}>{f.f}</span>
+              <span style={{fontFamily:FP,fontSize:12,color:on?T.text:T.muted,letterSpacing:"-0.005em"}}>{f.f}</span>
               {f.note&&<span style={{fontFamily:FM,fontSize:10,color:T.muted,marginLeft:"auto"}}>{f.note}</span>}
             </div>;
           })}
@@ -5574,7 +5583,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
           <div>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BROKERAGE CONNECTIONS</div>
-            <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+            <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
               Connect via SnapTrade OAuth. Credentials go directly to your broker — MĪZAN never sees your password.
             </p>
           </div>
@@ -5592,7 +5601,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
               padding:`${T.s3} ${T.s4}`,
               transition:"all 0.18s",
             }}>
-              <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:conn?T.blue:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.nm}</div>
+              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:conn?T.blue:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.nm}</div>
               <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:T.s2}}>{b.desc}</div>
               <Tag label={conn?"Connected":"Not Connected"} color={conn?T.gain:T.muted}/>
             </div>;
@@ -5608,7 +5617,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
           <div>
             <div style={{fontFamily:FM,fontSize:10,color:demoMode?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DEMO MODE</div>
-            <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+            <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
               Replaces your live data with a fictional ~$42M halal portfolio across 8 brokers — useful for screenshots, sharing, or previewing MIZAN before connecting brokers.
             </p>
           </div>
@@ -5731,7 +5740,7 @@ function NotificationsPanel(){
   if(!supported){
     return<BentoTile>
       <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.14em",marginBottom:T.s2}}>NOTIFICATIONS</div>
-      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6}}>This browser doesn't support push notifications.</p>
+      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6}}>This browser doesn't support push notifications.</p>
     </BentoTile>;
   }
 
@@ -5742,7 +5751,7 @@ function NotificationsPanel(){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,marginBottom:T.s3,flexWrap:"wrap"}}>
         <div>
           <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>PUSH NOTIFICATIONS</div>
-          <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
             Get a system notification when something needs attention — Sharia status changes, price alerts, dividends, and sync errors. Per-device opt-in.
           </p>
         </div>
@@ -5771,7 +5780,7 @@ function NotificationsPanel(){
 
     <BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>WHAT YOU'LL RECEIVE</div>
-      <ul style={{fontFamily:FU,fontSize:13,color:T.muted,margin:0,padding:`0 0 0 ${T.s4}`,lineHeight:1.8}}>
+      <ul style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,padding:`0 0 0 ${T.s4}`,lineHeight:1.8}}>
         <li><span style={{color:T.text,fontWeight:500}}>Price alerts</span> — when a watchlist target is crossed</li>
         <li><span style={{color:T.text,fontWeight:500}}>Sharia status changes</span> — a holding flips halal→haram or vice-versa</li>
         <li><span style={{color:T.text,fontWeight:500}}>Upcoming dividends</span> — ex-div date is tomorrow on a ticker you hold</li>
@@ -5820,7 +5829,7 @@ function AccountPanel(){
 
     <BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CHANGE EMAIL</div>
-      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:560}}>
+      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:560}}>
         Enter your new address and current password. Supabase will email a confirmation link to the new address — the change only takes effect after you click it.
       </p>
       <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:T.s3,maxWidth:480}}>
@@ -5900,7 +5909,7 @@ function PrivacyPanel(){
     return<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center"}}>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ACCOUNT DELETED</div>
       <div style={{fontFamily:FU,fontSize:18,color:T.textHi,fontWeight:600,letterSpacing:"-0.01em",marginBottom:T.s2}}>Your account has been deleted.</div>
-      <div style={{fontFamily:FU,fontSize:13,color:T.muted}}>You'll be redirected in a moment.</div>
+      <div style={{fontFamily:FP,fontSize:13,color:T.muted}}>You'll be redirected in a moment.</div>
     </BentoTile>;
   }
 
@@ -5915,7 +5924,7 @@ function PrivacyPanel(){
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     <BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>LEGAL DOCUMENTS</div>
-      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:600}}>
+      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:600}}>
         Our public-facing policies. Always available without a login at the same URLs — Plaid, Supabase, and your auditors can reach them too.
       </p>
       <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
@@ -5930,8 +5939,8 @@ function PrivacyPanel(){
           onMouseEnter={e=>{e.currentTarget.style.borderColor=T.borderHi;e.currentTarget.style.background=T.card;}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.surface;}}>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{d.l}</div>
-            <div style={{fontFamily:FU,fontSize:12,color:T.muted,marginTop:2,lineHeight:1.45}}>{d.desc}</div>
+            <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{d.l}</div>
+            <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:2,lineHeight:1.45}}>{d.desc}</div>
           </div>
           <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em",flexShrink:0}}>{d.ext?"PDF ↗":"OPEN ↗"}</span>
         </a>)}
@@ -5940,7 +5949,7 @@ function PrivacyPanel(){
 
     <BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DOWNLOAD MY DATA</div>
-      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
+      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
         Exports a JSON file containing your profile, account settings, CSV imports, manual assets, donations, audit history, brokerage holdings, and bank accounts. The file is for your records — MIZAN never shares it.
       </p>
       <button onClick={downloadExport} disabled={exportBusy} className="btn-primary">
@@ -5950,7 +5959,7 @@ function PrivacyPanel(){
 
     <BentoTile accent={T.loss} style={{background:`linear-gradient(135deg, ${T.loss}08, transparent 60%), ${T.card}`}}>
       <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DELETE MY ACCOUNT</div>
-      <p style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
+      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
         Permanently deletes everything — profile, account state, brokerage connections (via SnapTrade), bank links (via Plaid), and audit trail. This action cannot be undone.
       </p>
       <button onClick={()=>setShowModal(true)} className="btn-danger">Delete my account…</button>
@@ -5968,10 +5977,10 @@ function PrivacyPanel(){
         maxWidth:520,width:"100%",background:T.card,border:`1px solid ${T.loss}40`,borderRadius:T.rLg,padding:`${T.s6} ${T.s5}`,
       }}>
         <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.18em",fontWeight:700,marginBottom:T.s3}}>DELETE ACCOUNT — IRREVERSIBLE</div>
-        <p style={{fontFamily:FU,fontSize:14,color:T.text,margin:`0 0 ${T.s3}`,lineHeight:1.55}}>
+        <p style={{fontFamily:FP,fontSize:14,color:T.text,margin:`0 0 ${T.s3}`,lineHeight:1.55}}>
           This will permanently remove:
         </p>
-        <ul style={{fontFamily:FU,fontSize:13,color:T.muted,margin:`0 0 ${T.s4} ${T.s4}`,padding:0,lineHeight:1.7}}>
+        <ul style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4} ${T.s4}`,padding:0,lineHeight:1.7}}>
           <li>Your profile, settings, and authentication credentials</li>
           <li>Every connected brokerage (via SnapTrade /snapTrade/deleteUser)</li>
           <li>Every linked bank (Plaid Items unlinked)</li>
@@ -6081,9 +6090,9 @@ function AdminPanel(){
         <button onClick={load} disabled={busy} className="btn-ghost" style={{fontSize:10}}>{busy?"Loading…":"Refresh"}</button>
       </div>
       {users.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No users yet.</div>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No users yet.</div>
         :<Tbl cols={[
-          {l:"Email",r_:r=><span style={{fontFamily:FU,fontSize:13,color:T.text}}>{r.email}</span>},
+          {l:"Email",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text}}>{r.email}</span>},
           {l:"Joined",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.created_at)}</span>},
           {l:"Last sign-in",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.last_sign_in)}</span>},
           {l:"Status",r_:r=><Tag label={r.suspended?"Suspended":r.is_root?"Root":"Active"} color={r.suspended?T.loss:r.is_root?T.gold:T.gain}/>},
@@ -6104,11 +6113,11 @@ function AdminPanel(){
         </div>
       </div>
       {auditRows.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FU,fontSize:13,color:T.muted}}>No audit entries.</div>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No audit entries.</div>
         :<Tbl cols={[
           {l:"When",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,whiteSpace:"nowrap"}}>{fmtDate(r.created_at)}</span>},
-          {l:"User",r_:r=><span style={{fontFamily:FU,fontSize:11,color:T.text}}>{r.email||(r.user_id?r.user_id.slice(0,8)+"…":"—")}</span>},
-          {l:"Action",r_:r=><span style={{fontFamily:FU,fontSize:12,color:T.text,fontWeight:500}}>{r.action}</span>},
+          {l:"User",r_:r=><span style={{fontFamily:FP,fontSize:11,color:T.text}}>{r.email||(r.user_id?r.user_id.slice(0,8)+"…":"—")}</span>},
+          {l:"Action",r_:r=><span style={{fontFamily:FP,fontSize:12,color:T.text,fontWeight:500}}>{r.action}</span>},
           {l:"Target",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.target||"—"}</span>},
           {l:"IP",r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.ip||"—"}</span>},
           {l:"Metadata",r_:r=>r.metadata&&Object.keys(r.metadata).length>0
@@ -6262,7 +6271,7 @@ function ConnectModal({onClose,snapId,onConnected}){
                : step==="error" ? "Connection Failed"
                : "Connect Account"}
             </div>
-            <div style={{fontFamily:FU,fontSize:11,color:T.muted,marginTop:2}}>
+            <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:2}}>
               {step==="iframe" ? "Your credentials go directly to your broker"
                : "Powered by SnapTrade OAuth"}
             </div>
@@ -6287,7 +6296,7 @@ function ConnectModal({onClose,snapId,onConnected}){
           <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
             justifyContent:"center",padding:40,gap:14,textAlign:"center"}}>
             <div style={{fontFamily:FM,fontSize:13,color:T.loss}}>Backend Server Not Running</div>
-            <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.7,maxWidth:360}}>
+            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.7,maxWidth:360}}>
               SnapTrade needs a signed link from your backend.<br/>
               Open a second terminal in your <code style={{color:T.blue,fontFamily:FM}}>mizan-app</code> folder and run:
             </div>
@@ -6295,7 +6304,7 @@ function ConnectModal({onClose,snapId,onConnected}){
               padding:"11px 20px",fontFamily:FM,fontSize:13,color:T.textHi,letterSpacing:"0.04em"}}>
               node server.js
             </div>
-            <div style={{fontFamily:FU,fontSize:11,color:T.muted}}>
+            <div style={{fontFamily:FP,fontSize:11,color:T.muted}}>
               Keep it running alongside <code style={{fontFamily:FM}}>npm run dev</code>
             </div>
             <div style={{display:"flex",gap:8}}>
@@ -6318,7 +6327,7 @@ function ConnectModal({onClose,snapId,onConnected}){
           <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
             justifyContent:"center",padding:40,gap:12,textAlign:"center"}}>
             <div style={{fontFamily:FM,fontSize:13,color:T.loss}}>SnapTrade Client ID Required</div>
-            <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.7,maxWidth:300}}>
+            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.7,maxWidth:300}}>
               Add your SnapTrade Client ID in Settings → API Keys.<br/>
               Sign up free at snaptrade.com/developers.
             </div>
@@ -6380,7 +6389,7 @@ function ConnectModal({onClose,snapId,onConnected}){
           <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
             justifyContent:"center",padding:40,gap:12,textAlign:"center"}}>
             <div style={{fontFamily:FM,fontSize:13,color:T.loss}}>Connection Failed</div>
-            <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.6,maxWidth:340}}>
+            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,maxWidth:340}}>
               We couldn't set up your broker connection right now. This is usually temporary — please try again.
               If it keeps happening, contact support.
             </div>
@@ -6452,7 +6461,7 @@ function ConnectModal({onClose,snapId,onConnected}){
               })}
             </div>
             <div style={{padding:"9px 16px",borderTop:`1px solid ${T.border}`,flexShrink:0,
-              fontFamily:FU,fontSize:11,color:T.muted,lineHeight:1.6}}>
+              fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.6}}>
               Your brokerage password never touches MĪZAN. SnapTrade uses the same OAuth as "Sign in with Google."
             </div>
           </>
@@ -6524,7 +6533,7 @@ function About(){
           <span style={{fontSize:28,lineHeight:1}}>{s.icon}</span>
           <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:s.accent,letterSpacing:"0.18em"}}>{s.t.toUpperCase()}</span>
         </div>
-        <div style={{fontFamily:FU,fontSize:14,color:T.text,lineHeight:1.6,letterSpacing:"-0.005em"}}>{s.d}</div>
+        <div style={{fontFamily:FP,fontSize:14,color:T.text,lineHeight:1.6,letterSpacing:"-0.005em"}}>{s.d}</div>
       </BentoTile>)}
     </div>
 
@@ -6534,7 +6543,7 @@ function About(){
         <span style={{fontFamily:FM,fontSize:11,color:T.gold,letterSpacing:"0.18em",fontWeight:600}}>SHARIAH FOUNDATIONS</span>
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>{standards.length} STANDARDS</span>
       </div>
-      <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:760,marginBottom:T.s4,letterSpacing:"-0.005em"}}>
+      <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:760,marginBottom:T.s4,letterSpacing:"-0.005em"}}>
         Built around six Islamic finance principles. Not annotations on a generic finance app — they shape what's displayed, what's allowed at the order layer, and how AI recommendations are generated.
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:T.s1,marginBottom:T.s4}}>
@@ -6554,8 +6563,8 @@ function About(){
           border:`1px solid ${T.border}`,
           borderLeft:`3px solid ${T.gold}`,
         }}>
-          <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.gold,letterSpacing:"-0.01em",marginBottom:T.s1}}>{k}</div>
-          <div style={{fontFamily:FU,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{v}</div>
+          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.gold,letterSpacing:"-0.01em",marginBottom:T.s1}}>{k}</div>
+          <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{v}</div>
         </div>)}
       </div>
     </BentoTile>
@@ -6571,7 +6580,7 @@ function About(){
           border:`1px solid ${T.border}`,
           borderLeft:`3px solid ${i.c}`,
         }}>
-          <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{i.n}</div>
+          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{i.n}</div>
           <div style={{fontFamily:FM,fontSize:11,color:T.muted}}>{i.d}</div>
         </div>)}
       </div>
@@ -7298,7 +7307,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     {/* ─── INSTITUTIONS + ACCOUNTS ─────────────────── */}
     {institutions.length===0&&!loading?<BentoTile style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
       <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,marginBottom:T.s2,letterSpacing:"-0.01em"}}>No banks linked yet</div>
-      <div style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.55,maxWidth:520,margin:"0 auto"}}>
+      <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,maxWidth:520,margin:"0 auto"}}>
         Connect a bank to track checking, savings, and credit balances alongside your brokerage portfolio. Powered by Plaid — read-only, your credentials never touch our servers.
       </div>
     </BentoTile>:null}
@@ -7355,7 +7364,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
                 defaultName={a.name||a.official_name||"Account"}
                 nickname={nicknames?.[a.account_id]||""}
                 onSetNickname={onSetNickname}
-                primaryStyle={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.account_id]?600:400}}
+                primaryStyle={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.account_id]?600:400}}
                 pencilStyle={{fontSize:13}}
               />
               {nicknames?.[a.account_id]&&<div style={{fontSize:10,color:T.muted,marginTop:2,fontFamily:FM}}>{a.name||a.official_name||"Account"}</div>}
@@ -7378,18 +7387,18 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       return<BentoTile>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
           <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SPENDING BY CATEGORY · {monthLabel}</span>
-          <span style={{fontFamily:FU,fontSize:14,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(monthTotal)}</span>
+          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(monthTotal)}</span>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {entries.map(s=>{
             const pct=monthTotal>0?(s.total/monthTotal)*100:0;
             const barPct=(s.total/(entries[0]?.total||1))*100;
             return<div key={s.cat} style={{display:"grid",gridTemplateColumns:"minmax(130px,1.4fr) 1fr 90px 52px",gap:T.s3,alignItems:"center"}}>
-              <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{fmtCat(s.cat)}</span>
+              <span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{fmtCat(s.cat)}</span>
               <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${barPct}%`,background:`linear-gradient(90deg, ${T.blue}, ${T.blueDim})`,borderRadius:2}}/>
               </div>
-              <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(s.total)}</span>
+              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(s.total)}</span>
               <span style={{fontFamily:FM,fontSize:11,color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
             </div>;
           })}
@@ -7406,25 +7415,25 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       return<BentoTile>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
           <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DEBT PAYMENTS & TRANSFERS · {monthLabel}</span>
-          <span style={{fontFamily:FU,fontSize:14,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(outTotal)}</span>
+          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(outTotal)}</span>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {outEntries.map(e=>{
             const pct=outTotal>0?(e.total/outTotal)*100:0;
             const barPct=(e.total/(outEntries[0]?.total||1))*100;
             return<div key={e.cat} style={{display:"grid",gridTemplateColumns:"minmax(160px,1.6fr) 1fr 90px 52px",gap:T.s3,alignItems:"center"}}>
-              <span style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{CAT_LABEL[e.cat]||e.cat.replace(/_/g," ")}</span>
+              <span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{CAT_LABEL[e.cat]||e.cat.replace(/_/g," ")}</span>
               <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${barPct}%`,background:`linear-gradient(90deg,${T.loss}88,${T.loss}44)`,borderRadius:2}}/>
               </div>
-              <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(e.total)}</span>
+              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(e.total)}</span>
               <span style={{fontFamily:FM,fontSize:11,color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
             </div>;
           })}
         </div>
         {incomeTotal>0&&<div style={{marginTop:T.s4,paddingTop:T.s3,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.14em",fontWeight:600}}>INCOME & INFLOWS THIS MONTH</span>
-          <span style={{fontFamily:FU,fontSize:14,fontWeight:700,color:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(incomeTotal)}</span>
+          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(incomeTotal)}</span>
         </div>}
       </BentoTile>;
     })()}
@@ -7484,17 +7493,17 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             <span style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>RECURRING SUBSCRIPTIONS · {active.length} active</span>
             {usingPlaid&&<span style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>}
           </div>
-          <span style={{fontFamily:FU,fontSize:14,fontWeight:700,color:T.gold,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalMonthly)}<span style={{fontFamily:FM,fontSize:10,fontWeight:400,color:T.muted,marginLeft:4}}>/mo</span></span>
+          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.gold,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalMonthly)}<span style={{fontFamily:FM,fontSize:10,fontWeight:400,color:T.muted,marginLeft:4}}>/mo</span></span>
         </div>
         <div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
             {l:"Merchant",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-              <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:r.active?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{r.merchant}</span>
+              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{r.merchant}</span>
               {!r.active&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.border}`,borderRadius:T.rSm}}>INACTIVE</span>}
             </div>},
             {l:"Cadence",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,textTransform:"capitalize"}}>{r.cadence}</span>},
             {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgPerCharge)}</span>},
-            {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.estMonthly)}</span>},
+            {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.estMonthly)}</span>},
             {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
           ]} rows={[...active,...inactive].slice(0,25)}/>
         </div>
@@ -7537,7 +7546,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
                 flex:"1 1 240px",minWidth:200,
                 padding:`8px ${T.s3}`,
                 background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,
-                color:T.textHi,fontFamily:FU,fontSize:13,letterSpacing:"-0.005em",
+                color:T.textHi,fontFamily:FP,fontSize:13,letterSpacing:"-0.005em",
                 outline:"none",
               }}
             />
@@ -7547,7 +7556,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               style={{
                 padding:`8px ${T.s3}`,
                 background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,
-                color:T.text,fontFamily:FU,fontSize:13,letterSpacing:"-0.005em",
+                color:T.text,fontFamily:FP,fontSize:13,letterSpacing:"-0.005em",
                 outline:"none",cursor:"pointer",
               }}
             >
@@ -7572,7 +7581,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         <Tbl cols={[
           {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.date}</span>},
           {l:"Merchant",r_:r=><div>
-            <div style={{fontFamily:FU,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.merchant_name||r.name||"—"}</div>
+            <div style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.merchant_name||r.name||"—"}</div>
             {r.pending&&<div style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.06em",marginTop:2}}>● PENDING</div>}
           </div>},
           {l:"Category",r_:r=>{
@@ -7590,7 +7599,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               : (a?`${a.name} ····${a.mask}`:r.institution_name||"—");
             return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{label}</span>;
           }},
-          {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{fmtUSD(Math.abs(r.amount))}</span>;}},
+          {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{fmtUSD(Math.abs(r.amount))}</span>;}},
         ]} rows={visibleTxns}/>
         {/* Footer: counter + Load more. Empty state when filters wipe results. */}
         {filteredTxns.length===0?(
@@ -7664,8 +7673,8 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
         {accent:T.gold,t:"Sharia-screened",d:"Every position screened against AAOIFI + 6 other frameworks. Automatic Zakat + purification math."},
         {accent:T.gain,t:"AI advisor with context",d:"Ask anything about your portfolio. Claude sees your accounts, positions, and activity — answers are specific to you."},
       ].map(b=><div key={b.t} style={{padding:`${T.s3} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${b.accent}`,borderRadius:T.rMd}}>
-        <div style={{fontFamily:FU,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.t}</div>
-        <div style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{b.d}</div>
+        <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.t}</div>
+        <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{b.d}</div>
       </div>)}
     </div>
   </>;
@@ -7673,7 +7682,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
   // ───── STEP 2 — Connect brokerage ──────────
   const StepConnect=<>
     <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Connect your brokerage</div>
-    <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+    <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
       MĪZAN reads your accounts directly via SnapTrade — your credentials never touch our servers. Read-only by default.
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s2,maxWidth:560,margin:`0 auto ${T.s5}`}}>
@@ -7691,7 +7700,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
         borderTop:`3px solid ${b.c}`,
         borderRadius:T.rMd,
         textAlign:"center",
-        fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",
+        fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",
       }}>{b.n}</div>)}
     </div>
     <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.06em",marginBottom:T.s4}}>+ 60 more available</div>
@@ -7714,7 +7723,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
   };
   const StepImport=<>
     <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Bring in your past activity</div>
-    <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+    <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
       SnapTrade only backfills 1–2 years. Drop a Fidelity / Robinhood / Coinbase CSV here for your complete history. Drag in or click to choose.
     </div>
     <input ref={csvRef} type="file" accept=".csv,text/csv" onChange={e=>handleCsv(e.target.files?.[0])} style={{display:"none"}}/>
@@ -7776,7 +7785,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
   useEffect(()=>{if(step===3&&!aiStarted){setAiStarted(true);askAi();}},[step,aiStarted,askAi]);
   const StepAdvisor=<>
     <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Ask your AI advisor</div>
-    <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+    <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
       This is how every conversation works on the AI Advisor tab. The advisor sees your real account context — answers are tailored to you.
     </div>
     <div style={{maxWidth:560,margin:"0 auto",display:"flex",flexDirection:"column",gap:T.s3,textAlign:"left"}}>
@@ -7788,14 +7797,14 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
           borderRadius:T.rLg,
           background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
           color:"#fff",
-          fontFamily:FU,fontSize:14,lineHeight:1.55,letterSpacing:"-0.005em",
+          fontFamily:FP,fontSize:14,lineHeight:1.55,letterSpacing:"-0.005em",
           boxShadow:`0 4px 14px ${T.blue}40`,
         }}>{aiQ}</div>
-        <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:T.surface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FU,fontSize:13,fontWeight:600,color:T.text}}>Y</div>
+        <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:T.surface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FP,fontSize:13,fontWeight:600,color:T.text}}>Y</div>
       </div>
       {/* Assistant bubble */}
       <div style={{display:"flex",gap:T.s2,alignItems:"flex-start"}}>
-        <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FU,fontSize:13,fontWeight:700,color:"#fff",boxShadow:`0 2px 8px ${T.blue}40`}}>M</div>
+        <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FP,fontSize:13,fontWeight:700,color:"#fff",boxShadow:`0 2px 8px ${T.blue}40`}}>M</div>
         <div style={{
           maxWidth:"82%",
           padding:`${T.s3} ${T.s4}`,
@@ -7803,7 +7812,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
           background:T.surface,
           border:`1px solid ${T.border}`,
           color:T.text,
-          fontFamily:FU,fontSize:14,lineHeight:1.6,letterSpacing:"-0.005em",
+          fontFamily:FP,fontSize:14,lineHeight:1.6,letterSpacing:"-0.005em",
           whiteSpace:"pre-wrap",
           minHeight:60,
         }}>
@@ -7826,7 +7835,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
   ];
   const StepDone=<>
     <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>You're set</div>
-    <div style={{fontFamily:FU,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+    <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
       Six tabs. Everything connects. Here's the lay of the land:
     </div>
     <div style={{maxWidth:600,margin:"0 auto",display:"flex",flexDirection:"column",gap:T.s2,textAlign:"left"}}>
@@ -7838,8 +7847,8 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
         borderRadius:T.rMd,
       }}>
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{String(i+1).padStart(2,"0")}</span>
-        <span style={{fontFamily:FU,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{it.n}</span>
-        <span style={{fontFamily:FU,fontSize:13,color:T.muted,lineHeight:1.5,letterSpacing:"-0.005em"}}>{it.d}</span>
+        <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{it.n}</span>
+        <span style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.5,letterSpacing:"-0.005em"}}>{it.d}</span>
       </div>)}
     </div>
   </>;
@@ -8953,7 +8962,7 @@ export default function Mizan(){
         /* Disable lift on touch devices — no hover intent */
         .bento-tile:hover{transform:none;}
       }
-      .btn-primary{background:linear-gradient(135deg,${T.blue},${T.blueDim});color:#fff;border:none;font-family:${FM};font-size:11px;font-weight:600;letter-spacing:0.04em;padding:8px 16px;border-radius:var(--r-md);cursor:pointer;box-shadow:0 2px 10px ${T.blue}50;transition:transform 0.15s,box-shadow 0.2s;}
+      .btn-primary{background:linear-gradient(135deg,${T.blue},${T.blueDim});color:#0d1311;border:none;font-family:${FM};font-size:11px;font-weight:600;letter-spacing:0.04em;padding:8px 16px;border-radius:var(--r-md);cursor:pointer;box-shadow:0 2px 10px ${T.blue}40;transition:transform 0.15s,box-shadow 0.2s;}
       .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 14px ${T.blue}66;}
       .btn-primary:active:not(:disabled){transform:translateY(0);box-shadow:0 1px 6px ${T.blue}40;}
       .btn-primary:disabled{opacity:0.55;cursor:not-allowed;box-shadow:none;}
@@ -9123,7 +9132,7 @@ export default function Mizan(){
           border:"none",
           borderRadius:999,
           color:active?"#fff":T.text,
-          fontFamily:FU,fontSize:12,fontWeight:active?600:500,
+          fontFamily:FP,fontSize:12,fontWeight:active?600:500,
           letterSpacing:"-0.005em",
           cursor:"pointer",
           transition:"all 0.18s cubic-bezier(.34,1.56,.64,1)",

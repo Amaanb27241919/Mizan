@@ -30,13 +30,14 @@ const T = {
   s3:      "var(--s-3)",
   s4:      "var(--s-4)",
   s5:      "var(--s-5)",
-  blue:    "#7B61FF",   // matches MizanApp T.blue
-  gold:    "#FF9F6A",   // matches MizanApp T.gold
-  gain:    "#10B981",   // matches MizanApp T.gain
-  loss:    "#FF6B6B",
+  blue:    "#c9a24b",   // gold — primary accent
+  gold:    "#cf9e54",   // amber — warnings
+  gain:    "#6fae8e",   // jade — healthy
+  loss:    "#c46a52",   // rust — error
 };
-const FM = "var(--font-mono, ui-monospace, Menlo, monospace)";
-const FU = "var(--font-ui, system-ui, sans-serif)";
+const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
+const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
+const FU = FP;
 
 function relativeTime(iso) {
   if (!iso) return "never";
@@ -323,7 +324,7 @@ export default function ConnectionHealth({ onNav } = {}) {
           <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 600, color: T.textHi, letterSpacing: "-0.015em" }}>
             {counts.total === 0 ? "No connections yet" : `${counts.total} connection${counts.total === 1 ? "" : "s"} linked`}
           </div>
-          <div style={{ fontFamily: FU, fontSize: 13, color: T.muted, marginTop: T.s1 }}>
+          <div style={{ fontFamily: FP, fontSize: 13, color: T.muted, marginTop: T.s1 }}>
             {counts.ok} healthy · {counts.reauth} need attention{counts.error > 0 ? ` · ${counts.error} error` : ""}
           </div>
         </div>
@@ -341,7 +342,7 @@ export default function ConnectionHealth({ onNav } = {}) {
 
       {err && (
         <div style={{
-          fontFamily: FU, fontSize: 12, color: T.loss,
+          fontFamily: FP, fontSize: 12, color: T.loss,
           padding: T.s3, background: `${T.loss}15`,
           border: `1px solid ${T.loss}40`, borderRadius: T.rMd,
         }}>{err}</div>
@@ -350,7 +351,7 @@ export default function ConnectionHealth({ onNav } = {}) {
       {/* Empty state */}
       {!loading && !err && items.length === 0 && (
         <div style={{
-          fontFamily: FU, fontSize: 13, color: T.muted,
+          fontFamily: FP, fontSize: 13, color: T.muted,
           padding: `${T.s5} ${T.s4}`,
           textAlign: "center",
           background: T.card,

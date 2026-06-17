@@ -6,16 +6,14 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 
-const SF =
-  "'SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
-const MONO =
-  "'SF Mono',ui-monospace,'JetBrains Mono','Menlo','Monaco',monospace";
+const SF = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
+const MONO = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
 
 const styles = {
   page: {
     minHeight: '100vh',
     width: '100%',
-    background: 'radial-gradient(circle at 30% 20%, rgba(123,97,255,0.10), transparent 50%), radial-gradient(circle at 80% 90%, rgba(255,159,106,0.08), transparent 45%), #0B0F1E',
+    background: 'radial-gradient(circle at 30% 20%, rgba(201,162,75,0.08), transparent 50%), radial-gradient(circle at 80% 90%, rgba(111,174,142,0.07), transparent 45%), #0d1311',
     color: '#ECEFF7',
     display: 'flex',
     alignItems: 'center',
@@ -39,7 +37,7 @@ const styles = {
     fontSize: 13,
     letterSpacing: '0.34em',
     fontWeight: 700,
-    color: '#7B61FF',
+    color: '#c9a24b',
     textAlign: 'center',
     marginBottom: 24,
     fontFamily: MONO,
@@ -107,15 +105,15 @@ const styles = {
   button: {
     width: '100%',
     padding: '13px 14px',
-    background: 'linear-gradient(135deg, #7B61FF, #5A3FE0)',
+    background: 'linear-gradient(135deg, #c9a24b, #9a7a35)',
     border: 'none',
     borderRadius: 10,
-    color: '#fff',
+    color: '#0d1311',
     fontSize: 14,
     fontWeight: 600,
     letterSpacing: '-0.005em',
     cursor: 'pointer',
-    boxShadow: '0 4px 20px rgba(123,97,255,0.45)',
+    boxShadow: '0 4px 20px rgba(201,162,75,0.40)',
     fontFamily: SF,
     transition: 'transform 0.15s, box-shadow 0.2s',
   },
@@ -123,8 +121,8 @@ const styles = {
   notice: {
     fontSize: 13,
     color: '#9CDCA0',
-    background: 'rgba(123,97,255,0.10)',
-    border: '1px solid rgba(123,97,255,0.28)',
+    background: 'rgba(201,162,75,0.10)',
+    border: '1px solid rgba(201,162,75,0.28)',
     padding: 14,
     borderRadius: 10,
     lineHeight: 1.55,
@@ -133,7 +131,7 @@ const styles = {
   linkBtn: {
     background: 'none',
     border: 'none',
-    color: '#7B61FF',
+    color: '#c9a24b',
     cursor: 'pointer',
     fontSize: 12,
     padding: 0,
@@ -442,10 +440,10 @@ export default function Login() {
                 textAlign: 'center',
               }}>
                 By creating an account, you agree to MĪZAN's{' '}
-                <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#7B61FF', textDecoration: 'none' }}>
+                <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#c9a24b', textDecoration: 'none' }}>
                   Terms of Service
                 </a>{' '}and{' '}
-                <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#7B61FF', textDecoration: 'none' }}>
+                <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#c9a24b', textDecoration: 'none' }}>
                   Privacy Policy
                 </a>,
                 and consent to the collection, processing, and storage of your data as described in our Privacy Policy.

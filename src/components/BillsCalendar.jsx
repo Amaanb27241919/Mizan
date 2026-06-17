@@ -35,17 +35,18 @@ import React, { useMemo } from "react";
 // These mirror the CSS variables defined in MizanApp.jsx's THEME_CSS so
 // the tile blends in regardless of light/dark theme. No exports — kept
 // scoped to this file.
-const FU = "'SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
-const FM = "'SF Mono',ui-monospace,'JetBrains Mono','Menlo','Monaco',monospace";
+const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
+const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
+const FU = FP;
 const COL = {
   card:    "var(--mz-card)",
   border:  "var(--mz-border)",
   text:    "var(--mz-text)",
   textHi:  "var(--mz-textHi)",
   muted:   "var(--mz-muted)",
-  red:     "#FF6B6B",
-  gold:    "#FF9F6A",
-  blue:    "#7B61FF",
+  red:     "#c46a52",   // rust
+  gold:    "#cf9e54",   // amber
+  blue:    "#c9a24b",   // gold — primary accent
   rLg:     "var(--r-lg)",
   rMd:     "var(--r-md)",
   s2:      "var(--s-2)",

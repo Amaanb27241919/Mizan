@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@playwright/test": "^1.61.0",
     "@sentry/node": "^10.52.0",
     "@sentry/react": "^10.52.0",
     "@supabase/supabase-js": "^2.45.0",

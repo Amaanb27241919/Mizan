@@ -24,10 +24,10 @@ const TT = {
   textHi:   "var(--mz-textHi)",
   muted:    "var(--mz-muted)",
   dim:      "var(--mz-dim)",
-  gain:     "#10B981",  // <80% — under budget, healthy
-  gold:     "#FF9F6A",  // 80-100% — approaching cap
-  loss:     "#FF6B6B",  // >100% — over cap
-  blue:     "#7B61FF",
+  gain:     "#6fae8e",  // jade — under budget, healthy
+  gold:     "#cf9e54",  // amber — approaching cap
+  loss:     "#c46a52",  // rust — over cap
+  blue:     "#c9a24b",  // gold — primary accent
   rSm:      "var(--r-sm)",
   rMd:      "var(--r-md)",
   rLg:      "var(--r-lg)",
@@ -39,8 +39,9 @@ const TT = {
   s6:       "var(--s-6)",
   shadow:   "var(--mz-shadow)",
 };
-const FU = "'SF Pro Display','SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
-const FM = "'SF Mono',ui-monospace,'JetBrains Mono','Menlo','Monaco',monospace";
+const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
+const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
+const FU = FP;
 
 const fmtUSD = v => `$${(+v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

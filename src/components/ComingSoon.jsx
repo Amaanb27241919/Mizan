@@ -21,8 +21,8 @@ const tokens = {
   textHi:   "var(--mz-textHi)",
   text:     "var(--mz-text)",
   muted:    "var(--mz-muted)",
-  blue:     "#7B61FF",   // matches MizanApp T.blue
-  gold:     "#FF9F6A",   // matches MizanApp T.gold
+  blue:     "#c9a24b",   // gold — primary accent
+  gold:     "#cf9e54",   // amber — warnings
   rLg:      "var(--r-lg)",
   rMd:      "var(--r-md)",
   rSm:      "var(--r-sm)",
@@ -32,8 +32,9 @@ const tokens = {
   s5:       "var(--s-5)",
   s6:       "var(--s-6)",
 };
-const FM = "var(--font-mono, ui-monospace, Menlo, monospace)";
-const FU = "var(--font-ui, system-ui, sans-serif)";
+const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
+const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
+const FU = FP;
 
 export default function ComingSoon({
   title,
