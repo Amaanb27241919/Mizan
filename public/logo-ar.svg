@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 40" role="img" aria-label="ميزان">
+  <!-- Balance-scale mark (same as logo-en.svg) -->
+  <g transform="translate(4, 4)">
+    <circle cx="16" cy="7" r="2" fill="#c9a24b"/>
+    <rect x="5" y="8.5" width="22" height="2" rx="1" fill="#c9a24b"/>
+    <rect x="6" y="10.5" width="1.5" height="4.5" rx="0.75" fill="#c9a24b"/>
+    <rect x="24.5" y="10.5" width="1.5" height="4.5" rx="0.75" fill="#c9a24b"/>
+    <path d="M3.5 15.5 Q6.75 19.5 10 15.5" stroke="#c9a24b" stroke-width="1.75" fill="none" stroke-linecap="round"/>
+    <path d="M22 15.5 Q25.25 19.5 28.5 15.5" stroke="#c9a24b" stroke-width="1.75" fill="none" stroke-linecap="round"/>
+    <rect x="15.25" y="10.5" width="1.5" height="12" rx="0.75" fill="#c9a24b"/>
+    <rect x="11" y="22.5" width="10" height="2" rx="1" fill="#c9a24b"/>
+  </g>
+  <!-- ميزان Arabic wordmark -->
+  <text
+    x="48" y="28"
+    font-family="'Amiri', 'Scheherazade New', 'Noto Naskh Arabic', 'Arial', serif"
+    font-size="22"
+    font-weight="700"
+    fill="#c9a24b"
+    letter-spacing="1"
+    direction="rtl"
+  >ميزان</text>
+</svg>
