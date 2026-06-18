@@ -1105,6 +1105,49 @@ function parseCSV(text,broker){
   return rows;
 }
 
+/* ─── MARKET HEATMAP (TradingView embed) ─────────────── */
+function MarketHeatmap(){
+  const ref=useRef(null);
+  const[colorTheme,setColorTheme]=useState(()=>
+    document.documentElement.getAttribute("data-theme")==="light"?"light":"dark"
+  );
+  useEffect(()=>{
+    const obs=new MutationObserver(()=>{
+      setColorTheme(document.documentElement.getAttribute("data-theme")==="light"?"light":"dark");
+    });
+    obs.observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+    return()=>obs.disconnect();
+  },[]);
+  useEffect(()=>{
+    const el=ref.current;
+    if(!el)return;
+    while(el.firstChild)el.removeChild(el.firstChild);
+    const s=document.createElement("script");
+    s.type="text/javascript";
+    s.src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js";
+    s.async=true;
+    s.textContent=JSON.stringify({
+      exchanges:[],dataSource:"SPX500",grouping:"sector",
+      blockSize:"market_cap_basic",blockColor:"change",
+      locale:"en",symbolUrl:"",colorTheme,
+      hasTopBar:false,isDataSetEnabled:false,
+      isZoomEnabled:true,hasSymbolTooltip:true,isMonoSize:false,
+      width:"100%",height:"480",
+    });
+    el.appendChild(s);
+    return()=>{ while(el.firstChild)el.removeChild(el.firstChild); };
+  },[colorTheme]);
+  return(
+    <BentoTile accent={T.slate} style={{padding:0,overflow:"hidden"}}>
+      <div style={{padding:`${T.s3} ${T.s4} 0`}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>MARKET SECTORS — S&P 500</span>
+        <span style={{fontFamily:FM,fontSize:9,color:T.dim,letterSpacing:"0.06em",marginLeft:T.s3}}>via TradingView · live</span>
+      </div>
+      <div ref={ref} style={{width:"100%"}}/>
+    </BentoTile>
+  );
+}
+
 /* ─── SECTOR BREAKDOWN ───────────────────────────────── */
 // Buckets positions by sector. Pulls Finnhub /stock/profile2 per unique ticker
 // and caches results in localStorage so we don't burn the 60-calls/min free tier.
@@ -1878,6 +1921,9 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
 
     {/* Sector breakdown — keep as a standalone card */}
     <SectorBreakdown holdings={merged} total={equityValue}/>
+
+    {/* Market sector heat map — S&P 500 by sector, colored by day change */}
+    <MarketHeatmap/>
   </div>;
 }
 
@@ -6640,10 +6686,10 @@ function ConnectModal({onClose,snapId,onConnected}){
 /* ─── ABOUT ──────────────────────────────────────────── */
 function About(){
   const sections = [
-    { icon:"💳", t:"Finances",     accent:T.blue, d:"Net worth tracked daily across every connected brokerage plus manual assets (gold, real estate, business equity). Live Zakat calculation with per-asset eligibility toggles." },
-    { icon:"📈", t:"Investments",  accent:T.gain, d:"Unified portfolio across all brokerages via SnapTrade. Real-time Sharia screening against 7 frameworks. Tax-loss harvesting with halal replacement suggestions." },
-    { icon:"⚡", t:"Trading",      accent:T.gold, d:"Order ticket with preview/confirm flow. Pre/post-market quotes, browser-native price alerts, watchlist. Sharia pre-check on every order — spot only." },
-    { icon:"🧠", t:"Intelligence", accent:"#7C3AED", d:"Sentiment-tagged market news. Sharia-aware AI advisor with full portfolio context. Auto-notifications for non-compliance changes and dividend payments." },
+    { icon:"📊", t:"Portfolio",    accent:T.blue, d:"Holdings across 60+ brokerages via SnapTrade. Live Sharia screening against 7 AAOIFI-aligned standards with ratio analysis. Dividend purification log, tax-loss harvesting, backtesting, and per-holding news & earnings." },
+    { icon:"🏦", t:"Banking",      accent:T.gain, d:"Bank accounts and transactions via Plaid with cursor-based sync. Spending by category, budget management, bills calendar, and daily net worth snapshots." },
+    { icon:"🕌", t:"Zakat & Goals",accent:T.gold, d:"Live nisab calculation using real-time gold and silver spot prices. Per-dividend purification per AAOIFI guidelines. Goal templates for Hajj, Mahr, Waqf, Home, and FIRE." },
+    { icon:"🧠", t:"AI Advisor",   accent:T.violet, d:"Claude Sonnet-powered advisor with your full portfolio context and real-time prices injected. Islamic finance guardrails enforce Sharia-compliant guidance only." },
   ];
   const principles = [
     ["Riba","No interest-bearing instruments. Cash accounts only. Margin and shorts blocked at the order layer."],
@@ -6655,11 +6701,14 @@ function About(){
   ];
   const standards = ["AAOIFI","IFSB","DJIM","S&P Shariah","FTSE Shariah","MSCI Islamic","SC Malaysia"];
   const integrations = [
-    {n:"SnapTrade",d:"60+ brokerages",c:T.blue},
-    {n:"Finnhub",d:"Real-time quotes + news",c:T.gain},
-    {n:"Polygon",d:"Historical OHLC bars",c:T.gold},
-    {n:"Anthropic",d:"AI advisor (Claude)",c:"#CC785C"},
-    {n:"Supabase",d:"Auth + per-user state",c:"#3ECF8E"},
+    {n:"SnapTrade",    d:"60+ brokerages",              c:T.blue},
+    {n:"Plaid",        d:"Bank accounts + transactions", c:T.gain},
+    {n:"Anthropic",    d:"AI Advisor (Claude Sonnet)",   c:"#CC785C"},
+    {n:"Finnhub",      d:"Market data, news, earnings",  c:T.gain},
+    {n:"Polygon",      d:"Historical OHLC bars",          c:T.gold},
+    {n:"Stooq",        d:"Live gold & silver prices",    c:T.gold},
+    {n:"TradingView",  d:"Market sector heat map",        c:T.slate},
+    {n:"Supabase",     d:"Auth + encrypted data store",  c:"#3ECF8E"},
   ];
 
   return <div style={{display:"flex",flexDirection:"column",gap:T.s5,maxWidth:1080,margin:"0 auto",paddingBottom:T.s10}}>
@@ -6682,7 +6731,7 @@ function About(){
         The Shariah-compliant financial super-app.
       </div>
       <div style={{fontFamily:FU,fontSize:15,color:T.muted,lineHeight:1.6,maxWidth:600,margin:"0 auto"}}>
-        Brokerages, banking, trading, and AI insights — unified, halal-screened, in one place.
+        Brokerages, banking, Zakat, and AI insights — unified, halal-screened, in one place.
       </div>
     </BentoTile>
 
