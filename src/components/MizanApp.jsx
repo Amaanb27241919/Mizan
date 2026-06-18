@@ -1122,10 +1122,15 @@ function MarketHeatmap(){
     const el=ref.current;
     if(!el)return;
     while(el.firstChild)el.removeChild(el.firstChild);
+    // TradingView requires this sibling div as the render target
+    const widgetDiv=document.createElement("div");
+    widgetDiv.className="tradingview-widget-container__widget";
+    el.appendChild(widgetDiv);
     const s=document.createElement("script");
     s.type="text/javascript";
     s.src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js";
-    s.async=true;
+    // Do NOT set async — TradingView reads config via document.currentScript.textContent
+    // which is null when the script executes asynchronously
     s.textContent=JSON.stringify({
       exchanges:[],dataSource:"SPX500",grouping:"sector",
       blockSize:"market_cap_basic",blockColor:"change",
@@ -1143,7 +1148,7 @@ function MarketHeatmap(){
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>MARKET SECTORS — S&P 500</span>
         <span style={{fontFamily:FM,fontSize:9,color:T.dim,letterSpacing:"0.06em",marginLeft:T.s3}}>via TradingView · live</span>
       </div>
-      <div ref={ref} style={{width:"100%"}}/>
+      <div ref={ref} className="tradingview-widget-container" style={{width:"100%"}}/>
     </BentoTile>
   );
 }
