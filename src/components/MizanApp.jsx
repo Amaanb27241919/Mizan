@@ -2003,6 +2003,16 @@ function AAOIFIScreener({holdings=[]}){
   const[busy,setBusy]=useState(false);
   const[primary,setPrimary]=useState(()=>{try{return localStorage.getItem("mizan_screen_standard")||"AAOIFI";}catch{return"AAOIFI";}});
   const setStandard=v=>{setPrimary(v);try{localStorage.setItem("mizan_screen_standard",v);}catch{}};
+  // Cache freshness: most recent asOf date across all cached results.
+  const today=new Date().toISOString().slice(0,10);
+  const cachedDates=Object.values(results).map(r=>r.asOf).filter(Boolean);
+  const latestCacheDate=cachedDates.length>0?cachedDates.sort().at(-1):null;
+  const cacheAge=latestCacheDate
+    ?latestCacheDate===today?"Screened today"
+      :latestCacheDate===new Date(Date.now()-86400000).toISOString().slice(0,10)?"Screened yesterday"
+      :`Screened ${latestCacheDate}`
+    :"Not yet screened";
+  const cacheStale=latestCacheDate&&latestCacheDate<today;
   const tickers=[...new Set(holdings.map(h=>h.tk).filter(Boolean))];
 
   const runScreen=async(forceAll)=>{
@@ -2077,6 +2087,10 @@ function AAOIFIScreener({holdings=[]}){
           </select>
           <button onClick={()=>runScreen(true)} disabled={busy} className="btn-primary">{busy?"Screening…":"Re-screen"}</button>
         </div>
+      </div>
+      <div style={{marginTop:T.s2,display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:10,color:cacheStale?T.gold:T.muted}}>
+        <span style={{width:6,height:6,borderRadius:"50%",background:cacheStale?T.gold:T.gain,flexShrink:0,display:"inline-block"}}/>
+        {cacheAge}{cacheStale&&" — re-screen for fresh data"}
       </div>
       <div style={{marginTop:T.s3,padding:`${T.s2} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.6,letterSpacing:"0.02em"}}>
         <span style={{color:T.gold,fontWeight:600}}>{STANDARDS[primary].name}</span>
@@ -2174,6 +2188,20 @@ function AAOIFIScreener({holdings=[]}){
 function TaxPlanner({holdings=[],activities=[],snapAccounts=[]}){
   const[bracket,setBracket]=useState(0.24);
   const[stateBracket,setStateBracket]=useState(0.05);
+  // Normalize symbol to a clean uppercase string regardless of whether the
+  // activity's symbol field is a plain string, {symbol:"AAPL"}, or a nested object.
+  const normSym=s=>{
+    if(!s)return"";
+    if(typeof s==="string")return s.toUpperCase();
+    let cur=s,depth=0;
+    while(cur&&typeof cur==="object"&&depth<4){
+      const v=cur.symbol??cur.raw_symbol??cur.ticker;
+      if(typeof v==="string")return v.toUpperCase();
+      if(typeof v==="object"){cur=v;depth++;continue;}
+      break;
+    }
+    return(cur?.symbol??cur?.raw_symbol??cur?.ticker??"").toString().toUpperCase();
+  };
 
   const losers=holdings
     .filter(h=>h.sh>0&&h.ac>0&&h.px<h.ac)
@@ -2210,7 +2238,7 @@ function TaxPlanner({holdings=[],activities=[],snapAccounts=[]}){
   }));
   let missingBasisCount=0;
   const ytdRealized=ytdSells.reduce((s,a)=>{
-    const sym=((a.symbol&&(a.symbol.symbol||a.symbol))||"").toString().toUpperCase();
+    const sym=normSym(a.symbol);
     const proceeds=Math.abs(+a.amount||0);
     const units=Math.abs(+a.units||0);
     const ac=avgCostBySymbol[sym];
@@ -2225,7 +2253,7 @@ function TaxPlanner({holdings=[],activities=[],snapAccounts=[]}){
   const today=new Date();
   const days30=new Date(today);days30.setDate(today.getDate()-30);
   const days30ISO=days30.toISOString().slice(0,10);
-  const recentSells=new Set(activities.filter(a=>(a.type||"").toUpperCase()==="SELL"&&(a.trade_date||"")>=days30ISO).map(a=>a.symbol?.symbol||a.symbol));
+  const recentSells=new Set(activities.filter(a=>(a.type||"").toUpperCase()==="SELL"&&(a.trade_date||"")>=days30ISO).map(a=>normSym(a.symbol)));
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     {/* ─── Hero + bracket selectors ────────────────── */}
@@ -2533,27 +2561,31 @@ function ActivityPanel({activities=[],accounts=[]}){
     return typeof out==="string"&&out?out:"—";
   };
 
+  const rangeLabel={all:"All time","1m":"1 month","3m":"3 months","1y":"1 year","5y":"5 years"}[range]||range;
+  const withdrawals=rows.filter(r=>(r.type||"").toUpperCase()==="WITHDRAWAL").reduce((s,r)=>s+Math.abs(r.amount||0),0);
+  const netFlow=totals.DEPOSIT-withdrawals;
+
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     <div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:T.s4}}>
       <BentoTile accent={T.blue}>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BUYS</div>
         <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.BUY)}</div>
-        <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{rows.filter(r=>(r.type||"").toUpperCase()==="BUY").length} txns</div>
+        <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{rows.filter(r=>(r.type||"").toUpperCase()==="BUY").length} txns · {rangeLabel}</div>
       </BentoTile>
       <BentoTile accent={T.gold}>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SELLS</div>
         <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.SELL)}</div>
-        <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{rows.filter(r=>(r.type||"").toUpperCase()==="SELL").length} txns</div>
+        <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{rows.filter(r=>(r.type||"").toUpperCase()==="SELL").length} txns · {rangeLabel}</div>
       </BentoTile>
       <BentoTile accent={T.gain}>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DIVIDENDS</div>
         <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.DIVIDEND)}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>Cash received</div>
+        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>Cash received · {rangeLabel}</div>
       </BentoTile>
-      <BentoTile accent={T.gain}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DEPOSITS</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.DEPOSIT)}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>Net contributions</div>
+      <BentoTile accent={netFlow>=0?T.gain:T.loss}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NET FLOW</div>
+        <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:netFlow>=0?T.gain:T.loss,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{netFlow>=0?"+":"-"}{kf(Math.abs(netFlow))}</div>
+        <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>Deposits − withdrawals · {rangeLabel}</div>
       </BentoTile>
     </div>
 
@@ -4116,9 +4148,10 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
               <span style={{color:fc(today)}}>({valuesHidden?"••":fp(todayPct)})</span>
             </span>
           </div>
-          {merged.length>0&&<div style={{marginTop:T.s4,display:"flex",alignItems:"center",gap:T.s2}}>
-            <Sk vals={Array.from({length:30},(_,i)=>tot*(0.92+i*0.0028))} color={totGain>=0?T.gain:T.loss} w={220} h={42} fill/>
-            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.06em"}}>30-day trend</span>
+          {merged.length>0&&<div style={{marginTop:T.s4,display:"flex",alignItems:"center",gap:T.s3,fontFamily:FM,fontSize:11,color:T.muted}}>
+            <span>{merged.length} position{merged.length===1?"":"s"}</span>
+            <span style={{color:T.dim}}>·</span>
+            <span>Cost basis <span style={{color:T.textHi,fontWeight:600}}>{mask(fmtUSD(totCost))}</span></span>
           </div>}
         </BentoTile>
 
