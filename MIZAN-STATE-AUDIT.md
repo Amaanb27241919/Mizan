@@ -1,7 +1,9 @@
 # MĪZAN — State-of-App Audit
 
 > **Living document.** Re-run every few weeks to track drift between what's built and what's deployed.
-> Last audited: 2026-06-16 (updated) · All findings from direct file reads, no guessing.
+> Last audited: 2026-06-17 (updated) · All findings from direct file reads, no guessing.
+>
+> **2026-06-17 session changes**: Range-aware portfolio gains (1D/1W/1M/3M/YTD/1Y/All); real chart axes (XAxis months+year, YAxis $0→auto); Activity net-flow + range label; TaxPlanner normSym() helper; Screener cache freshness dot; fake sparkline replaced with position count + cost basis. CLAUDE.md rewritten to elite engineering brief (17 sections). Session hooks added (.claude/settings.json) — build check on edit, auto-update audit date on Stop.
 
 ---
 
