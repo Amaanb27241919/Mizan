@@ -1305,7 +1305,7 @@ function NicknameEditor({accountId,defaultName,nickname,onSetNickname,
 /* ─── OVERVIEW ───────────────────────────────────────── */
 function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0,nicknames={},onSetNickname}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
-  const[range,setRange]=useState("All");
+  const[range,setRange]=useState("1Y");
   const liveSrc=snapAccounts.length>0
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h => h && h.sh > 0 && h.px > 0)
     : [];
@@ -1506,13 +1506,12 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
 
     // Range filter
     const cutoff=new Date(today);
-    if(range==="1W")cutoff.setDate(today.getDate()-7);
+    if(range==="1D")cutoff.setDate(today.getDate()-1);
+    else if(range==="1W")cutoff.setDate(today.getDate()-7);
     else if(range==="1M")cutoff.setMonth(today.getMonth()-1);
     else if(range==="3M")cutoff.setMonth(today.getMonth()-3);
-    else if(range==="6M")cutoff.setMonth(today.getMonth()-6);
+    else if(range==="YTD")cutoff.setFullYear(today.getFullYear(),0,1);
     else if(range==="1Y")cutoff.setFullYear(today.getFullYear()-1);
-    else if(range==="3Y")cutoff.setFullYear(today.getFullYear()-3);
-    else if(range==="5Y")cutoff.setFullYear(today.getFullYear()-5);
     else cutoff.setTime(firstDate.getTime()); // "All"
     const startDate=cutoff>firstDate?cutoff:firstDate;
 
@@ -1578,13 +1577,14 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     return series;
   },[activities,netWorthHistory,totBucket,range]);
 
-  // Range-aware gain: compare current total against portfolio value at the
-  // start of the selected window. Falls back to cost-basis unrealized gain
-  // when chart history is unavailable or range is "All".
+  // Range-aware gain: 1D uses live day-change from positions; all others
+  // compare current total against the chart's first data point for that window.
+  // Falls back to cost-basis unrealized gain when chart history is unavailable.
   const rangeStartVal=chart.length>1?chart[0].value:null;
-  const useRangeGain=rangeStartVal!==null&&range!=="All";
-  const dispGain=useRangeGain?tot-rangeStartVal:gain;
-  const dispGpc=useRangeGain&&rangeStartVal>0?((tot-rangeStartVal)/rangeStartVal)*100:gpc;
+  const useRangeGain=range==="1D"||rangeStartVal!==null;
+  const dispGain=range==="1D"?today:useRangeGain&&rangeStartVal!==null?tot-rangeStartVal:gain;
+  const dispGpc=range==="1D"?(tot>0?(today/(tot-today))*100:0)
+    :rangeStartVal>0?((tot-rangeStartVal)/rangeStartVal)*100:gpc;
   const dispGainLabel=range==="All"?"all-time":range.toLowerCase();
 
   // Empty-state welcome card — shows for fresh users with no real broker
@@ -1649,7 +1649,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
             <EyeToggle hidden={valuesHidden} toggle={toggleHideValues} size={14} color={T.muted}/>
           </div>
           <div style={{display:"flex",gap:T.s1}}>
-            {["1W","1M","3M","6M","1Y","3Y","5Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{r}</button>)}
+            {["1D","1W","1M","3M","YTD","1Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{r}</button>)}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"baseline",gap:T.s3,marginBottom:T.s1,flexWrap:"wrap"}}>
@@ -1664,12 +1664,25 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
           <span style={{color:T.dim}}>·</span>
           <span>Today <span style={{color:fc(today),fontWeight:600}}>{valuesHidden?"••••":`${today>=0?"+":""}${f$(Math.abs(today))}`}</span></span>
         </div>
-        <div style={{marginTop:T.s4,height:120}}>
+        <div style={{marginTop:T.s4,height:180}}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chart} margin={{top:6,right:6,bottom:0,left:0}}>
-              <defs><linearGradient id="hero-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.blue} stopOpacity={0.35}/><stop offset="100%" stopColor={T.blue} stopOpacity={0}/></linearGradient></defs>
-              <XAxis dataKey="ts" type="number" domain={["dataMin","dataMax"]} scale="time" hide/>
-              <YAxis hide domain={["dataMin","auto"]}/>
+            <ComposedChart data={chart} margin={{top:6,right:8,bottom:20,left:56}}>
+              <defs><linearGradient id="hero-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.blue} stopOpacity={0.3}/><stop offset="100%" stopColor={T.blue} stopOpacity={0}/></linearGradient></defs>
+              <XAxis
+                dataKey="ts" type="number" domain={["dataMin","dataMax"]} scale="time"
+                tickFormatter={ts=>{
+                  const d=new Date(ts);
+                  const mo=d.toLocaleString("en-US",{month:"short"});
+                  const yr=String(d.getFullYear()).slice(2);
+                  return d.getMonth()===0?`${mo} '${yr}`:mo;
+                }}
+                tick={{fontFamily:FM,fontSize:9,fill:T.muted}} tickLine={false} axisLine={false}
+                minTickGap={36}/>
+              <YAxis
+                domain={[0,"auto"]}
+                tickFormatter={v=>v===0?"$0":`$${v>=1000?(v/1000).toFixed(0)+"k":v}`}
+                tick={{fontFamily:FM,fontSize:9,fill:T.muted}} tickLine={false} axisLine={false}
+                width={50}/>
               <Tooltip
                 labelFormatter={ts=>new Date(ts).toLocaleDateString("en-US",{year:"numeric",month:"short"})}
                 formatter={(v,name)=>[fmtUSD(v),name==="value"?"Portfolio":"Contributions"]}
