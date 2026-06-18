@@ -1506,7 +1506,11 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
 
     // Range filter
     const cutoff=new Date(today);
-    if(range==="1Y")cutoff.setFullYear(today.getFullYear()-1);
+    if(range==="1W")cutoff.setDate(today.getDate()-7);
+    else if(range==="1M")cutoff.setMonth(today.getMonth()-1);
+    else if(range==="3M")cutoff.setMonth(today.getMonth()-3);
+    else if(range==="6M")cutoff.setMonth(today.getMonth()-6);
+    else if(range==="1Y")cutoff.setFullYear(today.getFullYear()-1);
     else if(range==="3Y")cutoff.setFullYear(today.getFullYear()-3);
     else if(range==="5Y")cutoff.setFullYear(today.getFullYear()-5);
     else cutoff.setTime(firstDate.getTime()); // "All"
@@ -1574,6 +1578,15 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     return series;
   },[activities,netWorthHistory,totBucket,range]);
 
+  // Range-aware gain: compare current total against portfolio value at the
+  // start of the selected window. Falls back to cost-basis unrealized gain
+  // when chart history is unavailable or range is "All".
+  const rangeStartVal=chart.length>1?chart[0].value:null;
+  const useRangeGain=rangeStartVal!==null&&range!=="All";
+  const dispGain=useRangeGain?tot-rangeStartVal:gain;
+  const dispGpc=useRangeGain&&rangeStartVal>0?((tot-rangeStartVal)/rangeStartVal)*100:gpc;
+  const dispGainLabel=range==="All"?"all-time":range.toLowerCase();
+
   // Empty-state welcome card — shows for fresh users with no real broker
   // connections and demo mode off. Replaces the previous behavior where new
   // users saw a hardcoded sample portfolio.
@@ -1636,7 +1649,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
             <EyeToggle hidden={valuesHidden} toggle={toggleHideValues} size={14} color={T.muted}/>
           </div>
           <div style={{display:"flex",gap:T.s1}}>
-            {["1Y","3Y","5Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{r}</button>)}
+            {["1W","1M","3M","6M","1Y","3Y","5Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{r}</button>)}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"baseline",gap:T.s3,marginBottom:T.s1,flexWrap:"wrap"}}>
@@ -1644,9 +1657,9 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         </div>
         <div style={{display:"flex",gap:T.s4,marginTop:T.s2,fontFamily:FM,fontSize:12,color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
           <span style={{display:"inline-flex",alignItems:"center",gap:T.s1}}>
-            <span style={{color:gain>=0?T.gain:T.loss,fontWeight:600}}>{valuesHidden?"••••":`${gain>=0?"+":""}${kf(Math.abs(gain))}`}</span>
-            <span style={{color:gpc>=0?T.gain:T.loss}}>({valuesHidden?"••":fp(gpc)})</span>
-            all-time
+            <span style={{color:dispGain>=0?T.gain:T.loss,fontWeight:600}}>{valuesHidden?"••••":`${dispGain>=0?"+":""}${kf(Math.abs(dispGain))}`}</span>
+            <span style={{color:dispGpc>=0?T.gain:T.loss}}>({valuesHidden?"••":fp(dispGpc)})</span>
+            {dispGainLabel}
           </span>
           <span style={{color:T.dim}}>·</span>
           <span>Today <span style={{color:fc(today),fontWeight:600}}>{valuesHidden?"••••":`${today>=0?"+":""}${f$(Math.abs(today))}`}</span></span>
