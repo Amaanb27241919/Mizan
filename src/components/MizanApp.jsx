@@ -1555,7 +1555,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     // Range filter
     const cutoff=new Date(today);
     if(range==="1D")cutoff.setDate(today.getDate()-1);
-    else if(range==="1W")cutoff.setDate(today.getDate()-7);
+    else if(range==="1W"){const d=today.getDay();cutoff.setDate(today.getDate()-(d===0?7:d));}
     else if(range==="1M")cutoff.setMonth(today.getMonth()-1);
     else if(range==="3M")cutoff.setMonth(today.getMonth()-3);
     else if(range==="YTD")cutoff.setFullYear(today.getFullYear(),0,1);
@@ -1625,14 +1625,22 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     return series;
   },[activities,netWorthHistory,totBucket,range]);
 
-  // Range-aware gain: 1D uses live day-change from positions; all others
-  // compare current total against the chart's first data point for that window.
-  // Falls back to cost-basis unrealized gain when chart history is unavailable.
+  // Nightly snapshots sorted newest-first for 1D/1W baseline lookups.
+  const sortedSnaps=useMemo(()=>[...netWorthHistory].sort((a,b)=>b.date.localeCompare(a.date)),[netWorthHistory]);
+  // 1D: most recent snapshot strictly before today → real 24-hour change.
+  const snap1D=useMemo(()=>{const t=new Date().toISOString().slice(0,10);return sortedSnaps.find(s=>s.date<t)||null;},[sortedSnaps]);
+  // 1W: most recent snapshot at or before the most recent Sunday → week-to-date change.
+  const snap1W=useMemo(()=>{const d=new Date();const day=d.getDay();d.setDate(d.getDate()-(day===0?7:day));const str=d.toISOString().slice(0,10);return sortedSnaps.find(s=>s.date<=str)||null;},[sortedSnaps]);
+
   const rangeStartVal=chart.length>1?chart[0].value:null;
-  const useRangeGain=range==="1D"||rangeStartVal!==null;
-  const dispGain=range==="1D"?today:useRangeGain&&rangeStartVal!==null?tot-rangeStartVal:gain;
-  const dispGpc=range==="1D"?(tot>0?(today/(tot-today))*100:0)
-    :rangeStartVal>0?((tot-rangeStartVal)/rangeStartVal)*100:gpc;
+  const dispGain=
+    range==="1D"?(snap1D?tot-snap1D.total:today)
+    :range==="1W"?(snap1W?tot-snap1W.total:(rangeStartVal!==null?tot-rangeStartVal:gain))
+    :rangeStartVal!==null?tot-rangeStartVal:gain;
+  const dispGpc=
+    range==="1D"?(snap1D&&snap1D.total>0?(tot-snap1D.total)/snap1D.total*100:(tot>0?(today/(tot-today))*100:0))
+    :range==="1W"?(snap1W&&snap1W.total>0?(tot-snap1W.total)/snap1W.total*100:(rangeStartVal>0?(tot-rangeStartVal)/rangeStartVal*100:gpc))
+    :rangeStartVal>0?(tot-rangeStartVal)/rangeStartVal*100:gpc;
   const dispGainLabel=range==="All"?"all-time":range.toLowerCase();
 
   // Empty-state welcome card — shows for fresh users with no real broker
@@ -1923,9 +1931,6 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       netWorthHistory={netWorthHistory}
       onNav={onNav}
     />
-
-    {/* Sector breakdown — keep as a standalone card */}
-    <SectorBreakdown holdings={merged} total={equityValue}/>
 
     {/* Market sector heat map — S&P 500 by sector, colored by day change */}
     <MarketHeatmap/>
@@ -4256,6 +4261,9 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
           </div>
         </div>
       </BentoTile>}
+
+      {/* ─── Sector allocation — sits under brokerage allocation ─────────── */}
+      <SectorBreakdown holdings={merged} total={tot}/>
 
       {/* ─── Filter chips ─────────────────────────────── */}
       <div style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center"}}>
