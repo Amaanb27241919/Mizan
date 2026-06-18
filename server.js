@@ -75,7 +75,8 @@ loadEnv(path.join(__dirname, ".env"));
 
 // ── PWA icon generation (idempotent, runs at boot) ───────
 // Materializes public/icon-192.png and public/icon-512.png if missing.
-// Solid dark-navy (#06080D) background with a centered blue (#2563EB) diamond.
+// Forest-green (#0d1311) background with a gold (#c9a24b) diamond fallback.
+// Production icons are committed to git; this only runs on fresh local clones.
 // Pure Node built-ins (zlib + Buffer) — no image deps.
 function ensurePwaIcons() {
   const publicDir = path.join(__dirname, "public");
@@ -86,8 +87,8 @@ function ensurePwaIcons() {
   if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
   if (targets.every(t => fs.existsSync(t.file))) return;
 
-  const BG = [0x06, 0x08, 0x0d];
-  const FG = [0x25, 0x63, 0xeb];
+  const BG = [0x0d, 0x13, 0x11];
+  const FG = [0xc9, 0xa2, 0x4b];
 
   const crcTable = (() => {
     const table = new Uint32Array(256);

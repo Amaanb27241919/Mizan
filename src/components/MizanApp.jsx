@@ -6733,10 +6733,15 @@ function About(){
       textAlign:"center",
     }}>
       <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:T.s3,marginBottom:T.s4}}>
-        <svg width={48} height={48} viewBox="0 0 16 16" fill="none">
-          <defs><linearGradient id="abLg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs>
-          <path d="M8 1L15 7L8 13L1 7Z" stroke="url(#abLg)" strokeWidth={1.4} fill="none"/>
-          <circle cx="8" cy="7" r="2" fill={T.blue} opacity={0.9}/>
+        <svg width={48} height={48} viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="7" r="2" fill={T.blue}/>
+          <rect x="5" y="8.5" width="22" height="2" rx="1" fill={T.blue}/>
+          <rect x="6" y="10.5" width="1.5" height="4.5" rx="0.75" fill={T.blue}/>
+          <rect x="24.5" y="10.5" width="1.5" height="4.5" rx="0.75" fill={T.blue}/>
+          <path d="M3.5 15.5 Q6.75 19.5 10 15.5" stroke={T.blue} strokeWidth="1.75" strokeLinecap="round"/>
+          <path d="M22 15.5 Q25.25 19.5 28.5 15.5" stroke={T.blue} strokeWidth="1.75" strokeLinecap="round"/>
+          <rect x="15.25" y="10.5" width="1.5" height="12" rx="0.75" fill={T.blue}/>
+          <rect x="11" y="22.5" width="10" height="2" rx="1" fill={T.blue}/>
         </svg>
         <span style={{fontFamily:FU,fontSize:44,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>MĪZAN</span>
       </div>
@@ -7881,10 +7886,15 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
   // ───── STEP 1 — Welcome ──────────
   const StepWelcome=<>
     <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:T.s3,marginBottom:T.s5}}>
-      <svg width={56} height={56} viewBox="0 0 16 16" fill="none">
-        <defs><linearGradient id="onbLg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs>
-        <path d="M8 1L15 7L8 13L1 7Z" stroke="url(#onbLg)" strokeWidth={1.4} fill="none"/>
-        <circle cx="8" cy="7" r="2.2" fill={T.blue} opacity={0.9}/>
+      <svg width={56} height={56} viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="7" r="2" fill={T.blue}/>
+        <rect x="5" y="8.5" width="22" height="2" rx="1" fill={T.blue}/>
+        <rect x="6" y="10.5" width="1.5" height="4.5" rx="0.75" fill={T.blue}/>
+        <rect x="24.5" y="10.5" width="1.5" height="4.5" rx="0.75" fill={T.blue}/>
+        <path d="M3.5 15.5 Q6.75 19.5 10 15.5" stroke={T.blue} strokeWidth="1.75" strokeLinecap="round"/>
+        <path d="M22 15.5 Q25.25 19.5 28.5 15.5" stroke={T.blue} strokeWidth="1.75" strokeLinecap="round"/>
+        <rect x="15.25" y="10.5" width="1.5" height="12" rx="0.75" fill={T.blue}/>
+        <rect x="11" y="22.5" width="10" height="2" rx="1" fill={T.blue}/>
       </svg>
       <span style={{fontFamily:FU,fontSize:38,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>MĪZAN</span>
     </div>

@@ -38,9 +38,8 @@ yarn-error.log*
 .snaptrade-users.json
 .dev.log
 
-# PWA icons regenerated automatically on server boot
-public/icon-192.png
-public/icon-512.png
+# PWA icons are committed to git for Vercel deployment
+# server.js has an ensurePwaIcons() fallback for fresh local dev clones
 .vercel
 
 # Claude Code local state

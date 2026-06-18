@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 148 40">
+  <!-- Mark (balance scale, 40×40) -->
+  <g>
+    <rect width="40" height="40" rx="9" fill="#0d1311"/>
+    <rect x="1.25" y="1.25" width="37.5" height="37.5" rx="8" fill="none" stroke="rgba(201,162,75,0.18)" stroke-width="1"/>
+    <circle cx="20" cy="8.75" r="2.5" fill="#c9a24b"/>
+    <rect x="6.25" y="10.5" width="27.5" height="2.5" rx="1.25" fill="#c9a24b"/>
+    <rect x="7.5" y="13" width="1.875" height="5.625" rx="0.9375" fill="#c9a24b"/>
+    <rect x="30.625" y="13" width="1.875" height="5.625" rx="0.9375" fill="#c9a24b"/>
+    <path d="M4.375 19.375 Q8.4375 24.375 12.5 19.375" stroke="#c9a24b" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <path d="M27.5 19.375 Q31.5625 24.375 35.625 19.375" stroke="#c9a24b" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <rect x="19.0625" y="13" width="1.875" height="15" rx="0.9375" fill="#c9a24b"/>
+    <rect x="13.75" y="28" width="12.5" height="2.5" rx="1.25" fill="#c9a24b"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="52" y="27" font-family="Georgia, 'Times New Roman', serif" font-size="22" font-weight="700" fill="#f5f0e8" letter-spacing="-0.5">MĪZAN</text>
+</svg>
