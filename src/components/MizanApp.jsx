@@ -2089,14 +2089,16 @@ function AAOIFIScreener({holdings=[]}){
     const today=new Date().toISOString().slice(0,10);
     const todo=tickers.filter(tk=>forceAll||!results[tk]||results[tk].asOf!==today);
     let final=results;
-    for(let i=0;i<todo.length;i+=8){
-      const batch=todo.slice(i,i+8);
+    for(let i=0;i<todo.length;i+=4){
+      const batch=todo.slice(i,i+4);
       const settled=await Promise.allSettled(batch.map(tk=>screenTicker(tk)));
       const next={...final};
       settled.forEach((s,j)=>{if(s.status==="fulfilled")next[batch[j]]={...s.value,asOf:today};});
       final=next;
       setResults(next);
       try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(next));}catch{}
+      // 4 tickers × 2 Finnhub calls = 8 req per batch; pause between batches to stay under 60/min free tier
+      if(i+4<todo.length)await new Promise(r=>setTimeout(r,2000));
     }
     setBusy(false);
     // Diff against baseline → fire compliance-change notifications.
@@ -4696,7 +4698,267 @@ function HistoricalBacktest(){
   </div>;
 }
 
-function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities=[],onNav}){
+// ── Trading Bot Panel ─────────────────────────────────────────────────────────
+// Admin: full strategy management UI, NL builder, signals queue, kill switch
+// Non-admin/demo: polished Coming Soon teaser showing the 3 layers
+function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],demoMode=false,onNav}){
+  const[strategies,setStrategies]=useState([]);
+  const[signals,setSignals]=useState([]);
+  const[loadingStrats,setLoadingStrats]=useState(false);
+  const[loadingSignals,setLoadingSignals]=useState(false);
+  const[nlInput,setNlInput]=useState("");
+  const[nlBusy,setNlBusy]=useState(false);
+  const[nlResult,setNlResult]=useState(null); // parsed strategy from NL
+  const[nlErr,setNlErr]=useState(null);
+  const[riskAck,setRiskAck]=useState(false);
+  const[killSwitchBusy,setKillSwitchBusy]=useState(false);
+  const[killSwitchMsg,setKillSwitchMsg]=useState(null);
+  const allPaused=strategies.length>0&&strategies.every(s=>!s.enabled);
+
+  const loadStrategies=useCallback(async()=>{
+    setLoadingStrats(true);
+    try{
+      const r=await apiFetch("/api/bot/strategies");
+      const d=await r.json();
+      if(r.ok)setStrategies(d.strategies||[]);
+    }catch{}finally{setLoadingStrats(false);}
+  },[]);
+
+  const loadSignals=useCallback(async()=>{
+    setLoadingSignals(true);
+    try{
+      const r=await apiFetch("/api/bot/signals");
+      const d=await r.json();
+      if(r.ok)setSignals(d.signals||[]);
+    }catch{}finally{setLoadingSignals(false);}
+  },[]);
+
+  useEffect(()=>{if(isAdmin&&!demoMode){loadStrategies();loadSignals();}},[isAdmin,demoMode,loadStrategies,loadSignals]);
+
+  const activateKillSwitch=async()=>{
+    if(!window.confirm("Pause ALL bot automation? No signals will execute until you re-enable strategies."))return;
+    setKillSwitchBusy(true);
+    try{
+      await apiFetch("/api/bot/strategies/pause-all",{method:"PATCH",headers:{"Content-Type":"application/json"},body:"{}"});
+      setKillSwitchMsg("All automation paused.");
+      await loadStrategies();
+    }catch{setKillSwitchMsg("Failed to pause.");}finally{
+      setKillSwitchBusy(false);
+      setTimeout(()=>setKillSwitchMsg(null),4000);
+    }
+  };
+
+  const parseNl=async()=>{
+    if(!nlInput.trim()||nlBusy)return;
+    setNlBusy(true);setNlErr(null);setNlResult(null);setRiskAck(false);
+    try{
+      const accounts=snapAccounts.map(a=>({id:a.id||a.accountId,name:a.institution_name||a.brokerage?.name||a.name||"Unknown"}));
+      const r=await apiFetch("/api/bot/strategy/nl",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({description:nlInput.trim(),accounts}),
+      });
+      const d=await r.json();
+      if(!r.ok){setNlErr(d.error||"Parse failed");return;}
+      setNlResult(d.strategy);
+    }catch(e){setNlErr(e.message||"Network error");}finally{setNlBusy(false);}
+  };
+
+  const saveNlStrategy=async()=>{
+    if(!nlResult||!riskAck)return;
+    try{
+      const r=await apiFetch("/api/bot/strategies",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({...nlResult,nl_description:nlInput,nl_risk_disclosed:true}),
+      });
+      if(r.ok){setNlResult(null);setNlInput("");setRiskAck(false);await loadStrategies();}
+    }catch{}
+  };
+
+  const approveSignal=async(id)=>{
+    await apiFetch(`/api/bot/signals/${id}/approve`,{method:"POST"});
+    await loadSignals();
+  };
+  const rejectSignal=async(id)=>{
+    await apiFetch(`/api/bot/signals/${id}/reject`,{method:"POST"});
+    await loadSignals();
+  };
+
+  const deleteStrategy=async(id)=>{
+    if(!window.confirm("Delete this strategy?"))return;
+    await apiFetch(`/api/bot/strategies/${id}`,{method:"DELETE"});
+    await loadStrategies();
+  };
+
+  const toggleStrategy=async(id,enabled)=>{
+    await apiFetch(`/api/bot/strategies/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:!enabled})});
+    await loadStrategies();
+  };
+
+  // ── NON-ADMIN / DEMO VIEW ──────────────────────────────────────────────────
+  if(!isAdmin||demoMode){
+    const layers=[
+      {id:"manual",icon:"🎯",title:"Manual Control",desc:"You trigger every trade. Order Ticket with Sharia precheck, impact preview, and one-tap confirm. Every order runs through AAOIFI compliance before reaching your broker.",badge:"Live Soon",badgeColor:T.blue},
+      {id:"semi",icon:"🤖",title:"Semi-Automatic",desc:"The bot generates buy/sell signals based on your configured strategy. You approve each one via push notification — no trade executes without your tap.",badge:"Coming Soon",badgeColor:T.gold},
+      {id:"full",icon:"⚡",title:"Fully Automated",desc:"The bot signals and executes autonomously within your configured strategy, stop-loss, daily caps, and Sharia gate. Every execution is logged and push-notified.",badge:"Coming Soon",badgeColor:T.slate},
+    ];
+    return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+      <BentoTile style={{textAlign:"center",padding:`${T.s8} ${T.s6}`}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s3}}>COMING SOON</div>
+        <div style={{fontFamily:FU,fontSize:32,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s3}}>MĪZAN Trading Bot</div>
+        <p style={{fontFamily:FP,fontSize:14,color:T.muted,maxWidth:560,margin:`0 auto ${T.s4}`,lineHeight:1.65}}>
+          Halal systematic trading — manual, assisted, or fully automated. Every trade is screened against AAOIFI standards before it reaches your broker.
+        </p>
+        <div style={{display:"inline-flex",alignItems:"center",gap:T.s2,padding:`6px ${T.s3}`,borderRadius:T.rMd,background:`${T.blue}15`,border:`1px solid ${T.blue}30`,fontFamily:FM,fontSize:11,color:T.blue}}>
+          All positions Sharia-screened · Stop-loss mandatory · No riba
+        </div>
+      </BentoTile>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:T.s4}}>
+        {layers.map(l=><BentoTile key={l.id} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <span style={{fontSize:24}}>{l.icon}</span>
+            <Tag label={l.badge} color={l.badgeColor}/>
+          </div>
+          <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi,letterSpacing:"0.02em"}}>{l.title}</div>
+          <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:0}}>{l.desc}</p>
+        </BentoTile>)}
+      </div>
+
+      {/* Demo preview: disabled order ticket form */}
+      <BentoTile style={{position:"relative",overflow:"hidden",opacity:0.75}}>
+        <div style={{position:"absolute",top:T.s3,right:T.s3,padding:`4px ${T.s2}`,background:`${T.blue}20`,border:`1px solid ${T.blue}40`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,color:T.blue,fontWeight:600,letterSpacing:"0.1em",zIndex:1}}>PREVIEW · ADMIN ONLY</div>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>ORDER TICKET</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s3,opacity:0.6,pointerEvents:"none"}}>
+          {[["Symbol","SPUS"],["Quantity","10"],["Order Type","Market"],["Side","Buy"]].map(([l,v])=><div key={l}>
+            <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:4,letterSpacing:"0.08em"}}>{l.toUpperCase()}</div>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`8px ${T.s3}`,fontFamily:FM,fontSize:13,color:T.textHi}}>{v}</div>
+          </div>)}
+        </div>
+        <div style={{marginTop:T.s3,height:36,background:`${T.blue}20`,borderRadius:T.rMd,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:11,color:`${T.blue}60`,letterSpacing:"0.1em",opacity:0.6}}>PREVIEW — SHARIA SCREEN + ORDER PREVIEW</div>
+      </BentoTile>
+
+      {/* Sample signal card */}
+      <BentoTile accent={T.gold} style={{opacity:0.75}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",marginBottom:4}}>BOT SIGNAL · PREVIEW</div>
+            <div style={{fontFamily:FM,fontSize:14,fontWeight:600,color:T.textHi}}>BUY 5 SPUS · Momentum strategy</div>
+            <div style={{fontFamily:FM,fontSize:11,color:T.gold,marginTop:4}}>Suggested at $62.18 · Expires in 58 min</div>
+          </div>
+          <div style={{display:"flex",gap:T.s2,opacity:0.5,pointerEvents:"none"}}>
+            <button className="btn-primary" style={{fontSize:11,padding:`6px ${T.s3}`}}>Approve</button>
+            <button className="btn-ghost" style={{fontSize:11,padding:`6px ${T.s3}`}}>Reject</button>
+          </div>
+        </div>
+      </BentoTile>
+    </div>;
+  }
+
+  // ── ADMIN VIEW ─────────────────────────────────────────────────────────────
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    {/* Kill Switch */}
+    <BentoTile accent={allPaused?T.loss:T.gain} style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s3}}>
+      <div>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:4}}>AUTOMATION STATUS</div>
+        <div style={{fontFamily:FM,fontSize:14,fontWeight:600,color:allPaused?T.loss:T.gain}}>
+          {strategies.length===0?"No strategies configured":allPaused?"⏸ All automation paused":"▶ Automation running"}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:T.s3,alignItems:"center"}}>
+        {killSwitchMsg&&<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{killSwitchMsg}</span>}
+        {strategies.some(s=>s.enabled)&&<button onClick={activateKillSwitch} disabled={killSwitchBusy} style={{padding:`8px ${T.s4}`,borderRadius:T.rMd,border:`1px solid ${T.loss}60`,background:`${T.loss}15`,color:T.loss,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.08em",cursor:"pointer"}}>⏹ PAUSE ALL</button>}
+      </div>
+    </BentoTile>
+
+    {/* NL Strategy Builder */}
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>NATURAL LANGUAGE STRATEGY BUILDER</div>
+      <p style={{fontFamily:FP,fontSize:12,color:T.muted,marginBottom:T.s3,lineHeight:1.6}}>Describe a trading goal in plain English. The AI parses it into a structured, risk-bounded strategy with mandatory stop-loss.</p>
+      <textarea value={nlInput} onChange={e=>setNlInput(e.target.value)} placeholder='e.g. "Use $500 in my E*Trade account, run a momentum swing-trade on SPUS, target 20% return, within 4 weeks"' style={{width:"100%",minHeight:80,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:T.s3,fontFamily:FP,fontSize:13,color:T.textHi,resize:"vertical",boxSizing:"border-box"}}/>
+      {nlErr&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginTop:T.s2}}>{nlErr}</div>}
+      <button onClick={parseNl} disabled={nlBusy||!nlInput.trim()} className="btn-primary" style={{marginTop:T.s3,fontSize:11}}>{nlBusy?"Parsing…":"Parse Strategy"}</button>
+
+      {/* Strategy Review Modal (inline) */}
+      {nlResult&&<div style={{marginTop:T.s4,padding:T.s4,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STRATEGY REVIEW</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2,marginBottom:T.s3}}>
+          {[
+            ["Ticker",nlResult.ticker],
+            ["Strategy",nlResult.strategy_type],
+            ["Capital",`$${Number(nlResult.capital_allocated||0).toLocaleString()}`],
+            ["Profit Target",`${nlResult.profit_target_pct}%`],
+            ["Stop Loss",`${nlResult.stop_loss_pct}%`],
+            ["Horizon",`${nlResult.time_horizon_days} days`],
+          ].map(([k,v])=><div key={k} style={{fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
+            <span style={{color:T.muted}}>{k}: </span><span style={{color:T.textHi,fontWeight:600}}>{v}</span>
+          </div>)}
+        </div>
+        {nlResult.risk_disclosure&&<div style={{padding:T.s3,background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.gold,lineHeight:1.6,marginBottom:T.s3}}>
+          ⚠️ {nlResult.risk_disclosure}
+        </div>}
+        <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer",marginBottom:T.s3}}>
+          <input type="checkbox" checked={riskAck} onChange={e=>setRiskAck(e.target.checked)} style={{marginTop:2}}/>
+          I understand this is a TARGET, not a guarantee. The strategy could lose up to {nlResult.stop_loss_pct}% of my allocated capital.
+        </label>
+        <div style={{display:"flex",gap:T.s3}}>
+          <button onClick={saveNlStrategy} disabled={!riskAck} className="btn-primary" style={{fontSize:11}}>Activate Strategy</button>
+          <button onClick={()=>{setNlResult(null);setRiskAck(false);}} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
+        </div>
+      </div>}
+    </BentoTile>
+
+    {/* Pending Signals */}
+    {(loadingSignals||signals.length>0)&&<BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>PENDING SIGNALS</div>
+        <button onClick={loadSignals} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingSignals?"Loading…":"Refresh"}</button>
+      </div>
+      {loadingSignals&&!signals.length?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Loading signals…</div>:
+       signals.length===0?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>No pending signals.</div>:
+       signals.map(sig=><div key={sig.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:13,fontWeight:600,color:sig.side==="buy"?T.gain:T.loss}}>{sig.side.toUpperCase()} {sig.qty} {sig.ticker}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>~${Number(sig.suggested_price||0).toFixed(2)} · Expires {new Date(sig.expires_at).toLocaleTimeString()}</div>
+        </div>
+        <div style={{display:"flex",gap:T.s2}}>
+          <button onClick={()=>approveSignal(sig.id)} className="btn-primary" style={{fontSize:10,padding:`5px ${T.s3}`}}>Approve</button>
+          <button onClick={()=>rejectSignal(sig.id)} className="btn-ghost" style={{fontSize:10,padding:`5px ${T.s3}`}}>Reject</button>
+        </div>
+      </div>)}
+    </BentoTile>}
+
+    {/* Strategy List */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGIES ({strategies.length})</div>
+        <button onClick={loadStrategies} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingStrats?"Loading…":"Refresh"}</button>
+      </div>
+      {loadingStrats&&!strategies.length?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>:
+       strategies.length===0?<div style={{fontFamily:FP,fontSize:12,color:T.muted,textAlign:"center",padding:`${T.s5} 0`}}>No strategies configured yet. Use the builder above to create your first one.</div>:
+       strategies.map(s=><div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
+        <div>
+          <div style={{display:"flex",gap:T.s2,alignItems:"center",marginBottom:4}}>
+            <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{s.ticker}</span>
+            <Tag label={s.mode.toUpperCase()} color={s.mode==="full"?T.loss:T.gold}/>
+            {!s.enabled&&<Tag label="PAUSED" color={T.muted}/>}
+          </div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>${Number(s.capital_allocated).toLocaleString()} · Target: {s.profit_target_pct}% · Stop: {s.stop_loss_pct}%</div>
+        </div>
+        <div style={{display:"flex",gap:T.s2}}>
+          <button onClick={()=>toggleStrategy(s.id,s.enabled)} className="btn-ghost" style={{fontSize:10,padding:`5px ${T.s2}`}}>{s.enabled?"Pause":"Resume"}</button>
+          <button onClick={()=>deleteStrategy(s.id)} style={{fontFamily:FM,fontSize:10,padding:`5px ${T.s2}`,borderRadius:T.rSm,border:`1px solid ${T.loss}40`,background:"transparent",color:T.loss,cursor:"pointer"}}>Delete</button>
+        </div>
+      </div>)}
+    </BentoTile>
+
+    {fullAutoEnabled&&<BentoTile accent={T.loss}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FULL-AUTO ENABLED</div>
+      <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:0}}>Full-automation is active for this account. The bot will execute signals without your approval. Monitor the kill switch above and review audit logs regularly.</p>
+    </BentoTile>}
+  </div>;
+}
+
+function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities=[],onNav,isAdmin=false,fullAutoEnabled=false,demoMode=false}){
   // Order Ticket is currently behind a "Coming Soon" gate — real trading
   // requires Alpaca prod keys + a polished risk/preview flow we haven't
   // shipped yet. Default to the FIRE calculator so the tab opens onto
@@ -4766,6 +5028,13 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
         onOrderPlaced?.();
         return;
       }
+      // Sharia precheck — block known non-compliant tickers before hitting the broker API
+      const HARAM_SNAP=new Set(["JPM","BAC","WFC","GS","MS","C","USB","BK","WYNN","MO","PM","MCD","BND","HYG","LCID"]);
+      if(HARAM_SNAP.has(sym.toUpperCase())){
+        setOrderErr(`${sym.toUpperCase()} is flagged as potentially non-compliant with AAOIFI standards. Consult your Sharia advisor before placing this order.`);
+        setOrderBusy(false);
+        return;
+      }
       const orderTypeMap={market:"Market",limit:"Limit",stop:"StopLoss",stoplimit:"StopLimit"};
       const r=await apiFetch("/api/snaptrade/trade/impact",{
         method:"POST",headers:{"Content-Type":"application/json"},
@@ -4812,23 +5081,20 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
   const estTotal=parseFloat(qty||0)*parseFloat(lpx||0);
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["order","Order Ticket"],["backtest","Backtest"],["fire","Retirement / FIRE"],["sharia","Sharia Principles"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["order","Order Ticket"],["bot","Trading Bot"],["backtest","Backtest"],["fire","Retirement / FIRE"],["sharia","Sharia Principles"]]} active={sub} onChange={setSub}/>
     {sub==="fire"&&<FireCalculator currentNW={currentNW} ytdContrib={ytdContrib}/>}
     {sub==="backtest"&&<HistoricalBacktest/>}
+    {sub==="bot"&&<TradingBotPanel isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
 
-    {/* Order Ticket lives behind a Coming Soon banner. We still render the
-        TabBar entry so users discover it's planned, but the actual order-
-        placement UI (real-money via SnapTrade, paper via Alpaca) is gated
-        until the risk/preview flow is finished and the Alpaca production
-        keys are provisioned. */}
-    {sub==="order"&&<ComingSoon
+    {/* Order Ticket lives behind a Coming Soon banner for non-admin users. */}
+    {sub==="order"&&!isAdmin&&<ComingSoon
       title="Order Ticket"
-      description="Place halal-screened buy/sell orders against your connected SnapTrade brokerage or against a free Alpaca paper account. The interface, AAOIFI pre-check, and order preview are built — they're behind a Coming Soon gate until the risk-of-loss UX and Alpaca production keys finish review."
+      description="Place halal-screened buy/sell orders against your connected SnapTrade brokerage or against a free Alpaca paper account. Available for authorized users."
       hint="Want early access? Use the AI Advisor tab to research positions while this ships."
       action={onNav ? { label: "Open AI Advisor", onClick: () => onNav("advisor") } : null}
     />}
-    {false&&sub==="order"&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
-    {false&&sub==="order"&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
+    {sub==="order"&&isAdmin&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
+    {sub==="order"&&isAdmin&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
       {/* ─── Order Ticket bento ────────────────────────── */}
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
@@ -8228,6 +8494,8 @@ export default function Mizan(){
   // the tour. The default auto-show only fires when snapAccounts is empty;
   // force=true bypasses that so Settings can trigger it any time.
   const[onboardingForce,setOnboardingForce]=useState(false);
+  const[isAdmin,setIsAdmin]=useState(false);
+  const[fullAutoEnabled,setFullAutoEnabled]=useState(false);
   const replayOnboarding=useCallback(()=>{
     if(!window.confirm("Re-run the 5-step welcome tour?"))return;
     try{
@@ -9072,6 +9340,11 @@ export default function Mizan(){
 
   useEffect(()=>{setGlobalKeys(apiKeys);fetchSnapHoldings();},[]);
   useEffect(()=>{fetchSnapHoldings();},[demoMode]);
+  useEffect(()=>{
+    apiFetch("/api/user/features").then(r=>r.ok?r.json():null).then(d=>{
+      if(d){setIsAdmin(!!d.trading_bot);setFullAutoEnabled(!!d.full_auto);}
+    }).catch(()=>{});
+  },[]);
 
   // Hydrate broker connections from SnapTrade so they survive a localStorage wipe.
   useEffect(()=>{
