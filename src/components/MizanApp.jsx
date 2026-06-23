@@ -9646,7 +9646,7 @@ export default function Mizan(){
 
     {/* TOP BAR */}
     {/* STATUS BAR — slim, glanceable, single row. Brand left, info middle, actions right. */}
-    <header className="mz-status glass" style={{height:48,borderBottom:`1px solid var(--mz-glass-border)`,display:"flex",alignItems:"center",padding:`0 ${T.s5}`,gap:T.s4,position:"sticky",top:0,zIndex:100}}>
+    <header className="mz-status glass" style={{minHeight:"calc(48px + env(safe-area-inset-top, 0px))",padding:`env(safe-area-inset-top, 0px) ${T.s5} 0`,borderBottom:`1px solid var(--mz-glass-border)`,display:"flex",alignItems:"center",gap:T.s4,position:"sticky",top:0,zIndex:100}}>
       <div style={{display:"flex",alignItems:"center",gap:T.s2,flexShrink:0}}>
         <svg width={18} height={18} viewBox="0 0 16 16" fill="none"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs><path d="M8 1L15 7L8 13L1 7Z" stroke="url(#lg)" strokeWidth={1.5} fill="none"/><circle cx="8" cy="7" r="2" fill={T.blue} opacity={0.9}/></svg>
         <span style={{fontFamily:FU,fontSize:15,fontWeight:700,color:T.textHi,letterSpacing:"0.04em"}}>MĪZAN</span>
@@ -9695,7 +9695,7 @@ export default function Mizan(){
         {installEvt&&!isInstalled&&<button onClick={doInstall} className="btn-ghost mz-hide-sm" title="Install MĪZAN as an app on this device" style={{fontFamily:FM,fontSize:9,letterSpacing:"0.06em"}}>⬇ Install</button>}
         <button onClick={sync} disabled={fetching} className="btn-primary mz-status-sync">{fetching?"Syncing…":"Sync All"}</button>
       </div>
-      {forceMsg&&<div style={{position:"absolute",top:50,right:T.s3,background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--mz-glass-shadow)",zIndex:101,maxWidth:340,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>{forceMsg.msg}</div>}
+      {forceMsg&&<div style={{position:"absolute",top:"calc(env(safe-area-inset-top, 0px) + 50px)",right:T.s3,background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--mz-glass-shadow)",zIndex:101,maxWidth:340,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>{forceMsg.msg}</div>}
     </header>
 
     {/* Pull-to-refresh indicator — appears above status bar when dragging down from top */}
@@ -9709,7 +9709,7 @@ export default function Mizan(){
       transition:"color 0.15s",
     }}>{ptrReady?"↑ Release to refresh":"↓ Pull to refresh"}</div>}
 
-    <main style={{maxWidth:1320,margin:"0 auto",padding:"24px 24px 110px"}}>
+    <main style={{maxWidth:1320,margin:"0 auto",padding:`24px 24px calc(110px + env(safe-area-inset-bottom, 0px))`}}>
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
@@ -9750,7 +9750,7 @@ export default function Mizan(){
     {/* DOCK — Mac-style floating nav at the bottom. Glass surface, rounded
         pill, lifted with shadow. Active item highlighted with accent gradient. */}
     <nav className="mz-dock" style={{
-      position:"fixed",bottom:T.s5,left:"50%",transform:"translateX(-50%)",
+      position:"fixed",bottom:"calc(env(safe-area-inset-bottom, 0px) + 20px)",left:"50%",transform:"translateX(-50%)",
       display:"flex",alignItems:"center",gap:T.s1,
       padding:`${T.s1} ${T.s2}`,
       background:"var(--mz-glass)",
