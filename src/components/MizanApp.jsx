@@ -8468,7 +8468,7 @@ function KeyboardShortcuts({ onNav, onSync, onConnect, onHelp, onCommand }) {
       "/": "command",
     },
     onShortcut: (name) => {
-      const NAV_TARGETS = new Set(["overview","portfolio","finances","goals","advisor","settings"]);
+      const NAV_TARGETS = new Set(["overview","portfolio","finances","goals","advisor","settings","trade"]);
       if (NAV_TARGETS.has(name)) { onNav(name); return; }
       if (name === "sync")    { onSync?.(); return; }
       if (name === "help")    { onHelp?.(); return; }
@@ -9494,7 +9494,7 @@ export default function Mizan(){
   // (FIRE → Goals, Backtest → Portfolio, Sharia → Screener, Order Ticket
   // Coming Soon and reachable via CommandPalette only). Keeps the dock
   // un-crowded so first-time users aren't decision-fatigued.
-  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},{id:"goals",l:"Goals"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"}];
+  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},{id:"goals",l:"Goals"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"},...(isAdmin?[{id:"trade",l:"Trade"}]:[])];
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     <style>{`
@@ -9714,6 +9714,7 @@ export default function Mizan(){
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} bankBalance={bankBalance}/>}
+        {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onNav={setNav} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} demoMode={demoMode}/>}
         {nav==="goals"     &&<GoalsHub
           snapAccounts={visibleAccounts}
           plaidAccounts={plaidAccounts}
@@ -9810,6 +9811,7 @@ export default function Mizan(){
         {id:"nav-goals",    label:"Go to Goals",         group:"Navigate", hint:"g g", icon:"◉", action:()=>setNav("goals")},
         {id:"nav-advisor",  label:"Go to AI Advisor",    group:"Navigate", hint:"g a", icon:"✦", action:()=>setNav("advisor")},
         {id:"nav-settings", label:"Go to Settings",      group:"Navigate", hint:"g s", icon:"⚙", action:()=>setNav("settings")},
+        ...(isAdmin?[{id:"nav-trade",label:"Go to Trade",group:"Navigate",hint:"g t",icon:"⬡",action:()=>setNav("trade")}]:[]),
         // Actions
         {id:"act-sync",     label:"Sync All",            group:"Actions",  hint:"r",   icon:"↻", action:()=>sync()},
         {id:"act-connect",  label:"Connect Account",     group:"Actions",  icon:"+",             action:()=>setConn(true)},
