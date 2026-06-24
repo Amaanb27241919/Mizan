@@ -352,7 +352,11 @@ npm run build   # Must exit 0 with no errors
 
 These are documented constraints, not undiscovered issues:
 
-1. **Chart history uses monthly buckets** — not daily NAV. Built from deposit activity + nightly net worth snapshots. Intraday chart data doesn't exist. The "1D" range shows the live day-change value from Finnhub `dp` field, not an intraday chart.
+1. **Chart granularity is range-dependent** (Overview hero chart):
+   - **1D** = real-time 24h curve from a **client-side rolling buffer** (`mizan_intraday` in localStorage). The capture effect appends the live `tot` (throttled ~2min, capped to last 24h) and seeds point 0 from yesterday's nightly snapshot. Only accrues while the app is open; gaps are bridged by the line. Never captures in demo mode.
+   - **1W** = real-time daily curve for the current week (Sunday → today) built from `mizan_networth_history` daily snapshots, with today's point pinned to the live `tot`.
+   - **1M / 3M / YTD / 1Y / All** = **monthly buckets** from deposit activity + nightly net-worth snapshots (no sub-month granularity for long ranges — this is intentional).
+   - The X-axis + tooltip formatters adapt per range (time → weekday → month).
 
 2. **Tax cost basis uses average cost** — SnapTrade doesn't provide lot-level cost basis. `missingBasisCount` in the Tax tab already surfaces this with a warning to users.
 

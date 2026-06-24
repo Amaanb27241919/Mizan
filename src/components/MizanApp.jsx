@@ -1351,9 +1351,13 @@ function NicknameEditor({accountId,defaultName,nickname,onSetNickname,
 }
 
 /* ─── OVERVIEW ───────────────────────────────────────── */
-function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0,nicknames={},onSetNickname}){
+function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0,nicknames={},onSetNickname,demoMode=false}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[range,setRange]=useState("1Y");
+  // Rolling 24-hour intraday NAV buffer (client-captured on live ticks) —
+  // powers the real-time 1D chart. localStorage-backed so it survives nav
+  // changes within a session. Only accrues while the app is open.
+  const[intraday,setIntraday]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_intraday")||"[]");}catch{return[];}});
   const liveSrc=snapAccounts.length>0
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h => h && h.sh > 0 && h.px > 0)
     : [];
@@ -1538,12 +1542,74 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   // For value, we lerp from the cumulative-contributions curve up to `tot` so
   // the line reflects both the cash you've put in AND the growth on top.
   const totBucket=Math.round(tot/1000);
+
+  // Capture the live total into the rolling 24h intraday buffer. Throttled:
+  // a new point is appended at most every 2 minutes; in between, the latest
+  // point's value/timestamp track the live total so the chart tip stays live.
+  useEffect(()=>{
+    if(demoMode||!(tot>0))return; // never pollute the real 24h buffer with demo totals
+    const now=Date.now();
+    setIntraday(prev=>{
+      const cutoff=now-24*3600*1000;
+      let next=prev.filter(p=>p&&p.ts>=cutoff);
+      const last=next[next.length-1];
+      const pt={ts:now,total:+tot.toFixed(2)};
+      if(!last||now-last.ts>120000)next=[...next,pt];
+      else next=[...next.slice(0,-1),pt]; // update tip in place (throttle density)
+      try{localStorage.setItem("mizan_intraday",JSON.stringify(next));}catch{}
+      return next;
+    });
+  },[tot]);
+
+  // Nightly snapshots sorted newest-first for 1D/1W baselines.
+  const sortedSnaps=useMemo(()=>[...netWorthHistory].sort((a,b)=>b.date.localeCompare(a.date)),[netWorthHistory]);
+  // 1D: most recent snapshot strictly before today → 24h baseline (chart seed).
+  const snap1D=useMemo(()=>{const t=new Date().toISOString().slice(0,10);return sortedSnaps.find(s=>s.date<t)||null;},[sortedSnaps]);
+  // 1W: most recent snapshot at or before the most recent Sunday → week-to-date.
+  const snap1W=useMemo(()=>{const d=new Date();const day=d.getDay();d.setDate(d.getDate()-(day===0?7:day));const str=d.toISOString().slice(0,10);return sortedSnaps.find(s=>s.date<=str)||null;},[sortedSnaps]);
+
   const chart=useMemo(()=>{
+    const now=new Date();
+
+    // ─── 1D: real-time 24h curve from the intraday buffer ───────────────
+    if(range==="1D"){
+      const cutoffTs=Date.now()-24*3600*1000;
+      const pts=intraday.filter(p=>p&&p.ts>=cutoffTs)
+        .map(p=>({ts:p.ts,date:new Date(p.ts).toISOString(),value:+(+p.total).toFixed(2),contrib:null}));
+      // Seed an anchor at -24h from yesterday's close so the line always draws.
+      if(snap1D)pts.unshift({ts:cutoffTs,date:new Date(cutoffTs).toISOString(),value:+(+snap1D.total).toFixed(2),contrib:null});
+      // Pin the tip to the live total.
+      if(tot>0){
+        if(pts.length)pts[pts.length-1]={...pts[pts.length-1],ts:Date.now(),value:+tot.toFixed(2)};
+        else pts.push({ts:Date.now(),date:new Date().toISOString(),value:+tot.toFixed(2),contrib:null});
+      }
+      return pts;
+    }
+
+    // ─── 1W: real-time daily curve for the current week (Sunday → today) ─
+    if(range==="1W"){
+      const todayKey=now.toISOString().slice(0,10);
+      const sunday=new Date(now);sunday.setDate(now.getDate()-now.getDay());sunday.setHours(0,0,0,0);
+      const byDate={};
+      netWorthHistory.forEach(h=>{if(h.date>=sunday.toISOString().slice(0,10)&&h.date<=todayKey)byDate[h.date]=h.total;});
+      const series=[];
+      const cur=new Date(sunday);
+      while(cur<=now){
+        const k=cur.toISOString().slice(0,10);
+        const val=k===todayKey?(tot>0?tot:byDate[k]):byDate[k];
+        if(val!=null)series.push({ts:cur.getTime(),date:k,value:+(+val).toFixed(2),contrib:null});
+        cur.setDate(cur.getDate()+1);
+      }
+      // Guarantee a live tip for today even if no snapshot was written yet.
+      if(tot>0&&!series.some(p=>p.date===todayKey))series.push({ts:now.getTime(),date:todayKey,value:+tot.toFixed(2),contrib:null});
+      return series;
+    }
+
+    const today=now;
     const deposits=activities.filter(a=>(a.type||"").toUpperCase()==="DEPOSIT")
       .filter(a=>a.trade_date)
       .sort((a,b)=>a.trade_date.localeCompare(b.trade_date));
 
-    const today=new Date();
     let firstDate;
     if(deposits.length>0){
       firstDate=new Date(deposits[0].trade_date);
@@ -1623,14 +1689,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       });
     }
     return series;
-  },[activities,netWorthHistory,totBucket,range]);
-
-  // Nightly snapshots sorted newest-first for 1D/1W baseline lookups.
-  const sortedSnaps=useMemo(()=>[...netWorthHistory].sort((a,b)=>b.date.localeCompare(a.date)),[netWorthHistory]);
-  // 1D: most recent snapshot strictly before today → real 24-hour change.
-  const snap1D=useMemo(()=>{const t=new Date().toISOString().slice(0,10);return sortedSnaps.find(s=>s.date<t)||null;},[sortedSnaps]);
-  // 1W: most recent snapshot at or before the most recent Sunday → week-to-date change.
-  const snap1W=useMemo(()=>{const d=new Date();const day=d.getDay();d.setDate(d.getDate()-(day===0?7:day));const str=d.toISOString().slice(0,10);return sortedSnaps.find(s=>s.date<=str)||null;},[sortedSnaps]);
+  },[activities,netWorthHistory,totBucket,range,intraday,tot,snap1D]);
 
   const rangeStartVal=chart.length>1?chart[0].value:null;
   const dispGain=
@@ -1728,6 +1787,8 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
                 dataKey="ts" type="number" domain={["dataMin","dataMax"]} scale="time"
                 tickFormatter={ts=>{
                   const d=new Date(ts);
+                  if(range==="1D")return d.toLocaleTimeString("en-US",{hour:"numeric"});
+                  if(range==="1W")return d.toLocaleDateString("en-US",{weekday:"short"});
                   const mo=d.toLocaleString("en-US",{month:"short"});
                   const yr=String(d.getFullYear()).slice(2);
                   return d.getMonth()===0?`${mo} '${yr}`:mo;
@@ -1740,7 +1801,12 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
                 tick={{fontFamily:FM,fontSize:9,fill:T.muted}} tickLine={false} axisLine={false}
                 width={50}/>
               <Tooltip
-                labelFormatter={ts=>new Date(ts).toLocaleDateString("en-US",{year:"numeric",month:"short"})}
+                labelFormatter={ts=>{
+                  const d=new Date(ts);
+                  if(range==="1D")return d.toLocaleString("en-US",{hour:"numeric",minute:"2-digit"});
+                  if(range==="1W")return d.toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});
+                  return d.toLocaleDateString("en-US",{year:"numeric",month:"short"});
+                }}
                 formatter={(v,name)=>[fmtUSD(v),name==="value"?"Portfolio":"Contributions"]}
                 contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)"}}
                 itemStyle={{color:T.textHi}} labelStyle={{color:T.muted,fontSize:10}}/>
@@ -9687,7 +9753,7 @@ export default function Mizan(){
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:`24px 24px calc(110px + env(safe-area-inset-bottom, 0px))`}}>
       <div className="page">
-        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname}/>}
+        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} bankBalance={bankBalance}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onNav={setNav} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} demoMode={demoMode}/>}
