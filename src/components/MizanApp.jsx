@@ -4963,7 +4963,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
   // requires Alpaca prod keys + a polished risk/preview flow we haven't
   // shipped yet. Default to the FIRE calculator so the tab opens onto
   // something useful instead of a placeholder.
-  const[sub,setSub]=useState("fire");
+  const[sub,setSub]=useState("bot");
   const[side,setSide]=useState("buy");
   const[sym,setSym]=useState("AAPL");
   const[otype,setOtype]=useState("limit");
@@ -5081,9 +5081,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
   const estTotal=parseFloat(qty||0)*parseFloat(lpx||0);
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["order","Order Ticket"],["bot","Trading Bot"],["backtest","Backtest"],["fire","Retirement / FIRE"],["sharia","Sharia Principles"]]} active={sub} onChange={setSub}/>
-    {sub==="fire"&&<FireCalculator currentNW={currentNW} ytdContrib={ytdContrib}/>}
-    {sub==="backtest"&&<HistoricalBacktest/>}
+    <TabBar tabs={[["bot","Trading Bot"],["order","Order Ticket"]]} active={sub} onChange={setSub}/>
     {sub==="bot"&&<TradingBotPanel isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
 
     {/* Order Ticket lives behind a Coming Soon banner for non-admin users. */}
@@ -5187,24 +5185,6 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
       </BentoTile>
     </div>}
 
-    {sub==="sharia"&&<div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:T.s3}}>
-      {[
-        {t:"No Riba (Interest)",ok:true,d:"Cash-only accounts. No margin, no overnight interest charges. Never borrows capital to trade."},
-        {t:"No Gharar (Uncertainty)",ok:true,d:"Spot equity only. No options, futures, CFDs, or leveraged ETFs."},
-        {t:"No Maisir (Gambling)",ok:true,d:"Systematic edge required. Positive expectancy confirmed before any capital is deployed."},
-        {t:"Debt Screening",ok:true,d:"Total Debt / Total Assets must be below 33% per AAOIFI standard."},
-        {t:"Revenue Test",ok:true,d:"Haram revenue must be below 5% of total revenue. Purification calculated for mixed income."},
-        {t:"No Short Selling",ok:false,d:"You cannot sell what you don't own. Long positions only — no inverse or bear positions."},
-        {t:"No Derivatives",ok:false,d:"Options and futures contracts are prohibited under Gharar (excessive uncertainty)."},
-        {t:"No Margin",ok:false,d:"Borrowed capital with interest charges is Riba — absolutely prohibited."},
-      ].map(r=><BentoTile key={r.t} style={{borderLeft:`3px solid ${r.ok?T.gain:T.loss}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s2,marginBottom:T.s2}}>
-          <span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:r.ok?T.textHi:T.muted,letterSpacing:"-0.01em"}}>{r.t}</span>
-          <Tag label={r.ok?"Required":"Prohibited"} color={r.ok?T.gain:T.loss}/>
-        </div>
-        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,letterSpacing:"-0.005em"}}>{r.d}</p>
-      </BentoTile>)}
-    </div>}
   </div>;
 }
 
@@ -5915,7 +5895,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
   // Non-root accounts never see the API Keys page — those keys belong on
   // the server (env vars), not in user-entered fields. Default the sub-tab
   // to brokers for everyone else.
-  const[sub,setSub]=useState(isRoot?"keys":"brokers");
+  const[sub,setSub]=useState(isRoot?"keys":"connections");
   // Local install prompt detection for the Settings card.
   const[settingsInstallEvt,setSettingsInstallEvt]=useState(null);
   const[settingsInstalled,setSettingsInstalled]=useState(()=>{try{return window.matchMedia('(display-mode: standalone)').matches||!!navigator.standalone;}catch{return false;}});
@@ -5988,22 +5968,18 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
     <TabBar
       tabs={[
         ...(isRoot?[["keys","API Keys"]]:[]),
-        ["brokers","Connect Accounts"],
         ["connections","Connections"],
-        ["account","Account"],
-        ["security","Security"],
+        ["profile","Profile"],
         ["notifications","Notifications"],
-        ["assets","Manual Assets"],
+        ["assets","Assets"],
         ["docs","Documents"],
-        ["privacy","Privacy & Data"],
+        ["privacy","Privacy"],
         ["about","About"],
         ...(isRoot?[["admin","Admin"]]:[]),
       ]}
       active={sub}
       onChange={setSub}
     />
-
-    {sub==="connections"&&<ConnectionHealth onNav={onNav}/>}
 
     {sub==="assets"&&<ManualAssets demoMode={demoMode}/>}
 
@@ -6065,8 +6041,9 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
       </BentoTile>
     </div>}
 
-    {/* ─── CONNECT ACCOUNTS ─────────────────────────── */}
-    {sub==="brokers"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    {/* ─── CONNECTIONS (health + broker management) ─── */}
+    {sub==="connections"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+      <ConnectionHealth onNav={onNav}/>
       <BentoTile>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
           <div>
@@ -6122,8 +6099,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
       </BentoTile>
     </div>}
 
-    {sub==="account"&&<AccountPanel/>}
-    {sub==="security"&&<SecurityPanel/>}
+    {sub==="profile"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}><AccountPanel/><SecurityPanel/></div>}
     {sub==="notifications"&&<NotificationsPanel/>}
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
     {sub==="privacy"&&<PrivacyPanel/>}
