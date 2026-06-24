@@ -150,11 +150,11 @@ controls appear in the admin view.
   checks the daily cap (`max_trades_per_day`) → **Sharia gate** → fetches a Finnhub
   quote → applies a simple momentum rule (day change ≥ +1.5% → buy, ≤ −1.5% → sell)
   → sizes qty from `capital_allocated` → inserts a `pending_signals` row.
-- **Semi-auto:** sends an approval push notification; the trade executes (paper) only
-  when you tap **Approve**.
+- **Semi-auto:** sends an approval push notification; the trade executes via SnapTrade
+  only when you tap **Approve**.
 - **Full-auto** (`strat.mode === "full"` AND profile `full_auto_enabled`): calls
-  `placeAlpacaOrder()` to execute on the Alpaca paper account, then marks the signal
-  executed and sends an "executed (paper)" push.
+  `executeSnapTradeOrder()` (impact → place) to execute on the connected brokerage,
+  then marks the signal executed and sends an "auto-executed" push.
 
 ### Sharia gate
 - Server list: `HARAM_TICKERS = {JPM, WYNN, MO, LCID, BND}` (`handlers.mjs:31`).
@@ -187,27 +187,38 @@ Every meaningful action writes to `audit_log`: `bot.signal.generated`,
 
 ---
 
-## 8. Current implementation status (read before trusting it with money)
+## 8. Current implementation status
 
-- ✅ **Bot execution is wired to a broker — Alpaca PAPER.** As of 2026-06-24, both
-  signal **approve** and **full-auto** (cron) actually place orders through the shared
-  `placeAlpacaOrder()` helper (`handlers.mjs`), which posts to
-  `paper-api.alpaca.markets`. On success the signal flips to `executed` with the
-  Alpaca order id in the audit log; on failure it stays `approved`/`pending` with an
-  `error_msg` (never falsely marked executed). The Sharia gate is re-applied inside
-  the helper, so a haram ticker can never reach the broker.
-- 🔒 **No real money is at risk.** Execution is intentionally on the Alpaca **paper**
-  account (single env-configured account, plain tickers, no real funds). This lets
-  strategies run end-to-end safely before any live capital.
-- ⛔ **Live-money execution (SnapTrade) is deliberately NOT auto-wired.** Reasons:
-  (1) the manual SnapTrade path passes a raw ticker where SnapTrade expects a
-  `universal_symbol_id` — ticker→symbol resolution is unbuilt; (2) it can't be tested
-  without a live connected brokerage; (3) full-auto on non-owner accounts is
-  RIA-sensitive (`canUseFullAuto` compliance note). Enabling it requires that work +
-  legal review. The manual Order Ticket still offers SnapTrade as a venue, but the
-  bot never routes there.
+This is an **owner-only** feature (`is_root`). It does not exist for any other user —
+it is not advertised, sold, or available to them. Because it only ever trades the
+owner's own money on the owner's own connected brokerage, it is not an advisory
+service. (`canUseFullAuto` still carries the RIA comment as a hard boundary against
+ever extending full-auto to non-owner accounts without legal review.)
+
+All three layers execute through **SnapTrade → the connected brokerage** (impact →
+place). Money never flows through MĪZAN; it only instructs the broker.
+
+- ✅ **Layer 1 (Manual)** — `/api/snaptrade/trade/impact` now runs a server-side
+  Sharia gate and resolves the ticker to a `universal_symbol_id` before previewing;
+  `/trade/place` confirms. (Previously it passed a raw ticker as the symbol id, which
+  SnapTrade rejects — fixed via `resolveUniversalSymbolId()`.)
+- ✅ **Layer 2 (Semi-auto)** — `POST /api/bot/signals/:id/approve` calls
+  `executeSnapTradeOrder()` (impact → place). Success → `executed` with the SnapTrade
+  trade id audited; failure → stays `approved` + `error_msg`, returns 502 (never
+  falsely executed).
+- ✅ **Layer 3 (Full-auto)** — the cron calls `executeSnapTradeOrder()` for
+  `mode='full'` strategies whose owner profile has `full_auto_enabled=true`, then
+  audits + push-notifies after the fact. Failures leave the signal pending + logged.
+- 🔒 **Sharia gate is enforced server-side in every execution path** (manual impact,
+  approve, cron) via `HARAM_TICKERS` — re-checked at execution, not just on display.
+- 🧪 **Needs live validation.** SnapTrade's symbol-search contract
+  (`POST /accounts/{id}/symbols`) and the impact/place round-trip can only be verified
+  against a real connected brokerage during market hours. The failure mode is **safe**:
+  if resolution or impact/place fails, no order is placed, nothing is marked executed,
+  and the error is surfaced + audited. Validate with one small manual Order-Ticket
+  trade before relying on semi/full-auto.
 - The momentum rule is intentionally simple (±1.5% day change). It's a scaffold for
-  more sophisticated, backtested strategies.
+  the Backtester's MA-crossover / breakout strategy types.
 
 ---
 
