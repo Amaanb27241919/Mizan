@@ -1,0 +1,34 @@
+import { chromium } from 'playwright';
+import { writeFileSync } from 'fs';
+
+const INNER = `
+  <rect width="32" height="32" rx="7.5" fill="#0d1311"/>
+  <rect x="1" y="1" width="30" height="30" rx="6.75" fill="none" stroke="rgba(201,162,75,0.18)" stroke-width="0.75"/>
+  <circle cx="16" cy="7" r="2" fill="#c9a24b"/>
+  <rect x="5" y="8.5" width="22" height="2" rx="1" fill="#c9a24b"/>
+  <rect x="6" y="10.5" width="1.5" height="4.5" rx="0.75" fill="#c9a24b"/>
+  <rect x="24.5" y="10.5" width="1.5" height="4.5" rx="0.75" fill="#c9a24b"/>
+  <path d="M3.5 15.5 Q6.75 19.5 10 15.5" stroke="#c9a24b" stroke-width="1.75" fill="none" stroke-linecap="round"/>
+  <path d="M22 15.5 Q25.25 19.5 28.5 15.5" stroke="#c9a24b" stroke-width="1.75" fill="none" stroke-linecap="round"/>
+  <rect x="15.25" y="10.5" width="1.5" height="12" rx="0.75" fill="#c9a24b"/>
+  <rect x="11" y="22.5" width="10" height="2" rx="1" fill="#c9a24b"/>
+`;
+
+async function generate() {
+  const browser = await chromium.launch();
+
+  for (const size of [192, 512]) {
+    const page = await browser.newPage();
+    await page.setViewportSize({ width: size, height: size });
+    await page.setContent(`<!DOCTYPE html><html><head><style>*{margin:0;padding:0;background:#0d1311;overflow:hidden;}body{width:${size}px;height:${size}px;}</style></head><body><svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 32 32">${INNER}</svg></body></html>`);
+    const buf = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: size, height: size } });
+    const dest = `public/icon-${size}.png`;
+    writeFileSync(dest, buf);
+    console.log(`✓ ${dest} (${buf.length} bytes)`);
+    await page.close();
+  }
+
+  await browser.close();
+}
+
+generate().catch(e => { console.error(e); process.exit(1); });

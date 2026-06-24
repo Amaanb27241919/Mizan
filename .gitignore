@@ -47,3 +47,6 @@ yarn-error.log*
 
 # SnapTrade migration backups — contain user_secrets; never commit
 scripts/_snaptrade-backups/
+
+# Visual-audit screenshots — local debugging artifacts, not source
+bento-audit-shots/
