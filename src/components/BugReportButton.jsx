@@ -25,10 +25,10 @@ const T = {
   s3:      "var(--s-3)",
   s4:      "var(--s-4)",
   s5:      "var(--s-5)",
-  blue:    "#c9a24b",   // gold — primary accent
-  gold:    "#cf9e54",   // amber
-  gain:    "#6fae8e",   // jade
-  loss:    "#c46a52",   // rust
+  blue:    "#1e4e8c",   // gold — primary accent
+  gold:    "#b8842a",   // amber
+  gain:    "#117a52",   // jade
+  loss:    "#b23a3d",   // rust
 };
 const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
 const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";

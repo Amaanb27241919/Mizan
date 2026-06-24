@@ -44,9 +44,9 @@ const COL = {
   text:    "var(--mz-text)",
   textHi:  "var(--mz-textHi)",
   muted:   "var(--mz-muted)",
-  red:     "#c46a52",   // rust
-  gold:    "#cf9e54",   // amber
-  blue:    "#c9a24b",   // gold — primary accent
+  red:     "#b23a3d",   // rust
+  gold:    "#b8842a",   // amber
+  blue:    "#1e4e8c",   // gold — primary accent
   rLg:     "var(--r-lg)",
   rMd:     "var(--r-md)",
   s2:      "var(--s-2)",

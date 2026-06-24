@@ -19,7 +19,7 @@ const TT = {
   textHi: "var(--mz-textHi)",
   muted: "var(--mz-muted)",
   dim: "var(--mz-dim)",
-  blue: "#c9a24b",   // gold — primary accent
+  blue: "#1e4e8c",   // gold — primary accent
   rMd: "var(--r-md)",
   rLg: "var(--r-lg)",
   s2: "var(--s-2)",

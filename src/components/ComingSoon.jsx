@@ -21,8 +21,8 @@ const tokens = {
   textHi:   "var(--mz-textHi)",
   text:     "var(--mz-text)",
   muted:    "var(--mz-muted)",
-  blue:     "#c9a24b",   // gold — primary accent
-  gold:     "#cf9e54",   // amber — warnings
+  blue:     "#1e4e8c",   // gold — primary accent
+  gold:     "#b8842a",   // amber — warnings
   rLg:      "var(--r-lg)",
   rMd:      "var(--r-md)",
   rSm:      "var(--r-sm)",

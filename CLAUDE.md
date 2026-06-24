@@ -16,7 +16,7 @@
 5. AI advisor with Islamic finance guardrails (Claude Sonnet 4)
 6. Goal templates rooted in Muslim financial life (Hajj, Mahr, Waqf, Emergency)
 
-**Tone**: Professional, trustworthy, elegant. This is a tool for financially literate Muslims who care about both returns and deen. The design reflects that — dark forest-green with gold accents, editorial typography, no noise.
+**Tone**: Professional, trustworthy, elegant. This is a tool for financially literate Muslims who care about both returns and deen. The design reflects that — light-first paper canvas with navy accents (green/red reserved for compliant/loss semantics), editorial typography, no noise.
 
 **Stack:**
 ```
@@ -158,13 +158,13 @@ Understanding these concepts is required to work on Mizan correctly. Financial e
 
 ### Color Tokens (from `const T` in MizanApp.jsx)
 ```javascript
-T.blue     = "#c9a24b"   // Gold — primary accent, CTAs, links (NOT blue — named historically)
-T.blueDim  = "#9a7a35"   // Gold dim — gradient ends, secondary buttons
-T.gold     = "#cf9e54"   // Amber — warnings, Zakat amounts, Sadaqah
-T.gain     = "#6fae8e"   // Jade — halal / positive / gain
-T.loss     = "#c46a52"   // Rust — haram / error / loss / negative
-T.slate    = "#7b94a6"   // Slate — unscreened / neutral / pending
-T.violet   = "#9d86b8"   // Violet — crypto / alternative assets
+T.blue     = "#1e4e8c"   // Navy — primary accent, CTAs, links, active states (NOT blue-named-but-gold anymore — rebranded 2026-06-24)
+T.blueDim  = "#15396b"   // Navy dim — gradient ends, secondary buttons
+T.gold     = "#b8842a"   // Amber — warnings, Zakat amounts, Sadaqah ONLY (no longer the brand accent)
+T.gain     = "#117a52"   // Green — halal / positive / gain / compliant
+T.loss     = "#b23a3d"   // Red — haram / error / loss / negative
+T.slate    = "#6b7b88"   // Slate — unscreened / neutral / pending
+T.violet   = "#7e6ba8"   // Violet — crypto / alternative assets
 T.textHi              // High-emphasis text (paper white in dark mode)
 T.text                // Body text
 T.muted               // Low-contrast captions, secondary labels
@@ -208,7 +208,7 @@ className="btn-ghost"  — Ghost button (transparent, bordered)
 **Glass rule**: `glass` and `glass-strong` are for chrome surfaces ONLY. NEVER apply to data tables, stat cards, charts, or bento tiles containing financial data.
 
 ### Theming
-Both light and dark themes must work. Dark = `data-theme="dark"` (forest green `#0d1311` base). Light = `data-theme="light"` (warm paper `#f5f2eb` base). When adding a new UI surface, test both themes mentally — most `T.*` tokens adapt automatically.
+Both light and dark themes must work. **Light is the default/primary face** = `data-theme="light"` (paper canvas `#faf8f4` bg, ink `#1c1b19` text). Dark = `data-theme="dark"` (ink `#1c1b19` base, canvas-tinted text). New users default to light (`themeMode="light"`). When adding a new UI surface, test both themes mentally — most `T.*` tokens adapt automatically. Note: `T.blue`/`T.gold`/`T.gain`/`T.loss` are hex *literals* (the codebase composes opacity as `${T.blue}40`), so they're tuned for the light theme; navy-as-small-text on the dark theme is the one known weak spot (would need a var refactor to make accents per-theme).
 
 ---
 
@@ -302,7 +302,7 @@ These are architectural commitments. Undoing them would break the app or violate
 
 - **Split MizanApp.jsx** — it is intentionally monolithic. If extraction is needed for a specific component, user will ask explicitly.
 - **Change the font stack** — Fraunces + IBM Plex Sans + IBM Plex Mono is intentional and final.
-- **Add new color tokens** — use existing `T.*` palette. The forest green + gold + jade palette is the brand.
+- **Add new color tokens** — use existing `T.*` palette. The paper-canvas + ink + navy (accent) + green/red (semantics) palette is the brand, with amber/gold reserved for Zakat & warnings only.
 - **Use Tailwind or CSS Modules** — all styling is inline with `T.*` tokens + the THEME_CSS string injected at mount.
 - **Add external npm packages** — ask first. Bundle is already 360KB gzipped. Every dependency must justify itself.
 - **Add new Supabase migrations** — schema changes require explicit ask. Always discuss before adding columns/tables.

@@ -24,10 +24,10 @@ const TT = {
   textHi:   "var(--mz-textHi)",
   muted:    "var(--mz-muted)",
   dim:      "var(--mz-dim)",
-  gain:     "#6fae8e",  // jade — under budget, healthy
-  gold:     "#cf9e54",  // amber — approaching cap
-  loss:     "#c46a52",  // rust — over cap
-  blue:     "#c9a24b",  // gold — primary accent
+  gain:     "#117a52",  // jade — under budget, healthy
+  gold:     "#b8842a",  // amber — approaching cap
+  loss:     "#b23a3d",  // rust — over cap
+  blue:     "#1e4e8c",  // gold — primary accent
   rSm:      "var(--r-sm)",
   rMd:      "var(--r-md)",
   rLg:      "var(--r-lg)",

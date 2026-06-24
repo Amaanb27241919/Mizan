@@ -20,12 +20,12 @@ import BugReportButton from "./BugReportButton.jsx";
 const T = {
   bg:"var(--mz-bg)", surface:"var(--mz-surface)", card:"var(--mz-card)",
   border:"var(--mz-border)", borderHi:"var(--mz-borderHi)",
-  blue:"#c9a24b",  blueDim:"#9a7a35",    // gold — primary accent, active chips, links
-  gold:"#cf9e54",  goldDim:"#a07e30",    // amber — warnings, zakat, secondary
-  gain:"#6fae8e",  gainBg:"var(--mz-gainBg)",  // jade — compliant
-  loss:"#c46a52",  lossBg:"var(--mz-lossBg)",  // rust — non-compliant
-  slate:"#7b94a6",   // unscreened holdings
-  violet:"#9d86b8",  // crypto holdings
+  blue:"#1e4e8c",  blueDim:"#15396b",    // navy — primary accent, active chips, links, CTAs
+  gold:"#b8842a",  goldDim:"#8a6218",    // amber — zakat, warnings, secondary
+  gain:"#117a52",  gainBg:"var(--mz-gainBg)",  // green — compliant / up
+  loss:"#b23a3d",  lossBg:"var(--mz-lossBg)",  // red — non-compliant / loss
+  slate:"#6b7b88",   // unscreened holdings
+  violet:"#7e6ba8",  // crypto holdings
   text:"var(--mz-text)", textHi:"var(--mz-textHi)",
   muted:"var(--mz-muted)", dim:"var(--mz-dim)",
   shadow:"var(--mz-shadow)", glass:"var(--mz-glass)",
@@ -37,37 +37,37 @@ const T = {
 const THEME_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
 
-  :root, :root[data-theme="dark"] {
-    /* Forest-green dark editorial palette */
-    --mz-bg: #0d1311; --mz-surface: #111a17; --mz-card: #15201c;
-    --mz-border: #2a3a33; --mz-borderHi: #3a4f45;
-    --mz-text: #b7b3a6; --mz-textHi: #e9e4d6;
-    --mz-muted: #7d8079; --mz-dim: #2a3a33;
-    --mz-gainBg: #0e1e18; --mz-lossBg: #1e1210;
-    --mz-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 28px rgba(0,0,0,0.6);
-    /* Glass material — chrome elements only (nav, modals, overlays) */
-    --mz-glass: rgba(13,19,17,0.68);
-    --mz-glass-strong: rgba(13,19,17,0.91);
-    --mz-glass-border: rgba(58,79,69,0.65);
-    --mz-glass-shadow: inset 0 1px 0 0 rgba(255,255,255,0.07), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 8px 32px rgba(0,0,0,0.45);
-    --mz-glass-shadow-lg: inset 0 1px 0 0 rgba(255,255,255,0.07), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 20px 60px rgba(0,0,0,0.60);
-    color-scheme: dark;
-  }
-  :root[data-theme="light"] {
-    /* Warm paper light theme */
-    --mz-bg: #f5f2eb; --mz-surface: #ffffff; --mz-card: #ffffff;
-    --mz-border: #e4ddd1; --mz-borderHi: #c8beaf;
-    --mz-text: #3d3a35; --mz-textHi: #1a1714;
-    --mz-muted: #7d8079; --mz-dim: #ece8e0;
-    --mz-gainBg: #f0faf5; --mz-lossBg: #fdf2ef;
-    --mz-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 6px 20px rgba(15,18,12,0.06);
+  :root, :root[data-theme="light"] {
+    /* Paper-canvas light theme — primary brand face */
+    --mz-bg: #faf8f4; --mz-surface: #ffffff; --mz-card: #ffffff;
+    --mz-border: #e8e2d6; --mz-borderHi: #d2cabb;
+    --mz-text: #44413b; --mz-textHi: #1c1b19;
+    --mz-muted: #87827a; --mz-dim: #efebe3;
+    --mz-gainBg: #e7f3ec; --mz-lossBg: #fbeceb;
+    --mz-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 6px 20px rgba(28,27,25,0.06);
     /* Glass material — light theme variants */
-    --mz-glass: rgba(248,245,238,0.72);
-    --mz-glass-strong: rgba(255,252,246,0.93);
-    --mz-glass-border: rgba(200,190,175,0.60);
+    --mz-glass: rgba(250,248,244,0.72);
+    --mz-glass-strong: rgba(255,253,250,0.93);
+    --mz-glass-border: rgba(210,202,187,0.60);
     --mz-glass-shadow: inset 0 1px 0 0 rgba(255,255,255,0.75), inset 0 -1px 0 0 rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.09);
     --mz-glass-shadow-lg: inset 0 1px 0 0 rgba(255,255,255,0.75), inset 0 -1px 0 0 rgba(0,0,0,0.04), 0 20px 60px rgba(0,0,0,0.14);
     color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    /* Ink-base dark theme */
+    --mz-bg: #1c1b19; --mz-surface: #232220; --mz-card: #292724;
+    --mz-border: #393631; --mz-borderHi: #4c4841;
+    --mz-text: #c5c0b6; --mz-textHi: #faf8f4;
+    --mz-muted: #8a857b; --mz-dim: #393631;
+    --mz-gainBg: #13241b; --mz-lossBg: #271513;
+    --mz-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 28px rgba(0,0,0,0.6);
+    /* Glass material — chrome elements only (nav, modals, overlays) */
+    --mz-glass: rgba(28,27,25,0.68);
+    --mz-glass-strong: rgba(28,27,25,0.91);
+    --mz-glass-border: rgba(76,72,65,0.65);
+    --mz-glass-shadow: inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 8px 32px rgba(0,0,0,0.45);
+    --mz-glass-shadow-lg: inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 20px 60px rgba(0,0,0,0.60);
+    color-scheme: dark;
   }
   :root {
     --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
@@ -78,12 +78,12 @@ const THEME_CSS = `
     --sh-md: 0 4px 14px rgba(0,0,0,0.18);
     --sh-lg: 0 12px 36px rgba(0,0,0,0.32);
   }
-  /* Ambient glows — gold top-right, jade bottom-left — keep dark from feeling void */
+  /* Ambient glows — navy top-right, green bottom-left — subtle depth on canvas/ink */
   body::before{content:"";position:fixed;top:-30%;right:-20%;width:60%;height:60%;
-    background:radial-gradient(ellipse,#c9a24b09 0%,transparent 65%);
+    background:radial-gradient(ellipse,#1e4e8c0a 0%,transparent 65%);
     pointer-events:none;z-index:0;}
   body::after{content:"";position:fixed;bottom:-20%;left:-15%;width:50%;height:50%;
-    background:radial-gradient(ellipse,#6fae8e07 0%,transparent 65%);
+    background:radial-gradient(ellipse,#117a5208 0%,transparent 65%);
     pointer-events:none;z-index:0;}
   /* Base body font — elements without explicit fontFamily inherit IBM Plex Sans */
   body{font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;}
@@ -9354,8 +9354,8 @@ export default function Mizan(){
   },[auto,sync]);
 
   // ── Theme: auto (sunrise/sunset) | dark | light ──────────
-  const[themeMode,setThemeMode]=useState(()=>{try{return localStorage.getItem("mizan_theme_mode")||"auto";}catch{return"auto";}});
-  const[resolvedTheme,setResolvedTheme]=useState("dark");
+  const[themeMode,setThemeMode]=useState(()=>{try{return localStorage.getItem("mizan_theme_mode")||"light";}catch{return"light";}});
+  const[resolvedTheme,setResolvedTheme]=useState("light");
   useEffect(()=>{
     // Inject the palette CSS once.
     const existing=document.getElementById("mz-theme-css");
@@ -9499,7 +9499,7 @@ export default function Mizan(){
         /* Disable lift on touch devices — no hover intent */
         .bento-tile:hover{transform:none;}
       }
-      .btn-primary{background:linear-gradient(135deg,${T.blue},${T.blueDim});color:#0d1311;border:none;font-family:${FM};font-size:11px;font-weight:600;letter-spacing:0.04em;padding:8px 16px;border-radius:var(--r-md);cursor:pointer;box-shadow:0 2px 10px ${T.blue}40;transition:transform 0.15s,box-shadow 0.2s;}
+      .btn-primary{background:linear-gradient(135deg,${T.blue},${T.blueDim});color:#faf8f4;border:none;font-family:${FM};font-size:11px;font-weight:600;letter-spacing:0.04em;padding:8px 16px;border-radius:var(--r-md);cursor:pointer;box-shadow:0 2px 10px ${T.blue}40;transition:transform 0.15s,box-shadow 0.2s;}
       .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 14px ${T.blue}66;}
       .btn-primary:active:not(:disabled){transform:translateY(0);box-shadow:0 1px 6px ${T.blue}40;}
       .btn-primary:disabled{opacity:0.55;cursor:not-allowed;box-shadow:none;}

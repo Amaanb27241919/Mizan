@@ -18,7 +18,7 @@ const T = {
   bg: "var(--mz-bg)", card: "var(--mz-card)", surface: "var(--mz-surface)",
   border: "var(--mz-border)", borderHi: "var(--mz-borderHi)",
   text: "var(--mz-text)", textHi: "var(--mz-textHi)", muted: "var(--mz-muted)",
-  blue: "#c9a24b", gain: "#6fae8e", gold: "#cf9e54", loss: "#c46a52",
+  blue: "#1e4e8c", gain: "#117a52", gold: "#b8842a", loss: "#b23a3d",
   s1: "var(--s-1)", s2: "var(--s-2)", s3: "var(--s-3)", s4: "var(--s-4)",
   s5: "var(--s-5)", s6: "var(--s-6)", s8: "var(--s-8)",
   rSm: "var(--r-sm)", rMd: "var(--r-md)", rLg: "var(--r-lg)",

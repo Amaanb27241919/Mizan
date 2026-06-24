@@ -13,8 +13,8 @@ const styles = {
   page: {
     minHeight: '100vh',
     width: '100%',
-    background: 'radial-gradient(circle at 30% 20%, rgba(201,162,75,0.08), transparent 50%), radial-gradient(circle at 80% 90%, rgba(111,174,142,0.07), transparent 45%), #0d1311',
-    color: '#ECEFF7',
+    background: 'radial-gradient(circle at 30% 20%, rgba(30,78,140,0.06), transparent 50%), radial-gradient(circle at 80% 90%, rgba(17,122,82,0.05), transparent 45%), #faf8f4',
+    color: '#44413b',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -25,27 +25,27 @@ const styles = {
   card: {
     width: '100%',
     maxWidth: 430,
-    background: 'rgba(26,31,53,0.85)',
+    background: 'rgba(255,255,255,0.92)',
     backdropFilter: 'blur(20px) saturate(160%)',
     WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    border: '1px solid rgba(28,27,25,0.08)',
     borderRadius: 18,
     padding: '36px 30px',
-    boxShadow: '0 24px 80px rgba(0,0,0,0.55)',
+    boxShadow: '0 24px 80px rgba(28,27,25,0.10)',
   },
   wordmark: {
     fontSize: 13,
     letterSpacing: '0.34em',
     fontWeight: 700,
-    color: '#c9a24b',
+    color: '#1e4e8c',
     textAlign: 'center',
     marginBottom: 24,
     fontFamily: MONO,
   },
   tabs: {
     display: 'flex',
-    background: 'rgba(11,15,30,0.6)',
-    border: '1px solid rgba(255,255,255,0.06)',
+    background: '#f2eee6',
+    border: '1px solid rgba(28,27,25,0.06)',
     borderRadius: 12,
     padding: 4,
     marginBottom: 22,
@@ -57,7 +57,7 @@ const styles = {
     background: 'transparent',
     border: 'none',
     borderRadius: 9,
-    color: '#6F7997',
+    color: '#87827a',
     fontSize: 13,
     fontWeight: 500,
     letterSpacing: '-0.005em',
@@ -66,23 +66,23 @@ const styles = {
     fontFamily: SF,
   },
   tabActive: {
-    background: '#1A1F35',
-    color: '#ECEFF7',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+    background: '#ffffff',
+    color: '#1c1b19',
+    boxShadow: '0 1px 3px rgba(28,27,25,0.12)',
   },
   heading: {
     fontSize: 26,
     fontWeight: 700,
     letterSpacing: '-0.02em',
     margin: '0 0 8px 0',
-    color: '#ECEFF7',
+    color: '#1c1b19',
   },
-  sub: { fontSize: 14, color: '#6F7997', margin: '0 0 24px 0', lineHeight: 1.55 },
+  sub: { fontSize: 14, color: '#87827a', margin: '0 0 24px 0', lineHeight: 1.55 },
   label: {
     display: 'block',
     fontSize: 11,
     fontWeight: 500,
-    color: '#6F7997',
+    color: '#87827a',
     marginBottom: 7,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
@@ -91,10 +91,10 @@ const styles = {
   input: {
     width: '100%',
     padding: '12px 14px',
-    background: 'rgba(11,15,30,0.6)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: '#ffffff',
+    border: '1px solid rgba(28,27,25,0.12)',
     borderRadius: 10,
-    color: '#ECEFF7',
+    color: '#1c1b19',
     fontSize: 15,
     outline: 'none',
     boxSizing: 'border-box',
@@ -105,33 +105,33 @@ const styles = {
   button: {
     width: '100%',
     padding: '13px 14px',
-    background: 'linear-gradient(135deg, #c9a24b, #9a7a35)',
+    background: 'linear-gradient(135deg, #1e4e8c, #15396b)',
     border: 'none',
     borderRadius: 10,
-    color: '#0d1311',
+    color: '#faf8f4',
     fontSize: 14,
     fontWeight: 600,
     letterSpacing: '-0.005em',
     cursor: 'pointer',
-    boxShadow: '0 4px 20px rgba(201,162,75,0.40)',
+    boxShadow: '0 4px 20px rgba(30,78,140,0.35)',
     fontFamily: SF,
     transition: 'transform 0.15s, box-shadow 0.2s',
   },
   buttonDisabled: { opacity: 0.55, cursor: 'not-allowed', boxShadow: 'none' },
   notice: {
     fontSize: 13,
-    color: '#9CDCA0',
-    background: 'rgba(201,162,75,0.10)',
-    border: '1px solid rgba(201,162,75,0.28)',
+    color: '#117a52',
+    background: 'rgba(30,78,140,0.07)',
+    border: '1px solid rgba(30,78,140,0.20)',
     padding: 14,
     borderRadius: 10,
     lineHeight: 1.55,
   },
-  error: { fontSize: 12, color: '#F47373', marginTop: 8, marginBottom: 4 },
+  error: { fontSize: 12, color: '#b23a3d', marginTop: 8, marginBottom: 4 },
   linkBtn: {
     background: 'none',
     border: 'none',
-    color: '#c9a24b',
+    color: '#1e4e8c',
     cursor: 'pointer',
     fontSize: 12,
     padding: 0,
@@ -140,7 +140,7 @@ const styles = {
   },
   footer: {
     fontSize: 11,
-    color: '#5C6478',
+    color: '#87827a',
     textAlign: 'center',
     marginTop: 18,
     lineHeight: 1.6,
@@ -435,15 +435,15 @@ export default function Login() {
                 marginTop: 14,
                 fontSize: 11,
                 lineHeight: 1.55,
-                color: '#7C8597',
+                color: '#87827a',
                 fontFamily: SF,
                 textAlign: 'center',
               }}>
                 By creating an account, you agree to MĪZAN's{' '}
-                <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#c9a24b', textDecoration: 'none' }}>
+                <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#1e4e8c', textDecoration: 'none' }}>
                   Terms of Service
                 </a>{' '}and{' '}
-                <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#c9a24b', textDecoration: 'none' }}>
+                <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#1e4e8c', textDecoration: 'none' }}>
                   Privacy Policy
                 </a>,
                 and consent to the collection, processing, and storage of your data as described in our Privacy Policy.
@@ -490,20 +490,20 @@ export default function Login() {
         <div style={{
           marginTop: 18,
           paddingTop: 14,
-          borderTop: '1px solid rgba(255,255,255,0.06)',
+          borderTop: '1px solid rgba(28,27,25,0.08)',
           display: 'flex',
           flexWrap: 'wrap',
           gap: '10px 14px',
           justifyContent: 'center',
           fontSize: 11,
-          color: '#5C6478',
+          color: '#87827a',
           fontFamily: SF,
         }}>
-          <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Privacy</a>
-          <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Terms</a>
-          <a href="/contact" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Contact</a>
-          <a href="/legal/SECURITY_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Security</a>
-          <a href="/legal/DATA_RETENTION_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#7C8597', textDecoration: 'none' }}>Data Retention</a>
+          <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Privacy</a>
+          <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Terms</a>
+          <a href="/contact" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Contact</a>
+          <a href="/legal/SECURITY_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Security</a>
+          <a href="/legal/DATA_RETENTION_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Data Retention</a>
         </div>
       </div>
     </div>
