@@ -46,10 +46,13 @@ server gate that a tampered client cannot bypass.
 **Who counts as admin?** `canUseTradingBot(user) === isRootUser(user)` — i.e.
 `profiles.is_root = true` (the first registered user, or `OWNER_EMAIL`).
 
-**Full-auto** is stricter: `canUseFullAuto()` (`handlers.mjs:707`) requires **root
-AND** `profiles.full_auto_enabled = true`. There is a compliance note in the code:
-enabling full-auto for non-owner accounts likely requires RIA registration — do not
-change without legal review.
+**Full-auto** is stricter and now **per-account**. Layer 3 executes only when ALL hold:
+`strategy.mode = 'full'` **AND** `profiles.full_auto_enabled = true` (master switch)
+**AND** the specific account is opted in via the `account_full_auto` table
+(`accountFullAutoEnabled()`), which **defaults to false even for the owner**. Managed
+through `GET/PATCH /api/bot/full-auto-accounts`. There is a compliance note in the
+code: enabling full-auto for non-owner accounts likely requires RIA registration — do
+not change without legal review.
 
 ### How to grant a user access
 

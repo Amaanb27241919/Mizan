@@ -4779,6 +4779,8 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
   const[riskAck,setRiskAck]=useState(false);
   const[killSwitchBusy,setKillSwitchBusy]=useState(false);
   const[killSwitchMsg,setKillSwitchMsg]=useState(null);
+  // Per-account full-auto opt-in map: { [accountId]: true }
+  const[faAccounts,setFaAccounts]=useState({});
   const allPaused=strategies.length>0&&strategies.every(s=>!s.enabled);
 
   const loadStrategies=useCallback(async()=>{
@@ -4790,6 +4792,24 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
     }catch{}finally{setLoadingStrats(false);}
   },[]);
 
+  const loadFaAccounts=useCallback(async()=>{
+    try{
+      const r=await apiFetch("/api/bot/full-auto-accounts");
+      const d=await r.json();
+      if(r.ok)setFaAccounts(Object.fromEntries((d.accounts||[]).map(a=>[a.account_id,!!a.enabled])));
+    }catch{}
+  },[]);
+
+  const toggleFaAccount=async(accountId,next)=>{
+    setFaAccounts(p=>({...p,[accountId]:next})); // optimistic
+    try{
+      const r=await apiFetch(`/api/bot/full-auto-accounts/${encodeURIComponent(accountId)}`,{
+        method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:next}),
+      });
+      if(!r.ok)setFaAccounts(p=>({...p,[accountId]:!next})); // rollback on failure
+    }catch{setFaAccounts(p=>({...p,[accountId]:!next}));}
+  };
+
   const loadSignals=useCallback(async()=>{
     setLoadingSignals(true);
     try{
@@ -4799,7 +4819,7 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
     }catch{}finally{setLoadingSignals(false);}
   },[]);
 
-  useEffect(()=>{if(isAdmin&&!demoMode){loadStrategies();loadSignals();}},[isAdmin,demoMode,loadStrategies,loadSignals]);
+  useEffect(()=>{if(isAdmin&&!demoMode){loadStrategies();loadSignals();if(fullAutoEnabled)loadFaAccounts();}},[isAdmin,demoMode,fullAutoEnabled,loadStrategies,loadSignals,loadFaAccounts]);
 
   const activateKillSwitch=async()=>{
     if(!window.confirm("Pause ALL bot automation? No signals will execute until you re-enable strategies."))return;
@@ -5018,8 +5038,25 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
     </BentoTile>
 
     {fullAutoEnabled&&<BentoTile accent={T.loss}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FULL-AUTO ENABLED</div>
-      <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:0}}>Full-automation is active for this account. The bot will execute signals without your approval. Monitor the kill switch above and review audit logs regularly.</p>
+      <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FULL-AUTO — PER-ACCOUNT OPT-IN</div>
+      <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:`0 0 ${T.s3}`}}>Autonomous execution runs <strong>only</strong> on accounts you turn on here. Each defaults to off. A full-mode strategy on an account that's off will still generate signals but never auto-execute.</p>
+      {snapAccounts.length===0
+        ?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>No connected accounts.</div>
+        :snapAccounts.map(a=>{const id=a.accountId||a.id;const on=!!faAccounts[id];return(
+          <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
+            <div>
+              <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi}}>{a.brokerage||a.name||"Account"}</div>
+              <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>{a.accountName||id}</div>
+            </div>
+            <button onClick={()=>toggleFaAccount(id,!on)} style={{
+              padding:`5px ${T.s3}`,borderRadius:999,cursor:"pointer",
+              fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.08em",
+              border:`1px solid ${on?T.loss:T.border}`,
+              background:on?`${T.loss}18`:"transparent",
+              color:on?T.loss:T.muted,
+            }}>{on?"● AUTO ON":"AUTO OFF"}</button>
+          </div>
+        );})}
     </BentoTile>}
   </div>;
 }
