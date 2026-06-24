@@ -150,9 +150,11 @@ controls appear in the admin view.
   checks the daily cap (`max_trades_per_day`) → **Sharia gate** → fetches a Finnhub
   quote → applies a simple momentum rule (day change ≥ +1.5% → buy, ≤ −1.5% → sell)
   → sizes qty from `capital_allocated` → inserts a `pending_signals` row.
-- **Semi-auto:** sends an approval push notification.
-- **Full-auto** (`strat.mode === "full"` AND profile `full_auto_enabled`): marks the
-  signal executed and sends an "executed" push.
+- **Semi-auto:** sends an approval push notification; the trade executes (paper) only
+  when you tap **Approve**.
+- **Full-auto** (`strat.mode === "full"` AND profile `full_auto_enabled`): calls
+  `placeAlpacaOrder()` to execute on the Alpaca paper account, then marks the signal
+  executed and sends an "executed (paper)" push.
 
 ### Sharia gate
 - Server list: `HARAM_TICKERS = {JPM, WYNN, MO, LCID, BND}` (`handlers.mjs:31`).
@@ -187,14 +189,23 @@ Every meaningful action writes to `audit_log`: `bot.signal.generated`,
 
 ## 8. Current implementation status (read before trusting it with money)
 
-- ✅ **Manual Order Ticket places real orders** — SnapTrade (live) and Alpaca (paper) are wired end-to-end.
-- ⚠️ **Bot execution is not yet wired to a broker.** Both signal **approve**
-  (`handlers.mjs:3079`) and full-auto in the cron (`:4585`) currently update the
-  signal's **database status** ("approved" / "executed") and send notifications, but
-  they do **not** yet call `trade/impact` + `trade/place` to execute a real order.
-  The code marks this as the intended integration point ("real trade execution would
-  call trade/impact + trade/place here"). So today the bot is a fully functional
-  **signal engine + approval workflow + audit trail**, not yet an autonomous executor.
+- ✅ **Bot execution is wired to a broker — Alpaca PAPER.** As of 2026-06-24, both
+  signal **approve** and **full-auto** (cron) actually place orders through the shared
+  `placeAlpacaOrder()` helper (`handlers.mjs`), which posts to
+  `paper-api.alpaca.markets`. On success the signal flips to `executed` with the
+  Alpaca order id in the audit log; on failure it stays `approved`/`pending` with an
+  `error_msg` (never falsely marked executed). The Sharia gate is re-applied inside
+  the helper, so a haram ticker can never reach the broker.
+- 🔒 **No real money is at risk.** Execution is intentionally on the Alpaca **paper**
+  account (single env-configured account, plain tickers, no real funds). This lets
+  strategies run end-to-end safely before any live capital.
+- ⛔ **Live-money execution (SnapTrade) is deliberately NOT auto-wired.** Reasons:
+  (1) the manual SnapTrade path passes a raw ticker where SnapTrade expects a
+  `universal_symbol_id` — ticker→symbol resolution is unbuilt; (2) it can't be tested
+  without a live connected brokerage; (3) full-auto on non-owner accounts is
+  RIA-sensitive (`canUseFullAuto` compliance note). Enabling it requires that work +
+  legal review. The manual Order Ticket still offers SnapTrade as a venue, but the
+  bot never routes there.
 - The momentum rule is intentionally simple (±1.5% day change). It's a scaffold for
   more sophisticated, backtested strategies.
 
