@@ -4658,6 +4658,192 @@ function BotDashboard({activities=[],accounts=[]}){
 /* ─── HISTORICAL BACKTEST ────────────────────────────── */
 // Polygon /v2/aggs daily bars + simple SMA-50/200 crossover strategy.
 // Buy when SMA-50 crosses above SMA-200, sell when it crosses below.
+// Shared SMA-50/200 crossover backtest over Polygon daily bars.
+// Returns { series, trades, stats } where stats includes winRate, maxDrawdown,
+// totalRet (compounded strategy return %), buyHold, and a return-distribution
+// histogram of closed-trade returns. Reused by HistoricalBacktest and the
+// Trading Bot strategy reality-check before activation.
+function computeSmaBacktest(bars){
+  if(!bars||bars.length<200)return{series:(bars||[]).map(b=>({t:b.t,c:b.c})),trades:[],stats:{bars:(bars||[]).length}};
+  const closes=bars.map(b=>b.c);
+  const sma=(arr,n,i)=>i<n-1?null:arr.slice(i-n+1,i+1).reduce((s,v)=>s+v,0)/n;
+  const series=bars.map((b,i)=>({t:b.t,c:b.c,sma50:sma(closes,50,i),sma200:sma(closes,200,i),date:new Date(b.t).toISOString().slice(0,10)}));
+  const trades=[];let pos=null;
+  for(let i=1;i<series.length;i++){
+    const p=series[i-1],c=series[i];
+    if(p.sma50==null||p.sma200==null||c.sma50==null||c.sma200==null)continue;
+    const wasAbove=p.sma50>p.sma200, isAbove=c.sma50>c.sma200;
+    if(!wasAbove&&isAbove&&!pos){pos={entry:c.c,entryDate:c.date};trades.push({date:c.date,side:"BUY",price:c.c});}
+    else if(wasAbove&&!isAbove&&pos){const r=(c.c-pos.entry)/pos.entry*100;trades.push({date:c.date,side:"SELL",price:c.c,return:r,entry:pos.entry});pos=null;}
+  }
+  const closed=trades.filter(t=>t.side==="SELL");
+  const wins=closed.filter(t=>t.return>0).length;
+  // Chain returns multiplicatively: each trade's return (%) compounds prior equity.
+  const chained=closed.reduce((acc,t)=>acc*(1+(t.return||0)/100),1)-1;
+  const totalRet=chained*100;
+  // Max drawdown across the compounded equity curve of closed trades.
+  let eq=1,peak=1,maxDd=0;
+  for(const t of closed){eq*=(1+(t.return||0)/100);if(eq>peak)peak=eq;const dd=(peak-eq)/peak*100;if(dd>maxDd)maxDd=dd;}
+  // Return-distribution histogram: bucket each closed trade's % return.
+  const edges=[-100,-20,-10,-5,0,5,10,20,1e9];
+  const labels=["< -20%","-20 to -10%","-10 to -5%","-5 to 0%","0 to 5%","5 to 10%","10 to 20%","> 20%"];
+  const dist=labels.map((label,bi)=>({label,count:closed.filter(t=>(t.return||0)>=edges[bi]&&(t.return||0)<edges[bi+1]).length}));
+  const buyHold=bars.length>1?((bars[bars.length-1].c-bars[0].c)/bars[0].c)*100:0;
+  // Avg return per trade — used to scale an expectation over an arbitrary horizon.
+  const avgTradeRet=closed.length?closed.reduce((s,t)=>s+(t.return||0),0)/closed.length:0;
+  const spanDays=bars.length>1?Math.max(1,(bars[bars.length-1].t-bars[0].t)/86400000):1;
+  return{series,trades,stats:{trades:closed.length,wins,losses:closed.length-wins,winRate:closed.length?(wins/closed.length)*100:0,totalRet,buyHold,maxDrawdown:maxDd,dist,avgTradeRet,spanDays,bars:bars.length}};
+}
+
+// Reality-check backtest for a parsed NL strategy. Fetches Polygon bars for the
+// strategy ticker, runs computeSmaBacktest, scales the historical return to the
+// strategy's time horizon, and surfaces an honest mismatch warning when the
+// user's profit target is unrealistically above what the strategy historically
+// achieved. Profit target is always framed as a GOAL, never a promise.
+function StrategyReality({strat}){
+  const[bars,setBars]=useState([]);
+  const[busy,setBusy]=useState(false);
+  const[err,setErr]=useState(null);
+  const[ran,setRan]=useState(false);
+  const ticker=strat&&strat.ticker;
+  useEffect(()=>{
+    if(!ticker){setBars([]);setRan(false);return;}
+    let alive=true;
+    (async()=>{
+      setBusy(true);setErr(null);setRan(false);setBars([]);
+      try{
+        const to=new Date().toISOString().slice(0,10);
+        const fromD=new Date();fromD.setFullYear(fromD.getFullYear()-2);
+        const from=fromD.toISOString().slice(0,10);
+        const r=await apiFetch(`/api/polygon/bars?symbol=${encodeURIComponent(ticker)}&from=${from}&to=${to}`);
+        const d=await r.json();
+        if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
+        if(alive){setBars(d.bars||[]);setRan(true);}
+      }catch(e){if(alive)setErr(e.message||"Backtest unavailable");}
+      finally{if(alive)setBusy(false);}
+    })();
+    return()=>{alive=false;};
+  },[ticker]);
+
+  const{stats,expectedRet,target,mismatch}=useMemo(()=>{
+    const{stats}=computeSmaBacktest(bars);
+    const target=Number(strat?.profit_target_pct)||0;
+    const horizon=Number(strat?.time_horizon_days)||0;
+    // Scale the strategy's total historical return to the user's horizon so the
+    // comparison is apples-to-apples (return achieved over a comparable period).
+    let expectedRet=null;
+    if(stats.trades&&stats.spanDays>0){
+      if(horizon>0)expectedRet=stats.totalRet*(horizon/stats.spanDays);
+      else expectedRet=stats.totalRet;
+    }
+    // Mismatch: target meaningfully exceeds the historically achievable return.
+    // Flag when target is >2x the (positive) expected return, or any positive
+    // target against a flat/negative historical result.
+    let mismatch=false;
+    if(target>0&&expectedRet!=null){
+      if(expectedRet<=0)mismatch=true;
+      else if(target>expectedRet*2)mismatch=true;
+    }
+    return{stats,expectedRet,target,mismatch};
+  },[bars,strat]);
+
+  const hasData=ran&&bars.length>=200&&stats.trades>0;
+  const maxDistCount=stats.dist?Math.max(1,...stats.dist.map(d=>d.count)):1;
+  const lossPct=Number(strat?.stop_loss_pct)||Number(strat?.max_drawdown_pct)||0;
+
+  return<div style={{marginTop:T.s3,padding:T.s3,background:T.bg,borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
+    <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>HISTORICAL REALITY CHECK · {ticker}</div>
+    {busy&&<div style={{height:90,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:11,color:T.muted}}>Running backtest on 2yr of {ticker} bars…</div>}
+    {!busy&&err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>}
+    {!busy&&!err&&!hasData&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.5}}>Not enough historical data to backtest {ticker} (needs ~200 daily bars). Treat the profit target as an unvalidated goal and size risk accordingly.</div>}
+    {!busy&&!err&&hasData&&<>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:T.s2,marginBottom:T.s3}}>
+        {[
+          ["Win rate",`${stats.winRate.toFixed(0)}%`,T.textHi],
+          ["Max drawdown",`-${stats.maxDrawdown.toFixed(1)}%`,T.loss],
+          ["Hist. return",`${stats.totalRet.toFixed(1)}%`,fc(stats.totalRet)],
+        ].map(([l,v,clr])=><div key={l} style={{padding:T.s2,background:T.surface,borderRadius:T.rSm,border:`1px solid ${T.border}`}}>
+          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>{l.toUpperCase()}</div>
+          <div style={{fontFamily:FU,fontSize:17,fontWeight:700,color:clr,fontVariantNumeric:"tabular-nums"}}>{v}</div>
+        </div>)}
+      </div>
+      <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:T.s2}}>RETURN DISTRIBUTION · {stats.trades} CLOSED TRADES</div>
+      <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:T.s3}}>
+        {stats.dist.map(d=><div key={d.label} style={{display:"grid",gridTemplateColumns:"96px 1fr 24px",gap:T.s2,alignItems:"center"}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{d.label}</span>
+          <div style={{height:8,background:T.surface,borderRadius:999,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${(d.count/maxDistCount)*100}%`,background:d.label.includes("-")&&!d.label.startsWith("-5")?T.loss:d.label.startsWith("> ")||d.label.startsWith("10")||d.label.startsWith("5")?T.gain:d.label.startsWith("0")?T.gain:T.loss,borderRadius:999}}/>
+          </div>
+          <span style={{fontFamily:FM,fontSize:10,color:T.textHi,fontWeight:600,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{d.count}</span>
+        </div>)}
+      </div>
+      {mismatch&&<div style={{padding:T.s3,background:T.lossBg,border:`1px solid ${T.loss}50`,borderRadius:T.rMd,marginBottom:T.s2}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.12em",fontWeight:600,marginBottom:4}}>⚠ TARGET MAY NOT BE REALISTIC</div>
+        <div style={{fontFamily:FP,fontSize:12,color:T.text,lineHeight:1.55,fontVariantNumeric:"tabular-nums"}}>
+          Your target is <strong style={{color:T.loss}}>{target}%</strong>; historically this strategy achieved <strong style={{color:T.textHi}}>~{expectedRet.toFixed(1)}%</strong> over a comparable {Number(strat?.time_horizon_days)||0}-day period. Hitting your target would require materially more risk than the backtest shows — or may not be achievable at all.
+        </div>
+      </div>}
+      {!mismatch&&expectedRet!=null&&<div style={{padding:`${T.s2} ${T.s3}`,background:`${T.gold}10`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,marginBottom:T.s2,fontFamily:FP,fontSize:12,color:T.gold,lineHeight:1.5,fontVariantNumeric:"tabular-nums"}}>
+        Over a comparable {Number(strat?.time_horizon_days)||0}-day window this strategy historically returned ~{expectedRet.toFixed(1)}%. Your {target}% target is within reach of past results but is still a goal, not a guarantee.
+      </div>}
+    </>}
+    <div style={{padding:T.s3,background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:11,color:T.gold,lineHeight:1.6}}>
+      This is a <strong>TARGET, not a guarantee.</strong> Aggressive return targets require high risk. This strategy could lose up to {lossPct||stats.maxDrawdown?.toFixed?.(0)||"a significant portion"}% of allocated capital. Past backtest performance does not predict live results. Not financial advice.
+    </div>
+  </div>;
+}
+
+// Progress card for a single enabled strategy. Uses the `progress` object from
+// GET /api/bot/strategies: { current_value, pct_to_target, days_elapsed,
+// days_horizon, trades_executed }. Degrades gracefully when progress is missing.
+function StrategyProgressCard({strat}){
+  const p=strat&&strat.progress;
+  const capital=Number(strat?.capital_allocated)||0;
+  const current=p&&p.current_value!=null?Number(p.current_value):null;
+  const pnl=current!=null?current-capital:null;
+  const pnlPct=current!=null&&capital>0?(pnl/capital)*100:null;
+  const pctToTarget=p&&p.pct_to_target!=null?Math.max(0,Math.min(100,Number(p.pct_to_target))):null;
+  const daysElapsed=p&&p.days_elapsed!=null?Number(p.days_elapsed):null;
+  const daysHorizon=p&&p.days_horizon!=null?Number(p.days_horizon):(Number(strat?.time_horizon_days)||null);
+  const trades=p&&p.trades_executed!=null?Number(p.trades_executed):null;
+  const noData=current==null&&pctToTarget==null&&trades==null;
+  return<BentoTile accent={pnl!=null?(pnl>=0?T.gain:T.loss):T.blue} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
+        <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{strat.ticker}</span>
+        <Tag label={(strat.mode||"semi").toUpperCase()} color={strat.mode==="full"?T.loss:T.gold}/>
+      </div>
+      <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em"}}>TARGET {strat.profit_target_pct}%</span>
+    </div>
+    {noData?<div style={{fontFamily:FP,fontSize:12,color:T.muted}}>Progress data not available yet — check back after the next bot run.</div>:<>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>ALLOCATED</div>
+          <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{f$(capital,0)}</div>
+        </div>
+        <div>
+          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>CURRENT VALUE</div>
+          <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:pnl!=null?fc(pnl):T.textHi,fontVariantNumeric:"tabular-nums"}}>{current!=null?f$(current,0):"—"}</div>
+          {pnl!=null&&<div style={{fontFamily:FM,fontSize:10,color:fc(pnl),fontWeight:600,fontVariantNumeric:"tabular-nums",marginTop:2}}>{pnl>=0?"+":"−"}{f$(pnl,0)} ({fp(pnlPct)})</div>}
+        </div>
+      </div>
+      <div>
+        <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4,fontVariantNumeric:"tabular-nums"}}>
+          <span style={{letterSpacing:"0.08em"}}>PROGRESS TO TARGET</span>
+          <span style={{color:T.textHi,fontWeight:600}}>{pctToTarget!=null?`${pctToTarget.toFixed(0)}%`:"—"}</span>
+        </div>
+        <div style={{height:8,background:T.surface,borderRadius:999,overflow:"hidden",border:`1px solid ${T.border}`}}>
+          <div style={{height:"100%",width:`${pctToTarget||0}%`,background:`linear-gradient(90deg, ${T.gain}, ${T.blue})`,borderRadius:999,transition:"width 300ms cubic-bezier(0.16,1,0.3,1)"}}/>
+        </div>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums",borderTop:`1px solid ${T.border}`,paddingTop:T.s2}}>
+        <span>{daysElapsed!=null?`Day ${daysElapsed}`:"Day —"}{daysHorizon!=null?` of ${daysHorizon}`:""}</span>
+        <span>{trades!=null?`${trades} trade${trades===1?"":"s"} executed`:"— trades"}</span>
+      </div>
+    </>}
+  </BentoTile>;
+}
+
 function HistoricalBacktest(){
   const[symbol,setSymbol]=useState("AAPL");
   const[from,setFrom]=useState(()=>{const d=new Date();d.setFullYear(d.getFullYear()-2);return d.toISOString().slice(0,10);});
@@ -4677,28 +4863,8 @@ function HistoricalBacktest(){
     finally{setBusy(false);}
   };
 
-  // Compute SMAs + signal trades
-  const{series,trades,stats}=useMemo(()=>{
-    if(bars.length<200)return{series:bars.map(b=>({t:b.t,c:b.c})),trades:[],stats:{}};
-    const closes=bars.map(b=>b.c);
-    const sma=(arr,n,i)=>i<n-1?null:arr.slice(i-n+1,i+1).reduce((s,v)=>s+v,0)/n;
-    const series=bars.map((b,i)=>({t:b.t,c:b.c,sma50:sma(closes,50,i),sma200:sma(closes,200,i),date:new Date(b.t).toISOString().slice(0,10)}));
-    const trades=[];let pos=null;
-    for(let i=1;i<series.length;i++){
-      const p=series[i-1],c=series[i];
-      if(p.sma50==null||p.sma200==null||c.sma50==null||c.sma200==null)continue;
-      const wasAbove=p.sma50>p.sma200, isAbove=c.sma50>c.sma200;
-      if(!wasAbove&&isAbove&&!pos){pos={entry:c.c,entryDate:c.date};trades.push({date:c.date,side:"BUY",price:c.c});}
-      else if(wasAbove&&!isAbove&&pos){const r=(c.c-pos.entry)/pos.entry*100;trades.push({date:c.date,side:"SELL",price:c.c,return:r,entry:pos.entry});pos=null;}
-    }
-    const closed=trades.filter(t=>t.side==="SELL");
-    const wins=closed.filter(t=>t.return>0).length;
-    // Chain returns multiplicatively: each trade's return (%) compounds the prior equity.
-    const chained=closed.reduce((acc,t)=>acc*(1+(t.return||0)/100),1)-1;
-    const totalRet=chained*100;
-    const buyHold=bars.length>1?((bars[bars.length-1].c-bars[0].c)/bars[0].c)*100:0;
-    return{series,trades,stats:{trades:closed.length,wins,losses:closed.length-wins,winRate:closed.length?(wins/closed.length)*100:0,totalRet,buyHold,bars:bars.length}};
-  },[bars]);
+  // Compute SMAs + signal trades (shared helper, reused by the bot reality-check)
+  const{series,trades,stats}=useMemo(()=>computeSmaBacktest(bars),[bars]);
 
   return<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
     <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -4964,33 +5130,54 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
       {nlErr&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginTop:T.s2}}>{nlErr}</div>}
       <button onClick={parseNl} disabled={nlBusy||!nlInput.trim()} className="btn-primary" style={{marginTop:T.s3,fontSize:11}}>{nlBusy?"Parsing…":"Parse Strategy"}</button>
 
-      {/* Strategy Review Modal (inline) */}
-      {nlResult&&<div style={{marginTop:T.s4,padding:T.s4,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STRATEGY REVIEW</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2,marginBottom:T.s3}}>
-          {[
-            ["Ticker",nlResult.ticker],
-            ["Strategy",nlResult.strategy_type],
-            ["Capital",`$${Number(nlResult.capital_allocated||0).toLocaleString()}`],
-            ["Profit Target",`${nlResult.profit_target_pct}%`],
-            ["Stop Loss",`${nlResult.stop_loss_pct}%`],
-            ["Horizon",`${nlResult.time_horizon_days} days`],
-          ].map(([k,v])=><div key={k} style={{fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
-            <span style={{color:T.muted}}>{k}: </span><span style={{color:T.textHi,fontWeight:600}}>{v}</span>
+      {/* Strategy Review Modal (inline) — honest reality-check before activation */}
+      {nlResult&&(()=>{
+        const params=nlResult.params||{};
+        const universe=params.universe||nlResult.ticker;
+        const entryRules=params.entry_rules;
+        const exitRules=params.exit_rules;
+        const posSize=params.position_size_pct!=null?params.position_size_pct:nlResult.position_size_pct;
+        const acct=(snapAccounts.find(a=>(a.id||a.accountId)===nlResult.account_id));
+        const acctName=acct?(acct.brokerage||acct.name||acct.accountName||nlResult.account_id):(nlResult.account_id||"—");
+        const rule=v=>Array.isArray(v)?v.join(", "):(v||"—");
+        const plain=[
+          ["Universe",rule(universe)],
+          ["Strategy type",nlResult.strategy_type||"—"],
+          ["Entry rules",rule(entryRules)],
+          ["Exit rules",rule(exitRules)],
+          ["Position size",posSize!=null?`${posSize}% of allocated capital`:"—"],
+          ["Capital allocated",`$${Number(nlResult.capital_allocated||0).toLocaleString()}`],
+          ["Profit target (GOAL)",`${nlResult.profit_target_pct}%`],
+          ["Stop loss",`${nlResult.stop_loss_pct}%`],
+          ["Max drawdown",nlResult.max_drawdown_pct!=null?`${nlResult.max_drawdown_pct}%`:"—"],
+          ["Time horizon",`${nlResult.time_horizon_days} days`],
+          ["Max trades / day",nlResult.max_trades_per_day!=null?`${nlResult.max_trades_per_day}`:"—"],
+          ["Account",acctName],
+        ];
+        return<div style={{marginTop:T.s4,padding:T.s4,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STRATEGY REVIEW · REALITY CHECK</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:`${T.s1} ${T.s4}`,marginBottom:T.s3}}>
+          {plain.map(([k,v])=><div key={k} style={{display:"flex",justifyContent:"space-between",gap:T.s2,padding:`5px 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
+            <span style={{color:T.muted,letterSpacing:"0.02em"}}>{k}</span>
+            <span style={{color:k==="Profit target (GOAL)"?T.gold:T.textHi,fontWeight:600,textAlign:"right"}}>{v}</span>
           </div>)}
         </div>
-        {nlResult.risk_disclosure&&<div style={{padding:T.s3,background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.gold,lineHeight:1.6,marginBottom:T.s3}}>
+
+        {/* Client-side backtest reality check + mismatch warning + risk disclosure */}
+        <StrategyReality strat={nlResult}/>
+
+        {nlResult.risk_disclosure&&<div style={{marginTop:T.s3,padding:T.s3,background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.gold,lineHeight:1.6}}>
           ⚠️ {nlResult.risk_disclosure}
         </div>}
-        <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer",marginBottom:T.s3}}>
+        <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer",margin:`${T.s3} 0`}}>
           <input type="checkbox" checked={riskAck} onChange={e=>setRiskAck(e.target.checked)} style={{marginTop:2}}/>
-          I understand this is a TARGET, not a guarantee. The strategy could lose up to {nlResult.stop_loss_pct}% of my allocated capital.
+          I understand this is a TARGET, not a guarantee. The strategy could lose up to {nlResult.stop_loss_pct||nlResult.max_drawdown_pct}% of my allocated capital, and backtest results do not predict live performance.
         </label>
         <div style={{display:"flex",gap:T.s3}}>
           <button onClick={saveNlStrategy} disabled={!riskAck} className="btn-primary" style={{fontSize:11}}>Activate Strategy</button>
           <button onClick={()=>{setNlResult(null);setRiskAck(false);}} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
         </div>
-      </div>}
+      </div>;})()}
     </BentoTile>
 
     {/* Pending Signals */}
@@ -5012,6 +5199,14 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
         </div>
       </div>)}
     </BentoTile>}
+
+    {/* Strategy Progress — one card per enabled strategy, target is always a goal */}
+    {strategies.some(s=>s.enabled)&&<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGY PROGRESS</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:T.s3}}>
+        {strategies.filter(s=>s.enabled).map(s=><StrategyProgressCard key={s.id} strat={s}/>)}
+      </div>
+    </div>}
 
     {/* Strategy List */}
     <BentoTile>

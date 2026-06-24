@@ -100,11 +100,23 @@ controls appear in the admin view.
 1. Trade → **Trading Bot** (admin view).
 2. In **Natural Language Strategy Builder**, describe the goal, e.g.
    *"Use $500 in my E\*Trade account, momentum swing-trade on SPUS, target 20% within 4 weeks."*
-3. Click **Parse Strategy**. Claude converts it into a structured, risk-bounded
-   strategy: ticker, strategy type, capital, profit target, **mandatory stop-loss**
-   (defaults to 15% if unspecified), and time horizon.
-4. Review the parsed strategy + risk disclosure, tick the **risk acknowledgment**
-   ("this is a TARGET, not a guarantee…"), then **Activate Strategy**.
+3. Click **Parse Strategy**. Claude returns a structured, risk-bounded strategy
+   (ticker, account resolved from the named broker, strategy type, universe, entry/exit
+   rules, position size, capital cap, profit **target**, **mandatory stop-loss** + **max
+   drawdown**, horizon). Requests needing margin / options / shorting / leverage are
+   refused outright. The profit target is a take-profit only — it never enters the
+   trading logic.
+4. **Reality-check review screen** (before activation): the parsed strategy is shown in
+   plain language and **back-tested against Polygon history** — win rate, max drawdown,
+   and a return distribution. If your target is far above what the strategy historically
+   achieved (scaled to your horizon), a **mismatch warning** appears: *"Your target is
+   X%; historically this achieved ~Y%."* You must tick the **risk acknowledgment**
+   ("this is a TARGET, not a guarantee… could lose up to {stop/drawdown}%… not financial
+   advice") before **Activate** unlocks. Stop-loss is enforced **server-side** on save —
+   a strategy without one returns `400 stop_loss_required` and is never stored.
+
+Once active, each strategy shows a **Strategy Progress** card: capital, current value,
+% toward target (progress bar), days elapsed vs horizon, and trades executed.
 
 ### C) Review signals
 - Pending signals appear under **Pending Signals** with side, qty, suggested price,
@@ -151,8 +163,14 @@ controls appear in the admin view.
   once-daily. Restoring `*/15 9-16 * * 1-5` requires Vercel Pro.
 - Per enabled strategy it: expires stale signals → resets daily trade counts →
   checks the daily cap (`max_trades_per_day`) → **Sharia gate** → fetches a Finnhub
-  quote → applies a simple momentum rule (day change ≥ +1.5% → buy, ≤ −1.5% → sell)
-  → sizes qty from `capital_allocated` → inserts a `pending_signals` row.
+  quote → **runs the exit engine** (below) → then, if not exited, applies a simple
+  momentum entry rule (day change ≥ +1.5% → buy, ≤ −1.5% → sell) → sizes qty from
+  `capital_allocated` → inserts a `pending_signals` row.
+- **Exit engine** (reconstructs the net position from executed signals, then by
+  priority): **stop-loss or max-drawdown hit → exit + PAUSE the strategy** (overrides
+  the target, non-negotiable); **horizon expired → close out + pause**; **target hit →
+  take profit**. Full-auto exits execute via SnapTrade; semi/manual push a "sell?"
+  notification. Audited as `bot.strategy.stopped_out` / `horizon_closed` / `target_hit`.
 - **Semi-auto:** sends an approval push notification; the trade executes via SnapTrade
   only when you tap **Approve**.
 - **Full-auto** (`strat.mode === "full"` AND profile `full_auto_enabled`): calls
