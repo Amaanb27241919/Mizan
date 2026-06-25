@@ -698,7 +698,7 @@ const ai=async(prompt,max=6000)=>{
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
-      model:"claude-sonnet-4-20250514",
+      model:"claude-sonnet-4-6",
       max_tokens:max,
       // web_search lets the price/news fallbacks pull live data via the
       // server. The /api/advisor proxy only forwards documented tool types.
