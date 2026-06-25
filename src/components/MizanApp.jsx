@@ -4926,7 +4926,9 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
   const[nlBusy,setNlBusy]=useState(false);
   const[nlResult,setNlResult]=useState(null); // parsed strategy from NL
   const[nlErr,setNlErr]=useState(null);
+  const[nlAccount,setNlAccount]=useState(""); // brokerage account the strategy runs on
   const[riskAck,setRiskAck]=useState(false);
+  const acctId=a=>a.accountId||a.id; // SnapTrade accounts expose either shape
   const[killSwitchBusy,setKillSwitchBusy]=useState(false);
   const[killSwitchMsg,setKillSwitchMsg]=useState(null);
   // Per-account full-auto opt-in map: { [accountId]: true }
@@ -5019,18 +5021,25 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       if(d.error){setNlErr(d.error);return;}
       if(!d.strategy){setNlErr("Couldn't build a strategy from that. Try naming a ticker or theme, an amount, and your entry/exit rule (e.g. “Buy SPUS dips ~7%, take profit ~10%, $50”).");return;}
       setNlResult(d.strategy);
+      // Default the account selector to the model-resolved account, else the
+      // first connected brokerage. The user can change it before activating.
+      const resolved=snapAccounts.find(a=>acctId(a)===d.strategy.account_id);
+      setNlAccount(resolved?acctId(resolved):(snapAccounts[0]?acctId(snapAccounts[0]):""));
     }catch(e){setNlErr(e.message||"Network error");}finally{setNlBusy(false);}
   };
 
   const saveNlStrategy=async()=>{
     if(!nlResult||!riskAck)return;
+    if(!nlAccount){setNlErr("Select a brokerage account to run this strategy on.");return;}
     try{
       const r=await apiFetch("/api/bot/strategies",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...nlResult,layer:defaultLayer,nl_description:nlInput,nl_risk_disclosed:true}),
+        body:JSON.stringify({...nlResult,account_id:nlAccount,layer:defaultLayer,nl_description:nlInput,nl_risk_disclosed:true}),
       });
-      if(r.ok){setNlResult(null);setNlInput("");setRiskAck(false);await loadStrategies();}
-    }catch{}
+      const d=await r.json().catch(()=>({}));
+      if(r.ok){setNlResult(null);setNlInput("");setRiskAck(false);setNlErr(null);await loadStrategies();}
+      else setNlErr(d.error==="stop_loss_required"?"Strategy needs a stop-loss (the AI should set one — try re-parsing).":(d.error||"Couldn't activate the strategy."));
+    }catch(e){setNlErr(e.message||"Network error");}
   };
 
   const approveSignal=async(id)=>{
@@ -5172,8 +5181,6 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         const entryRules=params.entry_rules;
         const exitRules=params.exit_rules;
         const posSize=params.position_size_pct!=null?params.position_size_pct:nlResult.position_size_pct;
-        const acct=(snapAccounts.find(a=>(a.id||a.accountId)===nlResult.account_id));
-        const acctName=acct?(acct.brokerage||acct.name||acct.accountName||nlResult.account_id):(nlResult.account_id||"—");
         const rule=v=>Array.isArray(v)?v.join(", "):(v||"—");
         const plain=[
           ["Universe",rule(universe)],
@@ -5188,7 +5195,6 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           ["Max drawdown",nlResult.max_drawdown_pct!=null?`${nlResult.max_drawdown_pct}%`:"—"],
           ["Time horizon",`${nlResult.time_horizon_days} days`],
           ["Max trades / day",nlResult.max_trades_per_day!=null?`${nlResult.max_trades_per_day}`:"—"],
-          ["Account",acctName],
         ];
         return<div style={{marginTop:T.s4,padding:T.s4,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
         <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STRATEGY REVIEW · REALITY CHECK</div>
@@ -5197,6 +5203,18 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             <span style={{color:T.muted,letterSpacing:"0.02em"}}>{k}</span>
             <span style={{color:k==="Profit target (GOAL)"?T.gold:T.textHi,fontWeight:600,textAlign:"right"}}>{v}</span>
           </div>)}
+        </div>
+
+        {/* Brokerage account selector — the strategy runs on this connected account.
+            Defaults to the account the AI resolved from your text, else the first one. */}
+        <div style={{marginBottom:T.s3}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s1}}>BROKERAGE ACCOUNT</div>
+          {snapAccounts.length===0
+            ?<div style={{fontFamily:FM,fontSize:11,color:T.loss}}>No brokerage connected. Connect one in Settings → Connections before activating.</div>
+            :<select value={nlAccount} onChange={e=>setNlAccount(e.target.value)} className="field" style={{width:"100%"}}>
+              {snapAccounts.map(a=>{const id=acctId(a);return<option key={id} value={id}>{(a.brokerage||a.name||"Account")}{a.accountName?` — ${a.accountName}`:""}{a.balance!=null?` (${kf(a.balance)})`:""}</option>;})}
+            </select>}
+          {nlResult.account_id&&!snapAccounts.find(a=>acctId(a)===nlResult.account_id)&&<div style={{fontFamily:FM,fontSize:10,color:T.gold,marginTop:4}}>Couldn’t match “{nlResult.account_id}” to a connected account — pick one above.</div>}
         </div>
 
         {/* Client-side backtest reality check + mismatch warning + risk disclosure */}
@@ -5210,7 +5228,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           I understand this is a TARGET, not a guarantee. The strategy could lose up to {nlResult.stop_loss_pct||nlResult.max_drawdown_pct}% of my allocated capital, and backtest results do not predict live performance.
         </label>
         <div style={{display:"flex",gap:T.s3}}>
-          <button onClick={saveNlStrategy} disabled={!riskAck} className="btn-primary" style={{fontSize:11}}>Activate Strategy</button>
+          <button onClick={saveNlStrategy} disabled={!riskAck||!nlAccount} title={!nlAccount?"Select a brokerage account first":""} className="btn-primary" style={{fontSize:11,opacity:(riskAck&&nlAccount)?1:0.5}}>Activate Strategy</button>
           <button onClick={()=>{setNlResult(null);setRiskAck(false);}} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
         </div>
       </div>;})()}
