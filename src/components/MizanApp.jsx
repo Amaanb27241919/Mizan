@@ -4936,6 +4936,12 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
   // Layer-change acknowledgment gate: { strat, target } while confirming.
   const[layerModal,setLayerModal]=useState(null);
   const[layerAck,setLayerAck]=useState(false);
+  // In-place strategy edit: the strategy being edited + its working form values.
+  const[editStrat,setEditStrat]=useState(null);
+  const[editForm,setEditForm]=useState(null);
+  const[editBusy,setEditBusy]=useState(false);
+  const[editErr,setEditErr]=useState(null);
+  const[editAck,setEditAck]=useState(false);
   // Default execution layer applied to NEW strategies (each strategy can still
   // override its own below). Persisted per-device.
   const[defaultLayer,setDefaultLayer]=useState(()=>{try{return localStorage.getItem("mizan_bot_default_layer")||"semi";}catch{return"semi";}});
@@ -5060,6 +5066,51 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
   const toggleStrategy=async(id,enabled)=>{
     await apiFetch(`/api/bot/strategies/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:!enabled})});
     await loadStrategies();
+  };
+
+  // ── In-place strategy editing ─────────────────────────────────────────────
+  // Structured edit (no model call): pre-fill a form from the saved strategy and
+  // PATCH the changed fields. The backend re-enforces the stop-loss compliance
+  // gate and read-modify-writes params so universe/layer/rules survive the edit.
+  const openEdit=(s)=>{
+    setEditErr(null);setEditAck(false);
+    setEditStrat(s);
+    setEditForm({
+      ticker:s.ticker||"",
+      account_id:s.account_id||"",
+      strategy_type:s.strategy_type||"",
+      universe_tickers:(Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[]).join(", "),
+      capital_allocated:s.capital_allocated??0,
+      profit_target_pct:s.profit_target_pct??"",
+      stop_loss_pct:s.stop_loss_pct??"",
+      max_drawdown_pct:s.max_drawdown_pct??"",
+      time_horizon_days:s.time_horizon_days??"",
+      max_trades_per_day:s.max_trades_per_day??"",
+    });
+  };
+  const saveEdit=async()=>{
+    if(!editStrat||editBusy)return;
+    const f=editForm;
+    if(!(Number(f.stop_loss_pct)>0)){setEditErr("Stop-loss is required and must be greater than 0% — it can never be removed.");return;}
+    if(!String(f.ticker||"").trim()){setEditErr("Ticker can't be blank.");return;}
+    if(!String(f.account_id||"").trim()){setEditErr("Pick a brokerage account.");return;}
+    setEditBusy(true);setEditErr(null);
+    try{
+      const body={
+        ticker:f.ticker,account_id:f.account_id,strategy_type:f.strategy_type,
+        universe_tickers:String(f.universe_tickers||"").split(",").map(t=>t.trim()).filter(Boolean),
+        capital_allocated:Number(f.capital_allocated)||0,
+        profit_target_pct:f.profit_target_pct===""?null:Number(f.profit_target_pct),
+        stop_loss_pct:Number(f.stop_loss_pct),
+        max_drawdown_pct:f.max_drawdown_pct===""?null:Number(f.max_drawdown_pct),
+        time_horizon_days:f.time_horizon_days===""?null:Number(f.time_horizon_days),
+        max_trades_per_day:f.max_trades_per_day===""?null:Number(f.max_trades_per_day),
+      };
+      const r=await apiFetch(`/api/bot/strategies/${editStrat.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const d=await r.json().catch(()=>({}));
+      if(r.ok){setEditStrat(null);setEditForm(null);setEditAck(false);await loadStrategies();}
+      else setEditErr(d.error==="stop_loss_required"?"Stop-loss is required and must be greater than 0%.":(d.error||`Couldn't save changes (${r.status}).`));
+    }catch(e){setEditErr(e.message||"Network error");}finally{setEditBusy(false);}
   };
 
   // ── NON-ADMIN / DEMO VIEW ──────────────────────────────────────────────────
@@ -5295,6 +5346,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
               }}>{LAYER_META[k].label.toUpperCase()}</button>
             );})}
           </div>
+          <button onClick={()=>openEdit(s)} className="btn-ghost" style={{fontSize:10,padding:`5px ${T.s2}`}}>Edit</button>
           <button onClick={()=>toggleStrategy(s.id,s.enabled)} className="btn-ghost" style={{fontSize:10,padding:`5px ${T.s2}`}}>{s.enabled?"Pause":"Resume"}</button>
           <button onClick={()=>deleteStrategy(s.id)} style={{fontFamily:FM,fontSize:10,padding:`5px ${T.s2}`,borderRadius:T.rSm,border:`1px solid ${T.loss}40`,background:"transparent",color:T.loss,cursor:"pointer"}}>Delete</button>
         </div>
@@ -5347,6 +5399,74 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           <div style={{display:"flex",gap:T.s3,justifyContent:"flex-end"}}>
             <button onClick={()=>{setLayerModal(null);setLayerAck(false);}} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
             <button onClick={confirmLayer} disabled={!layerAck} className="btn-primary" style={{fontSize:11,opacity:layerAck?1:0.5}}>Set {m.label}</button>
+          </div>
+        </div>
+      </div>);})()}
+
+    {/* Edit Strategy — structured, pre-filled form. Full-auto edits re-prompt the
+        risk ack since they change autonomous-execution behavior next cron tick. */}
+    {showStrat&&editStrat&&editForm&&(()=>{
+      const isFull=layerOf(editStrat)==="full"&&editStrat.enabled;
+      const set=(k,v)=>setEditForm(f=>({...f,[k]:v}));
+      const num=(label,k,suffix)=><label style={{display:"block"}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>{label}</div>
+        <div style={{position:"relative"}}>
+          <input type="number" value={editForm[k]} onChange={e=>set(k,e.target.value)} className="field" style={{width:"100%",fontVariantNumeric:"tabular-nums"}}/>
+          {suffix&&<span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:11,color:T.muted,pointerEvents:"none"}}>{suffix}</span>}
+        </div>
+      </label>;
+      return(
+      <div onClick={()=>{if(!editBusy){setEditStrat(null);setEditForm(null);setEditAck(false);}}} style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:T.s4,background:"rgba(12,11,10,0.55)"}}>
+        <div className="glass-strong" onClick={e=>e.stopPropagation()} style={{maxWidth:560,width:"100%",borderRadius:T.rLg,border:`1px solid ${T.blue}40`,padding:T.s6,maxHeight:"90vh",overflowY:"auto"}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:4}}>EDIT STRATEGY</div>
+          <div style={{fontFamily:FU,fontSize:20,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s4}}>{(Array.isArray(editStrat.params?.universe_tickers)&&editStrat.params.universe_tickers[0])||editStrat.ticker}</div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s3,marginBottom:T.s3}}>
+            <label style={{display:"block"}}>
+              <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>PRIMARY TICKER</div>
+              <input value={editForm.ticker} onChange={e=>set("ticker",e.target.value.toUpperCase())} className="field" style={{width:"100%"}}/>
+            </label>
+            <label style={{display:"block"}}>
+              <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>STRATEGY TYPE</div>
+              <input value={editForm.strategy_type} onChange={e=>set("strategy_type",e.target.value)} className="field" style={{width:"100%"}}/>
+            </label>
+          </div>
+
+          <label style={{display:"block",marginBottom:T.s3}}>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>SCREEN UNIVERSE (comma-separated tickers — blank = single ticker above)</div>
+            <input value={editForm.universe_tickers} onChange={e=>set("universe_tickers",e.target.value)} placeholder="e.g. SPUS, HLAL, UMMA" className="field" style={{width:"100%",fontFamily:FM}}/>
+          </label>
+
+          <label style={{display:"block",marginBottom:T.s3}}>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>BROKERAGE ACCOUNT</div>
+            {snapAccounts.length===0
+              ?<div style={{fontFamily:FM,fontSize:11,color:T.loss}}>No brokerage connected.</div>
+              :<select value={editForm.account_id} onChange={e=>set("account_id",e.target.value)} className="field" style={{width:"100%"}}>
+                {!snapAccounts.find(a=>acctId(a)===editForm.account_id)&&<option value={editForm.account_id}>Unmatched ({editForm.account_id||"none"}) — pick one</option>}
+                {snapAccounts.map(a=>{const id=acctId(a);return<option key={id} value={id}>{(a.brokerage||a.name||"Account")}{a.accountName?` — ${a.accountName}`:""}{a.balance!=null?` (${kf(a.balance)})`:""}</option>;})}
+              </select>}
+          </label>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s3,marginBottom:T.s3}}>
+            {num("CAPITAL ALLOCATED","capital_allocated","$")}
+            {num("PROFIT TARGET (GOAL)","profit_target_pct","%")}
+            {num("STOP LOSS","stop_loss_pct","%")}
+            {num("MAX DRAWDOWN","max_drawdown_pct","%")}
+            {num("TIME HORIZON","time_horizon_days","days")}
+            {num("MAX TRADES / DAY","max_trades_per_day","")}
+          </div>
+
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.6,marginBottom:T.s3}}>Stop-loss, max-drawdown, the daily cap, and the Sharia gate stay enforced on every layer. The stop-loss can be tightened but never removed.</div>
+
+          {isFull&&<label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer",marginBottom:T.s3}}>
+            <input type="checkbox" checked={editAck} onChange={e=>setEditAck(e.target.checked)} style={{marginTop:2}}/>
+            This is a live FULL-AUTO strategy. I understand these changes take effect on the next automated run.
+          </label>}
+
+          {editErr&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginBottom:T.s3}}>{editErr}</div>}
+          <div style={{display:"flex",gap:T.s3,justifyContent:"flex-end"}}>
+            <button onClick={()=>{setEditStrat(null);setEditForm(null);setEditAck(false);}} disabled={editBusy} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
+            <button onClick={saveEdit} disabled={editBusy||(isFull&&!editAck)} className="btn-primary" style={{fontSize:11,opacity:(editBusy||(isFull&&!editAck))?0.5:1}}>{editBusy?"Saving…":"Save Changes"}</button>
           </div>
         </div>
       </div>);})()}
