@@ -34,6 +34,8 @@ export const ICONS = {
   pencil:<><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="M14 6l4 4"/></>,
   warning:<><path d="M12 4 2.8 20h18.4L12 4Z"/><path d="M12 10v4.5M12 17.4h.01"/></>,
   info:<><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6h.01"/></>,
+  check:<path d="M4.5 12.5 9.5 17.5 19.5 6.5"/>,
+  close:<path d="M6 6l12 12M18 6 6 18"/>,
 };
 
 export function Icon({ name, size = 16, color, stroke = 1.75, style, ...rest }) {

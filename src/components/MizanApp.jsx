@@ -763,6 +763,11 @@ const fp=v=>v!=null&&!isNaN(v)?`${+v>0?"+":""}${(+v).toFixed(2)}%`:"-";
 const fc=v=>!v||isNaN(v)?T.muted:+v>0?T.gain:+v<0?T.loss:T.muted;
 const kf=v=>v>=1e9?`$${(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(1)}M`:`$${v.toLocaleString()}`;
 
+// Inline status glyphs (success / failure) — shared so status lines stay terse.
+// They inherit the container's currentColor (green ok-banner / red error-banner).
+const ICON_OK=<Icon name="check" size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>;
+const ICON_NO=<Icon name="close" size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>;
+
 function LiveDot({on,pulse}){return<span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",flexShrink:0,background:on?T.gain:T.muted,boxShadow:on?`0 0 8px ${T.gain}80`:"none",animation:pulse?"blink 2s ease-in-out infinite":"none"}}/>;}
 
 function Tag({label,color}){
@@ -1294,7 +1299,7 @@ function EyeToggle({ hidden, toggle, size = 18, color }){
 // account cards and the Finances institution cards. When `nickname` is
 // set, the rename takes over as the primary line and `defaultName`
 // drops to a smaller subtitle so users can still see the broker label
-// for cross-reference. Click ✎ → swap to an input pre-populated with
+// for cross-reference. Click the edit icon → swap to an input pre-populated with
 // the current display. Enter / blur saves; Esc / cancel discards.
 function NicknameEditor({accountId,defaultName,nickname,onSetNickname,
   primaryStyle,subtitleStyle,pencilStyle,emptyHint="—"}){
@@ -1978,7 +1983,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
                   color:dim?T.gain:T.muted,cursor:"pointer"}}>{dim?"ON":"OFF"}</button>}
               {onDisconnectAcct&&<button onClick={()=>onDisconnectAcct(a.id,a.authId,a.nm)} title="Permanently disconnect"
                 style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,lineHeight:1,
-                  background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}>✕</button>}
+                  background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}><Icon name="close" size={12}/></button>}
             </div>}
             {isPlaid&&onNav&&<button onClick={()=>onNav("finances")} title="Manage in Finances tab"
               style={{position:"absolute",top:T.s2,right:T.s2,padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",lineHeight:1.4,
@@ -2144,7 +2149,7 @@ function AAOIFIScreener({holdings=[]}){
             try{new Notification(`${tk} flagged non-compliant`,{body:`Sharia status: ${was} → ${now}. Tap MIZAN to review and plan exit.`,icon:"/icon-192.png"});}catch{}
             updated[tk]=res; fired++;
           }else if(was&&now&&was==="haram"&&now==="halal"){
-            try{new Notification(`${tk} now compliant ✓`,{body:`Sharia status: ${was} → ${now}.`,icon:"/icon-192.png"});}catch{}
+            try{new Notification(`${tk} now compliant`,{body:`Sharia status: ${was} → ${now}.`,icon:"/icon-192.png"});}catch{}
             updated[tk]=res; fired++;
           }
         });
@@ -2235,7 +2240,7 @@ function AAOIFIScreener({holdings=[]}){
         {l:"A/R/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.recvR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<49?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
         {l:"Status",r_:r=><Tag label={r._screen.status==="halal"?"Halal":r._screen.status==="haram"?"Non-Compliant":r._screen.status==="review"?"Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>},
         {l:"Pass / 7",r:true,mobileHide:true,r_:r=>{const bs=r._screen.byStandard;if(!bs)return<span style={{color:T.muted}}>—</span>;const pass=Object.values(bs).filter(s=>s.pass===true).length;return<span style={{fontFamily:FM,fontSize:11,color:pass>=6?T.gain:pass>=4?T.gold:T.loss}} title={Object.entries(bs).map(([k,v])=>`${STANDARDS[k]?.name||k}: ${v.pass===true?"pass":v.pass===false?"fail":"n/a"}`).join("\n")}>{pass}/{Object.keys(STANDARDS).length}</span>;}},
-        {l:"Primary",mobileHide:true,r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return<Tag label={v.pass===true?"✓":v.pass===false?"✗":"…"} color={v.pass===true?T.gain:v.pass===false?T.loss:T.muted}/>;}},
+        {l:"Primary",mobileHide:true,r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return v.pass===true?<Icon name="check" size={14} color={T.gain}/>:v.pass===false?<Icon name="close" size={14} color={T.loss}/>:<span style={{color:T.muted}}>…</span>;}},
         {l:"Action",r_:r=>r._screen.status==="haram"?<Tag label="Exit + purify" color={T.loss}/>:r._screen.status==="review"?<Tag label="Verify" color={T.gold}/>:r._screen.status==="halal"?<Tag label="Hold" color={T.gain}/>:<Tag label="—" color={T.muted}/>},
       ]} rows={[...enriched].sort((a,b)=>{const o={haram:0,review:1,unknown:2,halal:3};return(o[a._screen.status]??9)-(o[b._screen.status]??9);})}/>
     </BentoTile>
@@ -2534,7 +2539,7 @@ function DocumentsPanel({documents=[],accounts=[]}){
           <button onClick={()=>fileRef.current?.click()} disabled={uploadBusy} className="btn-primary">{uploadBusy?"Uploading…":"Upload Files"}</button>
         </div>
       </div>
-      {uploadStatus&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:uploadStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(uploadStatus.ok?T.gain:T.loss)+"30"}`,color:uploadStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{uploadStatus.ok?"✓ ":"✗ "}{uploadStatus.msg}</div>}
+      {uploadStatus&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:uploadStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(uploadStatus.ok?T.gain:T.loss)+"30"}`,color:uploadStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{uploadStatus.ok?ICON_OK:ICON_NO}{uploadStatus.msg}</div>}
       {userDocs.length===0
         ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
           No files yet. Click <strong style={{color:T.text}}>Upload Files</strong> to add CSVs, PDFs, or DOCX. Files sync to your account so they appear on every device you sign in from.
@@ -2554,7 +2559,7 @@ function DocumentsPanel({documents=[],accounts=[]}){
             {l:"Size",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtSize(r.size)}</span>},
             {l:"",r:true,r_:r=><div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
               <a href={r.data} download={r.name} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,textDecoration:"none"}}>Download</a>
-              <button onClick={()=>removeUserDoc(r.id)} style={{padding:`4px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:11,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}>✕</button>
+              <button onClick={()=>removeUserDoc(r.id)} style={{padding:`4px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:11,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}><Icon name="close" size={12}/></button>
             </div>},
           ]} rows={userDocs}/>
         </div>}
@@ -3105,8 +3110,8 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                               autoFocus
                               onKeyDown={e => { if (e.key === "Enter") saveOverride(); if (e.key === "Escape") setEditOverride(null); }}
                             />
-                            <button onClick={saveOverride} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain, cursor: "pointer", fontFamily: FM, fontSize: 10, fontWeight: 600 }}>✓</button>
-                            <button onClick={() => setEditOverride(null)} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: "transparent", border: `1px solid ${T.border}`, color: T.muted, cursor: "pointer", fontFamily: FM, fontSize: 11 }}>✕</button>
+                            <button onClick={saveOverride} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain, cursor: "pointer", fontFamily: FM, fontSize: 10, fontWeight: 600, display:"inline-flex", alignItems:"center" }}><Icon name="check" size={12}/></button>
+                            <button onClick={() => setEditOverride(null)} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: "transparent", border: `1px solid ${T.border}`, color: T.muted, cursor: "pointer", fontFamily: FM, fontSize: 11 }}><Icon name="close" size={12}/></button>
                           </div>
                         ) : (
                           <span
@@ -3130,7 +3135,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                       </td>
                       {/* Status */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "center", borderBottom: `1px solid ${T.border}` }}>
-                        <Tag label={done ? "✓ Purified" : "Pending"} color={done ? T.gain : T.gold} />
+                        <Tag label={done ? "Purified" : "Pending"} color={done ? T.gain : T.gold} />
                       </td>
                       {/* Action */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "center", borderBottom: `1px solid ${T.border}` }}>
@@ -3529,7 +3534,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
       </form>
       <datalist id="dn-methods">{["Debit Card","Credit Card","Zelle","Cash","Check","Wire","Crypto","TBD",...allMethods].filter((v,i,a)=>a.indexOf(v)===i).map(m=><option key={m} value={m}/>)}</datalist>
       <datalist id="dn-accts">{["Checking","Savings","Brokerage","Cash",...allAccounts].filter((v,i,a)=>a.indexOf(v)===i).map(m=><option key={m} value={m}/>)}</datalist>
-      {importStatus&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:importStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(importStatus.ok?T.gain:T.loss)+"30"}`,color:importStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{importStatus.ok?"✓ ":"✗ "}{importStatus.msg}</div>}
+      {importStatus&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:importStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(importStatus.ok?T.gain:T.loss)+"30"}`,color:importStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{importStatus.ok?ICON_OK:ICON_NO}{importStatus.msg}</div>}
     </BentoTile>
 
     {/* ─── ROW 3: Filters ──────────────────────────── */}
@@ -3619,7 +3624,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
               </div>
               :<div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
                 <button onClick={()=>startEdit(r)} title="Edit this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:10,letterSpacing:"0.04em"}}>EDIT</button>
-                <button onClick={()=>remove(r.id)} title="Remove this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>
+                <button onClick={()=>remove(r.id)} title="Remove this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}><Icon name="close" size={12}/></button>
               </div>},
           ]} rows={filtered}/>}
     </BentoTile>
@@ -4411,7 +4416,7 @@ function Watchlist({live=[],watchlist=[],onAdd,onRemove,onSetAlert,onAlertPermis
             {l:"Vs Add",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;if(!px||!r.addPrice)return<span style={{color:T.muted}}>—</span>;const pct=((px-r.addPrice)/r.addPrice)*100;return<span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:fc(pct),fontVariantNumeric:"tabular-nums"}}>{fp(pct)}</span>;}},
             {l:"Alert ↑",r_:r=><input type="number" placeholder="—" defaultValue={r.alertAbove||""} onBlur={e=>onSetAlert(r.symbol,"alertAbove",e.target.value)} className="field" style={{width:78,fontSize:11,padding:`4px ${T.s2}`}}/>},
             {l:"Alert ↓",r_:r=><input type="number" placeholder="—" defaultValue={r.alertBelow||""} onBlur={e=>onSetAlert(r.symbol,"alertBelow",e.target.value)} className="field" style={{width:78,fontSize:11,padding:`4px ${T.s2}`}}/>},
-            {l:"",r_:r=><button onClick={()=>onRemove(r.symbol)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>},
+            {l:"",r_:r=><button onClick={()=>onRemove(r.symbol)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}><Icon name="close" size={12}/></button>},
           ]} rows={watchlist}/>
         </div>}
   </BentoTile>;
@@ -4540,7 +4545,7 @@ function OrderPreviewModal({preview={},onConfirm,onCancel,busy,side,sym,qty}){
           <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi}}>Confirm {side==="buy"?"Buy":"Sell"} {sym}</div>
           <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:2}}>SnapTrade preview · review before placing</div>
         </div>
-        <button onClick={onCancel} style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
+        <button onClick={onCancel} style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:18,lineHeight:1}}><Icon name="close" size={16}/></button>
       </div>
       <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:8}}>
         {[
@@ -4559,7 +4564,7 @@ function OrderPreviewModal({preview={},onConfirm,onCancel,busy,side,sym,qty}){
           <Icon name="warning" size={12} color={T.gold} style={{display:"inline-block",verticalAlign:"-2px",marginRight:4}}/>{Array.isArray(warnings)?warnings.join(" · "):String(warnings)}
         </div>}
         <div style={{padding:"10px 12px",background:`${T.gain}0E`,border:`1px solid ${T.gain}25`,borderRadius:8,fontFamily:FP,fontSize:11,color:T.text,lineHeight:1.5}}>
-          ✓ Sharia pre-check: spot equity, no margin, no derivatives. Run the screener after placing if {sym} isn't classified yet.
+          <Icon name="check" size={12} color={T.gain} style={{display:"inline-block",verticalAlign:"-2px",marginRight:4}}/>Sharia pre-check: spot equity, no margin, no derivatives. Run the screener after placing if {sym} isn't classified yet.
         </div>
       </div>
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end"}}>
@@ -4715,7 +4720,7 @@ function StrategyReality({strat}){
   return<div style={{marginTop:T.s3,padding:T.s3,background:T.bg,borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
     <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>HISTORICAL REALITY CHECK · {ticker}</div>
     {busy&&<div style={{height:90,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:11,color:T.muted}}>Running backtest on 2yr of {ticker} bars…</div>}
-    {!busy&&err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>}
+    {!busy&&err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
     {!busy&&!err&&!hasData&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.5}}>Not enough historical data to backtest {ticker} (needs ~200 daily bars). Treat the profit target as an unvalidated goal and size risk accordingly.</div>}
     {!busy&&!err&&hasData&&<>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:T.s2,marginBottom:T.s3}}>
@@ -4853,7 +4858,7 @@ function HistoricalBacktest(){
           <strong style={{color:T.text,fontWeight:600}}>Strategy:</strong> SMA-50 / SMA-200 crossover. Buy when 50-day crosses above 200-day; sell on cross below. Free-tier Polygon caps at 2 years of daily bars.
         </div>
         <button onClick={run} disabled={busy} className="btn-primary" style={{padding:`10px ${T.s4}`}}>{busy?"Fetching bars…":"Run Backtest"}</button>
-        {err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>}
+        {err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
       </BentoTile>
 
       {bars.length>0&&<BentoTile>
@@ -5537,9 +5542,9 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
           transition:"all 0.2s",
           boxShadow:done||orderBusy?"none":`0 4px 14px ${(side==="buy"?T.gain:T.loss)}55`,
         }}>
-          {done?"Order Placed ✓":orderBusy?"Loading…":venue==="alpaca"?`Place Paper ${side==="buy"?"Buy":"Sell"} ${sym}`:`Preview ${side==="buy"?"Buy":"Sell"} ${sym}`}
+          {done?<span style={{display:"inline-flex",alignItems:"center",gap:6}}>Order Placed<Icon name="check" size={13}/></span>:orderBusy?"Loading…":venue==="alpaca"?`Place Paper ${side==="buy"?"Buy":"Sell"} ${sym}`:`Preview ${side==="buy"?"Buy":"Sell"} ${sym}`}
         </button>
-        {orderErr&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss,whiteSpace:"pre-wrap",lineHeight:1.4}}>✗ {orderErr}</div>}
+        {orderErr&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss,whiteSpace:"pre-wrap",lineHeight:1.4}}>{ICON_NO}{orderErr}</div>}
       </BentoTile>
 
       {/* ─── Order Types card grid ─────────────────────── */}
@@ -5561,7 +5566,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
               border:`1px solid ${ok?T.gain:T.loss}40`,
               display:"flex",alignItems:"center",justifyContent:"center",
               fontFamily:FM,fontSize:10,color:ok?T.gain:T.loss,fontWeight:700,
-            }}>{ok?"✓":"✕"}</div>
+            }}>{ok?<Icon name="check" size={12}/>:<Icon name="close" size={12}/>}</div>
             <div>
               <div style={{fontFamily:FP,fontSize:13,fontWeight:600,color:ok?T.textHi:T.muted,letterSpacing:"-0.005em",marginBottom:T.s1}}>{nm}</div>
               <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{desc}</div>
@@ -5665,7 +5670,7 @@ Activity rows on file: ${activities.length}.`;
     {q:"Recommend 3 Sharia-compliant ETFs to diversify",   cat:"Allocation", icon:"◆",  color:T.blue},
     {q:"Should I tax-loss harvest any positions?",         cat:"Tax",        icon:"$",  color:T.gold},
     {q:"What's my projected Zakat for the year?",          cat:"Zakat",      icon:"scale",color:T.gold},
-    {q:"How do I exit non-compliant positions efficiently?",cat:"Compliance",icon:"✓",  color:T.gain},
+    {q:"How do I exit non-compliant positions efficiently?",cat:"Compliance",icon:"check",color:T.gain},
     {q:"Summarize my last 30 days of activity",            cat:"Activity",   icon:"≡",  color:T.blue},
   ];
 
@@ -5897,7 +5902,7 @@ function ManualAssets({demoMode=false}={}){
           {l:"Added",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.added}</span>},
           {l:"",r_:r=>demoMode
             ?<span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>—</span>
-            :<button onClick={()=>remove(r.id)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}>✕</button>},
+            :<button onClick={()=>remove(r.id)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}><Icon name="close" size={12}/></button>},
         ]} rows={assets}/>
       </BentoTile>
       :<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
@@ -6016,7 +6021,7 @@ function CSVImporter({onImport,onDedupe,onRetag}){
         {onRetag&&<button onClick={handleRetag} disabled={retagBusy} title="Re-tag imports with the correct broker by matching against SnapTrade trades" className="btn-ghost">{retagBusy?"Retagging…":"Fix broker tags"}</button>}
       </div>
     </div>
-    {status&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,whiteSpace:"pre-wrap",lineHeight:1.5}}>{status.ok?"✓ ":"✗ "}{status.msg}</div>}
+    {status&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,whiteSpace:"pre-wrap",lineHeight:1.5}}>{status.ok?ICON_OK:ICON_NO}{status.msg}</div>}
   </div>;
 }
 
@@ -6234,8 +6239,8 @@ function SessionsPanel(){
       {otherCount>0&&<button onClick={revokeAllOthers} disabled={busy} className="btn-danger">Sign out all others</button>}
     </div>
 
-    {toast&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain}}>✓ {toast}</div>}
-    {err&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>}
+    {toast&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain}}>{ICON_OK}{toast}</div>}
+    {err&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
 
     {loading
       ?<div style={{fontFamily:FM,fontSize:11,color:T.muted,padding:`${T.s3} 0`}}>Loading…</div>
@@ -6379,7 +6384,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
               Add keys in order. Finnhub activates real prices immediately. Keys save to localStorage — no re-entry needed. End-user accounts don't see this page.
             </p>
           </div>
-          <button onClick={save} className="btn-primary" style={{background:saved?`linear-gradient(135deg, ${T.gain}, #0A8A65)`:undefined,boxShadow:saved?`0 2px 10px ${T.gain}55`:undefined}}>{saved?"Saved ✓":"Save Keys"}</button>
+          <button onClick={save} className="btn-primary" style={{background:saved?`linear-gradient(135deg, ${T.gain}, #0A8A65)`:undefined,boxShadow:saved?`0 2px 10px ${T.gain}55`:undefined}}>{saved?<span style={{display:"inline-flex",alignItems:"center",gap:6}}>Saved<Icon name="check" size={12}/></span>:"Save Keys"}</button>
         </div>
       </BentoTile>
 
@@ -6400,12 +6405,12 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
                 onChange={e=>setKeys(k=>({...k,[f.k]:e.target.value}))}
                 className="field"
                 style={{borderColor:has(f.k)?api.color+"50":T.border,fontVariantNumeric:"tabular-nums"}}/>
-              {has(f.k)&&<span style={{position:"absolute",right:T.s3,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:11,fontWeight:700,color:api.color}}>✓</span>}
+              {has(f.k)&&<span style={{position:"absolute",right:T.s3,top:"50%",transform:"translateY(-50%)",display:"inline-flex"}}><Icon name="check" size={13} color={api.color}/></span>}
             </div>
           </div>)}
         </div>}
         {api.serverOnly&&<div style={{marginTop:T.s2,display:"flex",alignItems:"center",gap:T.s2,padding:`${T.s2} ${T.s3}`,background:`${T.gain}0F`,border:`1px solid ${T.gain}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.gain,lineHeight:1.5}}>
-          ✓ Server-configured. Set <code style={{color:T.text,padding:"1px 5px",background:T.surface,borderRadius:4}}>{api.id==="anthropic"?"ANTHROPIC_KEY":"SNAPTRADE_CONSUMER_KEY"}</code> in env vars on the host. Never exposed to the browser.
+          <Icon name="check" size={12} style={{flexShrink:0}}/><span>Server-configured. Set <code style={{color:T.text,padding:"1px 5px",background:T.surface,borderRadius:4}}>{api.id==="anthropic"?"ANTHROPIC_KEY":"SNAPTRADE_CONSUMER_KEY"}</code> in env vars on the host. Never exposed to the browser.</span>
         </div>}
       </BentoTile>)}
 
@@ -6624,8 +6629,8 @@ function NotificationsPanel(){
       {!vapidKey&&permission!=="denied"&&<div style={{marginTop:T.s3,fontFamily:FM,fontSize:11,color:T.muted}}>
         Waiting on server: VAPID_PUBLIC_KEY isn't configured yet. Once admin sets it, refresh this page.
       </div>}
-      {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain}}>✓ {ok}</div>}
-      {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>}
+      {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain}}>{ICON_OK}{ok}</div>}
+      {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
     </BentoTile>
 
     <BentoTile>
@@ -6707,8 +6712,8 @@ function AccountPanel(){
         </button>
       </form>
 
-      {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain,lineHeight:1.5}}>✓ {ok}</div>}
-      {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss,lineHeight:1.5}}>✗ {err}</div>}
+      {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain,lineHeight:1.5}}>{ICON_OK}{ok}</div>}
+      {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss,lineHeight:1.5}}>{ICON_NO}{err}</div>}
     </BentoTile>
   </div>;
 }
@@ -6816,7 +6821,7 @@ function PrivacyPanel(){
     </BentoTile>
 
     {err&&<BentoTile style={{background:`${T.loss}10`,border:`1px solid ${T.loss}40`}}>
-      <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>
+      <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>
     </BentoTile>}
 
     {showModal&&<div style={{
@@ -6931,7 +6936,7 @@ function AdminPanel(){
     <TabBar tabs={[["users","Users"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
 
     {err&&<BentoTile style={{background:`${T.loss}10`,border:`1px solid ${T.loss}40`}}>
-      <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>✗ {err}</div>
+      <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>
     </BentoTile>}
 
     {tab==="users"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
@@ -7127,7 +7132,7 @@ function ConnectModal({onClose,snapId,onConnected}){
             </div>
           </div>
           <button onClick={()=>{setStep("select");setUrl("");onClose?.();}}
-            style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
+            style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:18,lineHeight:1}}><Icon name="close" size={16}/></button>
         </div>
 
         {/* Loading */}
@@ -7217,7 +7222,7 @@ function ConnectModal({onClose,snapId,onConnected}){
             justifyContent:"center",padding:40,gap:12,textAlign:"center"}}>
             <div style={{width:44,height:44,borderRadius:"50%",background:T.gainBg,
               border:`1px solid ${T.gain}`,display:"flex",alignItems:"center",
-              justifyContent:"center",color:T.gain,fontSize:18}}>✓</div>
+              justifyContent:"center",color:T.gain}}><Icon name="check" size={22} color={T.gain}/></div>
             <div style={{fontFamily:FM,fontSize:13,color:T.gain}}>{sel?.nm} Connected</div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setStep("select")}
@@ -7303,7 +7308,7 @@ function ConnectModal({onClose,snapId,onConnected}){
                         <button onClick={()=>drop(b.id)}
                           style={{padding:"5px 8px",borderRadius:6,background:"transparent",
                             border:`1px solid ${T.loss}28`,color:T.loss,
-                            cursor:"pointer",fontFamily:FM,fontSize:9}}>✕</button>
+                            cursor:"pointer",fontFamily:FM,fontSize:9}}><Icon name="close" size={12}/></button>
                       )}
                     </div>
                   </div>
@@ -8149,10 +8154,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         </div>
       </div>
       {syncMsg&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:syncMsg.ok?T.gainBg:T.lossBg,border:`1px solid ${(syncMsg.ok?T.gain:T.loss)+"30"}`,color:syncMsg.ok?T.gain:T.loss}}>
-        {syncMsg.ok?"✓ ":"✗ "}{syncMsg.msg}
+        {syncMsg.ok?ICON_OK:ICON_NO}{syncMsg.msg}
       </div>}
       {status&&<div style={{marginTop:T.s4,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,display:"flex",alignItems:"center",gap:T.s3,flexWrap:"wrap"}}>
-        <span style={{flex:"1 1 auto"}}>{status.ok?"✓ ":"✗ "}{status.msg}</span>
+        <span style={{flex:"1 1 auto"}}>{status.ok?ICON_OK:ICON_NO}{status.msg}</span>
         {(status.code==="MFA_ENROLLMENT_REQUIRED"||status.code==="MFA_VERIFICATION_REQUIRED")&&onNav&&
           <button onClick={()=>onNav("settings")}
             style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.loss}`,background:"transparent",color:T.loss,fontFamily:FM,fontSize:11,fontWeight:600,cursor:"pointer",letterSpacing:"0.04em"}}>
@@ -8615,7 +8620,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
       </select>
       <span style={{fontFamily:FM,fontSize:10,color:T.muted,alignSelf:"center"}}>auto-detected if your CSV is recognizable</span>
     </div>
-    {csvStatus&&<div style={{maxWidth:520,margin:"0 auto",padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:csvStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(csvStatus.ok?T.gain:T.loss)+"30"}`,color:csvStatus.ok?T.gain:T.loss}}>{csvStatus.ok?"✓ ":"✗ "}{csvStatus.msg}</div>}
+    {csvStatus&&<div style={{maxWidth:520,margin:"0 auto",padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:csvStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(csvStatus.ok?T.gain:T.loss)+"30"}`,color:csvStatus.ok?T.gain:T.loss}}>{csvStatus.ok?ICON_OK:ICON_NO}{csvStatus.msg}</div>}
   </>;
 
   // ───── STEP 4 — First AI question ──────────
@@ -10156,7 +10161,7 @@ export default function Mizan(){
         <div style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,marginBottom:2}}>Install MĪZAN</div>
         <div style={{fontFamily:FP,fontSize:11,color:T.muted}}>Tap Share → "Add to Home Screen"</div>
       </div>
-      <button onClick={dismissIosHint} style={{background:"transparent",border:"none",color:T.muted,cursor:"pointer",fontSize:16,padding:T.s2,minHeight:44,minWidth:44,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+      <button onClick={dismissIosHint} style={{background:"transparent",border:"none",color:T.muted,cursor:"pointer",fontSize:16,padding:T.s2,minHeight:44,minWidth:44,display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="close" size={16}/></button>
     </div>}
 
     {/* DOCK — Mac-style floating nav at the bottom. Glass surface, rounded

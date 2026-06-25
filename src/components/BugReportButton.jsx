@@ -10,6 +10,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { apiFetch } from "../lib/apiFetch";
+import { Icon } from "./Icon.jsx";
 
 const T = {
   card:    "var(--mz-card)",
@@ -264,7 +265,7 @@ export default function BugReportButton() {
                 background: status.ok ? `${T.gain}14` : `${T.loss}14`,
                 border:     `1px solid ${(status.ok ? T.gain : T.loss)}40`,
                 color:      status.ok ? T.gain : T.loss,
-              }}>{status.ok ? "✓ " : "✗ "}{status.msg}</div>
+              }}><Icon name={status.ok ? "check" : "close"} size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>{status.msg}</div>
             )}
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: T.s2, marginTop: T.s1 }}>

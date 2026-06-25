@@ -1,7 +1,7 @@
 # MĪZAN — State-of-App Audit
 
 > **Living document.** Re-run every few weeks to track drift between what's built and what's deployed.
-> Last audited: 2026-06-24 (updated) · All findings from direct file reads, no guessing.
+> Last audited: 2026-06-25 (updated) · All findings from direct file reads, no guessing.
 >
 > **2026-06-24 session changes**: (1) **Trading Bot** — strategies now SCREEN a halal universe and PICK the ticker (cron `screenSymbol` over `params.universe_tickers` / `HALAL_UNIVERSE_DEFAULT`), size from capital, price from market; buys only from screener, sells only from the exit engine (no shorting); one open position per strategy; exit engine quotes the held ticker. Three layers (manual/semi/full) are now a **per-strategy** choice (`params.layer`, no migration — DB `mode` derived) switched via an inline selector behind an **ack gate**. Order Ticket reframed as ad-hoc manual override. (2) **Sharia screening unified** — new `lib/sharia.mjs` provider seam (Finnhub now, **Zoya** when `ZOYA_API_KEY` set) + `GET/POST /api/screen`; `h.sh_` now flows from the live verdict (`shariaScreen` state via a root effect) with `SHARIA_MAP` only as pre-load fallback, so Screener / Overview compliance / Rebalancer halal-mode / Purification all read ONE verdict. Purification uses a screen-derived non-permissible-income % when the provider supplies it (Zoya). NEW ENV: `ZOYA_API_KEY` (+ optional `ZOYA_API_BASE`) — not yet provisioned.
 >

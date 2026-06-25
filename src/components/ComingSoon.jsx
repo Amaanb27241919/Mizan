@@ -13,6 +13,7 @@
 // (no hardcoded colors) so light/dark themes both look intentional.
 
 import React from "react";
+import { Icon } from "./Icon.jsx";
 
 const tokens = {
   bg:       "var(--mz-card)",
@@ -42,9 +43,10 @@ export default function ComingSoon({
   hint,
   pending = false,         // true = "awaiting data" (blue); false = "coming soon" (gold)
   action,                  // optional { label, onClick, busy }
-  icon = pending ? "◐" : "✦",
+  icon,                    // optional override; defaults to an SVG glyph
 }) {
   const accent = pending ? tokens.blue : tokens.gold;
+  const iconNode = icon != null ? icon : <Icon name={pending ? "info" : "spark"} size={16} color={accent} />;
   const pillLabel = pending ? "AWAITING DATA" : "COMING SOON";
 
   return (
@@ -78,7 +80,7 @@ export default function ComingSoon({
         letterSpacing: "0.16em",
         fontWeight: 700,
       }}>
-        <span aria-hidden="true">{icon}</span>
+        <span aria-hidden="true" style={{ display: "inline-flex" }}>{iconNode}</span>
         {pillLabel}
       </div>
 
