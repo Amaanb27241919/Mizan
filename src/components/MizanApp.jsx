@@ -5014,6 +5014,10 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       });
       const d=await r.json();
       if(!r.ok){setNlErr(d.error||"Parse failed");return;}
+      // A refusal comes back as 200 { error } (no strategy). Surface it instead
+      // of silently rendering nothing.
+      if(d.error){setNlErr(d.error);return;}
+      if(!d.strategy){setNlErr("Couldn't build a strategy from that. Try naming a ticker or theme, an amount, and your entry/exit rule (e.g. “Buy SPUS dips ~7%, take profit ~10%, $50”).");return;}
       setNlResult(d.strategy);
     }catch(e){setNlErr(e.message||"Network error");}finally{setNlBusy(false);}
   };
