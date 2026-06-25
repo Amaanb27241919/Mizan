@@ -4909,7 +4909,9 @@ const LAYER_META={
   full:{label:"Full-auto",short:"F",color:T.loss,icon:"⚡",blurb:"The bot picks AND executes autonomously within your stop-loss, max-drawdown, daily cap, and the Sharia gate. Requires the per-account AUTO ON toggle below — off by default even here."},
 };
 
-function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],demoMode=false,onNav}){
+function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,snapAccounts=[],demoMode=false,onNav}){
+  const showStrat=view==="strategies";
+  const showSignals=view==="signals";
   const[strategies,setStrategies]=useState([]);
   const[signals,setSignals]=useState([]);
   const[loadingStrats,setLoadingStrats]=useState(false);
@@ -5119,7 +5121,7 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
 
     {/* Execution Layer — the 3-layer premise, front and center. Sets the default
         for NEW strategies; each strategy still overrides its own layer below. */}
-    <BentoTile>
+    {showStrat&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>EXECUTION LAYER · DEFAULT FOR NEW STRATEGIES</div>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>Each strategy overrides its own below</div>
@@ -5142,10 +5144,10 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
       </div>
       <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:`${T.s3} 0 0`}}>{LAYER_META[defaultLayer].blurb}</p>
       {defaultLayer==="full"&&<div style={{marginTop:T.s2,fontFamily:FM,fontSize:11,color:T.loss}}>Full-auto still requires the per-account AUTO ON toggle below — off by default even here.</div>}
-    </BentoTile>
+    </BentoTile>}
 
     {/* NL Strategy Builder */}
-    <BentoTile>
+    {showStrat&&<BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>NATURAL LANGUAGE STRATEGY BUILDER</div>
       <p style={{fontFamily:FP,fontSize:12,color:T.muted,marginBottom:T.s3,lineHeight:1.6}}>Describe a trading goal in plain English. The AI parses it into a structured, risk-bounded strategy with mandatory stop-loss.</p>
       <textarea value={nlInput} onChange={e=>setNlInput(e.target.value)} placeholder='e.g. "Use $500 in my E*Trade account, run a momentum swing-trade on SPUS, target 20% return, within 4 weeks"' style={{width:"100%",minHeight:80,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:T.s3,fontFamily:FP,fontSize:13,color:T.textHi,resize:"vertical",boxSizing:"border-box"}}/>
@@ -5202,10 +5204,10 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
           <button onClick={()=>{setNlResult(null);setRiskAck(false);}} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
         </div>
       </div>;})()}
-    </BentoTile>
+    </BentoTile>}
 
-    {/* Pending Signals */}
-    {(loadingSignals||signals.length>0)&&<BentoTile>
+    {/* Pending Signals — the Signals view. Always rendered here (with an empty state). */}
+    {showSignals&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>PENDING SIGNALS</div>
         <button onClick={loadSignals} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingSignals?"Loading…":"Refresh"}</button>
@@ -5225,7 +5227,7 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
     </BentoTile>}
 
     {/* Strategy Progress — one card per enabled strategy, target is always a goal */}
-    {strategies.some(s=>s.enabled)&&<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+    {showStrat&&strategies.some(s=>s.enabled)&&<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGY PROGRESS</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:T.s3}}>
         {strategies.filter(s=>s.enabled).map(s=><StrategyProgressCard key={s.id} strat={s}/>)}
@@ -5233,7 +5235,7 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
     </div>}
 
     {/* Strategy List */}
-    <BentoTile>
+    {showStrat&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGIES ({strategies.length})</div>
         <button onClick={loadStrategies} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingStrats?"Loading…":"Refresh"}</button>
@@ -5269,9 +5271,9 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
           <button onClick={()=>deleteStrategy(s.id)} style={{fontFamily:FM,fontSize:10,padding:`5px ${T.s2}`,borderRadius:T.rSm,border:`1px solid ${T.loss}40`,background:"transparent",color:T.loss,cursor:"pointer"}}>Delete</button>
         </div>
       </div>;})}
-    </BentoTile>
+    </BentoTile>}
 
-    {fullAutoEnabled&&<BentoTile accent={T.loss}>
+    {showStrat&&fullAutoEnabled&&<BentoTile accent={T.loss}>
       <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FULL-AUTO — PER-ACCOUNT OPT-IN</div>
       <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:`0 0 ${T.s3}`}}>Autonomous execution runs <strong>only</strong> on accounts you turn on here. Each defaults to off. A full-mode strategy on an account that's off will still generate signals but never auto-execute.</p>
       {snapAccounts.length===0
@@ -5295,7 +5297,7 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
 
     {/* Layer-change acknowledgment gate — you can't switch a strategy's layer
         without confirming you understand what that layer does. */}
-    {layerModal&&(()=>{const m=LAYER_META[layerModal.target];return(
+    {showStrat&&layerModal&&(()=>{const m=LAYER_META[layerModal.target];return(
       <div onClick={()=>{setLayerModal(null);setLayerAck(false);}} style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:T.s4,background:"rgba(12,11,10,0.55)"}}>
         <div className="glass-strong" onClick={e=>e.stopPropagation()} style={{maxWidth:460,width:"100%",borderRadius:T.rLg,border:`1px solid ${m.color}40`,padding:T.s6}}>
           <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s3}}>
@@ -5323,12 +5325,18 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
   </div>;
 }
 
-function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities=[],onNav,isAdmin=false,fullAutoEnabled=false,demoMode=false}){
-  // Order Ticket is currently behind a "Coming Soon" gate — real trading
-  // requires Alpaca prod keys + a polished risk/preview flow we haven't
-  // shipped yet. Default to the FIRE calculator so the tab opens onto
-  // something useful instead of a placeholder.
-  const[sub,setSub]=useState("bot");
+function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOrderPlaced,activities=[],onNav,isAdmin=false,fullAutoEnabled=false,demoMode=false}){
+  // Trade is the admin trading hub: bot Strategies + Signals, plus the analysis
+  // tools (Screener / Rebalance / Backtest, reused from Portfolio) and an ad-hoc
+  // Quick Trade ticket. Opens on Strategies.
+  const[sub,setSub]=useState("strategies");
+  // Holdings (with live prices merged) — needed by Screener + Rebalance. Same
+  // derivation Portfolio uses, kept self-contained here.
+  const merged=(()=>{
+    if(!mapPosition)return[];
+    const base=accounts.length>0?accounts.flatMap(a=>(a.positions||[]).map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0):[];
+    return base.map(h=>{const l=(live||[]).find(q=>q.tk===h.tk);return l?{...h,px:l.price||h.px,_p:l.pct||0,_live:true}:h;});
+  })();
   const[side,setSide]=useState("buy");
   const[sym,setSym]=useState("AAPL");
   const[otype,setOtype]=useState("limit");
@@ -5445,11 +5453,22 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
 
   const estTotal=parseFloat(qty||0)*parseFloat(lpx||0);
 
-  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["bot","Trading Bot"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
-    {sub==="bot"&&<TradingBotPanel isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
+  // Hard frontend gate: Trade does not exist for non-root users. The nav never
+  // shows it and setNav bounces them, but this guarantees the surface renders
+  // nothing even if a tampered client forces nav==="trade".
+  if(!isAdmin)return null;
 
-    {/* Order Ticket lives behind a Coming Soon banner for non-admin users. */}
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    <TabBar tabs={[["strategies","Strategies"],["signals","Signals"],["screener","Screener"],["rebalance","Rebalance"],["backtest","Backtest"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    {/* Bot panel, split into Strategies + Signals views (same component, shared state). */}
+    {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
+
+    {/* Analysis tools — reused from Portfolio (which keeps them for everyone). */}
+    {sub==="screener"&&<AAOIFIScreener holdings={merged}/>}
+    {sub==="rebalance"&&<Rebalancer holdings={merged} snapAccounts={accounts} onNav={onNav}/>}
+    {sub==="backtest"&&<HistoricalBacktest/>}
+
+    {/* Quick Trade (ad-hoc order ticket) lives behind a Coming Soon banner for non-admin users. */}
     {sub==="order"&&!isAdmin&&<ComingSoon
       title="Order Ticket"
       description="Place halal-screened buy/sell orders against your connected SnapTrade brokerage or against a free Alpaca paper account. Available for authorized users."
@@ -8787,7 +8806,6 @@ const SHORTCUT_REFERENCE = {
   "g o": "Go to Overview",
   "g p": "Go to Portfolio",
   "g f": "Go to Finances",
-  "g t": "Go to Trade & Bot",
   "g a": "Go to AI Advisor",
   "g s": "Go to Settings",
   "r":   "Sync All",
@@ -8837,6 +8855,7 @@ export default function Mizan(){
   // force=true bypasses that so Settings can trigger it any time.
   const[onboardingForce,setOnboardingForce]=useState(false);
   const[isAdmin,setIsAdmin]=useState(false);
+  const[featuresLoaded,setFeaturesLoaded]=useState(false);
   const[fullAutoEnabled,setFullAutoEnabled]=useState(false);
   const replayOnboarding=useCallback(()=>{
     if(!window.confirm("Re-run the 5-step welcome tour?"))return;
@@ -8872,14 +8891,18 @@ export default function Mizan(){
       // After the consolidation, "trade" + "about" map to other tabs:
       // "trade" → "portfolio" (Backtest lives there now); "about" → "settings"
       // (under the About sub-tab). Keeps stale localStorage from crashing.
-      const valid=new Set(["overview","finances","portfolio","goals","advisor","settings"]);
+      // "trade" restores only for admins — the guard effect below bounces any
+      // non-admin off it once features load (legit non-admins never store it).
+      const valid=new Set(["overview","finances","portfolio","goals","advisor","settings","trade"]);
       if (v && valid.has(v)) return v;
-      if (v === "trade") return "portfolio";
       if (v === "about") return "settings";
       return "overview";
     }catch{return"overview";}
   });
-  const setNav=v=>{setNavState(v);try{localStorage.setItem("mizan_nav",v);}catch{}};
+  // Non-root users can never navigate to Trade. Every entry point (nav bar,
+  // command palette, keyboard, deep link) funnels through setNav, so this one
+  // guard hides the whole surface. The server also 403s /api/bot/* for them.
+  const setNav=v=>{const t=(v==="trade"&&!isAdmin)?"overview":v;setNavState(t);try{localStorage.setItem("mizan_nav",t);}catch{}};
 
   // Command palette state (Cmd+K). The hook listens for the global
   // keystroke and toggles open. Commands are built below from setNav
@@ -9724,8 +9747,12 @@ export default function Mizan(){
   useEffect(()=>{
     apiFetch("/api/user/features").then(r=>r.ok?r.json():null).then(d=>{
       if(d){setIsAdmin(!!d.trading_bot);setFullAutoEnabled(!!d.full_auto);}
-    }).catch(()=>{});
+    }).catch(()=>{}).finally(()=>setFeaturesLoaded(true));
   },[]);
+
+  // Defensive bounce: once we know the user's capabilities, a non-admin sitting
+  // on Trade (only possible via tampered localStorage/URL) is sent to Overview.
+  useEffect(()=>{ if(featuresLoaded&&!isAdmin&&nav==="trade")setNav("overview"); },[featuresLoaded,isAdmin,nav]);
 
   // Hydrate broker connections from SnapTrade so they survive a localStorage wipe.
   useEffect(()=>{
@@ -10095,7 +10122,7 @@ export default function Mizan(){
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} bankBalance={bankBalance}/>}
-        {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} activities={snapActivities} onNav={setNav} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} demoMode={demoMode}/>}
+        {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} live={live} mapPosition={mapPosition} activities={snapActivities} onNav={setNav} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} demoMode={demoMode}/>}
         {nav==="goals"     &&<GoalsHub
           snapAccounts={visibleAccounts}
           plaidAccounts={plaidAccounts}
