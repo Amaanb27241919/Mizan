@@ -1,7 +1,7 @@
 # MĪZAN — Trade Tab: How It Works
 
 > Instructions + technical explanation for the **Trade** tab (the MĪZAN Trading Bot
-> and Order Ticket). Last reviewed against code: 2026-06-24.
+> and Quick Trade ticket). Last reviewed against code: 2026-06-25.
 > Source of truth: `src/components/MizanApp.jsx` (frontend) and `lib/handlers.mjs` (backend).
 
 ---
@@ -14,7 +14,7 @@ The **Trade** tab is MĪZAN's halal trading surface. It has two jobs:
    The bot **screens a halal universe, picks the ticker, sizes the position, and prices
    it**; you choose a per-strategy execution **layer** (manual / semi / full) that decides
    only who pulls the trigger. Every signal passes a non-negotiable Sharia gate.
-2. **Manual Order** (ad-hoc override only) — place a one-off buy/sell order you type by
+2. **Quick Trade** (ad-hoc override only) — place a one-off buy/sell order you type by
    hand, screened against AAOIFI Sharia rules before it reaches a broker (live via
    SnapTrade, or paper via Alpaca). Not how the bot trades — just a manual escape hatch.
 
@@ -25,12 +25,21 @@ It is **admin/root-only** and intentionally gated at several layers (see §3).
 ## 2. Where it lives in the UI
 
 - Top-level nav item **"Trade"** — only rendered when the current user is admin
-  (`NAV` array, `MizanApp.jsx:9771`). Hidden entirely for everyone else.
-- Also reachable from the Command Palette (⌘K → "Go to Trade", admin only).
-- The tab renders the `TradeBot` component (`MizanApp.jsx:5259`), which has two
-  sub-tabs:
-  - **Trading Bot** (default) → `TradingBotPanel` (`MizanApp.jsx:4936`)
-  - **Manual Order** → inline order form + `OrderPreviewModal` (`MizanApp.jsx:4567`)
+  (`NAV` array, `MizanApp.jsx:9935`). Hidden entirely for everyone else.
+- Also reachable from the Command Palette (⌘K → "Go to Trade") and the keyboard
+  shortcut **`g t`** — both registered **only when `isAdmin`**.
+- The tab renders the `TradeBot` component (`MizanApp.jsx:5356`), an admin trading
+  **hub** with **six sub-tabs** (`TabBar`, `MizanApp.jsx:5490`). It opens on
+  **Strategies**. `TradeBot` itself returns `null` for non-admins (`:5487`).
+
+  | Sub-tab | Renders | Role |
+  |---------|---------|------|
+  | **Strategies** (default) | `TradingBotPanel view="strategies"` (`:4918`) | NL builder, strategy list, layer toggle, kill switch, per-account full-auto |
+  | **Signals** | `TradingBotPanel view="signals"` | Pending signals → Approve / Reject |
+  | **Screener** | `AAOIFIScreener` (`:2103`) | AAOIFI Sharia screen (shared with Portfolio) |
+  | **Rebalance** | `Rebalancer` (`:3638`) | Drift vs target allocation (shared with Portfolio) |
+  | **Backtest** | `HistoricalBacktest` (`:4821`) | Polygon-history SMA backtest |
+  | **Quick Trade** | inline order form + `OrderPreviewModal` (`:4567`) | Ad-hoc manual override only (see §4) |
 
 ---
 
@@ -41,12 +50,20 @@ server gate that a tampered client cannot bypass.
 
 | Layer | Where | Rule |
 |------|-------|------|
-| Nav visibility | `MizanApp.jsx:9771` | Tab only shown if `isAdmin` |
-| Feature flags | `GET /api/user/features` (`handlers.mjs:1294`) | Returns `{ trading_bot, full_auto }` for the current user |
+| Nav visibility | `NAV` (`MizanApp.jsx:9935`) | "Trade" item only in the array if `isAdmin` |
+| Non-admin lockdown | `setNav` guard (`:8935`) + bounce effect (`:9785`) + `TradeBot` returns `null` (`:5487`) | Even a forced `nav="trade"` (stale localStorage, tampering) is rewritten to `overview`; the component renders nothing for non-admins |
+| Command palette / shortcut | `SHORTCUT_REFERENCE` filter (`:10240`) + palette item (`:10253`) | `g t` and "Go to Trade" only registered when `isAdmin` |
+| Feature flags | `GET /api/user/features` (`handlers.mjs:1294`) | Returns `{ trading_bot, full_auto }` for the current user; sets `isAdmin` / `fullAutoEnabled` (and `featuresLoaded`) at mount |
 | Server gate | `canUseTradingBot()` (`handlers.mjs:700`) | **Every** `/api/bot/*` and `/api/snaptrade/trade/*` endpoint calls it; returns `403 trading_not_enabled` otherwise |
 
+The client gates are convenience only — to a non-admin the tab **"literally doesn't
+exist."** The server gate is the real boundary: a tampered client still gets `403`.
+
 **Who counts as admin?** `canUseTradingBot(user) === isRootUser(user)` — i.e.
-`profiles.is_root = true` (the first registered user, or `OWNER_EMAIL`).
+`profiles.is_root = true` **OR** the `OWNER_EMAIL` env (backend) / `VITE_OWNER_EMAIL`
+(frontend) fallback. The env value **wins over the DB** and requires a redeploy to
+re-bind (backend caches it in an in-memory `_rootCache`, cleared on cold start). As of
+2026-06-25 the sole root/owner is **akhan.industries@gmail.com**.
 
 **Full-auto** is stricter and now **per-account**. Layer 3 executes only when ALL hold:
 `strategy.mode = 'full'` **AND** `profiles.full_auto_enabled = true` (master switch)
@@ -102,16 +119,110 @@ applying. Shown as cards in the non-admin "Coming Soon" view (`MizanApp.jsx:4865
 > full-auto safety gate. Only `layer="full"` maps to `mode="full"`, so a tampered
 > client `params.layer` can never bypass the per-account opt-in.
 
-The **Order Ticket** (blank symbol/qty/limit form) is **not** how the bot trades — it's
-kept only as an **ad-hoc manual override** for one-off trades you place by hand.
+The **Quick Trade** ticket (blank symbol/qty/limit form) is **not** how the bot
+trades — it's kept only as an **ad-hoc manual override** for one-off trades you place
+by hand.
 
 ---
 
-## 5. How to use it (instructions)
+## 5. Execution flow — WITH vs WITHOUT money in a connected brokerage
 
-### A) Ad-hoc manual order (Order Ticket — override only)
+**The single most important property:** money **never** flows through MĪZAN. Every
+layer ends at `executeSnapTradeOrder()` → SnapTrade `/trade/impact` → `/trade/place`,
+which only *instructs the connected broker*. So the broker state — connected & funded,
+connected but unfunded, or not connected — decides whether a signal ever **fills**,
+while the layer only decides **who pulls the trigger**.
+
+Signals are generated the **same way regardless of broker state.** With no broker (or
+no buying power) the bot is effectively a **preview / paper surface**: it still screens,
+picks, sizes, and posts signals — they just never fill.
+
+### Shared pipeline (runs before any layer-specific step)
+
+```
+Daily cron  /api/cron/bot-signals  (0 14 * * 1-5, fail-closed: Bearer CRON_SECRET)
+  │  for each ENABLED strategy:
+  ├─ expire stale signals · reset daily trade counts · check max_trades_per_day
+  ├─ reconstruct net position from executed signals  ──►  EXIT ENGINE
+  │        stop-loss / max-drawdown hit → SELL + PAUSE   (non-negotiable)
+  │        horizon expired → close out + pause
+  │        target hit → take profit
+  └─ if FLAT → SCREENER
+           build candidates (params.universe_tickers │ HALAL_UNIVERSE_DEFAULT)
+           → re-filter through Sharia gate (HARAM_TICKERS)
+           → Finnhub quote each → score by day momentum
+           → pick strongest name > +1.5%  → size from capital
+           → INSERT one BUY row in pending_signals  (status: pending)
+                                  │
+                                  ▼
+                 ┌─ trigger differs by LAYER ─┐
+```
+
+### Layer 1 — 🎯 Manual  (`params.layer="manual"`, DB `mode="semi"`)
+
+```
+pending_signal sits SILENTLY in Trade → Signals  (no push)
+        │
+        ▼  you tap "Approve / Execute"
+POST /api/bot/signals/:id/approve  →  executeSnapTradeOrder()
+        │
+        ├─ Sharia gate (HARAM_TICKERS) ─ blocked? → rejected + audited (never fills)
+        ▼
+   broker state?
+   ├── WITH money  (broker connected + buying power)
+   │       /trade/impact → /trade/place → REAL FILL at the broker
+   │       signal → executed  (+ SnapTrade trade id, audited bot.signal.executed)
+   │
+   └── WITHOUT money
+           • no broker linked     → executeSnapTradeOrder returns broker_not_connected
+           • broker but no cash    → /trade/impact rejected (insufficient buying power)
+           ⇒ signal STAYS approved + error_msg, HTTP 502, NOTHING fills (preview only)
+```
+
+### Layer 2 — 🤖 Semi-auto  (`params.layer="semi"`, DB `mode="semi"`)
+
+```
+pending_signal created  →  PUSH notification "approve this trade?"
+        │
+        ▼  you tap Approve  (Reject → status rejected, no broker call)
+POST /api/bot/signals/:id/approve  →  executeSnapTradeOrder()   [identical to Layer 1]
+        │
+        ▼  broker state?
+   ├── WITH money     → impact → place → REAL FILL → executed + "executed" push
+   └── WITHOUT money  → broker_not_connected / insufficient buying power
+                        ⇒ stays approved + error_msg, 502, nothing fills
+```
+
+### Layer 3 — ⚡ Full-auto  (`params.layer="full"`, DB `mode="full"`)
+
+Triple-gated: `mode="full"` **AND** `profiles.full_auto_enabled` **AND**
+`account_full_auto` for that account (default **off**). Any gate false → the strategy
+still **signals** but never **fires** (degrades to a silent Layer-1 signal).
+
+```
+the cron itself calls executeSnapTradeOrder()  — nobody taps anything
+        │
+        ├─ Sharia gate (re-checked at execution)
+        ▼  broker state?
+   ├── WITH money     → impact → place → AUTO-FILL → executed
+   │                    + "auto-executed" push, audited bot.signal.auto_executed
+   └── WITHOUT money  → broker_not_connected / insufficient buying power
+                        ⇒ signal LEFT pending + logged (bot.signal.execute_failed),
+                          NOTHING fills — safe failure, retried next cron
+```
+
+**Summary:** the layer changes *who/what triggers* (you tap · you approve a push ·
+nobody). The broker state changes *whether it fills* (real fill · safe no-op). The two
+are orthogonal — e.g. a Full-auto strategy on an account with no buying power generates
+and "fires" signals every cron run that simply never fill until the account is funded.
+
+---
+
+## 6. How to use it (instructions)
+
+### A) Ad-hoc manual order (Quick Trade — override only)
 This is for a one-off trade you type by hand. Automated trades come from strategies (B).
-1. Trade → **Manual Order**.
+1. Trade → **Quick Trade**.
 2. Pick a venue: **Live · SnapTrade** (real broker) or **Paper · Alpaca** (sandbox, no real money).
 3. Choose **Buy/Sell**, select the account, enter **Symbol**, **Quantity**, and (for limit) **Limit Price**.
 4. A **Sharia pre-check** runs on the symbol. Known non-compliant tickers are blocked before the broker is ever called.
@@ -119,33 +230,44 @@ This is for a one-off trade you type by hand. Automated trades come from strateg
    **Alpaca:** the paper order is placed directly (no preview).
 
 ### B) Create a bot strategy (Natural-Language Builder)
-1. Trade → **Trading Bot** (admin view).
-2. In **Natural Language Strategy Builder**, describe the goal, e.g.
+1. Trade → **Strategies** (admin view).
+2. Pick the **EXECUTION LAYER** default (Manual / Semi / Full) the new strategy will be
+   created with — this is just the starting layer; you can change it per-strategy later.
+3. In **Natural Language Strategy Builder**, describe the goal, e.g.
    *"Use $500 in my E\*Trade account, momentum swing-trade on halal tech, target 20% within 4 weeks."*
-3. Click **Parse Strategy**. Claude returns a structured, risk-bounded strategy:
+4. Click **Parse Strategy**. Claude returns a structured, risk-bounded strategy:
    a **primary ticker** plus a **`universe_tickers` candidate list** the bot will screen
    and pick from (if you name a theme rather than tickers, it proposes 3–8 liquid,
    Sharia-screened names), the account resolved from the named broker, strategy type,
    entry/exit rules, position size, capital cap, profit **target**, **mandatory
-   stop-loss** + **max drawdown**, and horizon. Requests needing margin / options /
-   shorting / leverage are refused outright. The profit target is a take-profit only —
-   it never enters the trading logic.
-4. **Reality-check review screen** (before activation): the parsed strategy is shown in
+   stop-loss** + **max drawdown**, and horizon. The parser **only refuses** genuinely
+   non-compliant asks (margin / options / shorting / interest) — ambitious goals,
+   question phrasing ("how can I double $50?"), short horizons and small capital are
+   **mapped, not refused** ("double"→100% target, "triple"→200%). A refusal returns a
+   `200 { error }` the UI surfaces inline instead of a blank screen. The profit target
+   is a take-profit only — it never enters the trading logic.
+5. **Reality-check review screen** (before activation): the parsed strategy is shown in
    plain language and **back-tested against Polygon history** — win rate, max drawdown,
-   and a return distribution. If your target is far above what the strategy historically
+   and a return distribution. A **BROKERAGE ACCOUNT** `<select>` (defaulted to the
+   account resolved from your wording, else your first connected account) chooses where
+   the strategy runs — if the named broker (e.g. "E\*Trade") isn't a connected SnapTrade
+   account it shows a "couldn't match" hint, and if you have **no** brokerage connected
+   it shows an empty state. If your target is far above what the strategy historically
    achieved (scaled to your horizon), a **mismatch warning** appears: *"Your target is
    X%; historically this achieved ~Y%."* You must tick the **risk acknowledgment**
    ("this is a TARGET, not a guarantee… could lose up to {stop/drawdown}%… not financial
-   advice") before **Activate** unlocks. Stop-loss is enforced **server-side** on save —
+   advice") **and** select an account before **Activate Strategy** unlocks
+   (`disabled={!riskAck || !nlAccount}`). Stop-loss is enforced **server-side** on save —
    a strategy without one returns `400 stop_loss_required` and is never stored.
 
 Once active, each strategy shows a **Strategy Progress** card: capital, current value,
 % toward target (progress bar), days elapsed vs horizon, and trades executed.
 
 ### C) Review signals
-- Pending signals appear under **Pending Signals** with side, qty, suggested price,
-  and an expiry. **Approve** or **Reject** each. (Semi-auto only — full-auto executes
-  without this step.)
+- Open the **Signals** sub-tab. Pending signals appear with side, qty, suggested price,
+  and an expiry. **Approve** or **Reject** each. (Manual & Semi-auto — full-auto executes
+  without this step; with no funded broker, Approve returns a 502 and the signal keeps
+  its `error_msg` instead of filling — see §5.)
 
 ### D) Manage strategies & the kill switch
 - **Strategies** list: each shows the screened universe (e.g. "SPUS +4 more"), its
@@ -156,18 +278,19 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
 
 ---
 
-## 6. How it works under the hood
+## 7. How it works under the hood
 
 ### Frontend components (`src/components/MizanApp.jsx`)
 | Component | Line | Role |
 |-----------|------|------|
-| `TradeBot` | 5259 | Tab shell (Trading Bot / Order Ticket), order state, SnapTrade/Alpaca submit |
-| `TradingBotPanel` | 4936 | Strategy builder, signals, strategies, kill switch, per-account full-auto toggles |
+| `TradeBot` | 5356 | 6-sub-tab hub shell; order state, SnapTrade/Alpaca submit; `null` for non-admins |
+| `TradingBotPanel` | 4918 | `view="strategies"`/`"signals"` — NL builder, signals, strategies, kill switch, per-account full-auto, brokerage `<select>` |
+| `LAYER_META` | 4904 | Manual/Semi/Full metadata (icon + blurb) for the layer selector & ack gate |
 | `StrategyReality` | 4703 | Review screen — client-side backtest + mismatch warning |
 | `StrategyProgressCard` | 4799 | Per-strategy progress toward target |
 | `computeSmaBacktest` | 4666 | Shared backtest math (reused by HistoricalBacktest + StrategyReality) |
 | `OrderPreviewModal` | 4567 | SnapTrade impact preview → confirm/cancel |
-| `isAdmin` / `fullAutoEnabled` state | — | Fetched from `/api/user/features` at mount |
+| `isAdmin` / `fullAutoEnabled` / `featuresLoaded` state | 8887 | Fetched from `/api/user/features` at mount; gate the nav, palette, shortcut, and bounce |
 
 ### Backend endpoints (`lib/handlers.mjs`) — all gated by `canUseTradingBot()`
 | Endpoint | Method | Purpose |
@@ -187,7 +310,10 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
 | `/api/cron/bot-signals` | GET/POST | Scheduled signal generation/execution |
 
 ### The signal cron (`handlers.mjs:4770`)
-- Auth: `Bearer ${CRON_SECRET}`.
+- Auth: **fail-closed** via `cronUnauthorized(headers)` (`handlers.mjs:124`) — requires
+  `Authorization: Bearer ${CRON_SECRET}` and returns `401` if `CRON_SECRET` is unset or
+  the header doesn't match. All seven `/api/cron/*` routes share this helper (no more
+  fail-open when the secret is missing).
 - Schedule: `vercel.json` → `0 14 * * 1-5` (**daily 14:00 UTC, Mon–Fri**). NOTE: the
   in-code comment says "every 15 min during market hours" — that's the intended
   cadence, but Vercel's Hobby plan only allows daily crons, so the live schedule is
@@ -223,7 +349,7 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
 - Default screening set: `HALAL_UNIVERSE_DEFAULT` (Sharia-screened ETFs SPUS/HLAL/UMMA/…
   plus commonly-compliant large caps) — every candidate is still re-checked against
   `HARAM_TICKERS` before any signal (`strategyUniverse()`).
-- Client precheck on the ad-hoc Order Ticket uses a broader `HARAM_SNAP` set.
+- Client precheck on the ad-hoc Quick Trade ticket uses a broader `HARAM_SNAP` set.
 - Enforced server-side in **every execution path**: manual `/trade/impact`, signal
   approval, cron generation, and inside `executeSnapTradeOrder()` itself — re-checked at
   execution, not just on display. A blocked ticker is rejected and audited.
@@ -251,7 +377,7 @@ Every meaningful action writes to `audit_log`: `bot.signal.generated`, `.approve
 
 ---
 
-## 7. Safety & compliance rails
+## 8. Safety & compliance rails
 - **Mandatory stop-loss** — enforced **server-side on save**: `POST /api/bot/strategies`
   returns `400 stop_loss_required` if it's missing/≤0. The NL parser also always sets one.
 - **Daily trade cap** — `max_trades_per_day`, reset daily by the cron.
@@ -265,7 +391,7 @@ Every meaningful action writes to `audit_log`: `bot.signal.generated`, `.approve
 
 ---
 
-## 8. Current implementation status
+## 9. Current implementation status
 
 This is an **owner-only** feature (`is_root`). It does not exist for any other user —
 it is not advertised, sold, or available to them. Because it only ever trades the
@@ -293,7 +419,7 @@ place). Money never flows through MĪZAN; it only instructs the broker.
   (`POST /accounts/{id}/symbols`) and the impact/place round-trip can only be verified
   against a real connected brokerage during market hours. The failure mode is **safe**:
   if resolution or impact/place fails, no order is placed, nothing is marked executed,
-  and the error is surfaced + audited. Validate with one small ad-hoc Order-Ticket
+  and the error is surfaced + audited. Validate with one small ad-hoc Quick Trade
   trade before relying on semi/full-auto.
 - The screener scores candidates by day momentum (+1.5% buy threshold) — the free-tier
   Finnhub quote is the live proxy for the edge. `strategy_type` (`ma_crossover|breakout`)
@@ -304,18 +430,21 @@ place). Money never flows through MĪZAN; it only instructs the broker.
 
 ---
 
-## 9. Quick file reference (line numbers drift — search the symbol if off)
+## 10. Quick file reference (line numbers drift — search the symbol if off)
 ```
 Frontend  src/components/MizanApp.jsx
   4567  OrderPreviewModal
   4666  computeSmaBacktest      4703  StrategyReality      4799  StrategyProgressCard
-  4936  LAYER_META + TradingBotPanel (builder, signals, strategies, layer toggle + ack
-        gate, kill switch, per-account toggles)
-  5297  TradeBot         (tab shell: Trading Bot / Manual Order, order submit/place)
-  9771  NAV array        (admin-only "Trade" item)
+  4904  LAYER_META
+  4918  TradingBotPanel  (builder, signals, strategies, layer toggle + ack gate,
+        kill switch, per-account toggles, brokerage <select> at ~5211)
+  5356  TradeBot         (6-sub-tab hub; TabBar at 5490; null for non-admins at 5487)
+  8853  KeyboardShortcuts ("g t" admin-only)
+  9785  non-admin bounce effect    9935  NAV array (admin-only "Trade" item)
 
 Backend   lib/handlers.mjs
   31    HARAM_TICKERS (Sharia gate list) + HALAL_UNIVERSE_DEFAULT + strategyUniverse()
+  124   cronUnauthorized (fail-closed Bearer CRON_SECRET gate, shared by all crons)
   700   canUseTradingBot   707  canUseFullAuto   717  accountFullAutoEnabled
   792   resolveUniversalSymbolId   813  executeSnapTradeOrder
         botPositionFromSignals (returns held ticker)
