@@ -1766,7 +1766,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       }}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
           <div style={{display:"inline-flex",alignItems:"center",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600}}>
-            <span>TOTAL PORTFOLIO VALUE</span>
+            <span>NET WORTH</span>
             {snapAccounts.length>0&&<span style={{color:T.gain,marginLeft:T.s2,display:"inline-flex",alignItems:"center",gap:5}}><LiveDot on pulse/>LIVE</span>}
             <EyeToggle hidden={valuesHidden} toggle={toggleHideValues} size={14} color={T.muted}/>
           </div>
