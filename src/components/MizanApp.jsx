@@ -4807,11 +4807,19 @@ function StrategyProgressCard({strat}){
   const daysHorizon=p&&p.days_horizon!=null?Number(p.days_horizon):(Number(strat?.time_horizon_days)||null);
   const trades=p&&p.trades_executed!=null?Number(p.trades_executed):null;
   const noData=current==null&&pctToTarget==null&&trades==null;
+  const lyr=["manual","semi","full"].includes(strat.params?.layer)?strat.params.layer:(strat.mode==="full"?"full":"semi");
+  const lyrColor=lyr==="full"?T.loss:lyr==="semi"?T.gold:T.blue;
+  // Show the ticker the bot actually holds when there's an open position;
+  // otherwise the universe it's screening.
+  const held=p&&p.held_ticker;
+  const cands=Array.isArray(strat.params?.universe_tickers)?strat.params.universe_tickers:[];
+  const headline=held||(cands.length>1?`${cands.length} halal names`:(cands[0]||strat.ticker));
   return<BentoTile accent={pnl!=null?(pnl>=0?T.gain:T.loss):T.blue} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
-        <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{strat.ticker}</span>
-        <Tag label={(strat.mode||"semi").toUpperCase()} color={strat.mode==="full"?T.loss:T.gold}/>
+        <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{headline}</span>
+        {held&&cands.length>1&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.06em"}}>HELD</span>}
+        <Tag label={lyr.toUpperCase()} color={lyrColor}/>
       </div>
       <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em"}}>TARGET {strat.profit_target_pct}%</span>
     </div>
@@ -4933,6 +4941,14 @@ function HistoricalBacktest(){
 // ── Trading Bot Panel ─────────────────────────────────────────────────────────
 // Admin: full strategy management UI, NL builder, signals queue, kill switch
 // Non-admin/demo: polished Coming Soon teaser showing the 3 layers
+// The three execution layers. The bot's brain (screening, sizing, pricing) is
+// identical across all three — the layer only decides who pulls the trigger.
+const LAYER_META={
+  manual:{label:"Manual",short:"M",color:T.blue,icon:"🎯",blurb:"The bot screens your halal universe, picks the ticker, sizes the position from allocated capital, and posts a ready-to-go signal. Nothing executes until YOU tap Execute on each one. No push, no auto-fire."},
+  semi:{label:"Semi-auto",short:"S",color:T.gold,icon:"🤖",blurb:"The bot picks the full trade and sends you a push to approve. One tap approves and places it at your broker. Still never executes without your tap."},
+  full:{label:"Full-auto",short:"F",color:T.loss,icon:"⚡",blurb:"The bot picks AND executes autonomously within your stop-loss, max-drawdown, daily cap, and the Sharia gate. Requires the per-account AUTO ON toggle below — off by default even here."},
+};
+
 function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],demoMode=false,onNav}){
   const[strategies,setStrategies]=useState([]);
   const[signals,setSignals]=useState([]);
@@ -4947,7 +4963,22 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
   const[killSwitchMsg,setKillSwitchMsg]=useState(null);
   // Per-account full-auto opt-in map: { [accountId]: true }
   const[faAccounts,setFaAccounts]=useState({});
+  // Layer-change acknowledgment gate: { strat, target } while confirming.
+  const[layerModal,setLayerModal]=useState(null);
+  const[layerAck,setLayerAck]=useState(false);
   const allPaused=strategies.length>0&&strategies.every(s=>!s.enabled);
+
+  // The execution LAYER is the user-facing choice; it lives in params.layer.
+  // Fall back to the DB mode for strategies created before layers existed.
+  const layerOf=s=>["manual","semi","full"].includes(s.params?.layer)?s.params.layer:(s.mode==="full"?"full":"semi");
+  const requestLayer=(strat,target)=>{if(layerOf(strat)===target)return;setLayerAck(false);setLayerModal({strat,target});};
+  const confirmLayer=async()=>{
+    if(!layerModal||!layerAck)return;
+    const{strat,target}=layerModal;
+    setLayerModal(null);setLayerAck(false);
+    await apiFetch(`/api/bot/strategies/${strat.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({layer:target})});
+    await loadStrategies();
+  };
 
   const loadStrategies=useCallback(async()=>{
     setLoadingStrats(true);
@@ -5049,9 +5080,9 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
   // ── NON-ADMIN / DEMO VIEW ──────────────────────────────────────────────────
   if(!isAdmin||demoMode){
     const layers=[
-      {id:"manual",icon:"🎯",title:"Manual Control",desc:"You trigger every trade. Order Ticket with Sharia precheck, impact preview, and one-tap confirm. Every order runs through AAOIFI compliance before reaching your broker.",badge:"Live Soon",badgeColor:T.blue},
-      {id:"semi",icon:"🤖",title:"Semi-Automatic",desc:"The bot generates buy/sell signals based on your configured strategy. You approve each one via push notification — no trade executes without your tap.",badge:"Coming Soon",badgeColor:T.gold},
-      {id:"full",icon:"⚡",title:"Fully Automated",desc:"The bot signals and executes autonomously within your configured strategy, stop-loss, daily caps, and Sharia gate. Every execution is logged and push-notified.",badge:"Coming Soon",badgeColor:T.slate},
+      {id:"manual",icon:"🎯",title:"Manual Control",desc:"The bot screens your halal universe, picks the ticker, sizes the position, and hands you a ready-to-go signal. You tap Execute on each — nothing fires on its own. Every order is AAOIFI-screened first.",badge:"Live Soon",badgeColor:T.blue},
+      {id:"semi",icon:"🤖",title:"Semi-Automatic",desc:"Same bot-picked signals, delivered as a push you approve. One tap places the trade at your broker — no trade executes without your tap.",badge:"Coming Soon",badgeColor:T.gold},
+      {id:"full",icon:"⚡",title:"Fully Automated",desc:"The bot picks AND executes autonomously within your strategy, stop-loss, daily caps, and Sharia gate. Per-account opt-in, off by default. Every execution is logged and push-notified.",badge:"Coming Soon",badgeColor:T.slate},
     ];
     return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
       <BentoTile style={{textAlign:"center",padding:`${T.s8} ${T.s6}`}}>
@@ -5134,6 +5165,7 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
       {nlResult&&(()=>{
         const params=nlResult.params||{};
         const universe=params.universe||nlResult.ticker;
+        const cands=Array.isArray(nlResult.universe_tickers)&&nlResult.universe_tickers.length?nlResult.universe_tickers:(Array.isArray(params.universe_tickers)?params.universe_tickers:[]);
         const entryRules=params.entry_rules;
         const exitRules=params.exit_rules;
         const posSize=params.position_size_pct!=null?params.position_size_pct:nlResult.position_size_pct;
@@ -5142,6 +5174,7 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
         const rule=v=>Array.isArray(v)?v.join(", "):(v||"—");
         const plain=[
           ["Universe",rule(universe)],
+          ["Bot screens & picks from",cands.length?cands.join(", "):(nlResult.ticker||"—")],
           ["Strategy type",nlResult.strategy_type||"—"],
           ["Entry rules",rule(entryRules)],
           ["Exit rules",rule(exitRules)],
@@ -5216,20 +5249,35 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
       </div>
       {loadingStrats&&!strategies.length?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>:
        strategies.length===0?<div style={{fontFamily:FP,fontSize:12,color:T.muted,textAlign:"center",padding:`${T.s5} 0`}}>No strategies configured yet. Use the builder above to create your first one.</div>:
-       strategies.map(s=><div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
-        <div>
+       strategies.map(s=>{
+        const lyr=layerOf(s);
+        const cands=Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[];
+        const uniLabel=cands.length>1?`${cands[0]} +${cands.length-1} more`:(cands[0]||s.ticker);
+        return<div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
+        <div style={{minWidth:200}}>
           <div style={{display:"flex",gap:T.s2,alignItems:"center",marginBottom:4}}>
-            <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{s.ticker}</span>
-            <Tag label={s.mode.toUpperCase()} color={s.mode==="full"?T.loss:T.gold}/>
+            <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{uniLabel}</span>
+            <Tag label={LAYER_META[lyr].label.toUpperCase()} color={LAYER_META[lyr].color}/>
             {!s.enabled&&<Tag label="PAUSED" color={T.muted}/>}
           </div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>${Number(s.capital_allocated).toLocaleString()} · Target: {s.profit_target_pct}% · Stop: {s.stop_loss_pct}%</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}${Number(s.capital_allocated).toLocaleString()} · Target: {s.profit_target_pct}% · Stop: {s.stop_loss_pct}%</div>
         </div>
-        <div style={{display:"flex",gap:T.s2}}>
+        <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
+          {/* Layer selector — switching opens the acknowledgment gate */}
+          <div style={{display:"inline-flex",border:`1px solid ${T.border}`,borderRadius:999,overflow:"hidden"}}>
+            {["manual","semi","full"].map(k=>{const on=lyr===k;return(
+              <button key={k} onClick={()=>requestLayer(s,k)} title={LAYER_META[k].blurb} style={{
+                padding:`5px ${T.s2}`,border:"none",cursor:"pointer",
+                fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
+                background:on?`${LAYER_META[k].color}1a`:"transparent",
+                color:on?LAYER_META[k].color:T.muted,
+              }}>{LAYER_META[k].label.toUpperCase()}</button>
+            );})}
+          </div>
           <button onClick={()=>toggleStrategy(s.id,s.enabled)} className="btn-ghost" style={{fontSize:10,padding:`5px ${T.s2}`}}>{s.enabled?"Pause":"Resume"}</button>
           <button onClick={()=>deleteStrategy(s.id)} style={{fontFamily:FM,fontSize:10,padding:`5px ${T.s2}`,borderRadius:T.rSm,border:`1px solid ${T.loss}40`,background:"transparent",color:T.loss,cursor:"pointer"}}>Delete</button>
         </div>
-      </div>)}
+      </div>;})}
     </BentoTile>
 
     {fullAutoEnabled&&<BentoTile accent={T.loss}>
@@ -5253,6 +5301,34 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
           </div>
         );})}
     </BentoTile>}
+
+    {/* Layer-change acknowledgment gate — you can't switch a strategy's layer
+        without confirming you understand what that layer does. */}
+    {layerModal&&(()=>{const m=LAYER_META[layerModal.target];return(
+      <div onClick={()=>{setLayerModal(null);setLayerAck(false);}} style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:T.s4,background:"rgba(12,11,10,0.55)"}}>
+        <div className="glass-strong" onClick={e=>e.stopPropagation()} style={{maxWidth:460,width:"100%",borderRadius:T.rLg,border:`1px solid ${m.color}40`,padding:T.s6}}>
+          <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s3}}>
+            <span style={{fontSize:22}}>{m.icon}</span>
+            <div>
+              <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SWITCH EXECUTION LAYER</div>
+              <div style={{fontFamily:FU,fontSize:20,fontWeight:700,color:m.color,letterSpacing:"-0.02em"}}>{m.label}</div>
+            </div>
+          </div>
+          <p style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.65,margin:`0 0 ${T.s3}`}}>{m.blurb}</p>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.6,marginBottom:T.s4}}>
+            Switching <span style={{color:T.textHi,fontWeight:600}}>{layerOf(layerModal.strat)===layerModal.target?m.label:LAYER_META[layerOf(layerModal.strat)].label}</span> → <span style={{color:m.color,fontWeight:600}}>{m.label}</span> for <span style={{color:T.textHi,fontWeight:600}}>{(Array.isArray(layerModal.strat.params?.universe_tickers)&&layerModal.strat.params.universe_tickers[0])||layerModal.strat.ticker}</span>. Stop-loss, max-drawdown, the daily cap, and the Sharia gate stay enforced on every layer.
+            {layerModal.target==="full"&&<span style={{display:"block",marginTop:T.s2,color:T.loss}}>Full-auto also requires the per-account AUTO ON toggle (off by default) before anything executes on its own.</span>}
+          </div>
+          <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer",marginBottom:T.s4}}>
+            <input type="checkbox" checked={layerAck} onChange={e=>setLayerAck(e.target.checked)} style={{marginTop:2}}/>
+            I understand what <strong style={{color:m.color}}>&nbsp;{m.label}&nbsp;</strong> means and accept how trades will be executed under it.
+          </label>
+          <div style={{display:"flex",gap:T.s3,justifyContent:"flex-end"}}>
+            <button onClick={()=>{setLayerModal(null);setLayerAck(false);}} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
+            <button onClick={confirmLayer} disabled={!layerAck} className="btn-primary" style={{fontSize:11,opacity:layerAck?1:0.5}}>Set {m.label}</button>
+          </div>
+        </div>
+      </div>);})()}
   </div>;
 }
 
@@ -5379,7 +5455,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
   const estTotal=parseFloat(qty||0)*parseFloat(lpx||0);
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["bot","Trading Bot"],["order","Order Ticket"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["bot","Trading Bot"],["order","Manual Order"]]} active={sub} onChange={setSub}/>
     {sub==="bot"&&<TradingBotPanel isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
 
     {/* Order Ticket lives behind a Coming Soon banner for non-admin users. */}
@@ -5394,9 +5470,10 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
       {/* ─── Order Ticket bento ────────────────────────── */}
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ORDER TICKET</div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>AD-HOC MANUAL ORDER</div>
           <Tag label={venue==="alpaca"?"PAPER · ALPACA":"LIVE · SNAPTRADE"} color={venue==="alpaca"?T.gold:T.blue}/>
         </div>
+        <p style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.55,margin:0}}>One-off trade you place by hand. For automated trades, create a strategy in the <strong>Trading Bot</strong> tab — it screens a halal universe, picks the ticker, sizes it, and executes per your chosen layer.</p>
         <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
           {[["snaptrade","Live · SnapTrade"],["alpaca","Paper · Alpaca"]].map(([v,l])=><button key={v} onClick={()=>setVenue(v)} title={v==="alpaca"?"Paper trade against Alpaca's free sandbox — no real money":"Place a real order through your connected broker"} style={{
             flex:1,padding:"8px 10px",fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"-0.005em",

@@ -10,11 +10,13 @@
 
 The **Trade** tab is MĪZAN's halal trading surface. It has two jobs:
 
-1. **Order Ticket** — place individual buy/sell orders, each screened against AAOIFI
-   Sharia rules before it reaches a broker (live via SnapTrade, or paper via Alpaca).
-2. **Trading Bot** — define rule-based strategies in plain English, let the system
-   generate buy/sell **signals**, and either approve them yourself (semi-auto) or let
-   them run (full-auto). Every signal passes a non-negotiable Sharia gate.
+1. **Trading Bot** (the primary surface) — define rule-based strategies in plain English.
+   The bot **screens a halal universe, picks the ticker, sizes the position, and prices
+   it**; you choose a per-strategy execution **layer** (manual / semi / full) that decides
+   only who pulls the trigger. Every signal passes a non-negotiable Sharia gate.
+2. **Manual Order** (ad-hoc override only) — place a one-off buy/sell order you type by
+   hand, screened against AAOIFI Sharia rules before it reaches a broker (live via
+   SnapTrade, or paper via Alpaca). Not how the bot trades — just a manual escape hatch.
 
 It is **admin/root-only** and intentionally gated at several layers (see §3).
 
@@ -28,7 +30,7 @@ It is **admin/root-only** and intentionally gated at several layers (see §3).
 - The tab renders the `TradeBot` component (`MizanApp.jsx:5259`), which has two
   sub-tabs:
   - **Trading Bot** (default) → `TradingBotPanel` (`MizanApp.jsx:4936`)
-  - **Order Ticket** → inline order form + `OrderPreviewModal` (`MizanApp.jsx:4567`)
+  - **Manual Order** → inline order form + `OrderPreviewModal` (`MizanApp.jsx:4567`)
 
 ---
 
@@ -83,21 +85,33 @@ After granting, the user must reload — `/api/user/features` is fetched once at
 
 ## 4. The three automation layers
 
-Shown as cards in the non-admin "Coming Soon" view (`MizanApp.jsx:4865`); the real
-controls appear in the admin view.
+The **layer never changes what gets traded** — the strategy is the brain. On every
+layer the bot screens the strategy's halal universe, **picks the ticker**, sizes the
+position from allocated capital, and prices it. The layer only decides **who pulls the
+trigger**. It is a **per-strategy** setting (stored in `params.layer`); switch it with
+the inline Manual / Semi / Full selector, which opens an **acknowledgment gate** before
+applying. Shown as cards in the non-admin "Coming Soon" view (`MizanApp.jsx:4865`).
 
-| Layer | What it does | Who approves the trade |
+| Layer | What it does | Who pulls the trigger |
 |-------|--------------|------------------------|
-| 🎯 **Manual** | You fill the Order Ticket. Sharia precheck → impact preview → one-tap confirm. | You, every time |
-| 🤖 **Semi-auto** | A strategy generates signals; you get a push notification and Approve/Reject each one. | You, per signal |
+| 🎯 **Manual** | Bot posts a ready-to-go, fully-formed signal (ticker/qty/price picked). No push, no auto. | You — tap Execute on each signal in the panel |
+| 🤖 **Semi-auto** | Same bot-picked signal, delivered as a push to Approve/Reject. | You — one tap per signal |
 | ⚡ **Full-auto** | The strategy signals **and** executes within your caps, stop-loss, and the Sharia gate. | Nobody — autonomous (root + master switch + **per-account opt-in**) |
+
+> The DB `mode` column (`semi`/`full`) is derived from the layer and is the real
+> full-auto safety gate. Only `layer="full"` maps to `mode="full"`, so a tampered
+> client `params.layer` can never bypass the per-account opt-in.
+
+The **Order Ticket** (blank symbol/qty/limit form) is **not** how the bot trades — it's
+kept only as an **ad-hoc manual override** for one-off trades you place by hand.
 
 ---
 
 ## 5. How to use it (instructions)
 
-### A) Place a manual order (Order Ticket)
-1. Trade → **Order Ticket**.
+### A) Ad-hoc manual order (Order Ticket — override only)
+This is for a one-off trade you type by hand. Automated trades come from strategies (B).
+1. Trade → **Manual Order**.
 2. Pick a venue: **Live · SnapTrade** (real broker) or **Paper · Alpaca** (sandbox, no real money).
 3. Choose **Buy/Sell**, select the account, enter **Symbol**, **Quantity**, and (for limit) **Limit Price**.
 4. A **Sharia pre-check** runs on the symbol. Known non-compliant tickers are blocked before the broker is ever called.
@@ -107,13 +121,15 @@ controls appear in the admin view.
 ### B) Create a bot strategy (Natural-Language Builder)
 1. Trade → **Trading Bot** (admin view).
 2. In **Natural Language Strategy Builder**, describe the goal, e.g.
-   *"Use $500 in my E\*Trade account, momentum swing-trade on SPUS, target 20% within 4 weeks."*
-3. Click **Parse Strategy**. Claude returns a structured, risk-bounded strategy
-   (ticker, account resolved from the named broker, strategy type, universe, entry/exit
-   rules, position size, capital cap, profit **target**, **mandatory stop-loss** + **max
-   drawdown**, horizon). Requests needing margin / options / shorting / leverage are
-   refused outright. The profit target is a take-profit only — it never enters the
-   trading logic.
+   *"Use $500 in my E\*Trade account, momentum swing-trade on halal tech, target 20% within 4 weeks."*
+3. Click **Parse Strategy**. Claude returns a structured, risk-bounded strategy:
+   a **primary ticker** plus a **`universe_tickers` candidate list** the bot will screen
+   and pick from (if you name a theme rather than tickers, it proposes 3–8 liquid,
+   Sharia-screened names), the account resolved from the named broker, strategy type,
+   entry/exit rules, position size, capital cap, profit **target**, **mandatory
+   stop-loss** + **max drawdown**, and horizon. Requests needing margin / options /
+   shorting / leverage are refused outright. The profit target is a take-profit only —
+   it never enters the trading logic.
 4. **Reality-check review screen** (before activation): the parsed strategy is shown in
    plain language and **back-tested against Polygon history** — win rate, max drawdown,
    and a return distribution. If your target is far above what the strategy historically
@@ -132,7 +148,10 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
   without this step.)
 
 ### D) Manage strategies & the kill switch
-- **Strategies** list: each shows mode (semi/full), capital, target, stop. **Pause/Resume** or **Delete** per strategy.
+- **Strategies** list: each shows the screened universe (e.g. "SPUS +4 more"), its
+  current **layer** (Manual/Semi/Full), capital, target, stop. Use the inline
+  **Manual / Semi / Full** selector to change the layer — it opens an **acknowledgment
+  gate** explaining what that layer does before applying. **Pause/Resume** or **Delete** per strategy.
 - **Automation Status** tile (top) has **⏹ PAUSE ALL** — the kill switch — which pauses every strategy at once (`PATCH /api/bot/strategies/pause-all`).
 
 ---
@@ -174,17 +193,26 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
   cadence, but Vercel's Hobby plan only allows daily crons, so the live schedule is
   once-daily. Restoring `*/15 9-16 * * 1-5` requires Vercel Pro.
 - Per enabled strategy it: expires stale signals → resets daily trade counts →
-  checks the daily cap (`max_trades_per_day`) → **Sharia gate** → fetches a Finnhub
-  quote → **runs the exit engine** (below) → then, if not exited, applies a simple
-  momentum entry rule (day change ≥ +1.5% → buy, ≤ −1.5% → sell) → sizes qty from
-  `capital_allocated` → inserts a `pending_signals` row.
-- **Exit engine** (reconstructs the net position from executed signals, then by
-  priority): **stop-loss or max-drawdown hit → exit + PAUSE the strategy** (overrides
-  the target, non-negotiable); **horizon expired → close out + pause**; **target hit →
-  take profit**. Full-auto exits execute via SnapTrade; semi/manual push a "sell?"
-  notification. Audited as `bot.strategy.stopped_out` / `horizon_closed` / `target_hit`.
-- **Semi-auto:** sends an approval push notification; the trade executes via SnapTrade
-  only when you tap **Approve**.
+  checks the daily cap (`max_trades_per_day`) → resolves the effective **layer** →
+  reconstructs the net position → **runs the exit engine** (below). If flat, it runs
+  the **screener**: builds the candidate set from `params.universe_tickers` (or the
+  `HALAL_UNIVERSE_DEFAULT` set), re-filters it through the Sharia gate, fetches a Finnhub
+  quote for **each** candidate, scores by day momentum, and **picks the single strongest
+  name above +1.5%** — that's the "bot picks the ticker" behavior. It then sizes qty
+  from `position_size_pct` (or an even split of `capital_allocated`) and inserts one
+  **buy** `pending_signals` row on the picked ticker. **Buys come only from the screener;
+  SELLs come only from the exit engine — the bot never shorts.** One open position per
+  strategy at a time, so position accounting stays unambiguous.
+- **Exit engine** (reconstructs the net position + the **held ticker** from executed
+  signals, quotes that ticker, then by priority): **stop-loss or max-drawdown hit →
+  exit + PAUSE the strategy** (overrides the target, non-negotiable); **horizon expired
+  → close out + pause**; **target hit → take profit**. Full-auto exits execute via
+  SnapTrade; semi pushes a "sell?" notification; manual stays quiet in the panel.
+  Audited as `bot.strategy.stopped_out` / `horizon_closed` / `target_hit`.
+- **Manual (Layer 1):** signal is created and waits silently in the panel — no push.
+  You tap **Approve/Execute** when ready.
+- **Semi-auto (Layer 2):** sends an approval push notification; the trade executes via
+  SnapTrade only when you tap **Approve**.
 - **Full-auto** (`mode === "full"` AND `profiles.full_auto_enabled` AND
   `accountFullAutoEnabled(user, account)`): calls `executeSnapTradeOrder()` (impact →
   place) on the connected brokerage, marks the signal executed, sends an "auto-executed"
@@ -192,16 +220,23 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
 
 ### Sharia gate
 - Server list: `HARAM_TICKERS = {JPM, WYNN, MO, LCID, BND}` (`handlers.mjs:31`).
-- Client precheck on the Order Ticket uses a broader `HARAM_SNAP` set.
+- Default screening set: `HALAL_UNIVERSE_DEFAULT` (Sharia-screened ETFs SPUS/HLAL/UMMA/…
+  plus commonly-compliant large caps) — every candidate is still re-checked against
+  `HARAM_TICKERS` before any signal (`strategyUniverse()`).
+- Client precheck on the ad-hoc Order Ticket uses a broader `HARAM_SNAP` set.
 - Enforced server-side in **every execution path**: manual `/trade/impact`, signal
   approval, cron generation, and inside `executeSnapTradeOrder()` itself — re-checked at
   execution, not just on display. A blocked ticker is rejected and audited.
 
 ### Database tables (migrations `020_trading_bot.sql`, `021_full_auto_per_account.sql`)
-- `bot_strategies` — one row per strategy: ticker, strategy_type (`momentum|ma_crossover|breakout`),
-  mode, capital_allocated, profit_target_pct, **stop_loss_pct**, max_drawdown_pct,
+- `bot_strategies` — one row per strategy: ticker (the **primary**/first candidate),
+  strategy_type (`momentum|ma_crossover|breakout`), mode (`semi|full`, **derived from
+  the layer**), capital_allocated, profit_target_pct, **stop_loss_pct**, max_drawdown_pct,
   time_horizon_days, max_trades_per_day, trades_today, enabled, account_id, user_id,
-  and `params` jsonb (universe, entry_rules, exit_rules, position_size_pct). RLS owner-only.
+  and `params` jsonb (**`layer`** manual/semi/full, **`universe_tickers`** candidate
+  array, universe, entry_rules, exit_rules, position_size_pct). RLS owner-only. The
+  manual layer needed **no schema change** — it lives in `params.layer` while the
+  `mode` CHECK stays `semi|full`.
 - `pending_signals` — generated signals (ticker, side, qty, suggested_price, status:
   pending/approved/executed/rejected/expired, error_msg, expires_at, executed_at). RLS owner-only.
 - `account_full_auto` — per-connected-account full-auto opt-in (user_id, account_id,
@@ -258,10 +293,14 @@ place). Money never flows through MĪZAN; it only instructs the broker.
   (`POST /accounts/{id}/symbols`) and the impact/place round-trip can only be verified
   against a real connected brokerage during market hours. The failure mode is **safe**:
   if resolution or impact/place fails, no order is placed, nothing is marked executed,
-  and the error is surfaced + audited. Validate with one small manual Order-Ticket
+  and the error is surfaced + audited. Validate with one small ad-hoc Order-Ticket
   trade before relying on semi/full-auto.
-- The momentum rule is intentionally simple (±1.5% day change). It's a scaffold for
-  the Backtester's MA-crossover / breakout strategy types.
+- The screener scores candidates by day momentum (+1.5% buy threshold) — the free-tier
+  Finnhub quote is the live proxy for the edge. `strategy_type` (`ma_crossover|breakout`)
+  is carried through to the NL builder and the client reality-check backtest, but the
+  live cron scores all types by day momentum for now; richer per-type screening is the
+  next step. The screener fetches one quote per candidate (default universe ≈ 15), which
+  is well within Finnhub's free 60/min for a daily, owner-only cron.
 
 ---
 
@@ -270,20 +309,22 @@ place). Money never flows through MĪZAN; it only instructs the broker.
 Frontend  src/components/MizanApp.jsx
   4567  OrderPreviewModal
   4666  computeSmaBacktest      4703  StrategyReality      4799  StrategyProgressCard
-  4936  TradingBotPanel  (builder, signals, strategies, kill switch, per-account toggles)
-  5259  TradeBot         (tab shell, order submit/place)
+  4936  LAYER_META + TradingBotPanel (builder, signals, strategies, layer toggle + ack
+        gate, kill switch, per-account toggles)
+  5297  TradeBot         (tab shell: Trading Bot / Manual Order, order submit/place)
   9771  NAV array        (admin-only "Trade" item)
 
 Backend   lib/handlers.mjs
-  31    HARAM_TICKERS (Sharia gate list)
+  31    HARAM_TICKERS (Sharia gate list) + HALAL_UNIVERSE_DEFAULT + strategyUniverse()
   700   canUseTradingBot   707  canUseFullAuto   717  accountFullAutoEnabled
   792   resolveUniversalSymbolId   813  executeSnapTradeOrder
+        botPositionFromSignals (returns held ticker)
   1294  GET /api/user/features
   1477  /api/snaptrade/trade/impact   1612  /trade/place
   3196  /api/bot/strategies*   3264  /api/bot/signals*   3340  /api/bot/full-auto-accounts*
   3366  /api/bot/strategy/nl (Claude)
   4559  /api/alpaca/order
-  4770  /api/cron/bot-signals (entry signals + exit engine)
+  4770  /api/cron/bot-signals (universe screener → picks ticker → entry; + exit engine)
 
 Migrations  020_trading_bot.sql · 021_full_auto_per_account.sql
 Config      vercel.json → crons → /api/cron/bot-signals (0 14 * * 1-5)
