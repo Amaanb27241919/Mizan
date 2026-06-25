@@ -273,7 +273,23 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
 - **Strategies** list: each shows the screened universe (e.g. "SPUS +4 more"), its
   current **layer** (Manual/Semi/Full), capital, target, stop. Use the inline
   **Manual / Semi / Full** selector to change the layer — it opens an **acknowledgment
-  gate** explaining what that layer does before applying. **Pause/Resume** or **Delete** per strategy.
+  gate** explaining what that layer does before applying. **Edit**, **Pause/Resume**, or
+  **Delete** per strategy.
+- **Edit a strategy in place** — the **Edit** button opens a **structured, pre-filled
+  modal** (no AI call). Editable: primary ticker, strategy type, screen universe
+  (comma-separated tickers), brokerage account, capital, profit target, stop-loss,
+  max drawdown, time horizon, max trades/day. Saving sends a `PATCH
+  /api/bot/strategies/:id` with the changed fields. Previously these were create-only
+  (you had to delete and recreate); now they're editable directly. Two guardrails:
+  - **Stop-loss can be tightened but never removed** — the gate is enforced on **both**
+    client and server. A `PATCH` with `stop_loss_pct ≤ 0` returns `400 stop_loss_required`
+    (mirrors the create gate), and the modal blocks Save with the same message.
+  - **Editing a live FULL-AUTO strategy re-prompts a risk acknowledgment** before Save
+    unlocks, because the change takes effect on the **next automated run**. (Manual/Semi
+    edits save without the extra ack.)
+  - Server-side, any edit touching `params` / `universe_tickers` / `layer` does a
+    **read-modify-write** of the `params` jsonb, so `layer`, `universe_tickers`, and
+    entry/exit rules survive a partial edit instead of being clobbered.
 - **Automation Status** tile (top) has **⏹ PAUSE ALL** — the kill switch — which pauses every strategy at once (`PATCH /api/bot/strategies/pause-all`).
 
 ---
@@ -284,7 +300,7 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
 | Component | Line | Role |
 |-----------|------|------|
 | `TradeBot` | 5356 | 6-sub-tab hub shell; order state, SnapTrade/Alpaca submit; `null` for non-admins |
-| `TradingBotPanel` | 4918 | `view="strategies"`/`"signals"` — NL builder, signals, strategies, kill switch, per-account full-auto, brokerage `<select>` |
+| `TradingBotPanel` | 4918 | `view="strategies"`/`"signals"` — NL builder, signals, strategies, kill switch, per-account full-auto, brokerage `<select>`, **in-place Edit modal** (`openEdit`/`saveEdit`) |
 | `LAYER_META` | 4904 | Manual/Semi/Full metadata (icon + blurb) for the layer selector & ack gate |
 | `StrategyReality` | 4703 | Review screen — client-side backtest + mismatch warning |
 | `StrategyProgressCard` | 4799 | Per-strategy progress toward target |
@@ -297,7 +313,7 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
 |----------|--------|---------|
 | `/api/user/features` | GET | Returns `{ trading_bot, full_auto }` |
 | `/api/bot/strategies` | GET / POST | List / create strategies |
-| `/api/bot/strategies/:id` | PATCH / DELETE | Update (incl. enable), delete |
+| `/api/bot/strategies/:id` | PATCH / DELETE | Update (enable, layer, **full param edit** — ticker, account, type, universe, capital, target, stop, drawdown, horizon, daily cap), delete. Re-enforces the stop-loss gate (`400 stop_loss_required` on `≤0`) and read-modify-writes `params`. |
 | `/api/bot/strategies/pause-all` | PATCH | Kill switch |
 | `/api/bot/signals` | GET | Pending (non-expired) signals |
 | `/api/bot/signals/:id/approve` | POST | Approve a signal → executes via SnapTrade |
@@ -378,8 +394,9 @@ Every meaningful action writes to `audit_log`: `bot.signal.generated`, `.approve
 ---
 
 ## 8. Safety & compliance rails
-- **Mandatory stop-loss** — enforced **server-side on save**: `POST /api/bot/strategies`
-  returns `400 stop_loss_required` if it's missing/≤0. The NL parser also always sets one.
+- **Mandatory stop-loss** — enforced **server-side on both create and edit**: `POST`
+  and `PATCH /api/bot/strategies` return `400 stop_loss_required` if it's missing/≤0
+  (edit can tighten it but never remove it). The NL parser also always sets one.
 - **Daily trade cap** — `max_trades_per_day`, reset daily by the cron.
 - **Kill switch** — Pause-all halts every strategy instantly.
 - **Sharia gate** — enforced server-side at generation AND approval; cannot be bypassed by the client.
