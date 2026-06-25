@@ -9844,7 +9844,7 @@ export default function Mizan(){
   // (FIRE → Goals, Backtest → Portfolio, Sharia → Screener, Order Ticket
   // Coming Soon and reachable via CommandPalette only). Keeps the dock
   // un-crowded so first-time users aren't decision-fatigued.
-  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},{id:"goals",l:"Goals"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"},...(isAdmin?[{id:"trade",l:"Trade"}]:[])];
+  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},...(isAdmin?[{id:"trade",l:"Trade"}]:[]),{id:"goals",l:"Goals"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"}];
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     <style>{`
