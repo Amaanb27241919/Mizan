@@ -3,6 +3,8 @@
 > **Living document.** Re-run every few weeks to track drift between what's built and what's deployed.
 > Last audited: 2026-06-24 (updated) · All findings from direct file reads, no guessing.
 >
+> **2026-06-24 session changes**: (1) **Trading Bot** — strategies now SCREEN a halal universe and PICK the ticker (cron `screenSymbol` over `params.universe_tickers` / `HALAL_UNIVERSE_DEFAULT`), size from capital, price from market; buys only from screener, sells only from the exit engine (no shorting); one open position per strategy; exit engine quotes the held ticker. Three layers (manual/semi/full) are now a **per-strategy** choice (`params.layer`, no migration — DB `mode` derived) switched via an inline selector behind an **ack gate**. Order Ticket reframed as ad-hoc manual override. (2) **Sharia screening unified** — new `lib/sharia.mjs` provider seam (Finnhub now, **Zoya** when `ZOYA_API_KEY` set) + `GET/POST /api/screen`; `h.sh_` now flows from the live verdict (`shariaScreen` state via a root effect) with `SHARIA_MAP` only as pre-load fallback, so Screener / Overview compliance / Rebalancer halal-mode / Purification all read ONE verdict. Purification uses a screen-derived non-permissible-income % when the provider supplies it (Zoya). NEW ENV: `ZOYA_API_KEY` (+ optional `ZOYA_API_BASE`) — not yet provisioned.
+>
 > **2026-06-17 session changes**: Range-aware portfolio gains (1D/1W/1M/3M/YTD/1Y/All); real chart axes (XAxis months+year, YAxis $0→auto); Activity net-flow + range label; TaxPlanner normSym() helper; Screener cache freshness dot; fake sparkline replaced with position count + cost basis. CLAUDE.md rewritten to elite engineering brief (17 sections). Session hooks added (.claude/settings.json) — build check on edit, auto-update audit date on Stop.
 
 ---
@@ -101,7 +103,8 @@
 | **Plaid** | ✅ Fully wired | `/api/plaid/link-token`, `exchange`, `accounts`, `transactions`, `item-status`, `item` (DELETE), `webhook` | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | Paid production | Yes |
 | **Anthropic** | ✅ Fully wired | `/api/advisor` (POST), `/api/advisor/count` (POST) | `ANTHROPIC_KEY` | Pay-as-you-go (~$0.01/msg) | Yes |
 | **Stooq** | ✅ Fully wired | `/api/metals/spot` (proxies Stooq CSV) | None (free, no key) | Free | Yes |
-| **Finnhub** | ✅ Fully wired | `/api/finnhub/earnings`, `dividends`, `profile2`, `metric`, `quote`, `news` | `VITE_FINNHUB_KEY` | Free tier (60 req/min) | Yes |
+| **Finnhub** | ✅ Fully wired | `/api/finnhub/earnings`, `dividends`, `profile2`, `metric`, `quote`, `news`; **Sharia screening fundamentals via `lib/sharia.mjs` → `/api/screen`** | `FINNHUB_KEY` / `VITE_FINNHUB_KEY` | Free tier (60 req/min) | Yes |
+| **Zoya** | 🔌 Seam ready, not keyed | `lib/sharia.mjs` → `/api/screen` (overrides Finnhub when `ZOYA_API_KEY` set; adds non-permissible-income test + direct verdict; falls back to Finnhub on error) | `ZOYA_API_KEY`, `ZOYA_API_BASE` (opt) | Free (per user — not yet provisioned) | No (provider seam only) |
 | **Polygon** | ⚙️ Partially | `/api/polygon/bars` (OHLC for backtester only) | `POLYGON_KEY` | Free tier (5 req/min, 2yr history) | Yes (backtester only) |
 | **Alpaca** | ⚙️ Partially | `/api/alpaca/order`, `orders`, `positions` — **paper API only** | `ALPACA_KEY_ID`, `ALPACA_SECRET` | Free paper trading | Backend yes, UI gated |
 | **Supabase** | ✅ Fully wired | DB + Auth for entire app | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Paid | Yes |
@@ -146,10 +149,10 @@
 | Per-holding news accordion (3 headlines, expandable inline) | ✅ Built + Deployed |
 | Per-holding earnings accordion (next/last earnings dates + EPS) | ✅ Built + Deployed |
 | Activity (SnapTrade transaction history) | ✅ Built + Deployed |
-| Rebalance (target asset class weights, drift suggestions) | ✅ Built + Deployed |
+| Rebalance (target asset class weights, drift suggestions) | ✅ Built + Deployed · halal-mode keys off the live screen (shared `sh_`) |
 | Tax (unrealized gains/losses breakdown) | ✅ Built + Deployed |
 | Backtest (Polygon OHLC, strategy runner) | ✅ Built + Deployed |
-| Screener (AAOIFI framework Sharia screener) | ✅ Built + Deployed |
+| Screener (AAOIFI 7-framework Sharia screener) | ✅ Built + Deployed · now backed by `lib/sharia.mjs` → `/api/screen` (single source of truth for `sh_`); provider seam ready for Zoya |
 | ETFs & Funds catalog | ✅ Built + Deployed |
 | Documents (SnapTrade account statements) | ✅ Built + Deployed |
 

@@ -53,6 +53,7 @@ src/lib/useKeyboard.js         — Global keyboard shortcuts
 ```
 api/[...path].mjs              — Vercel catch-all. Routes to lib/handlers.mjs.
 lib/handlers.mjs               — 4,200+ lines. Every API route in one file.
+lib/sharia.mjs                 — Sharia screening service (provider seam: Finnhub now, Zoya when ZOYA_API_KEY set). screenSymbol/screenBatch power /api/screen → governs h.sh_ app-wide
 lib/crypto.mjs                 — AES-256-GCM encrypt/decrypt (APP_ENCRYPTION_KEY)
 lib/anomaly.mjs                — 4 anomaly detectors (brute force, 5xx spike, cron staleness, new device)
 lib/alerts.mjs                 — Resend email alerts (anomaly notifications to owner)
@@ -384,7 +385,8 @@ These are documented constraints, not undiscovered issues:
 | Plaid | Bank accounts + transactions | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | access_token server-only, never reaches browser |
 | Anthropic | AI Advisor chat | `ANTHROPIC_KEY` | claude-sonnet-4-6, 60/hr rate limit, streaming |
 | Stooq | Gold/silver spot prices | None (free) | CSV proxy — no API key needed |
-| Finnhub | News, earnings, profile, dividends, quote | `VITE_FINNHUB_KEY` | 60 req/min free tier |
+| Finnhub | News, earnings, profile, dividends, quote, **Sharia screening fundamentals** | `FINNHUB_KEY` / `VITE_FINNHUB_KEY` | 60 req/min free tier |
+| Zoya | Sharia screening (optional provider — overrides Finnhub when keyed) | `ZOYA_API_KEY`, `ZOYA_API_BASE` (opt) | NOT yet provisioned. When set, `lib/sharia.mjs` routes screening to Zoya (adds non-permissible-income test + direct verdict); falls back to Finnhub on any error. Adapter response-mapping must be verified against the live API. |
 | Polygon | OHLC bars (backtester only) | `POLYGON_KEY` | 5 req/min free, 2yr history |
 | Alpaca | Paper trading | `ALPACA_KEY_ID`, `ALPACA_SECRET` | Paper only — no production keys |
 | Supabase | DB + Auth | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Paid plan |
