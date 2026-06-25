@@ -4926,6 +4926,10 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
   // Layer-change acknowledgment gate: { strat, target } while confirming.
   const[layerModal,setLayerModal]=useState(null);
   const[layerAck,setLayerAck]=useState(false);
+  // Default execution layer applied to NEW strategies (each strategy can still
+  // override its own below). Persisted per-device.
+  const[defaultLayer,setDefaultLayer]=useState(()=>{try{return localStorage.getItem("mizan_bot_default_layer")||"semi";}catch{return"semi";}});
+  const setDefLayer=k=>{setDefaultLayer(k);try{localStorage.setItem("mizan_bot_default_layer",k);}catch{}};
   const allPaused=strategies.length>0&&strategies.every(s=>!s.enabled);
 
   // The execution LAYER is the user-facing choice; it lives in params.layer.
@@ -5011,7 +5015,7 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
     try{
       const r=await apiFetch("/api/bot/strategies",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...nlResult,nl_description:nlInput,nl_risk_disclosed:true}),
+        body:JSON.stringify({...nlResult,layer:defaultLayer,nl_description:nlInput,nl_risk_disclosed:true}),
       });
       if(r.ok){setNlResult(null);setNlInput("");setRiskAck(false);await loadStrategies();}
     }catch{}
@@ -5111,6 +5115,33 @@ function TradingBotPanel({isAdmin=false,fullAutoEnabled=false,snapAccounts=[],de
         {killSwitchMsg&&<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{killSwitchMsg}</span>}
         {strategies.some(s=>s.enabled)&&<button onClick={activateKillSwitch} disabled={killSwitchBusy} style={{padding:`8px ${T.s4}`,borderRadius:T.rMd,border:`1px solid ${T.loss}60`,background:`${T.loss}15`,color:T.loss,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.08em",cursor:"pointer"}}>⏹ PAUSE ALL</button>}
       </div>
+    </BentoTile>
+
+    {/* Execution Layer — the 3-layer premise, front and center. Sets the default
+        for NEW strategies; each strategy still overrides its own layer below. */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>EXECUTION LAYER · DEFAULT FOR NEW STRATEGIES</div>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>Each strategy overrides its own below</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:T.s2}}>
+        {["manual","semi","full"].map(k=>{const m=LAYER_META[k];const on=defaultLayer===k;const n=k==="manual"?"1":k==="semi"?"2":"3";return(
+          <button key={k} onClick={()=>setDefLayer(k)} style={{
+            display:"flex",flexDirection:"column",gap:5,alignItems:"flex-start",textAlign:"left",
+            padding:T.s3,borderRadius:T.rMd,cursor:"pointer",transition:"all 0.15s",
+            border:`1px solid ${on?m.color:T.border}`,
+            background:on?`${m.color}14`:"transparent",
+          }}>
+            <div style={{display:"flex",alignItems:"center",gap:T.s2,width:"100%"}}>
+              <span style={{fontSize:18}}>{m.icon}</span>
+              <span style={{fontFamily:FM,fontSize:9,color:on?m.color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginLeft:"auto"}}>LAYER {n}</span>
+            </div>
+            <span style={{fontFamily:FM,fontSize:12,fontWeight:600,color:on?m.color:T.textHi}}>{m.label}</span>
+          </button>
+        );})}
+      </div>
+      <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:`${T.s3} 0 0`}}>{LAYER_META[defaultLayer].blurb}</p>
+      {defaultLayer==="full"&&<div style={{marginTop:T.s2,fontFamily:FM,fontSize:11,color:T.loss}}>Full-auto still requires the per-account AUTO ON toggle below — off by default even here.</div>}
     </BentoTile>
 
     {/* NL Strategy Builder */}
@@ -5415,7 +5446,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],onOrderPlaced,activities
   const estTotal=parseFloat(qty||0)*parseFloat(lpx||0);
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["bot","Trading Bot"],["order","Manual Order"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["bot","Trading Bot"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
     {sub==="bot"&&<TradingBotPanel isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
 
     {/* Order Ticket lives behind a Coming Soon banner for non-admin users. */}
