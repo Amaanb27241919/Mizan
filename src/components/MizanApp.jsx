@@ -2075,60 +2075,20 @@ const STANDARDS = {
     notes:"Prudential standard; defers to local board for retail screening.",
   },
 };
-// NOTE: The non-permissible income ratio (standard.nonPermMax) is intentionally
-// NOT evaluated here. That test requires a revenue-breakdown by business segment
-// (e.g. interest income, alcohol-derived revenue) which is not available from the
-// Finnhub free tier. We rely on the sector-exclusion check instead. The UI flags
-// this limitation next to each standard's spec line.
-function evaluateAgainst(standard,{sector,debt,cash,recv,mc,assets}){
-  if(sector==="haram")return{pass:false,fails:[{rule:"Sector",detail:"Prohibited industry"}],ratios:{}};
-  const denom=standard.denominator==="totalAssets"?assets:mc;
-  if(!denom||denom<=0)return{pass:null,fails:[],ratios:{},reason:`No ${standard.denominator} data`};
-  const debtR=(debt/denom)*100, cashR=(cash/denom)*100, recvR=recv>0?(recv/denom)*100:0;
-  const tests=[
-    {rule:`Debt/${standard.denominator==="totalAssets"?"Assets":"MC"}`,pass:debtR<standard.debtMax,detail:`${debtR.toFixed(1)}%`,limit:standard.debtMax},
-    {rule:`Cash/${standard.denominator==="totalAssets"?"Assets":"MC"}`,pass:cashR<standard.cashMax,detail:`${cashR.toFixed(1)}%`,limit:standard.cashMax},
-    {rule:`A/R/${standard.denominator==="totalAssets"?"Assets":"MC"}`,pass:recv===0||recvR<standard.recvMax,detail:recv===0?"n/a":`${recvR.toFixed(1)}%`,limit:standard.recvMax},
-  ];
-  const fails=tests.filter(t=>!t.pass);
-  return{pass:fails.length===0,fails,ratios:{debtR,cashR,recvR},tests};
-}
+// NOTE: The ratio engine (debt/cash/receivables + non-permissible income) now
+// runs server-side in lib/sharia.mjs so a single provider (Finnhub now, Zoya
+// when keyed) governs every surface. STANDARDS above is kept here only for the
+// Screener's display metadata (names, regions, thresholds).
 async function screenTicker(tk){
-  // No client-side Finnhub gate — /api/finnhub/* is server-proxied with the
-  // env-var FINNHUB_KEY and is per-user JWT-scoped + rate limited. The
-  // browser never holds the key, so we can always attempt the call.
-  if(/^(BTC|ETH|SOL|DOGE|ADA|DOT|LINK)$/.test(tk))return{tk,status:"halal",industry:"Cryptocurrency",notes:"Treated as commodity per most contemporary scholars",byStandard:Object.fromEntries(Object.keys(STANDARDS).map(k=>[k,{pass:true,note:"crypto"}]))};
+  // Single screening engine lives server-side (lib/sharia.mjs, provider-dispatched:
+  // Finnhub now, Zoya when keyed). The Screener tab and the app-wide sh_ governance
+  // both read this, so verdicts can never diverge. Server caches per-day; the
+  // client STANDARDS table is kept only for display metadata (names/thresholds).
   try{
-    const[profileR,metricR]=await Promise.all([
-      apiFetch(`/api/finnhub/profile2?symbol=${encodeURIComponent(tk)}`),
-      apiFetch(`/api/finnhub/metric?symbol=${encodeURIComponent(tk)}`),
-    ]);
-    const profile=await profileR.json();
-    const metric=(await metricR.json()).metric||{};
-    const industry=profile.finnhubIndustry||profile.gicsSector||"";
-    const sector=classifyIndustry(industry);
-    const mc=profile.marketCapitalization||0;
-    const debt=metric.totalDebt||metric.longTermDebtAnnual||0;
-    const cash=metric.cashAndShortTermInvestmentsAnnual||metric.cashAndCashEquivalentsAnnual||0;
-    const recv=metric.netReceivablesAnnual||0;
-    const assets=metric.totalAssetsAnnual||metric.totalAssetsTTM||0;
-    if(sector==="haram"){
-      const byStandard=Object.fromEntries(Object.keys(STANDARDS).map(k=>[k,{pass:false,fails:[{rule:"Sector"}]}]));
-      return{tk,status:"haram",industry,reason:`Prohibited sector: ${industry}`,marketCap:mc,byStandard};
-    }
-    // Run every standard
-    const byStandard={};
-    Object.entries(STANDARDS).forEach(([key,std])=>{
-      byStandard[key]=evaluateAgainst(std,{sector,debt,cash,recv,mc,assets});
-    });
-    const passCount=Object.values(byStandard).filter(r=>r.pass===true).length;
-    const failCount=Object.values(byStandard).filter(r=>r.pass===false).length;
-    const status=sector==="review"?"review":passCount>=5?"halal":failCount>=4?"haram":"review";
-    // Aggregate ratios from AAOIFI for the row display (most conservative)
-    const{ratios={}}=byStandard.AAOIFI||{};
-    return{tk,status,industry,marketCap:mc,assets,
-      debtR:ratios.debtR,cashR:ratios.cashR,recvR:ratios.recvR,
-      byStandard,passCount,failCount,country:profile.country,name:profile.name};
+    const r=await apiFetch(`/api/screen?symbol=${encodeURIComponent(tk)}`);
+    if(!r.ok)return{tk,status:"unknown",reason:`HTTP ${r.status}`};
+    const d=await r.json();
+    return d.verdict||{tk,status:"unknown"};
   }catch(err){
     return{tk,status:"unknown",reason:err.message||"Screen failed"};
   }
@@ -9110,6 +9070,13 @@ export default function Mizan(){
     };
   },[snapActivities,disabledAccts.size]);
 
+  // Live Sharia screen verdicts (ticker → {status,...}) from the server screening
+  // service (/api/screen — Finnhub now, Zoya when keyed). This is the SINGLE
+  // source of truth for h.sh_: Overview compliance, Portfolio filter, the
+  // Rebalancer's halal mode, and Purification all flow from it. The hardcoded
+  // SHARIA_MAP is only an instant fallback while the live screen loads.
+  const[shariaScreen,setShariaScreen]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
+
   // Map SnapTrade position → MIZAN holding format. Robust to nested UniversalSymbol
   // shapes (some brokers wrap symbols 1–2 levels deep).
   const SHARIA_MAP={...DEMO_SHARIA,...Object.fromEntries(HOLDINGS.map(h=>[h.tk,h.sh_]))};
@@ -9138,10 +9105,42 @@ export default function Mizan(){
             :b.includes("coinbase")?"Crypto"
             :b.includes("chase")?"Chase"
             :(acctName||broker||"Unknown");
+    // Live screen wins; hardcoded map is the instant fallback; "review" last.
+    const live=shariaScreen[tk]&&shariaScreen[tk].status&&shariaScreen[tk].status!=="unknown"?shariaScreen[tk].status:null;
     return{tk,nm,sh,ac,px,ty,
-      sh_:SHARIA_MAP[tk]||(ty==="Crypto"||ty==="cryptocurrency"?"halal":"review"),
+      sh_:live||SHARIA_MAP[tk]||(ty==="Crypto"||ty==="cryptocurrency"?"halal":"review"),
       ac_,br:broker,_live:true,_fromSnap:true};
-  },[]);
+  },[shariaScreen]);
+
+  // Screen the user's real holdings server-side so h.sh_ reflects the live
+  // verdict app-wide (not just when the Screener tab is open). Only tickers not
+  // already screened today are sent; results merge into shariaScreen + the
+  // shared mizan_aaoifi_cache the Screener tab reads. Skipped in demo mode.
+  useEffect(()=>{
+    if(demoMode)return;
+    const today=new Date().toISOString().slice(0,10);
+    const held=[...new Set(snapAccounts.flatMap(a=>(a.positions||[]).map(p=>readSymbol(p).tk)).filter(Boolean))];
+    const todo=held.filter(tk=>!shariaScreen[tk]||shariaScreen[tk].asOf!==today);
+    if(!todo.length)return;
+    let cancelled=false;
+    (async()=>{
+      try{
+        const r=await apiFetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbols:todo})});
+        if(!r.ok)return;
+        const d=await r.json();
+        const results=d.results||{};
+        if(cancelled||!Object.keys(results).length)return;
+        setShariaScreen(prev=>{
+          const next={...prev};
+          Object.entries(results).forEach(([tk,v])=>{next[tk]={...v,asOf:v.asOf||today};});
+          try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(next));}catch{}
+          return next;
+        });
+      }catch{/* screen failures leave sh_ on its fallback — never throw */}
+    })();
+    return()=>{cancelled=true;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[demoMode,snapAccounts]);
 
   // Persist + broadcast helper so every place that updates these arrays caches
   // the value AND notifies other open tabs.

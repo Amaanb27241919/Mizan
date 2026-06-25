@@ -132,7 +132,7 @@ Understanding these concepts is required to work on Mizan correctly. Financial e
   1. **Business activity screen**: Does the company earn revenue from prohibited sectors (alcohol, pork, weapons, gambling, tobacco, adult entertainment, conventional finance)?
   2. **Financial ratio screen**: Is the company's debt ratio below the AAOIFI threshold (debt/market cap < 33%)? Impermissible income ratio < 5%?
 - **`h.sh_` field** in holdings state = Sharia status: `"halal"` / `"review"` / `"haram"` / `"unlisted"`
-- `SHARIA_MAP` (local lookup in MizanApp.jsx) is the fast path. The Screener tab calls Finnhub for deeper analysis. These can differ — expected and documented behavior.
+- **Single screening source of truth**: `h.sh_` is governed by the server screening service (`lib/sharia.mjs` via `/api/screen` — provider-dispatched: Finnhub now, Zoya when `ZOYA_API_KEY` is set). A root effect screens real holdings into `shariaScreen` state; `mapPosition` reads the live verdict (hardcoded `SHARIA_MAP` is only the instant fallback while it loads). Screener tab, Overview compliance, Rebalancer halal-mode, and Purification all read this one verdict — no more divergence.
 
 ### Zakat
 - **Nisab threshold**: Minimum wealth before Zakat is due. Two standards: gold (87.48g) or silver (612.36g). User can toggle.
@@ -338,7 +338,7 @@ npm run build   # Must exit 0 with no errors
 - [ ] Values match what the underlying data source provides
 - [ ] No synthetic/fabricated data that could be mistaken for real portfolio data
 - [ ] Range filters affect all three: chart, gain display, and label
-- [ ] Sharia status uses `h.sh_` from `SHARIA_MAP` — not from Screener results
+- [ ] Sharia status uses `h.sh_`, which now flows from the live `/api/screen` verdict (`shariaScreen` state) with `SHARIA_MAP` as fallback — all surfaces share it
 
 ### Security checklist (for new API routes)
 - [ ] Auth check via `requireAuth()` before any data access
@@ -362,7 +362,7 @@ These are documented constraints, not undiscovered issues:
 
 3. **YTD realized gains use current avg cost as sell basis** — because we don't have historical cost basis per lot. This is disclosed in-UI.
 
-4. **Sharia screening is Finnhub-dependent** — the Screener tab caches results per-day. Same-day rescreens require clicking "Re-screen." The local `SHARIA_MAP` and Finnhub screener can show different verdicts — this is expected and intentional.
+4. **Sharia screening runs through one provider seam** (`lib/sharia.mjs`): Finnhub fundamentals today, Zoya when `ZOYA_API_KEY` is set (Zoya adds the non-permissible-income test + a direct verdict; Finnhub can't supply revenue-segment data so that one test is sector-only). Verdicts cache per-day. `h.sh_` now flows from this — `SHARIA_MAP` is only the pre-load fallback. The Zoya adapter's response mapping is best-effort and must be confirmed against the live API when the key is provisioned (it falls back to Finnhub on any shape mismatch, so it can't break prod).
 
 5. **SnapTrade 5xx spike detector is in-memory** — `_snaptradeFailures` Map resets on cold starts. DB-backed IP blocking (`security_events`) is in place but the spike counter specifically is in-memory. Documented risk.
 
