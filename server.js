@@ -172,6 +172,7 @@ async function handleApi(req, res, url) {
     pathname: url.pathname,
     query: Object.fromEntries(url.searchParams),
     body: parsed,
+    rawBody: body, // exact bytes — enables Plaid webhook body-hash binding in dev
     headers: req.headers,
   });
   // Honor handler-provided Content-Type (e.g. text/csv for /api/export/*).

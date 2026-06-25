@@ -27,6 +27,11 @@ export default async function handler(req, res) {
       pathname: url.pathname,
       query:    Object.fromEntries(url.searchParams),
       body:     typeof req.body === "string" ? (req.body ? JSON.parse(req.body) : {}) : (req.body || {}),
+      // Raw body for signature verification (Plaid webhook). When Vercel has
+      // already parsed the JSON into an object the raw bytes are gone, so this
+      // is the string form only; verifyPlaidWebhook falls back to signature +
+      // freshness when the body hash can't be checked.
+      rawBody:  typeof req.body === "string" ? req.body : "",
       headers:  req.headers,
     });
     // Honor handler-provided Content-Type (e.g. text/csv for /api/export/*).
