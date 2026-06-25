@@ -8806,6 +8806,7 @@ const SHORTCUT_REFERENCE = {
   "g o": "Go to Overview",
   "g p": "Go to Portfolio",
   "g f": "Go to Finances",
+  "g t": "Go to Trade",
   "g a": "Go to AI Advisor",
   "g s": "Go to Settings",
   "r":   "Sync All",
@@ -8814,13 +8815,14 @@ const SHORTCUT_REFERENCE = {
   "Esc": "Close any open modal",
 };
 
-function KeyboardShortcuts({ onNav, onSync, onConnect, onHelp, onCommand }) {
+function KeyboardShortcuts({ onNav, onSync, onConnect, onHelp, onCommand, isAdmin = false }) {
   useKeyboard({
     shortcuts: {
       "g o": "overview",
       "g p": "portfolio",
       "g f": "finances",
       "g g": "goals",
+      ...(isAdmin ? { "g t": "trade" } : {}),
       "g a": "advisor",
       "g s": "settings",
       "r": "sync",
@@ -10202,11 +10204,12 @@ export default function Mizan(){
       onConnect={()=>setConn(true)}
       onHelp={()=>setShortcutHelpOpen(true)}
       onCommand={()=>palette.setOpen(true)}
+      isAdmin={isAdmin}
     />
     <ShortcutHelp
       open={shortcutHelpOpen}
       onClose={()=>setShortcutHelpOpen(false)}
-      shortcuts={SHORTCUT_REFERENCE}
+      shortcuts={isAdmin?SHORTCUT_REFERENCE:Object.fromEntries(Object.entries(SHORTCUT_REFERENCE).filter(([k])=>k!=="g t"))}
     />
     <CommandPalette
       open={palette.open}
