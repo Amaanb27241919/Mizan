@@ -10,6 +10,7 @@
 // Named exports: GoalsOverviewWidget (used by Overview tab)
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/apiFetch.js";
+import { Icon } from "./Icon.jsx";
 
 // Reuse the global theme tokens by reading the CSS custom properties so
 // this file stays decoupled from MizanApp's `T`/`FU`/`FM` constants. The
@@ -40,14 +41,14 @@ const fmtDate = (s) => {
 // `target: null` means "compute at render time" (Emergency Fund uses
 // avgMonthlySpend × 4, falling back to 15000 when spend data isn't ready).
 const TEMPLATES = [
-  { id: "hajj",      icon: "🕋", name: "Hajj Fund",         target: 10000, note: null },
-  { id: "umrah",     icon: "🌙", name: "Umrah Fund",         target: 4000,  note: null },
-  { id: "home",      icon: "🏠", name: "Home Down Payment",  target: 60000,
+  { id: "hajj",      icon: "kaaba",  name: "Hajj Fund",         target: 10000, note: null },
+  { id: "umrah",     icon: "moon",   name: "Umrah Fund",         target: 4000,  note: null },
+  { id: "home",      icon: "home",   name: "Home Down Payment",  target: 60000,
     note: "Consider a halal financing structure (Ijara/Murabaha) vs. a conventional mortgage" },
-  { id: "emergency", icon: "🛡", name: "Emergency Fund",     target: null,
+  { id: "emergency", icon: "shield", name: "Emergency Fund",     target: null,
     note: "3-6 months of expenses. Suggested target is 4× your avg monthly spend." },
-  { id: "education", icon: "📚", name: "Education Fund",     target: 20000, note: null },
-  { id: "custom",    icon: "✏️",  name: "Custom",             target: null,  note: null },
+  { id: "education", icon: "book",   name: "Education Fund",     target: 20000, note: null },
+  { id: "custom",    icon: "pencil", name: "Custom",             target: null,  note: null },
 ];
 
 function TemplatePicker({ avgMonthlySpend, onPick, onCancel }) {
@@ -97,7 +98,7 @@ function TemplatePicker({ avgMonthlySpend, onPick, onCancel }) {
                 e.currentTarget.style.background = T.surface;
               }}
             >
-              <span style={{ fontSize: 22 }}>{tmpl.icon}</span>
+              <Icon name={tmpl.icon} size={22} color={T.blue}/>
               <span style={{ fontFamily: FP, fontSize: 13, fontWeight: 600, color: T.textHi }}>
                 {tmpl.name}
               </span>
@@ -297,9 +298,9 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
           fontFamily: FP, fontSize: 12, color: T.gold, lineHeight: 1.5,
           padding: `${T.s2} ${T.s3}`,
           background: `${T.gold}10`, border: `1px solid ${T.gold}30`,
-          borderRadius: T.rSm,
+          borderRadius: T.rSm, display: "flex", alignItems: "flex-start", gap: 6,
         }}>
-          ℹ️ {templateNote}
+          <Icon name="info" size={13} color={T.gold} style={{ marginTop: 1 }}/>{templateNote}
         </div>
       )}
 
@@ -792,7 +793,7 @@ export default function Goals({
           border: `1px dashed ${T.border}`, borderRadius: T.rLg,
           display: "flex", flexDirection: "column", alignItems: "center", gap: T.s3,
         }}>
-          <span style={{ fontSize: 28 }}>🎯</span>
+          <Icon name="target" size={28} color={T.muted}/>
           <span>No goals yet.</span>
           <button
             onClick={() => { setCreating("picker"); setEditingId(null); }}
@@ -883,7 +884,7 @@ export function GoalsOverviewWidget({
   const previews = goals.slice(0, 3);
 
   // Map template name → icon for display
-  const iconFor = (g) => (TEMPLATES.find((t) => t.name === g.name)?.icon ?? g.icon ?? "◎");
+  const iconFor = (g) => { const n = TEMPLATES.find((t) => t.name === g.name)?.icon; return n || "target"; };
 
   if (!loaded) return null;
 
@@ -921,7 +922,7 @@ export function GoalsOverviewWidget({
           display: "flex", flexDirection: "column", alignItems: "center", gap: T.s2,
           padding: `${T.s4} 0`, textAlign: "center",
         }}>
-          <span style={{ fontSize: 24 }}>🎯</span>
+          <Icon name="target" size={24} color={T.muted}/>
           <span style={{ fontFamily: FP, fontSize: 13, color: T.muted }}>No savings goals yet</span>
           <button
             onClick={() => onNav?.("goals")}
@@ -947,7 +948,7 @@ export function GoalsOverviewWidget({
               <div key={g.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: T.s2 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: T.s2, minWidth: 0 }}>
-                    <span style={{ fontSize: 16, flexShrink: 0 }}>{iconFor(g)}</span>
+                    <Icon name={iconFor(g)} size={16} color={T.blue} style={{ flexShrink: 0 }}/>
                     <span style={{
                       fontFamily: FP, fontSize: 13, fontWeight: 600, color: T.textHi,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",

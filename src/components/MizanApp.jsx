@@ -6,6 +6,7 @@ import { persistUserState } from "../lib/userState.js";
 import { downloadCSV } from "../lib/exportCSV.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
+import { Icon, ICONS } from "./Icon.jsx";
 import { Skeleton, SkeletonCard, SkeletonTable } from "./Skeleton.jsx";
 import Goals, { GoalsOverviewWidget } from "./Goals.jsx";
 import ComingSoon from "./ComingSoon.jsx";
@@ -1345,8 +1346,9 @@ function NicknameEditor({accountId,defaultName,nickname,onSetNickname,
       style={{
         background:"transparent",border:"none",cursor:"pointer",padding:2,
         color:T.muted,lineHeight:1,fontSize:12,
+        display:"inline-flex",alignItems:"center",
         ...(pencilStyle||{}),
-      }}>✎</button>}
+      }}><Icon name="pencil" size={12}/></button>}
   </div>;
 }
 
@@ -1825,7 +1827,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
           <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{overviewAboveNisab?`2.5% of net zakatable wealth${zakatSettings.investmentMethod==="longterm_30"?" (30% rule on investments)":""}`:`Below nisab (${zakatSettings.nisabStandard} standard, ${fmtUSD(nisabOverview)})`}</div>
           {purificationOwedTotal != null && purificationOwedTotal > 0 && (
             <button onClick={() => onNav?.("goals")} style={{display:"flex",alignItems:"center",gap:4,marginTop:T.s2,background:`${T.gold}10`,border:`1px solid ${T.gold}30`,borderRadius:T.rSm,padding:`3px ${T.s2}`,cursor:"pointer",fontFamily:FM,fontSize:10,color:T.gold,fontWeight:600,letterSpacing:"0.06em",textDecoration:"none",width:"100%",justifyContent:"flex-start"}}>
-              <span style={{fontSize:12}}>🌿</span>
+              <Icon name="leaf" size={12} color={T.gold}/>
               <span>Purify {fmtUSD(purificationOwedTotal)} → Zakat tab</span>
             </button>
           )}
@@ -2231,7 +2233,7 @@ function AAOIFIScreener({holdings=[]}){
         {l:"Debt/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.debtR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
         {l:"Cash/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.cashR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
         {l:"A/R/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.recvR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<49?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
-        {l:"Status",r_:r=><Tag label={r._screen.status==="halal"?"✓ Halal":r._screen.status==="haram"?"✗ Non-Compliant":r._screen.status==="review"?"⚠ Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>},
+        {l:"Status",r_:r=><Tag label={r._screen.status==="halal"?"Halal":r._screen.status==="haram"?"Non-Compliant":r._screen.status==="review"?"Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>},
         {l:"Pass / 7",r:true,mobileHide:true,r_:r=>{const bs=r._screen.byStandard;if(!bs)return<span style={{color:T.muted}}>—</span>;const pass=Object.values(bs).filter(s=>s.pass===true).length;return<span style={{fontFamily:FM,fontSize:11,color:pass>=6?T.gain:pass>=4?T.gold:T.loss}} title={Object.entries(bs).map(([k,v])=>`${STANDARDS[k]?.name||k}: ${v.pass===true?"pass":v.pass===false?"fail":"n/a"}`).join("\n")}>{pass}/{Object.keys(STANDARDS).length}</span>;}},
         {l:"Primary",mobileHide:true,r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return<Tag label={v.pass===true?"✓":v.pass===false?"✗":"…"} color={v.pass===true?T.gain:v.pass===false?T.loss:T.muted}/>;}},
         {l:"Action",r_:r=>r._screen.status==="haram"?<Tag label="Exit + purify" color={T.loss}/>:r._screen.status==="review"?<Tag label="Verify" color={T.gold}/>:r._screen.status==="halal"?<Tag label="Hold" color={T.gain}/>:<Tag label="—" color={T.muted}/>},
@@ -3487,7 +3489,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
     <BentoTile accent={T.gold}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s2,marginBottom:T.s4}}>
         <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
-          <span style={{fontSize:20,lineHeight:1}}>🌿</span>
+          <Icon name="leaf" size={20} color={T.gold}/>
           <div>
             <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>DIVIDEND PURIFICATION</div>
             <div style={{fontFamily:FP,fontSize:12,color:T.muted}}>AAOIFI-compliant — purify impure income from halal-screened funds</div>
@@ -4105,11 +4107,10 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp })
                   <td style={tdBase(isOpen)}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{
-                        fontSize: 8, color: isOpen ? T.blue : T.muted,
-                        display: "inline-block", transition: "transform 0.15s",
+                        display: "inline-flex", transition: "transform 0.15s",
                         transform: isOpen ? "rotate(90deg)" : "none",
                         lineHeight: 1, userSelect: "none",
-                      }}>▶</span>
+                      }}><Icon name="chevron" size={11} color={isOpen ? T.blue : T.muted}/></span>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: T.s1 }}>
                           <span style={{ fontFamily: FP, fontSize: 14, fontWeight: 600, color: r.sh_ === "haram" ? T.loss : T.textHi, letterSpacing: "-0.01em" }}>{r.tk}</span>
@@ -4118,7 +4119,7 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp })
                               fontFamily: FM, fontSize: 9, fontWeight: 600, letterSpacing: "0.04em",
                               color: T.gold, background: `${T.gold}18`, border: `1px solid ${T.gold}30`,
                               borderRadius: 999, padding: "1px 5px", whiteSpace: "nowrap",
-                            }}>📅 {daysAway}d</span>
+                            }}><Icon name="calendar" size={9} color={T.gold} style={{display:"inline-block",verticalAlign:"-1px",marginRight:3}}/>{daysAway}d</span>
                           )}
                         </div>
                         <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, marginTop: 2 }}>{r.ac_}</div>
@@ -4555,7 +4556,7 @@ function OrderPreviewModal({preview={},onConfirm,onCancel,busy,side,sym,qty}){
           <span style={{color:T.textHi}}>{v}</span>
         </div>)}
         {warnings.length>0&&<div style={{padding:"10px 12px",background:`${T.gold}0E`,border:`1px solid ${T.gold}30`,borderRadius:8,fontFamily:FM,fontSize:10,color:T.gold,lineHeight:1.5}}>
-          ⚠ {Array.isArray(warnings)?warnings.join(" · "):String(warnings)}
+          <Icon name="warning" size={12} color={T.gold} style={{display:"inline-block",verticalAlign:"-2px",marginRight:4}}/>{Array.isArray(warnings)?warnings.join(" · "):String(warnings)}
         </div>}
         <div style={{padding:"10px 12px",background:`${T.gain}0E`,border:`1px solid ${T.gain}25`,borderRadius:8,fontFamily:FP,fontSize:11,color:T.text,lineHeight:1.5}}>
           ✓ Sharia pre-check: spot equity, no margin, no derivatives. Run the screener after placing if {sym} isn't classified yet.
@@ -4738,7 +4739,7 @@ function StrategyReality({strat}){
         </div>)}
       </div>
       {mismatch&&<div style={{padding:T.s3,background:T.lossBg,border:`1px solid ${T.loss}50`,borderRadius:T.rMd,marginBottom:T.s2}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.12em",fontWeight:600,marginBottom:4}}>⚠ TARGET MAY NOT BE REALISTIC</div>
+        <div style={{display:"flex",alignItems:"center",gap:4,fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.12em",fontWeight:600,marginBottom:4}}><Icon name="warning" size={12} color={T.loss}/>TARGET MAY NOT BE REALISTIC</div>
         <div style={{fontFamily:FP,fontSize:12,color:T.text,lineHeight:1.55,fontVariantNumeric:"tabular-nums"}}>
           Your target is <strong style={{color:T.loss}}>{target}%</strong>; historically this strategy achieved <strong style={{color:T.textHi}}>~{expectedRet.toFixed(1)}%</strong> over a comparable {Number(strat?.time_horizon_days)||0}-day period. Hitting your target would require materially more risk than the backtest shows — or may not be achievable at all.
         </div>
@@ -4904,9 +4905,9 @@ function HistoricalBacktest(){
 // The three execution layers. The bot's brain (screening, sizing, pricing) is
 // identical across all three — the layer only decides who pulls the trigger.
 const LAYER_META={
-  manual:{label:"Manual",short:"M",color:T.blue,icon:"🎯",blurb:"The bot screens your halal universe, picks the ticker, sizes the position from allocated capital, and posts a ready-to-go signal. Nothing executes until YOU tap Execute on each one. No push, no auto-fire."},
-  semi:{label:"Semi-auto",short:"S",color:T.gold,icon:"🤖",blurb:"The bot picks the full trade and sends you a push to approve. One tap approves and places it at your broker. Still never executes without your tap."},
-  full:{label:"Full-auto",short:"F",color:T.loss,icon:"⚡",blurb:"The bot picks AND executes autonomously within your stop-loss, max-drawdown, daily cap, and the Sharia gate. Requires the per-account AUTO ON toggle below — off by default even here."},
+  manual:{label:"Manual",short:"M",color:T.blue,icon:"target",blurb:"The bot screens your halal universe, picks the ticker, sizes the position from allocated capital, and posts a ready-to-go signal. Nothing executes until YOU tap Execute on each one. No push, no auto-fire."},
+  semi:{label:"Semi-auto",short:"S",color:T.gold,icon:"cpu",blurb:"The bot picks the full trade and sends you a push to approve. One tap approves and places it at your broker. Still never executes without your tap."},
+  full:{label:"Full-auto",short:"F",color:T.loss,icon:"bolt",blurb:"The bot picks AND executes autonomously within your stop-loss, max-drawdown, daily cap, and the Sharia gate. Requires the per-account AUTO ON toggle below — off by default even here."},
 };
 
 function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,snapAccounts=[],demoMode=false,onNav}){
@@ -5046,9 +5047,9 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
   // ── NON-ADMIN / DEMO VIEW ──────────────────────────────────────────────────
   if(!isAdmin||demoMode){
     const layers=[
-      {id:"manual",icon:"🎯",title:"Manual Control",desc:"The bot screens your halal universe, picks the ticker, sizes the position, and hands you a ready-to-go signal. You tap Execute on each — nothing fires on its own. Every order is AAOIFI-screened first.",badge:"Live Soon",badgeColor:T.blue},
-      {id:"semi",icon:"🤖",title:"Semi-Automatic",desc:"Same bot-picked signals, delivered as a push you approve. One tap places the trade at your broker — no trade executes without your tap.",badge:"Coming Soon",badgeColor:T.gold},
-      {id:"full",icon:"⚡",title:"Fully Automated",desc:"The bot picks AND executes autonomously within your strategy, stop-loss, daily caps, and Sharia gate. Per-account opt-in, off by default. Every execution is logged and push-notified.",badge:"Coming Soon",badgeColor:T.slate},
+      {id:"manual",icon:"target",title:"Manual Control",desc:"The bot screens your halal universe, picks the ticker, sizes the position, and hands you a ready-to-go signal. You tap Execute on each — nothing fires on its own. Every order is AAOIFI-screened first.",badge:"Live Soon",badgeColor:T.blue},
+      {id:"semi",icon:"cpu",title:"Semi-Automatic",desc:"Same bot-picked signals, delivered as a push you approve. One tap places the trade at your broker — no trade executes without your tap.",badge:"Coming Soon",badgeColor:T.gold},
+      {id:"full",icon:"bolt",title:"Fully Automated",desc:"The bot picks AND executes autonomously within your strategy, stop-loss, daily caps, and Sharia gate. Per-account opt-in, off by default. Every execution is logged and push-notified.",badge:"Coming Soon",badgeColor:T.slate},
     ];
     return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
       <BentoTile style={{textAlign:"center",padding:`${T.s8} ${T.s6}`}}>
@@ -5065,7 +5066,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:T.s4}}>
         {layers.map(l=><BentoTile key={l.id} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <span style={{fontSize:24}}>{l.icon}</span>
+            <Icon name={l.icon} size={24} color={l.badgeColor}/>
             <Tag label={l.badge} color={l.badgeColor}/>
           </div>
           <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi,letterSpacing:"0.02em"}}>{l.title}</div>
@@ -5109,13 +5110,13 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     <BentoTile accent={allPaused?T.loss:T.gain} style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s3}}>
       <div>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:4}}>AUTOMATION STATUS</div>
-        <div style={{fontFamily:FM,fontSize:14,fontWeight:600,color:allPaused?T.loss:T.gain}}>
-          {strategies.length===0?"No strategies configured":allPaused?"⏸ All automation paused":"▶ Automation running"}
+        <div style={{display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:14,fontWeight:600,color:allPaused?T.loss:T.gain}}>
+          {strategies.length===0?"No strategies configured":allPaused?<><Icon name="pause" size={14} color={T.loss}/>All automation paused</>:<><Icon name="play" size={14} color={T.gain}/>Automation running</>}
         </div>
       </div>
       <div style={{display:"flex",gap:T.s3,alignItems:"center"}}>
         {killSwitchMsg&&<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{killSwitchMsg}</span>}
-        {strategies.some(s=>s.enabled)&&<button onClick={activateKillSwitch} disabled={killSwitchBusy} style={{padding:`8px ${T.s4}`,borderRadius:T.rMd,border:`1px solid ${T.loss}60`,background:`${T.loss}15`,color:T.loss,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.08em",cursor:"pointer"}}>⏹ PAUSE ALL</button>}
+        {strategies.some(s=>s.enabled)&&<button onClick={activateKillSwitch} disabled={killSwitchBusy} style={{display:"inline-flex",alignItems:"center",gap:6,padding:`8px ${T.s4}`,borderRadius:T.rMd,border:`1px solid ${T.loss}60`,background:`${T.loss}15`,color:T.loss,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.08em",cursor:"pointer"}}><Icon name="stop" size={12} color={T.loss}/>PAUSE ALL</button>}
       </div>
     </BentoTile>
 
@@ -5135,7 +5136,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             background:on?`${m.color}14`:"transparent",
           }}>
             <div style={{display:"flex",alignItems:"center",gap:T.s2,width:"100%"}}>
-              <span style={{fontSize:18}}>{m.icon}</span>
+              <Icon name={m.icon} size={18} color={on?m.color:T.muted}/>
               <span style={{fontFamily:FM,fontSize:9,color:on?m.color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginLeft:"auto"}}>LAYER {n}</span>
             </div>
             <span style={{fontFamily:FM,fontSize:12,fontWeight:600,color:on?m.color:T.textHi}}>{m.label}</span>
@@ -5193,7 +5194,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         <StrategyReality strat={nlResult}/>
 
         {nlResult.risk_disclosure&&<div style={{marginTop:T.s3,padding:T.s3,background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.gold,lineHeight:1.6}}>
-          ⚠️ {nlResult.risk_disclosure}
+          <Icon name="warning" size={13} color={T.gold} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>{nlResult.risk_disclosure}
         </div>}
         <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer",margin:`${T.s3} 0`}}>
           <input type="checkbox" checked={riskAck} onChange={e=>setRiskAck(e.target.checked)} style={{marginTop:2}}/>
@@ -5301,7 +5302,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       <div onClick={()=>{setLayerModal(null);setLayerAck(false);}} style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:T.s4,background:"rgba(12,11,10,0.55)"}}>
         <div className="glass-strong" onClick={e=>e.stopPropagation()} style={{maxWidth:460,width:"100%",borderRadius:T.rLg,border:`1px solid ${m.color}40`,padding:T.s6}}>
           <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s3}}>
-            <span style={{fontSize:22}}>{m.icon}</span>
+            <Icon name={m.icon} size={22} color={m.color}/>
             <div>
               <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SWITCH EXECUTION LAYER</div>
               <div style={{fontFamily:FU,fontSize:20,fontWeight:700,color:m.color,letterSpacing:"-0.02em"}}>{m.label}</div>
@@ -5660,10 +5661,10 @@ Activity rows on file: ${activities.length}.`;
   // Suggested prompts presented as accent-colored bento cards. Each ties
   // to a different topic so the user can scan by domain.
   const prompts=[
-    {q:"What's my biggest concentration risk?",            cat:"Risk",       icon:"⚠",  color:T.loss},
+    {q:"What's my biggest concentration risk?",            cat:"Risk",       icon:"warning",color:T.loss},
     {q:"Recommend 3 Sharia-compliant ETFs to diversify",   cat:"Allocation", icon:"◆",  color:T.blue},
     {q:"Should I tax-loss harvest any positions?",         cat:"Tax",        icon:"$",  color:T.gold},
-    {q:"What's my projected Zakat for the year?",          cat:"Zakat",      icon:"⚖",  color:T.gold},
+    {q:"What's my projected Zakat for the year?",          cat:"Zakat",      icon:"scale",color:T.gold},
     {q:"How do I exit non-compliant positions efficiently?",cat:"Compliance",icon:"✓",  color:T.gain},
     {q:"Summarize my last 30 days of activity",            cat:"Activity",   icon:"≡",  color:T.blue},
   ];
@@ -5734,7 +5735,7 @@ Activity rows on file: ${activities.length}.`;
                   background:`${p.color}18`,color:p.color,
                   display:"flex",alignItems:"center",justifyContent:"center",
                   fontFamily:FM,fontSize:12,fontWeight:700,
-                }}>{p.icon}</span>
+                }}>{ICONS[p.icon]?<Icon name={p.icon} size={13} color={p.color}/>:p.icon}</span>
                 <span style={{fontFamily:FM,fontSize:9,color:p.color,letterSpacing:"0.16em",fontWeight:600,textTransform:"uppercase"}}>{p.cat}</span>
               </div>
               <span style={{color:T.textHi,fontWeight:500}}>{p.q}</span>
@@ -5802,7 +5803,7 @@ Activity rows on file: ${activities.length}.`;
         color:tokenNotice.kind==="err"?T.loss:T.gold,
         display:"flex",alignItems:"center",gap:T.s2,letterSpacing:"0.01em",
       }}>
-        <span style={{fontWeight:700}}>{tokenNotice.kind==="err"?"✕":"⚠"}</span>
+        <Icon name="warning" size={13} style={{display:"inline-block",verticalAlign:"-2px"}}/>
         <span>{tokenNotice.text}</span>
       </div>}
       <form onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:"1px solid var(--mz-glass-border)",padding:T.s3,display:"flex",gap:T.s2,background:"var(--mz-glass)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)"}}>
@@ -6340,11 +6341,11 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
         {isSupabaseConfigured
           ?<div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
             {onReplayOnboarding&&<button onClick={onReplayOnboarding} className="btn-ghost" title="Re-run the 5-step welcome tour">Replay tour</button>}
-            {settingsInstallEvt&&!settingsInstalled&&<button onClick={doSettingsInstall} className="btn-ghost" title="Install MĪZAN as a standalone app on this device">⬇ Install App</button>}
+            {settingsInstallEvt&&!settingsInstalled&&<button onClick={doSettingsInstall} className="btn-ghost" title="Install MĪZAN as a standalone app on this device" style={{display:"inline-flex",alignItems:"center",gap:6}}><Icon name="download" size={13}/>Install App</button>}
             <button onClick={async()=>{if(confirm("Sign out of MIZAN?"))await signOut();}} className="btn-danger">Sign out</button>
           </div>
           :<div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
-            {settingsInstallEvt&&!settingsInstalled&&<button onClick={doSettingsInstall} className="btn-ghost" title="Install MĪZAN as a standalone app">⬇ Install App</button>}
+            {settingsInstallEvt&&!settingsInstalled&&<button onClick={doSettingsInstall} className="btn-ghost" title="Install MĪZAN as a standalone app" style={{display:"inline-flex",alignItems:"center",gap:6}}><Icon name="download" size={13}/>Install App</button>}
             <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>Set VITE_SUPABASE_URL to enable accounts</span>
           </div>}
       </div>
@@ -7326,10 +7327,10 @@ function ConnectModal({onClose,snapId,onConnected}){
 /* ─── ABOUT ──────────────────────────────────────────── */
 function About(){
   const sections = [
-    { icon:"📊", t:"Portfolio",    accent:T.blue, d:"Holdings across 60+ brokerages via SnapTrade. Live Sharia screening against 7 AAOIFI-aligned standards with ratio analysis. Dividend purification log, tax-loss harvesting, backtesting, and per-holding news & earnings." },
-    { icon:"🏦", t:"Banking",      accent:T.gain, d:"Bank accounts and transactions via Plaid with cursor-based sync. Spending by category, budget management, bills calendar, and daily net worth snapshots." },
-    { icon:"🕌", t:"Zakat & Goals",accent:T.gold, d:"Live nisab calculation using real-time gold and silver spot prices. Per-dividend purification per AAOIFI guidelines. Goal templates for Hajj, Mahr, Waqf, Home, and FIRE." },
-    { icon:"🧠", t:"AI Advisor",   accent:T.violet, d:"Claude Sonnet-powered advisor with your full portfolio context and real-time prices injected. Islamic finance guardrails enforce Sharia-compliant guidance only." },
+    { icon:"chart", t:"Portfolio",    accent:T.blue, d:"Holdings across 60+ brokerages via SnapTrade. Live Sharia screening against 7 AAOIFI-aligned standards with ratio analysis. Dividend purification log, tax-loss harvesting, backtesting, and per-holding news & earnings." },
+    { icon:"bank", t:"Banking",      accent:T.gain, d:"Bank accounts and transactions via Plaid with cursor-based sync. Spending by category, budget management, bills calendar, and daily net worth snapshots." },
+    { icon:"mosque", t:"Zakat & Goals",accent:T.gold, d:"Live nisab calculation using real-time gold and silver spot prices. Per-dividend purification per AAOIFI guidelines. Goal templates for Hajj, Mahr, Waqf, Home, and FIRE." },
+    { icon:"spark", t:"AI Advisor",   accent:T.violet, d:"Claude Sonnet-powered advisor with your full portfolio context and real-time prices injected. Islamic finance guardrails enforce Sharia-compliant guidance only." },
   ];
   const principles = [
     ["Riba","No interest-bearing instruments. Cash accounts only. Margin and shorts blocked at the order layer."],
@@ -7387,7 +7388,7 @@ function About(){
         display:"flex",flexDirection:"column",gap:T.s2,
       }}>
         <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
-          <span style={{fontSize:28,lineHeight:1}}>{s.icon}</span>
+          <Icon name={s.icon} size={26} color={s.accent}/>
           <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:s.accent,letterSpacing:"0.18em"}}>{s.t.toUpperCase()}</span>
         </div>
         <div style={{fontFamily:FP,fontSize:14,color:T.text,lineHeight:1.6,letterSpacing:"-0.005em"}}>{s.d}</div>
@@ -8192,7 +8193,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         alignItems:"center",
         gap:T.s2,
       }}>
-        <span style={{fontSize:14}} aria-hidden="true">⚠️</span>
+        <Icon name="warning" size={14} aria-hidden="true"/>
         <span>This connection needs re-authorization. Click Re-authorize.</span>
       </div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s2}}>
@@ -10089,7 +10090,7 @@ export default function Mizan(){
 
       {/* Right: compact action toggles + sync */}
       <div className="mz-status-right" style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-        <button onClick={cycleTheme} title={`Theme: ${themeMode} (resolved: ${resolvedTheme}).`} style={{fontFamily:FM,fontSize:11,color:T.muted,padding:"5px 9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}>{themeMode==="auto"?(resolvedTheme==="dark"?"🌙":"☀"):themeMode==="dark"?"🌙":"☀"}</button>
+        <button onClick={cycleTheme} title={`Theme: ${themeMode} (resolved: ${resolvedTheme}).`} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",color:T.muted,padding:"5px 9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}><Icon name={(themeMode==="auto"?resolvedTheme:themeMode)==="dark"?"moon":"sun"} size={14}/></button>
         {(!hasRealData||demoMode)&&<button onClick={toggleDemo} title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
         <button onClick={()=>setAuto(v=>!v)} title={`Auto-sync ${auto?"on":"off"}`} style={{fontFamily:FM,fontSize:9,color:auto?T.gain:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:auto?`${T.gain}14`:"transparent",border:`1px solid ${auto?T.gain+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{auto?"AUTO":"AUTO"}</button>
         <button onClick={()=>setConn(true)} className="btn-ghost">+ Connect</button>
@@ -10102,7 +10103,7 @@ export default function Mizan(){
           const title=cooling?`Broker refresh on cooldown — try again in ${mins} min`:"Push a refresh signal to SnapTrade so balances + activity catch up to what your brokerage shows.";
           return<button onClick={forceRefresh} disabled={disabled} title={title} style={{fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.04em",padding:`7px ${T.s3}`,borderRadius:T.rMd,border:`1px solid ${cooling?T.border:T.gold+"40"}`,background:cooling?"transparent":`${T.gold}14`,color:disabled?T.muted:T.gold,cursor:disabled?"not-allowed":"pointer",transition:"all 0.15s"}}>{label}</button>;
         })()}
-        {installEvt&&!isInstalled&&<button onClick={doInstall} className="btn-ghost mz-hide-sm" title="Install MĪZAN as an app on this device" style={{fontFamily:FM,fontSize:9,letterSpacing:"0.06em"}}>⬇ Install</button>}
+        {installEvt&&!isInstalled&&<button onClick={doInstall} className="btn-ghost mz-hide-sm" title="Install MĪZAN as an app on this device" style={{display:"inline-flex",alignItems:"center",gap:5,fontFamily:FM,fontSize:9,letterSpacing:"0.06em"}}><Icon name="download" size={11}/>Install</button>}
         <button onClick={sync} disabled={fetching} className="btn-primary mz-status-sync">{fetching?"Syncing…":"Sync All"}</button>
       </div>
       {forceMsg&&<div style={{position:"absolute",top:"calc(env(safe-area-inset-top, 0px) + 50px)",right:T.s3,background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--mz-glass-shadow)",zIndex:101,maxWidth:340,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>{forceMsg.msg}</div>}
@@ -10150,7 +10151,7 @@ export default function Mizan(){
       boxShadow:"var(--mz-glass-shadow)",maxWidth:"calc(100vw - 32px)",
       animation:"glassFadeUp 0.25s cubic-bezier(.34,1.56,.64,1)",
     }}>
-      <span style={{fontSize:18,color:T.blue}}>⬆</span>
+      <Icon name="arrowUp" size={18} color={T.blue}/>
       <div style={{flex:1}}>
         <div style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,marginBottom:2}}>Install MĪZAN</div>
         <div style={{fontFamily:FP,fontSize:11,color:T.muted}}>Tap Share → "Add to Home Screen"</div>
@@ -10220,14 +10221,14 @@ export default function Mizan(){
         {id:"nav-portfolio",label:"Go to Portfolio",     group:"Navigate", hint:"g p", icon:"▣", action:()=>setNav("portfolio")},
         {id:"nav-finances", label:"Go to Finances",      group:"Navigate", hint:"g f", icon:"$", action:()=>setNav("finances")},
         {id:"nav-goals",    label:"Go to Goals",         group:"Navigate", hint:"g g", icon:"◉", action:()=>setNav("goals")},
-        {id:"nav-advisor",  label:"Go to AI Advisor",    group:"Navigate", hint:"g a", icon:"✦", action:()=>setNav("advisor")},
-        {id:"nav-settings", label:"Go to Settings",      group:"Navigate", hint:"g s", icon:"⚙", action:()=>setNav("settings")},
-        ...(isAdmin?[{id:"nav-trade",label:"Go to Trade",group:"Navigate",hint:"g t",icon:"⬡",action:()=>setNav("trade")}]:[]),
+        {id:"nav-advisor",  label:"Go to AI Advisor",    group:"Navigate", hint:"g a", icon:<Icon name="spark" size={14}/>, action:()=>setNav("advisor")},
+        {id:"nav-settings", label:"Go to Settings",      group:"Navigate", hint:"g s", icon:<Icon name="gear" size={14}/>, action:()=>setNav("settings")},
+        ...(isAdmin?[{id:"nav-trade",label:"Go to Trade",group:"Navigate",hint:"g t",icon:<Icon name="hexagon" size={14}/>,action:()=>setNav("trade")}]:[]),
         // Actions
         {id:"act-sync",     label:"Sync All",            group:"Actions",  hint:"r",   icon:"↻", action:()=>sync()},
         {id:"act-connect",  label:"Connect Account",     group:"Actions",  icon:"+",             action:()=>setConn(true)},
         {id:"act-demo",     label:demoMode?"Disable demo mode":"Enable demo mode", group:"Actions", icon:"◧", action:()=>toggleDemo()},
-        {id:"act-help",     label:"Keyboard shortcuts",  group:"Actions",  hint:"?",   icon:"⌨", action:()=>setShortcutHelpOpen(true)},
+        {id:"act-help",     label:"Keyboard shortcuts",  group:"Actions",  hint:"?",   icon:<Icon name="keyboard" size={14}/>, action:()=>setShortcutHelpOpen(true)},
       ]}
       onSelect={()=>{/* command.action already fired in the palette */}}
     />

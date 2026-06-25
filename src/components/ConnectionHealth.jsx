@@ -57,9 +57,9 @@ function relativeTime(iso) {
 
 function StatusPill({ status, errorCode }) {
   const map = {
-    ok:    { color: T.gain, label: "✓ Healthy" },
-    reauth:{ color: T.gold, label: errorCode === "DISABLED" ? "⚠ Disabled" : "⚠ Re-auth needed" },
-    error: { color: T.loss, label: "✗ Error" },
+    ok:    { color: T.gain, label: "Healthy" },
+    reauth:{ color: T.gold, label: errorCode === "DISABLED" ? "Disabled" : "Re-auth needed" },
+    error: { color: T.loss, label: "Error" },
   };
   const hit = map[status] || map.error;
   return (
