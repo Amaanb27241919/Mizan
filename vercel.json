@@ -29,7 +29,7 @@
     },
     {
       "path": "/api/cron/bot-signals",
-      "schedule": "0 14 * * 1-5"
+      "schedule": "*/15 13-20 * * 1-5"
     }
   ],
   "rewrites": [
