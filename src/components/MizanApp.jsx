@@ -4772,6 +4772,8 @@ function StrategyProgressCard({strat}){
   const daysElapsed=p&&p.days_elapsed!=null?Number(p.days_elapsed):null;
   const daysHorizon=p&&p.days_horizon!=null?Number(p.days_horizon):(Number(strat?.time_horizon_days)||null);
   const trades=p&&p.trades_executed!=null?Number(p.trades_executed):null;
+  const realized=p&&p.realized_pnl!=null?Number(p.realized_pnl):null;
+  const closedCount=p&&p.closed_count!=null?Number(p.closed_count):0;
   const noData=current==null&&pctToTarget==null&&trades==null;
   const lyr=["manual","semi","full"].includes(strat.params?.layer)?strat.params.layer:(strat.mode==="full"?"full":"semi");
   const lyrColor=lyr==="full"?T.loss:lyr==="semi"?T.gold:T.blue;
@@ -4814,6 +4816,10 @@ function StrategyProgressCard({strat}){
         <span>{daysElapsed!=null?`Day ${daysElapsed}`:"Day —"}{daysHorizon!=null?` of ${daysHorizon}`:""}</span>
         <span>{trades!=null?`${trades} trade${trades===1?"":"s"} executed`:"— trades"}</span>
       </div>
+      {realized!=null&&closedCount>0&&<div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
+        <span style={{color:T.muted}}>Realized ({closedCount} closed)</span>
+        <span style={{color:fc(realized),fontWeight:600}}>{`${realized>=0?"+":"−"}${f$(realized,0)}`}</span>
+      </div>}
     </>}
   </BentoTile>;
 }
@@ -5008,7 +5014,17 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     }catch{}finally{setLoadingSignals(false);}
   },[]);
 
-  useEffect(()=>{if(isAdmin&&!demoMode){loadStrategies();loadSignals();if(fullAutoEnabled)loadFaAccounts();}},[isAdmin,demoMode,fullAutoEnabled,loadStrategies,loadSignals,loadFaAccounts]);
+  // Realized-P&L ledger (closed round-trips across all strategies).
+  const[ledger,setLedger]=useState(null);
+  const loadLedger=useCallback(async()=>{
+    try{
+      const r=await apiFetch("/api/bot/trades");
+      const d=await r.json();
+      if(r.ok)setLedger(d);
+    }catch{}
+  },[]);
+
+  useEffect(()=>{if(isAdmin&&!demoMode){loadStrategies();loadSignals();loadLedger();if(fullAutoEnabled)loadFaAccounts();}},[isAdmin,demoMode,fullAutoEnabled,loadStrategies,loadSignals,loadLedger,loadFaAccounts]);
 
   const activateKillSwitch=async()=>{
     if(!window.confirm("Pause ALL bot automation? No signals will execute until you re-enable strategies."))return;
@@ -5062,7 +5078,8 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
 
   const approveSignal=async(id)=>{
     await apiFetch(`/api/bot/signals/${id}/approve`,{method:"POST"});
-    await loadSignals();
+    // A filled signal may have closed a position — refresh strategies + ledger too.
+    await Promise.all([loadSignals(),loadStrategies(),loadLedger()]);
   };
   const rejectSignal=async(id)=>{
     await apiFetch(`/api/bot/signals/${id}/reject`,{method:"POST"});
@@ -5334,6 +5351,46 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         {strategies.filter(s=>s.enabled).map(s=><StrategyProgressCard key={s.id} strat={s}/>)}
       </div>
     </div>}
+
+    {/* Realized P&L ledger — closed round-trips across all strategies. The
+        "did Trade actually make money" answer, which the open-position cards lose
+        once a position is fully sold. Shows only once there's a closed trade. */}
+    {showStrat&&ledger&&ledger.closed_count>0&&(()=>{
+      const net=Number(ledger.realized_pnl)||0;
+      const pos=net>=0;
+      return<BentoTile accent={pos?T.gain:T.loss} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s2}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>REALIZED P&L · CLOSED TRADES</div>
+          <button onClick={loadLedger} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>Refresh</button>
+        </div>
+        <div style={{display:"flex",gap:T.s6,flexWrap:"wrap",alignItems:"baseline"}}>
+          <div>
+            <div style={{fontFamily:FU,fontSize:30,fontWeight:700,color:fc(net),letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{`${pos?"+":"−"}${f$(net,0)}`}</div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",marginTop:2}}>NET REALIZED</div>
+          </div>
+          <div style={{display:"flex",gap:T.s4,fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
+            <span><span style={{color:T.textHi,fontWeight:600}}>{ledger.closed_count}</span> closed</span>
+            <span><span style={{color:T.gain,fontWeight:600}}>{ledger.wins}</span>W · <span style={{color:T.loss,fontWeight:600}}>{ledger.losses}</span>L</span>
+            {ledger.win_rate!=null&&<span><span style={{color:T.textHi,fontWeight:600}}>{ledger.win_rate}%</span> win rate</span>}
+          </div>
+        </div>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5}}>Realized from filled buy→sell round-trips (average-cost basis on signal fill price — approximate, no lot-level basis from the broker). Open positions are tracked separately above.</div>
+        <div style={{display:"flex",flexDirection:"column"}}>
+          {ledger.trades.slice(0,8).map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s2} 0`,borderTop:i===0?"none":`1px solid ${T.border}`,fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
+            <div style={{display:"flex",gap:T.s2,alignItems:"center",minWidth:160}}>
+              <span style={{fontWeight:600,color:T.textHi}}>{t.ticker}</span>
+              <span style={{color:T.muted}}>{t.qty} sh · {f$(t.entry)}→{f$(t.exit)}</span>
+            </div>
+            <div style={{display:"flex",gap:T.s3,alignItems:"center"}}>
+              <span style={{color:fc(t.realized),fontWeight:600}}>{`${t.realized>=0?"+":"−"}${f$(t.realized,0)}`}</span>
+              <span style={{color:fc(t.realized)}}>({t.realized>=0?"+":""}{t.realized_pct}%)</span>
+              <span style={{color:T.muted,fontSize:10}}>{t.closed_at?new Date(t.closed_at).toLocaleDateString():"—"}</span>
+            </div>
+          </div>)}
+          {ledger.trades.length>8&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,paddingTop:T.s2}}>+{ledger.trades.length-8} more closed trade{ledger.trades.length-8===1?"":"s"}</div>}
+        </div>
+      </BentoTile>;
+    })()}
 
     {/* Strategy List */}
     {showStrat&&<BentoTile>
