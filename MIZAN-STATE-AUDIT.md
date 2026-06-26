@@ -3,6 +3,8 @@
 > **Living document.** Re-run every few weeks to track drift between what's built and what's deployed.
 > Last audited: 2026-06-25 (updated) · All findings from direct file reads, no guessing.
 >
+> **2026-06-25 session changes**: (1) **Trading Bot opened to beta users** — migration `022_trading_bot_beta` adds `profiles.trading_bot_enabled` (allowlist, default false, independent of `is_root`) + `profiles.trading_bot_consent_at`. `canUseTradingBot()` = root OR `trading_bot_enabled`; `is_root` still solely gates admin/keys/anomaly. **Full-auto is now root-only and unreachable for beta users** (server rejects `403 full_auto_root_only` on create/edit + per-account opt-in PATCH). **First-use consent gate** (`POST /api/bot/consent`, experimental/not-an-RIA/not-advice) blocks strategy-create / signal-approve / order-place for non-root until accepted; UI hides the builder behind a consent card and shows only Manual/Semi layers. `/api/user/features` now returns `is_root` + `trading_bot_consented`. (2) **In-place strategy editing** — `PATCH /api/bot/strategies/:id` now edits ticker/account/type/universe + all risk params (was create-only), re-enforces the stop-loss gate and read-modify-writes `params`; new pre-filled Edit modal in the UI. (3) **Realized-P&L ledger** — `botRealizedPnl()` (per-ticker avg-cost walk over executed signals) + `GET /api/bot/trades` (aggregate realized + win rate + closed round-trips); new "REALIZED P&L · CLOSED TRADES" tile + per-strategy realized line. (4) **Overview hero relabeled** "Total Portfolio Value" → **"Net Worth"** (it computes net worth, collided with Portfolio's holdings-only "Market Value"). (5) **First-run fixes** — `demoMode` now **defaults OFF** (new users see real $0 + Welcome card, not the demo persona's ~$41M; demo is opt-in via `mizan_demo=1`); onboarding **CSV/document step removed** (Welcome·Connect·AI·Done); new connection **immediately** `fetchSnapHoldings()` so every tab updates even with zero holdings. (6) **CRON OUTAGE FIXED** — `CRON_SECRET` was never set in Vercel (a typo'd `CRON_SECRE` existed), so the fail-closed `cronUnauthorized()` 401'd **every** cron — nothing ran for the app's life (empty `cron_jobs`, zero `cron.*` audit rows, `cron.stale` alert). Set `CRON_SECRET` in Vercel Production → crons live. Also fixed: bot-signals cron 500'd on `.catch is not a function` (×3 Supabase-builder `.catch()` misuses — expire/reset/dividend-notif), and `cron.sync` success now writes an `audit({action:"cron.sync"})` row so the staleness detector + admin "last sync" have a real signal. NEW ENV (now set): `CRON_SECRET`. (7) **whats-new-banner** project skill added (curates the landing ticker after a commit).
+>
 > **2026-06-24 session changes**: (1) **Trading Bot** — strategies now SCREEN a halal universe and PICK the ticker (cron `screenSymbol` over `params.universe_tickers` / `HALAL_UNIVERSE_DEFAULT`), size from capital, price from market; buys only from screener, sells only from the exit engine (no shorting); one open position per strategy; exit engine quotes the held ticker. Three layers (manual/semi/full) are now a **per-strategy** choice (`params.layer`, no migration — DB `mode` derived) switched via an inline selector behind an **ack gate**. Order Ticket reframed as ad-hoc manual override. (2) **Sharia screening unified** — new `lib/sharia.mjs` provider seam (Finnhub now, **Zoya** when `ZOYA_API_KEY` set) + `GET/POST /api/screen`; `h.sh_` now flows from the live verdict (`shariaScreen` state via a root effect) with `SHARIA_MAP` only as pre-load fallback, so Screener / Overview compliance / Rebalancer halal-mode / Purification all read ONE verdict. Purification uses a screen-derived non-permissible-income % when the provider supplies it (Zoya). NEW ENV: `ZOYA_API_KEY` (+ optional `ZOYA_API_BASE`) — not yet provisioned.
 >
 > **2026-06-17 session changes**: Range-aware portfolio gains (1D/1W/1M/3M/YTD/1Y/All); real chart axes (XAxis months+year, YAxis $0→auto); Activity net-flow + range label; TaxPlanner normSym() helper; Screener cache freshness dot; fake sparkline replaced with position count + cost basis. CLAUDE.md rewritten to elite engineering brief (17 sections). Session hooks added (.claude/settings.json) — build check on edit, auto-update audit date on Stop.
@@ -40,7 +42,7 @@
 - **Support libs**: `lib/alerts.mjs`, `lib/anomaly.mjs`, `lib/crypto.mjs`, `lib/fetchWithRetry.mjs`, `lib/logger.mjs`, `lib/notify.mjs`, `lib/rateLimit.mjs`, `lib/sentry.mjs`
 
 ### Database (Supabase / PostgreSQL)
-19 migrations — all sequential (011 gap was patched):
+22 migrations — all sequential (011 gap was patched). Bot tables (020–022) added in the 2026-06-24/25 sessions:
 
 | Table | Key Columns | RLS | Notes |
 |-------|-------------|-----|-------|
@@ -61,6 +63,10 @@
 | `goals` | id, user_id, name, target_amount, target_date, account_ids[], track_mode, manual_progress | ✅ Full CRUD | |
 | `security_events` | id, ip, event_type, user_id, metadata, created_at | ✅ **No client policy** | **NEW (mig 018)** — DB-backed IP blocks replacing in-memory Map |
 | `purification_ratios` | id, ticker, impurity_pct, source, updated_at | ✅ SELECT public | **NEW (mig 019)** — AAOIFI impurity % per ETF; seeded with SPUS/HLAL/UMMA/SPSK/SPRE/SPTE/AMAGX/AMANX |
+| `bot_strategies` | id, user_id, ticker, account_id, strategy_type, params jsonb (layer, universe_tickers, entry/exit rules), mode, capital_allocated, profit_target_pct, stop_loss_pct, max_drawdown_pct, time_horizon_days, max_trades_per_day, enabled | owner-gated | **NEW (mig 020)** — owner/beta trading-bot strategies; `params.layer` is the user-facing execution layer, DB `mode` is the full-auto safety gate |
+| `pending_signals` | id, user_id, strategy_id, ticker, side, qty, suggested_price, status (pending/approved/executed/expired/rejected), executed_at, expires_at, error_msg | owner-gated | **NEW (mig 020)** — bot BUY/SELL signals; executed rows ARE the realized-P&L ledger (`botRealizedPnl`) |
+| `account_full_auto` | (user_id, account_id) PK, enabled (default false), updated_at | owner-only RLS | **NEW (mig 021)** — per-account Layer-3 opt-in; third gate of the full-auto triple-gate (root + master switch + this). PATCH now root-only |
+| `profiles` (+cols) | …, `trading_bot_enabled` (default false), `trading_bot_consent_at` | ✅ SELECT own | **NEW cols (mig 022)** — beta bot allowlist (independent of `is_root`) + first-use consent timestamp |
 
 **RLS functions (service-role only):**
 - `increment_rate_limit(user_id, window_key, max)` — atomic upsert rate counter
@@ -258,14 +264,14 @@ No hardcoded secrets found in any source file. All keys read from `process.env`.
 - 6 Vercel cron jobs
 - Service worker / PWA install
 - Sentry error tracking (frontend + backend)
-- All 19 Supabase migrations (assuming applied in prod)
+- All 22 Supabase migrations (020–022 applied in prod via MCP this session)
 
 ### Built but NOT Live in UI
 - **Order Ticket**: UI code exists in `MizanApp.jsx` but is wrapped in `{false && ...}` (hardcoded dead code). Clicking the tab shows a `<ComingSoon>` tile. Two separate gates to remove before it renders.
 - **Alpaca paper trading UI** and **SnapTrade live trading UI**: Both backend API routes fully deployed; no UI path reaches them.
 
 ### Demo Mode
-When no real accounts are connected, the app auto-populates from `DEMO_ACCOUNTS`, `DEMO_BANK_ACCOUNTS`, `DEMO_TRANSACTIONS`, `DEMO_ACTIVITIES`, `DEMO_MANUAL_ASSETS`, `DEMO_SADAQAH`, `DEMO_SHARIA`, `DEMO_PURIFICATION_ITEMS` — a rich 8-figure demo persona. All demo data is hardcoded inside `MizanApp.jsx`.
+A rich 8-figure demo persona lives in hardcoded `DEMO_ACCOUNTS`, `DEMO_BANK_ACCOUNTS`, `DEMO_TRANSACTIONS`, `DEMO_ACTIVITIES`, `DEMO_MANUAL_ASSETS`, `DEMO_SADAQAH`, `DEMO_SHARIA`, `DEMO_PURIFICATION_ITEMS` inside `MizanApp.jsx`. **As of 2026-06-25 demo is OPT-IN, not the default** — `demoMode` initializes from `localStorage.mizan_demo==="1"` only; a new/connection-less user sees their real **$0 + Welcome/Connect** state, never the demo's ~$41M as their net worth. The DEMO toggle (shown while `!hasRealData || demoMode`) flips `mizan_demo` and `fetchSnapHoldings` swaps in/out `DEMO_ACCOUNTS` via the `[demoMode]` effect. (Previously demo defaulted ON for any user without real data, which routed the demo book into the net-worth headline — that was the "$0 → $41M" bug.)
 
 ### Backend Endpoints with No Active Frontend Caller
 - `/api/alpaca/orders` (GET), `/api/alpaca/positions` (GET) — exist in handlers, no component fetches them
@@ -437,6 +443,8 @@ Zero unit tests, zero integration tests, zero E2E tests. Every change is verifie
 ---
 
 ### Things Found Broken or Half-Wired
+
+0. **[RESOLVED 2026-06-25] Crons never ran for the app's life.** `CRON_SECRET` was never set in Vercel (a typo'd `CRON_SECRE` had been created). The fail-closed `cronUnauthorized()` (`!CRON_SECRET || bearer mismatch`) therefore 401'd every `/api/cron/*` invocation — empty `cron_jobs`, zero `cron.*` audit rows, recurring `cron.stale` high alert. **Fix: set `CRON_SECRET` in Vercel Production** (Vercel only auto-attaches the cron `Authorization: Bearer` header when that exact var exists). Two code bugs surfaced once crons finally ran and are also fixed: (a) bot-signals 500'd on `.catch is not a function` — three Supabase filter builders chained `.catch()` (which builders don't have); (b) `cron.sync` logged success via `info()` but never wrote an audit row, so the staleness detector + admin "last sync" always read Infinity → now writes `audit({action:"cron.sync"})`. **Watch-outs:** Vercel **Redeploy** reuses the original deployment's env snapshot — a *fresh git build* is required to bind a newly-added env var; and the env-name typo class (`CRON_SECRE`) is silent because nothing reads it.
 
 1. **Order Ticket is double-gated.** The tab renders `<ComingSoon>` for all users. The real UI code is also wrapped in `{false && sub==="order" && ...}` (hardcoded dead code). To re-enable, both the `<ComingSoon>` render AND the `{false && ...}` wrappers must be removed. The backend (`/api/alpaca/order`, `/api/snaptrade/trade/*`) is fully deployed and ready.
 

@@ -22,7 +22,7 @@
 ```
 Frontend:  React 18 (JSX, not TypeScript) · Vite 5 · Recharts · Single-file SPA
 Backend:   Node.js ESM · Vercel serverless (api/[...path].mjs) · lib/handlers.mjs
-Database:  Supabase (PostgreSQL + Auth + RLS) · 19 migrations applied
+Database:  Supabase (PostgreSQL + Auth + RLS) · 22 migrations applied
 Hosting:   Vercel (team: mizan-s-projects2) · prod URL: mizan-puce.vercel.app
 External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alpaca (paper)
 ```
@@ -64,7 +64,7 @@ lib/sentry.mjs                 — Sentry backend init
 server.js                      — Dev server (Vite middleware + API on :3000)
 ```
 
-### Database (19 Migrations — all applied in prod)
+### Database (22 Migrations — all applied in prod)
 ```
 001_init.sql                   — Core tables: user_snaptrade, user_state, user_keys, profiles
 002_plaid.sql                  — plaid_tokens, plaid_accounts, plaid_transactions
@@ -85,6 +85,9 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 017_drop_plaintext_secrets.sql — Dropped plaintext secret columns (AES-256-GCM only now)
 018_security_events.sql        — security_events table (DB-backed IP blocks)
 019_purification.sql           — purification_ratios table (AAOIFI impurity %)
+020_trading_bot.sql            — bot_strategies + pending_signals (owner/beta trading bot)
+021_full_auto_per_account.sql  — account_full_auto (per-account Layer-3 opt-in, default false)
+022_trading_bot_beta.sql       — profiles.trading_bot_enabled (beta allowlist) + trading_bot_consent_at
 ```
 
 ---
@@ -391,6 +394,7 @@ These are documented constraints, not undiscovered issues:
 | Alpaca | Paper trading | `ALPACA_KEY_ID`, `ALPACA_SECRET` | Paper only — no production keys |
 | Supabase | DB + Auth | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Paid plan |
 | Resend | Owner alert emails | `RESEND_API_KEY` | Anomaly alerts only — no user emails |
+| Vercel Cron | Scheduled jobs auth | `CRON_SECRET` | **Required.** `cronUnauthorized()` is fail-closed (`!CRON_SECRET` → all crons 401). Vercel auto-attaches `Authorization: Bearer $CRON_SECRET` to cron paths ONLY when this exact var is set. Set in Vercel Prod 2026-06-25 after it was missing (crons hadn't run). Note: a Vercel **Redeploy** reuses the old env snapshot — bind new env vars with a fresh git build. |
 | Sentry | Error tracking | `VITE_SENTRY_DSN`, `SENTRY_DSN` | Frontend + backend, v10.52 |
 | Web Push | Push notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | VAPID, per-device subscriptions |
 
@@ -411,7 +415,7 @@ These are documented constraints, not undiscovered issues:
 
 ## 13. DEMO MODE
 
-When no accounts are connected, the app shows a rich 8-figure demo persona (Muslim professional, diversified halal portfolio). All demo data is hardcoded arrays inside MizanApp.jsx:
+**Demo is OPT-IN, not the default (changed 2026-06-25).** `demoMode` initializes from `localStorage.mizan_demo==="1"` only — a new or connection-less user sees their **real $0 + Welcome/Connect** state, never the demo persona as their net worth. The DEMO toggle (visible while `!hasRealData || demoMode`) flips `mizan_demo`; `fetchSnapHoldings` swaps `DEMO_ACCOUNTS` in/out via the `[demoMode]` effect. Do NOT restore demo-by-default — routing the demo's ~$41M into a real user's net-worth headline was a reported bug. When opted in, the app shows a rich 8-figure demo persona (Muslim professional, diversified halal portfolio). All demo data is hardcoded arrays inside MizanApp.jsx:
 
 ```javascript
 DEMO_ACCOUNTS        // SnapTrade brokerage accounts
