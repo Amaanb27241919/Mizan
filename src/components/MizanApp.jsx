@@ -6554,8 +6554,13 @@ function SessionsPanel(){
   </div>;
 }
 
-function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[],onNav}){
+function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[],onNav}){
   const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
+  // Live-trading opt-in preference. "" = undecided, "enabled" = bot may place
+  // real orders, "declined" = user turned it off. Mirrored to localStorage +
+  // Supabase user_state so the choice follows the user across devices.
+  const[tradeOptin,setTradeOptin]=useState(()=>{try{return localStorage.getItem("mizan_trade_optin")||"";}catch{return"";}});
+  const setTradePref=v=>{setTradeOptin(v);try{localStorage.setItem("mizan_trade_optin",v);}catch{}persistUserState("mizan_trade_optin",v);};
   const[keys,setKeys]=useState({...apiKeys});
   const[saved,setSaved]=useState(false);
   // Non-root accounts never see the API Keys page — those keys belong on
@@ -6739,6 +6744,36 @@ function Settings({apiKeys,setApiKeys,onConnect,onImportCSV,onDedupeCSV,onRetagC
           })}
         </div>
       </BentoTile>
+
+      {/* ─── Live Trading opt-in (trading-bot users only) ─── */}
+      {isAdmin&&(()=>{
+        const on=tradeOptin==="enabled";
+        return<BentoTile accent={on?T.gold:null} style={on?{background:`linear-gradient(135deg, ${T.gold}0F, transparent 60%), ${T.card}`}:undefined}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
+            <div style={{maxWidth:560}}>
+              <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s2,flexWrap:"wrap"}}>
+                <span style={{fontFamily:FM,fontSize:10,color:on?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600}}>LIVE TRADING</span>
+                <Tag label={on?"Enabled":"Off"} color={on?T.gold:T.muted}/>
+              </div>
+              <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55}}>
+                Enabling lets the trading bot place <strong style={{color:T.text}}>real orders</strong> in your brokerage. This requires reconnecting your brokerage with trade permission — a read-only connection cannot execute trades. You can turn this off at any time.
+              </p>
+            </div>
+            <button onClick={()=>setTradePref(on?"declined":"enabled")} style={{
+              padding:`8px ${T.s4}`,borderRadius:T.rMd,
+              fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",
+              background:on?`${T.gold}22`:"transparent",
+              border:`1px solid ${on?T.gold+"50":T.border}`,
+              color:on?T.gold:T.text,
+              cursor:"pointer",flexShrink:0,transition:"all 0.15s",
+            }}>{on?"Turn off":"Enable trading"}</button>
+          </div>
+          {on&&<div style={{marginTop:T.s4,paddingTop:T.s4,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,flexWrap:"wrap"}}>
+            <span style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>Reconnect a brokerage with trade permission to activate live orders.</span>
+            <button onClick={onConnectTrade} className="btn-primary" style={{flexShrink:0,background:`linear-gradient(135deg, ${T.gold}, ${T.gold}CC)`,boxShadow:`0 2px 10px ${T.gold}55`}}>+ Connect brokerage for trading</button>
+          </div>}
+        </BentoTile>;
+      })()}
 
       {/* CSV import for historical backfill */}
       <CSVImporter onImport={onImportCSV} onDedupe={onDedupeCSV} onRetag={onRetagCSV}/>
@@ -7147,8 +7182,38 @@ function AdminPanel(){
   const[busy,setBusy]=useState(false);
   const[err,setErr]=useState(null);
   const[dbStatus,setDbStatus]=useState(null);
+  // Per-job run state for the Maintenance panel: {job:{status,code,msg}}.
+  const[cronRun,setCronRun]=useState({});
 
   const PAGE=50;
+
+  // Cron jobs the /api/admin/run-cron endpoint accepts, with display labels.
+  const CRON_JOBS=[
+    ["sync","SnapTrade sync"],
+    ["cleanup","Data cleanup"],
+    ["nightly-snapshot","Net-worth snapshot"],
+    ["dividend-check","Dividend check"],
+    ["bill-reminders","Bill reminders"],
+    ["weekly-digest","Weekly digest"],
+    ["bot-signals","Bot signals"],
+  ];
+
+  const runCron=async job=>{
+    setCronRun(p=>({...p,[job]:{status:"running"}}));
+    try{
+      const r=await apiFetch("/api/admin/run-cron",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({job})});
+      let d=null;try{d=await r.json();}catch{}
+      if(!r.ok||!d?.ok){
+        const msg=d?.error?(typeof d.error==="string"?d.error:JSON.stringify(d.error)):`HTTP ${r.status}`;
+        setCronRun(p=>({...p,[job]:{status:"error",msg}}));
+        return;
+      }
+      setCronRun(p=>({...p,[job]:{status:"ok",code:d.cronStatus}}));
+      load();
+    }catch(e){
+      setCronRun(p=>({...p,[job]:{status:"error",msg:e?.message||"Network error"}}));
+    }
+  };
 
   const load=useCallback(async()=>{
     setBusy(true);setErr(null);
@@ -7207,6 +7272,44 @@ function AdminPanel(){
       </div>
     </BentoTile>}
 
+    {/* ─── Maintenance · Cron Jobs ───────────────── */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>MAINTENANCE · CRON JOBS</span>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.06em"}}>{busy?"Loading status…":"Run a job on demand"}</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:T.s3}}>
+        {CRON_JOBS.map(([job,label])=>{
+          const run=cronRun[job]||{};
+          const last=dbStatus?.cron?.[`cron.${job}`];
+          const running=run.status==="running";
+          return<div key={job} style={{background:T.surface,border:`1px solid ${run.status==="error"?T.loss+"40":run.status==="ok"?T.gain+"40":T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`,display:"flex",flexDirection:"column",gap:T.s2}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s2}}>
+              <div>
+                <div style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{label}</div>
+                <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{job}</div>
+              </div>
+              <button onClick={()=>runCron(job)} disabled={running} style={{
+                padding:`4px ${T.s3}`,borderRadius:T.rSm,
+                background:running?"transparent":`${T.blue}14`,
+                border:`1px solid ${running?T.border:T.blue+"40"}`,
+                color:running?T.muted:T.blue,
+                cursor:running?"default":"pointer",opacity:running?0.6:1,
+                fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",flexShrink:0,
+              }}>{running?"Running…":"Run now"}</button>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap",minHeight:18}}>
+              {run.status==="ok"&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontFamily:FM,fontSize:10,color:T.gain,fontVariantNumeric:"tabular-nums"}}><Icon name="check" size={11}/>HTTP {run.code}</span>}
+              {run.status==="error"&&<span style={{fontFamily:FM,fontSize:10,color:T.loss,lineHeight:1.4}}>{ICON_NO}{run.msg}</span>}
+              {!run.status&&(last?.created_at
+                ?<span style={{fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums"}}>Last run {fmtDate(last.created_at)}{Number.isFinite(last.hours_ago)?` · ${last.hours_ago}h ago`:""}</span>
+                :<span style={{fontFamily:FM,fontSize:10,color:T.dim}}>No recent run recorded</span>)}
+            </div>
+          </div>;
+        })}
+      </div>
+    </BentoTile>
+
     {/* ─── Sub-tabs ──────────────────────────────── */}
     <TabBar tabs={[["users","Users"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
 
@@ -7259,7 +7362,8 @@ function AdminPanel(){
 }
 
 /* ─── CONNECT MODAL ──────────────────────────────────── */
-function ConnectModal({onClose,snapId,onConnected}){
+function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
+  const isTrade = connectionType==="trade";
   const [step, setStep] = useState("select");
   const [sel,  setSel]  = useState(null);
   const [url,  setUrl]  = useState("");
@@ -7345,7 +7449,7 @@ function ConnectModal({onClose,snapId,onConnected}){
       const r = await apiFetch("/api/snaptrade/login", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({broker: b.id, connectionType: "read"})
+        body: JSON.stringify({broker: b.id, connectionType})
       });
       let d = null;
       try { d = await r.json(); } catch {}
@@ -7401,8 +7505,9 @@ function ConnectModal({onClose,snapId,onConnected}){
                : step==="error" ? "Connection Failed"
                : "Connect Account"}
             </div>
-            <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:2}}>
-              {step==="iframe" ? "Your credentials go directly to your broker"
+            <div style={{fontFamily:FP,fontSize:11,color:isTrade?T.gold:T.muted,marginTop:2}}>
+              {isTrade ? "Trade-enabled connection — the bot may place real orders"
+               : step==="iframe" ? "Your credentials go directly to your broker"
                : "Powered by SnapTrade OAuth"}
             </div>
           </div>
@@ -9314,6 +9419,10 @@ export default function Mizan(){
   const[fetching,setFetch]=useState(false);
   const[lastSync,setSync]=useState(null);
   const[showConn,setConn]=useState(false);
+  // Brokerage connect scope: "read" (default, everywhere) vs "trade" (live
+  // trading opt-in, gated to trading-bot users). Reset to "read" on close so
+  // the next default connect is never accidentally trade-enabled.
+  const[connMode,setConnMode]=useState("read");
   // Hydrate from cache so refresh / new tab loads instantly with last-known state.
   const[snapAccounts,setSnapAccounts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_accounts_cache")||"[]");}catch{return[];}});
   const[snapActivities,setSnapActivities]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]");}catch{return[];}});
@@ -10432,7 +10541,7 @@ export default function Mizan(){
           bankBalance={bankBalance}
         />}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>setConn(true)} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} onNav={setNav}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>{setConnMode("read");setConn(true);}} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} onNav={setNav}/>}
       </div>
     </main>
 
@@ -10486,7 +10595,7 @@ export default function Mizan(){
       })}
     </nav>
 
-    {showConn&&<ConnectModal onClose={()=>setConn(false)} snapId={apiKeys.snapId} onConnected={()=>{
+    {showConn&&<ConnectModal onClose={()=>{setConn(false);setConnMode("read");}} snapId={apiKeys.snapId} connectionType={connMode} onConnected={()=>{
       // Pull the new account into state IMMEDIATELY so every tab/sub-tab reflects
       // it right away — even a cash-only account with zero holdings. forceRefresh
       // then asks the broker to re-pull positions (which can lag ~15-30s).
