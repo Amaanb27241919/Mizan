@@ -9912,25 +9912,22 @@ export default function Mizan(){
   // symbols. Falls back to a small market-bellwether set ONLY when the
   // user has no connections at all, so first-load Markets still has
   // something to render. NEVER seeded from the owner's HOLDINGS sample.
+  // Recomputes whenever holdings or the watchlist change so a freshly-added
+  // watchlist ticker enters the next price sync (previously frozen at mount,
+  // which left new symbols showing "—" until a full page reload).
   const tickers=useMemo(()=>{
     const set=new Set();
-    try{
-      const cached=JSON.parse(localStorage.getItem("mizan_accounts_cache")||"[]");
-      cached.forEach(a=>(a.positions||[]).forEach(p=>{
-        const t=p?.symbol?.symbol||p?.symbol;
-        if(typeof t==="string"&&t)set.add(t);
-      }));
-    }catch{}
-    try{
-      const wl=JSON.parse(localStorage.getItem("mizan_watchlist")||"[]");
-      wl.forEach(w=>w?.symbol&&set.add(w.symbol));
-    }catch{}
+    snapAccounts.forEach(a=>(a.positions||[]).forEach(p=>{
+      const t=p?.symbol?.symbol||p?.symbol;
+      if(typeof t==="string"&&t)set.add(t);
+    }));
+    watchlist.forEach(w=>w?.symbol&&set.add(w.symbol));
     if(set.size===0){
       // Generic market bellwethers — not user data.
       ["SPY","QQQ","AAPL","MSFT","NVDA"].forEach(t=>set.add(t));
     }
     return[...set];
-  },[]);
+  },[snapAccounts,watchlist]);
   const isLive=live.length>0;
 
   const sync=useCallback(async()=>{
@@ -9962,6 +9959,14 @@ export default function Mizan(){
   // Keep a stable ref to sync so pull-to-refresh can call it without
   // re-registering touch listeners every time sync changes.
   useEffect(()=>{syncRef.current=sync;},[sync]);
+  // Fetch live prices on mount and whenever the tracked-symbol set changes
+  // (e.g. a watchlist add or accounts loading). Keyed on the joined ticker
+  // string — not the array — so it fires only when the set actually changes,
+  // not on every re-memo. Uses syncRef so this effect doesn't re-run each time
+  // sync() is recreated. Removes the ~90s blank window before the first
+  // auto-sync tick and makes new watchlist tickers resolve right away.
+  const tickersKey=tickers.join(",");
+  useEffect(()=>{syncRef.current?.();},[tickersKey]);
   useEffect(()=>{
     let startY=null;
     const ptrReadyRef={current:false};
@@ -10034,7 +10039,9 @@ export default function Mizan(){
     return()=>clearInterval(t);
   },[forceCooldownUntil]);
 
-  useEffect(()=>{setGlobalKeys(apiKeys);fetchSnapHoldings();},[]);
+  // fetchSnapHoldings on mount is covered by the [demoMode] effect below and by
+  // the mount sync() (tickersKey effect); this one only seeds global keys.
+  useEffect(()=>{setGlobalKeys(apiKeys);},[]);
   useEffect(()=>{fetchSnapHoldings();},[demoMode]);
   useEffect(()=>{
     apiFetch("/api/user/features").then(r=>r.ok?r.json():null).then(d=>{
