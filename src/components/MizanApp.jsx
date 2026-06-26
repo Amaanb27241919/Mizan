@@ -8870,8 +8870,9 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
     }catch(err){setAiErr(err.message||"Request failed");}
     finally{setAiBusy(false);}
   },[aiBusy,aiAnswer,aiQ]);
-  // Auto-fire when the step opens (once).
-  useEffect(()=>{if(step===3&&!aiStarted){setAiStarted(true);askAi();}},[step,aiStarted,askAi]);
+  // Auto-fire when the Advisor step opens (once). It's index 2 now that the CSV
+  // import step was removed from the flow.
+  useEffect(()=>{if(step===2&&!aiStarted){setAiStarted(true);askAi();}},[step,aiStarted,askAi]);
   const StepAdvisor=<>
     <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Ask your AI advisor</div>
     <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
@@ -8942,11 +8943,16 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
     </div>
   </>;
 
-  const steps=[StepWelcome,StepConnect,StepImport,StepAdvisor,StepDone];
-  const ctaLabel=step===0?"Let's get started →":step===4?"Open MĪZAN →":"Continue →";
-  const onCta=()=>{if(step===4)return finish();setStep(step+1);};
-  const onSkip=()=>{if(step===4)return finish();setStep(step+1);};
-  const canSkip=step!==0&&step!==4;
+  // CSV/document import is intentionally NOT part of onboarding — new users
+  // shouldn't be asked to upload anything before they ever see the app. It still
+  // lives in Settings for anyone who wants to backfill history. (StepImport is
+  // left defined but unused.)
+  const steps=[StepWelcome,StepConnect,StepAdvisor,StepDone];
+  const LAST=steps.length-1;
+  const ctaLabel=step===0?"Let's get started →":step===LAST?"Open MĪZAN →":"Continue →";
+  const onCta=()=>{if(step===LAST)return finish();setStep(step+1);};
+  const onSkip=()=>{if(step===LAST)return finish();setStep(step+1);};
+  const canSkip=step!==0&&step!==LAST;
 
   return<div style={{
     position:"fixed",inset:0,zIndex:1000,
@@ -9263,11 +9269,12 @@ export default function Mizan(){
   // toggle (mizan_demo = "0" or "1") always wins.
   const[demoMode,setDemoMode]=useState(()=>{
     try{
-      const explicit=localStorage.getItem("mizan_demo");
-      if(explicit==="0")return false;
-      if(explicit==="1")return true;
-      const hasReal=localStorage.getItem("mizan_has_real_data")==="1";
-      return!hasReal;
+      // Default OFF: a newly signed-in user with no connections sees their REAL
+      // (empty) state — $0 net worth + the Welcome/Connect card — NOT the demo
+      // persona's 8-figure book. Demo is opt-in via the DEMO toggle, which sets
+      // mizan_demo="1". (Previously defaulted ON for new users, which routed the
+      // demo's ~$41M into their net-worth headline as if it were real.)
+      return localStorage.getItem("mizan_demo")==="1";
     }catch{return false;}
   });
   const[hasRealData,setHasRealData]=useState(()=>{try{return localStorage.getItem("mizan_has_real_data")==="1";}catch{return false;}});
@@ -10418,7 +10425,13 @@ export default function Mizan(){
       })}
     </nav>
 
-    {showConn&&<ConnectModal onClose={()=>setConn(false)} snapId={apiKeys.snapId} onConnected={()=>{ try{forceRefresh();}catch{} }}/>}
+    {showConn&&<ConnectModal onClose={()=>setConn(false)} snapId={apiKeys.snapId} onConnected={()=>{
+      // Pull the new account into state IMMEDIATELY so every tab/sub-tab reflects
+      // it right away — even a cash-only account with zero holdings. forceRefresh
+      // then asks the broker to re-pull positions (which can lag ~15-30s).
+      try{ fetchSnapHoldings(); }catch{}
+      try{ forceRefresh(); }catch{}
+    }}/>}
 
     {/* Always-on bug-report affordance. Self-positioned bottom-right above
         the dock; also listens for the "mizan:open-bug-report" custom event
