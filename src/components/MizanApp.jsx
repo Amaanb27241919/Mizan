@@ -7217,12 +7217,24 @@ function AdminPanel(){
 
   const load=useCallback(async()=>{
     setBusy(true);setErr(null);
+    // Check r.ok before reading JSON — otherwise a 403/500/503 error body is
+    // consumed as if it were data and the panel renders empty/zero with no
+    // signal, indistinguishable from a genuinely empty system.
+    const j=async(path)=>{
+      const r=await apiFetch(path);
+      if(!r.ok){
+        let msg=`HTTP ${r.status}`;
+        try{const e=await r.json();if(e?.error)msg=typeof e.error==="string"?e.error:JSON.stringify(e.error);}catch{}
+        throw new Error(`${path.split("?")[0]} — ${msg}`);
+      }
+      return r.json();
+    };
     try{
       const[s,u,a,d]=await Promise.all([
-        apiFetch("/api/admin/stats").then(r=>r.json()),
-        apiFetch("/api/admin/users?limit=200").then(r=>r.json()),
-        apiFetch(`/api/admin/audit-log?limit=${PAGE}&offset=${auditOffset}`).then(r=>r.json()),
-        apiFetch("/api/admin/db-status").then(r=>r.json()),
+        j("/api/admin/stats"),
+        j("/api/admin/users?limit=200"),
+        j(`/api/admin/audit-log?limit=${PAGE}&offset=${auditOffset}`),
+        j("/api/admin/db-status"),
       ]);
       setStats(s);setUsers(u.users||[]);setAuditRows(a.rows||[]);setAuditTotal(a.total||0);setDbStatus(d);
     }catch(e){setErr(e.message||"Failed to load");}
