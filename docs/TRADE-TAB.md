@@ -35,7 +35,7 @@ It is **admin/root-only** and intentionally gated at several layers (see §3).
   | Sub-tab | Renders | Role |
   |---------|---------|------|
   | **Strategies** (default) | `TradingBotPanel view="strategies"` (`:4918`) | NL builder, strategy list, layer toggle, kill switch, per-account full-auto |
-  | **Signals** | `TradingBotPanel view="signals"` | Pending signals → Approve / Reject |
+  | **Signals** | `TradingBotPanel view="signals"` | Pending signals → Approve / Reject, **plus the Bot Activity timeline** (every action the bot took) |
   | **Screener** | `AAOIFIScreener` (`:2103`) | AAOIFI Sharia screen (shared with Portfolio) |
   | **Rebalance** | `Rebalancer` (`:3638`) | Drift vs target allocation (shared with Portfolio) |
   | **Backtest** | `HistoricalBacktest` (`:4821`) | Polygon-history SMA backtest |
@@ -263,11 +263,22 @@ This is for a one-off trade you type by hand. Automated trades come from strateg
 Once active, each strategy shows a **Strategy Progress** card: capital, current value,
 % toward target (progress bar), days elapsed vs horizon, and trades executed.
 
-### C) Review signals
+### C) Review signals & watch the bot
 - Open the **Signals** sub-tab. Pending signals appear with side, qty, suggested price,
   and an expiry. **Approve** or **Reject** each. (Manual & Semi-auto — full-auto executes
   without this step; with no funded broker, Approve returns a 502 and the signal keeps
   its `error_msg` instead of filling — see §5.)
+- Below the pending list, **BOT ACTIVITY · ALL ACTIONS** is the bot's full timeline
+  (`GET /api/bot/activity`, newest-first, ≤100) straight from `pending_signals` — every
+  signal it generated and what became of it: BUY/SELL, **FILLED** / **PENDING** /
+  **APPROVED** / **REJECTED** / **EXPIRED** / **FAILED** (status `approved` + `error_msg`),
+  with side, qty, ticker, strategy label, ~price, timestamp, and the error inline on
+  failures. It reads the bot's **own ledger**, so a **full-auto fill shows here the instant
+  the cron runs — before** it reaches the broker-synced **Portfolio → Activity** tab (which
+  depends on SnapTrade sync). This is the no-broker-needed view of what the bot did; it
+  refetches after each Approve/Reject. (Closed round-trips with P&L live in the
+  **Realized P&L · Closed Trades** tile under Strategies; the open position's live value
+  is in **Strategy Progress**.)
 
 ### D) Manage strategies & the kill switch
 - **Strategies** list: each shows the screened universe (e.g. "SPUS +4 more"), its
@@ -311,13 +322,16 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
 ### Backend endpoints (`lib/handlers.mjs`) — all gated by `canUseTradingBot()`
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/user/features` | GET | Returns `{ trading_bot, full_auto }` |
+| `/api/user/features` | GET | Returns `{ trading_bot, full_auto, is_root, trading_bot_consented }` |
+| `/api/bot/consent` | POST | Records the beta risk-disclosure acceptance (`profiles.trading_bot_consent_at`); required before non-root create/approve/place |
 | `/api/bot/strategies` | GET / POST | List / create strategies |
 | `/api/bot/strategies/:id` | PATCH / DELETE | Update (enable, layer, **full param edit** — ticker, account, type, universe, capital, target, stop, drawdown, horizon, daily cap), delete. Re-enforces the stop-loss gate (`400 stop_loss_required` on `≤0`) and read-modify-writes `params`. |
 | `/api/bot/strategies/pause-all` | PATCH | Kill switch |
 | `/api/bot/signals` | GET | Pending (non-expired) signals |
 | `/api/bot/signals/:id/approve` | POST | Approve a signal → executes via SnapTrade |
 | `/api/bot/signals/:id/reject` | POST | Reject a signal |
+| `/api/bot/activity` | GET | **Bot Activity timeline** — all signals + outcomes from `pending_signals` (newest-first, ≤100); powers the BOT ACTIVITY tile |
+| `/api/bot/trades` | GET | **Realized-P&L ledger** — aggregate realized + win rate + closed round-trips across all strategies (`botRealizedPnl`) |
 | `/api/bot/full-auto-accounts` | GET / PATCH `/:accountId` | List / set per-account full-auto opt-in |
 | `/api/bot/strategy/nl` | POST | Claude parses NL → structured strategy |
 | `/api/snaptrade/trade/impact` | POST | Live order preview |
