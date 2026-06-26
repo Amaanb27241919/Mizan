@@ -5024,7 +5024,21 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     }catch{}
   },[]);
 
-  useEffect(()=>{if(isAdmin&&!demoMode){loadStrategies();loadSignals();loadLedger();if(fullAutoEnabled)loadFaAccounts();}},[isAdmin,demoMode,fullAutoEnabled,loadStrategies,loadSignals,loadLedger,loadFaAccounts]);
+  // Bot activity timeline — every signal the bot generated + its outcome.
+  // Sourced from the bot's own ledger, so a full-auto fill shows here instantly
+  // (before it reaches the broker-synced Portfolio → Activity tab).
+  const[activity,setActivity]=useState(null);
+  const[loadingActivity,setLoadingActivity]=useState(false);
+  const loadActivity=useCallback(async()=>{
+    setLoadingActivity(true);
+    try{
+      const r=await apiFetch("/api/bot/activity");
+      const d=await r.json();
+      if(r.ok)setActivity(d.items||[]);
+    }catch{}finally{setLoadingActivity(false);}
+  },[]);
+
+  useEffect(()=>{if(isAdmin&&!demoMode){loadStrategies();loadSignals();loadLedger();loadActivity();if(fullAutoEnabled)loadFaAccounts();}},[isAdmin,demoMode,fullAutoEnabled,loadStrategies,loadSignals,loadLedger,loadActivity,loadFaAccounts]);
 
   const activateKillSwitch=async()=>{
     if(!window.confirm("Pause ALL bot automation? No signals will execute until you re-enable strategies."))return;
@@ -5078,12 +5092,12 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
 
   const approveSignal=async(id)=>{
     await apiFetch(`/api/bot/signals/${id}/approve`,{method:"POST"});
-    // A filled signal may have closed a position — refresh strategies + ledger too.
-    await Promise.all([loadSignals(),loadStrategies(),loadLedger()]);
+    // A filled signal may have closed a position — refresh strategies + ledger + activity too.
+    await Promise.all([loadSignals(),loadStrategies(),loadLedger(),loadActivity()]);
   };
   const rejectSignal=async(id)=>{
     await apiFetch(`/api/bot/signals/${id}/reject`,{method:"POST"});
-    await loadSignals();
+    await Promise.all([loadSignals(),loadActivity()]);
   };
 
   const deleteStrategy=async(id)=>{
@@ -5343,6 +5357,46 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         </div>
       </div>)}
     </BentoTile>}
+
+    {/* Bot Activity timeline — every action the bot took, from its own ledger.
+        Shows full-auto fills the instant the cron runs, before the broker-synced
+        Portfolio → Activity tab catches up. No need to open your brokerage. */}
+    {showSignals&&(()=>{
+      const META={ // status → { label, color }
+        executed:{label:"FILLED",color:T.gain},
+        pending: {label:"PENDING",color:T.blue},
+        approved:{label:"APPROVED",color:T.blue},
+        rejected:{label:"REJECTED",color:T.muted},
+        expired: {label:"EXPIRED",color:T.muted},
+      };
+      const labelFor=a=>(a.status==="approved"&&a.error_msg)?{label:"FAILED",color:T.loss}:(META[a.status]||{label:(a.status||"—").toUpperCase(),color:T.muted});
+      const stratLabel=id=>{const s=strategies.find(x=>x.id===id);if(!s)return null;const c=Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[];return c.length>1?`${c.length} halal names`:(c[0]||s.ticker);};
+      return<BentoTile>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>BOT ACTIVITY · ALL ACTIONS</div>
+          <button onClick={loadActivity} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingActivity?"Loading…":"Refresh"}</button>
+        </div>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5,marginBottom:T.s2}}>Every signal the bot generated and what became of it — buys, sells (exits), approvals, and failures. Updates the moment the bot acts, independent of broker sync.</div>
+        {loadingActivity&&!activity?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>:
+         !activity||activity.length===0?<div style={{fontFamily:FP,fontSize:12,color:T.muted,textAlign:"center",padding:`${T.s4} 0`}}>No bot activity yet. Actions appear here as soon as the bot generates or fills a signal.</div>:
+         <div style={{display:"flex",flexDirection:"column"}}>
+          {activity.map((a,i)=>{const m=labelFor(a);const when=a.executed_at||a.created_at;const sl=stratLabel(a.strategy_id);return(
+            <div key={a.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s2} 0`,borderTop:i===0?"none":`1px solid ${T.border}`,fontVariantNumeric:"tabular-nums"}}>
+              <div style={{display:"flex",gap:T.s2,alignItems:"baseline",minWidth:170}}>
+                <span style={{fontFamily:FM,fontSize:12,fontWeight:600,color:a.side==="buy"?T.gain:T.loss}}>{(a.side||"").toUpperCase()}</span>
+                <span style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi}}>{a.qty} {a.ticker}</span>
+                {sl&&<span style={{fontFamily:FM,fontSize:9,color:T.muted}}>· {sl}</span>}
+              </div>
+              <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>~${Number(a.suggested_price||0).toFixed(2)}</span>
+                <Tag label={m.label} color={m.color}/>
+                <span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{when?new Date(when).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"—"}</span>
+              </div>
+              {m.label==="FAILED"&&a.error_msg&&<div style={{flexBasis:"100%",fontFamily:FM,fontSize:10,color:T.loss}}>{a.error_msg}</div>}
+            </div>);})}
+         </div>}
+      </BentoTile>;
+    })()}
 
     {/* Strategy Progress — one card per enabled strategy, target is always a goal */}
     {showStrat&&strategies.some(s=>s.enabled)&&<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
