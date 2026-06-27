@@ -86,6 +86,13 @@ const THEME_CSS = `
   body::after{content:"";position:fixed;bottom:-20%;left:-15%;width:50%;height:50%;
     background:radial-gradient(ellipse,#117a5208 0%,transparent 65%);
     pointer-events:none;z-index:0;}
+  /* Film grain — sits in the canvas behind all content (same z-layer as the
+     glows above), pointer-events none. Subtle (3%) so dashboard numbers stay
+     crisp. Uses html::before since body::before/::after are the glows. */
+  html::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.03;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size:140px 140px;}
+  @media (prefers-reduced-motion: reduce){ html::before{display:none;} }
   /* Base body font — elements without explicit fontFamily inherit IBM Plex Sans */
   body{font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;}
 
