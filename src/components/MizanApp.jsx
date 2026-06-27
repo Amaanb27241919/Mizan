@@ -1358,7 +1358,7 @@ function NicknameEditor({accountId,defaultName,nickname,onSetNickname,
 }
 
 /* ─── OVERVIEW ───────────────────────────────────────── */
-function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0,nicknames={},onSetNickname,demoMode=false}){
+function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0,nicknames={},onSetNickname,demoMode=false,pendingSignals=0}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[range,setRange]=useState("1Y");
   // Rolling 24-hour intraday NAV buffer (client-captured on live ticks) —
@@ -1760,6 +1760,14 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         <button onClick={onToggleDemoFromBanner} className="btn-ghost" style={{fontSize:13,padding:`11px ${T.s5}`,color:T.gold,borderColor:T.gold+"40"}}>Try Demo Mode →</button>
       </div>
     </BentoTile>}
+
+    {/* Bot signals awaiting approval — surfaced here so you don't have to sit on the Trade tab */}
+    {pendingSignals>0&&<div onClick={()=>onNav("trade")} style={{cursor:"pointer",padding:`${T.s3} ${T.s4}`,background:`linear-gradient(135deg, ${T.blue}14, transparent 60%), ${T.surface}`,border:`1px solid ${T.blue}40`,borderRadius:T.rMd,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:T.s2}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:12,color:T.blue,fontWeight:600}}>
+        <LiveDot on pulse/>{pendingSignals} bot signal{pendingSignals===1?"":"s"} need{pendingSignals===1?"s":""} your approval
+      </span>
+      <span style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.blue,letterSpacing:"0.08em"}}>REVIEW →</span>
+    </div>}
 
     {/* Compliance alert — non-compliant holdings WITH the reason for each */}
     {haramV>0&&<div style={{padding:`${T.s3} ${T.s4}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd}}>
@@ -5767,8 +5775,8 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
 function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOrderPlaced,activities=[],onNav,isAdmin=false,fullAutoEnabled=false,isRoot=false,consented=false,demoMode=false}){
   // Trade is the admin trading hub: bot Strategies + Signals, plus the analysis
   // tools (Screener / Rebalance / Backtest, reused from Portfolio) and an ad-hoc
-  // Quick Trade ticket. Opens on Strategies.
-  const[sub,setSub]=useState("strategies");
+  // Opens on Signals (pending approvals are the most time-sensitive view).
+  const[sub,setSub]=useState("signals");
   // Holdings (with live prices merged) — needed by Screener + Rebalance. Same
   // derivation Portfolio uses, kept self-contained here.
   const merged=(()=>{
@@ -5900,7 +5908,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     {/* Screener / Rebalance / Backtest are NOT duplicated here — they live in
         the Portfolio tab (one home each). Trade stays focused on the bot. */}
-    <TabBar tabs={[["strategies","Strategies"],["signals","Signals"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["signals","Signals"],["strategies","Strategies"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
     {/* Bot panel, split into Strategies + Signals views (same component, shared state). */}
     {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
 
@@ -6903,8 +6911,8 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
         ...(isRoot?[["keys","API Keys"]]:[]),
         ["connections","Connections"],
         ["account","Account"],
-        ["docs","Documents"],
         ["methodology","Methodology"],
+        ["docs","Documents"],
         ...(isRoot?[["admin","Admin"]]:[]),
       ]}
       active={sub}
@@ -7063,9 +7071,6 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
         </BentoTile>;
       })()}
 
-      {/* CSV import for historical backfill */}
-      <CSVImporter onImport={onImportCSV} onDedupe={onDedupeCSV} onRetag={onRetagCSV}/>
-
       {/* Demo mode toggle */}
       <BentoTile accent={demoMode?T.gold:null} style={demoMode?{background:`linear-gradient(135deg, ${T.gold}0F, transparent 60%), ${T.card}`}:undefined}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
@@ -7088,9 +7093,10 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       </BentoTile>
     </div>}
 
-    {/* Account = profile + security + notifications + data controls, consolidated. */}
-    {sub==="account"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}><AccountPanel/><SecurityPanel/><NotificationsPanel/><PrivacyPanel/></div>}
-    {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
+    {/* Account = profile + security + data controls. (Notifications deferred until demand.) */}
+    {sub==="account"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}><AccountPanel/><SecurityPanel/><PrivacyPanel/></div>}
+    {/* Documents = broker docs + CSV historical backfill + legal policies. */}
+    {sub==="docs"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}><DocumentsPanel documents={documents} accounts={accounts}/><CSVImporter onImport={onImportCSV} onDedupe={onDedupeCSV} onRetag={onRetagCSV}/><LegalDocsPanel/></div>}
     {sub==="methodology"&&<ShariaMethodology/>}
     {sub==="admin"&&isRoot&&<AdminPanel/>}
   </div>;
@@ -7316,6 +7322,42 @@ function AccountPanel(){
 }
 
 /* ─── PRIVACY & DATA (export + delete) ────────────────── */
+// Public legal/policy links — lives under Settings → Documents (moved out of the
+// Privacy/data-controls panel so all documents sit in one place).
+function LegalDocsPanel(){
+  const LEGAL_DOCS=[
+    {l:"Privacy Policy",      desc:"What we collect, how we use it, your rights under GDPR/CCPA.", href:"/privacy",                          ext:false},
+    {l:"Terms of Service",    desc:"Service rules, disclaimers, limitations of liability.",         href:"/terms",                            ext:false},
+    {l:"Security Policy",     desc:"Encryption, access control, monitoring, and incident response.",href:"/legal/SECURITY_POLICY.pdf",        ext:true},
+    {l:"Access Controls Policy",desc:"RBAC, MFA, periodic access reviews, secret management.",     href:"/legal/ACCESS_CONTROLS_POLICY.pdf", ext:true},
+    {l:"Data Retention Policy",desc:"What we keep, how long, when it's deleted, vendor handling.",  href:"/legal/DATA_RETENTION_POLICY.pdf",  ext:true},
+  ];
+  return<BentoTile>
+    <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>LEGAL DOCUMENTS</div>
+    <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:600}}>
+      Our public-facing policies. Always available without a login at the same URLs — Plaid, Supabase, and your auditors can reach them too.
+    </p>
+    <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+      {LEGAL_DOCS.map(d=><a key={d.href} href={d.href} target={d.ext?"_blank":undefined} rel={d.ext?"noreferrer":undefined}
+        style={{
+          display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,
+          padding:`${T.s3} ${T.s4}`,
+          background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,
+          textDecoration:"none",color:"inherit",cursor:"pointer",
+          transition:"border-color 0.15s, background 0.15s",
+        }}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.borderHi;e.currentTarget.style.background=T.card;}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.surface;}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{d.l}</div>
+          <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:2,lineHeight:1.45}}>{d.desc}</div>
+        </div>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em",flexShrink:0}}>{d.ext?"PDF ↗":"OPEN ↗"}</span>
+      </a>)}
+    </div>
+  </BentoTile>;
+}
+
 function PrivacyPanel(){
   const{signOut}=useAuth();
   const[exportBusy,setExportBusy]=useState(false);
@@ -7365,40 +7407,7 @@ function PrivacyPanel(){
     </BentoTile>;
   }
 
-  const LEGAL_DOCS=[
-    {l:"Privacy Policy",      desc:"What we collect, how we use it, your rights under GDPR/CCPA.", href:"/privacy",                          ext:false},
-    {l:"Terms of Service",    desc:"Service rules, disclaimers, limitations of liability.",         href:"/terms",                            ext:false},
-    {l:"Security Policy",     desc:"Encryption, access control, monitoring, and incident response.",href:"/legal/SECURITY_POLICY.pdf",        ext:true},
-    {l:"Access Controls Policy",desc:"RBAC, MFA, periodic access reviews, secret management.",     href:"/legal/ACCESS_CONTROLS_POLICY.pdf", ext:true},
-    {l:"Data Retention Policy",desc:"What we keep, how long, when it's deleted, vendor handling.",  href:"/legal/DATA_RETENTION_POLICY.pdf",  ext:true},
-  ];
-
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
-    <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>LEGAL DOCUMENTS</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:600}}>
-        Our public-facing policies. Always available without a login at the same URLs — Plaid, Supabase, and your auditors can reach them too.
-      </p>
-      <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
-        {LEGAL_DOCS.map(d=><a key={d.href} href={d.href} target={d.ext?"_blank":undefined} rel={d.ext?"noreferrer":undefined}
-          style={{
-            display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,
-            padding:`${T.s3} ${T.s4}`,
-            background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,
-            textDecoration:"none",color:"inherit",cursor:"pointer",
-            transition:"border-color 0.15s, background 0.15s",
-          }}
-          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.borderHi;e.currentTarget.style.background=T.card;}}
-          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.surface;}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{d.l}</div>
-            <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:2,lineHeight:1.45}}>{d.desc}</div>
-          </div>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em",flexShrink:0}}>{d.ext?"PDF ↗":"OPEN ↗"}</span>
-        </a>)}
-      </div>
-    </BentoTile>
-
     <BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DOWNLOAD MY DATA</div>
       <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
@@ -9476,6 +9485,20 @@ export default function Mizan(){
     return()=>{cancel=true;clearInterval(tick);};
   },[demoMode]);
 
+  // ── Pending bot signals (Overview banner) ─────────────
+  // Count signals awaiting approval so the Overview can surface a banner —
+  // the user doesn't have to sit on the Trade tab to catch them. Trading
+  // users only (isAdmin), never in demo. Polls on the 90s cadence.
+  const[pendingSignals,setPendingSignals]=useState(0);
+  useEffect(()=>{
+    if(!isAdmin||demoMode){setPendingSignals(0);return;}
+    let cancel=false;
+    const pull=async()=>{try{const r=await apiFetch("/api/bot/signals");if(!r.ok||cancel)return;const d=await r.json();const n=(d.signals||[]).filter(s=>s.status==="pending").length;if(!cancel)setPendingSignals(n);}catch{}};
+    pull();
+    const t=setInterval(pull,90*1000);
+    return()=>{cancel=true;clearInterval(t);};
+  },[isAdmin,demoMode]);
+
   // ── Account nicknames ─────────────────────────────────
   // Per-user, per-account-id display overrides. Hydrated from
   // localStorage for an instant first paint, then refreshed from
@@ -10631,7 +10654,7 @@ export default function Mizan(){
 
     <main style={{maxWidth:1320,margin:"0 auto",padding:`24px 24px calc(110px + env(safe-area-inset-bottom, 0px))`}}>
       <div className="page">
-        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode}/>}
+        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode} pendingSignals={pendingSignals}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} onConnect={()=>{setConnMode("read");setConn(true);}} bankBalance={bankBalance}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} live={live} mapPosition={mapPosition} activities={snapActivities} onNav={setNav} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={botIsRoot} consented={botConsented} demoMode={demoMode}/>}
