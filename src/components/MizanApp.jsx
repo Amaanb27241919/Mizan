@@ -52,6 +52,9 @@ const THEME_CSS = `
     --mz-glass-border: rgba(210,202,187,0.60);
     --mz-glass-shadow: inset 0 1px 0 0 rgba(255,255,255,0.75), inset 0 -1px 0 0 rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.09);
     --mz-glass-shadow-lg: inset 0 1px 0 0 rgba(255,255,255,0.75), inset 0 -1px 0 0 rgba(0,0,0,0.04), 0 20px 60px rgba(0,0,0,0.14);
+    /* Bento tile depth — soft, layered (light theme tuned: gentle, not harsh) */
+    --mz-tile: 0 1px 2px rgba(28,27,25,0.04), 0 6px 20px rgba(28,27,25,0.06);
+    --mz-tile-hover: 0 4px 10px rgba(30,78,140,0.07), 0 16px 40px rgba(28,27,25,0.10);
     color-scheme: light;
   }
   :root[data-theme="dark"] {
@@ -68,6 +71,9 @@ const THEME_CSS = `
     --mz-glass-border: rgba(76,72,65,0.65);
     --mz-glass-shadow: inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 8px 32px rgba(0,0,0,0.45);
     --mz-glass-shadow-lg: inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 20px 60px rgba(0,0,0,0.60);
+    /* Bento tile depth — layered, deeper for the ink theme */
+    --mz-tile: 0 1px 2px rgba(0,0,0,0.30), 0 8px 28px rgba(0,0,0,0.45);
+    --mz-tile-hover: 0 6px 16px rgba(0,0,0,0.50), 0 22px 50px rgba(0,0,0,0.60);
     color-scheme: dark;
   }
   :root {
@@ -867,7 +873,7 @@ function BentoTile({children,span="auto",accent,gradient,glass,style,onClick}){
     borderLeft: accent ? `1px solid ${accent}30` : `1px solid ${T.border}`,
     borderRadius:T.rLg,
     padding:`${T.s5} ${T.s5}`,
-    boxShadow:"var(--sh-md)",
+    boxShadow:"var(--mz-tile)",
     backdropFilter:glass?"blur(16px) saturate(160%)":undefined,
     WebkitBackdropFilter:glass?"blur(16px) saturate(160%)":undefined,
     gridColumn:span&&span.col||undefined,
@@ -10465,7 +10471,7 @@ export default function Mizan(){
       /* Design-system primitives. Used by KV stat cards, buttons, inputs. */
       .kv-card:hover{border-color:${T.borderHi}!important;transform:translateY(-1px);box-shadow:var(--sh-md);}
       .bento-tile{position:relative;}
-      .bento-tile:hover{border-color:${T.borderHi}!important;box-shadow:var(--sh-lg);transform:translateY(-1px);}
+      .bento-tile:hover{border-color:${T.borderHi}!important;box-shadow:var(--mz-tile-hover)!important;transform:translateY(-1px);}
       .bento-tile--click:hover{transform:translateY(-2px) scale(1.003);}
       .bento-tile--click:active{transform:translateY(0) scale(0.998);box-shadow:var(--sh-sm)!important;}
       @media (max-width: 900px) {
