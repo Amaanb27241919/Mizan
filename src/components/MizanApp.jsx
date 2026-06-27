@@ -5853,14 +5853,11 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   if(!isAdmin)return null;
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["strategies","Strategies"],["signals","Signals"],["screener","Screener"],["rebalance","Rebalance"],["backtest","Backtest"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    {/* Screener / Rebalance / Backtest are NOT duplicated here — they live in
+        the Portfolio tab (one home each). Trade stays focused on the bot. */}
+    <TabBar tabs={[["strategies","Strategies"],["signals","Signals"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
     {/* Bot panel, split into Strategies + Signals views (same component, shared state). */}
     {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
-
-    {/* Analysis tools — reused from Portfolio (which keeps them for everyone). */}
-    {sub==="screener"&&<AAOIFIScreener holdings={merged}/>}
-    {sub==="rebalance"&&<Rebalancer holdings={merged} snapAccounts={accounts} onNav={onNav}/>}
-    {sub==="backtest"&&<HistoricalBacktest/>}
 
     {/* Quick Trade (ad-hoc order ticket) lives behind a Coming Soon banner for non-admin users. */}
     {sub==="order"&&!isAdmin&&<ComingSoon
@@ -6860,13 +6857,10 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       tabs={[
         ...(isRoot?[["keys","API Keys"]]:[]),
         ["connections","Connections"],
-        ["profile","Profile"],
-        ["notifications","Notifications"],
+        ["account","Account"],
         ["assets","Assets"],
         ["docs","Documents"],
         ["methodology","Methodology"],
-        ["privacy","Privacy"],
-        ["about","About"],
         ...(isRoot?[["admin","Admin"]]:[]),
       ]}
       active={sub}
@@ -7052,12 +7046,10 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       </BentoTile>
     </div>}
 
-    {sub==="profile"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}><AccountPanel/><SecurityPanel/></div>}
-    {sub==="notifications"&&<NotificationsPanel/>}
+    {/* Account = profile + security + notifications + data controls, consolidated. */}
+    {sub==="account"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}><AccountPanel/><SecurityPanel/><NotificationsPanel/><PrivacyPanel/></div>}
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
     {sub==="methodology"&&<ShariaMethodology/>}
-    {sub==="privacy"&&<PrivacyPanel/>}
-    {sub==="about"&&<About/>}
     {sub==="admin"&&isRoot&&<AdminPanel/>}
   </div>;
 }
@@ -7974,151 +7966,6 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
 
 
 /* ─── ROOT ───────────────────────────────────────────── */
-/* ─── ABOUT ──────────────────────────────────────────── */
-function About(){
-  const sections = [
-    { icon:"chart", t:"Portfolio",    accent:T.blue, d:"Holdings across 60+ brokerages via SnapTrade. Live Sharia screening against 7 AAOIFI-aligned standards with ratio analysis. Dividend purification log, tax-loss harvesting, backtesting, and per-holding news & earnings." },
-    { icon:"bank", t:"Banking",      accent:T.gain, d:"Bank accounts and transactions via Plaid with cursor-based sync. Spending by category, budget management, bills calendar, and daily net worth snapshots." },
-    { icon:"mosque", t:"Zakat & Goals",accent:T.gold, d:"Live nisab calculation using real-time gold and silver spot prices. Per-dividend purification per AAOIFI guidelines. Goal templates for Hajj, Mahr, Waqf, Home, and FIRE." },
-    { icon:"spark", t:"AI Advisor",   accent:T.violet, d:"Claude Sonnet-powered advisor with your full portfolio context and real-time prices injected. Islamic finance guardrails enforce Sharia-compliant guidance only." },
-  ];
-  const principles = [
-    ["Riba","No interest-bearing instruments. Cash accounts only. Margin and shorts blocked at the order layer."],
-    ["Gharar","No options, futures, CFDs, or leveraged ETFs. Spot equity and physical assets only."],
-    ["Maisir","Edge required before deployment. Bot strategies require positive expected value."],
-    ["Sector screen","Banking, alcohol, tobacco, gambling, conventional insurance, weapons, adult entertainment, pork — excluded."],
-    ["Financial ratios","Total debt <33%, cash + interest-bearing securities <33%, accounts receivable <49% (varies by framework)."],
-    ["Purification","Non-permissible income calculated and surfaced for Sadaqah. No expectation of reward."],
-  ];
-  const standards = ["AAOIFI","IFSB","DJIM","S&P Shariah","FTSE Shariah","MSCI Islamic","SC Malaysia"];
-  const integrations = [
-    {n:"SnapTrade",    d:"60+ brokerages",              c:T.blue},
-    {n:"Plaid",        d:"Bank accounts + transactions", c:T.gain},
-    {n:"Anthropic",    d:"AI Advisor (Claude Sonnet)",   c:"#CC785C"},
-    {n:"Finnhub",      d:"Market data, news, earnings",  c:T.gain},
-    {n:"Polygon",      d:"Historical OHLC bars",          c:T.gold},
-    {n:"Stooq",        d:"Live gold & silver prices",    c:T.gold},
-    {n:"TradingView",  d:"Market sector heat map",        c:T.slate},
-    {n:"Supabase",     d:"Auth + encrypted data store",  c:"#3ECF8E"},
-  ];
-
-  return <div style={{display:"flex",flexDirection:"column",gap:T.s5,maxWidth:1080,margin:"0 auto",paddingBottom:T.s10}}>
-    {/* ─── HERO ─────────────────────────────────────────── */}
-    <BentoTile style={{
-      background:`radial-gradient(circle at 0% 0%, ${T.blue}18, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gold}12, transparent 50%), ${T.card}`,
-      borderColor:T.blue+"30",
-      padding:`${T.s10} ${T.s8}`,
-      textAlign:"center",
-    }}>
-      <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:T.s3,marginBottom:T.s4}}>
-        <svg width={48} height={48} viewBox="0 0 32 32" fill="none">
-          <circle cx="16" cy="7" r="2" fill={T.blue}/>
-          <rect x="5" y="8.5" width="22" height="2" rx="1" fill={T.blue}/>
-          <rect x="6" y="10.5" width="1.5" height="4.5" rx="0.75" fill={T.blue}/>
-          <rect x="24.5" y="10.5" width="1.5" height="4.5" rx="0.75" fill={T.blue}/>
-          <path d="M3.5 15.5 Q6.75 19.5 10 15.5" stroke={T.blue} strokeWidth="1.75" strokeLinecap="round"/>
-          <path d="M22 15.5 Q25.25 19.5 28.5 15.5" stroke={T.blue} strokeWidth="1.75" strokeLinecap="round"/>
-          <rect x="15.25" y="10.5" width="1.5" height="12" rx="0.75" fill={T.blue}/>
-          <rect x="11" y="22.5" width="10" height="2" rx="1" fill={T.blue}/>
-        </svg>
-        <span style={{fontFamily:FU,fontSize:44,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>MĪZAN</span>
-      </div>
-      <div style={{fontFamily:FU,fontSize:24,fontWeight:600,color:T.textHi,lineHeight:1.3,maxWidth:680,margin:`0 auto ${T.s2}`,letterSpacing:"-0.02em"}}>
-        The Shariah-compliant financial super-app.
-      </div>
-      <div style={{fontFamily:FU,fontSize:15,color:T.muted,lineHeight:1.6,maxWidth:600,margin:"0 auto"}}>
-        Brokerages, banking, Zakat, and AI insights — unified, halal-screened, in one place.
-      </div>
-    </BentoTile>
-
-    {/* ─── 4 FEATURE BENTO CARDS ──────────────────────── */}
-    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:T.s4}}>
-      {sections.map(s=><BentoTile key={s.t} accent={s.accent} style={{
-        background:`linear-gradient(135deg, ${s.accent}0F, transparent 60%), ${T.card}`,
-        display:"flex",flexDirection:"column",gap:T.s2,
-      }}>
-        <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
-          <Icon name={s.icon} size={26} color={s.accent}/>
-          <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:s.accent,letterSpacing:"0.18em"}}>{s.t.toUpperCase()}</span>
-        </div>
-        <div style={{fontFamily:FP,fontSize:14,color:T.text,lineHeight:1.6,letterSpacing:"-0.005em"}}>{s.d}</div>
-      </BentoTile>)}
-    </div>
-
-    {/* ─── SHARIAH FOUNDATIONS ──────────────────────── */}
-    <BentoTile accent={T.gold} style={{background:`radial-gradient(circle at 100% 0%, ${T.gold}10, transparent 55%), ${T.card}`}}>
-      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:T.s2,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:11,color:T.gold,letterSpacing:"0.18em",fontWeight:600}}>SHARIAH FOUNDATIONS</span>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>{standards.length} STANDARDS</span>
-      </div>
-      <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:760,marginBottom:T.s4,letterSpacing:"-0.005em"}}>
-        Built around six Islamic finance principles. Not annotations on a generic finance app — they shape what's displayed, what's allowed at the order layer, and how AI recommendations are generated.
-      </div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:T.s1,marginBottom:T.s4}}>
-        {standards.map(s=><span key={s} style={{
-          padding:`5px ${T.s3}`,
-          background:`${T.gold}15`,
-          border:`1px solid ${T.gold}35`,
-          borderRadius:999,
-          fontFamily:FM,fontSize:10,fontWeight:600,color:T.gold,letterSpacing:"0.06em",
-        }}>{s}</span>)}
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s2}}>
-        {principles.map(([k,v])=><div key={k} style={{
-          padding:`${T.s3} ${T.s4}`,
-          background:T.surface,
-          borderRadius:T.rMd,
-          border:`1px solid ${T.border}`,
-          borderLeft:`3px solid ${T.gold}`,
-        }}>
-          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.gold,letterSpacing:"-0.01em",marginBottom:T.s1}}>{k}</div>
-          <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{v}</div>
-        </div>)}
-      </div>
-    </BentoTile>
-
-    {/* ─── INTEGRATIONS ─────────────────────────────── */}
-    <BentoTile accent={T.blue}>
-      <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s4}}>DATA & INTEGRATIONS</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:T.s2}}>
-        {integrations.map(i=><div key={i.n} style={{
-          padding:`${T.s3} ${T.s4}`,
-          background:T.surface,
-          borderRadius:T.rMd,
-          border:`1px solid ${T.border}`,
-          borderLeft:`3px solid ${i.c}`,
-        }}>
-          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{i.n}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted}}>{i.d}</div>
-        </div>)}
-      </div>
-    </BentoTile>
-
-    {/* ─── REPORT A BUG ───────────────────────────── */}
-    {/* Surfaces the floating BugReportButton modal via custom event so
-        users who land here looking for "contact us" have a direct CTA. */}
-    <div style={{textAlign:"center",padding:`${T.s2} 0`}}>
-      <button
-        type="button"
-        onClick={()=>{try{window.dispatchEvent(new Event("mizan:open-bug-report"));}catch{}}}
-        style={{
-          fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.08em",
-          color:T.muted,
-          background:"transparent",
-          border:`1px solid ${T.border}`,
-          borderRadius:T.rMd,
-          padding:`8px ${T.s4}`,
-          cursor:"pointer",
-        }}>FOUND A BUG?  →  REPORT IT</button>
-    </div>
-
-    {/* ─── DISCLAIMER ─────────────────────────────── */}
-    <div style={{textAlign:"center",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",padding:`${T.s4} 0 ${T.s6}`,lineHeight:1.8,fontWeight:500}}>
-      MĪZAN · NOT FINANCIAL OR RELIGIOUS ADVICE<br/>
-      CONSULT A QUALIFIED SCHOLAR FOR PERSONAL JURISPRUDENCE
-    </div>
-  </div>;
-}
 
 /* ─── FINANCES (Plaid banking) ───────────────────────── */
 // Bank accounts (checking/savings/credit), recent transactions, spending
