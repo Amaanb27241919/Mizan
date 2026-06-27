@@ -9440,6 +9440,15 @@ export default function Mizan(){
   // without waiting for the Finances tab to mount.
   const[bankBalance,setBankBalance]=useState(()=>{try{const v=localStorage.getItem("mizan_bank_balance");return v?+v:0;}catch{return 0;}});
   useEffect(()=>{try{localStorage.setItem("mizan_bank_balance",String(bankBalance||0));}catch{}},[bankBalance]);
+  // Demo mode — declared up here (before the Plaid + pending-signals effects)
+  // because those effects list `demoMode` in their dependency arrays, which are
+  // evaluated during render. Declaring it later caused a TDZ ("Cannot access
+  // before initialization") that crashed the whole app once a fresh bundle
+  // loaded. Default OFF: a new user with no connections sees their real ($0)
+  // state, not the demo persona; demo is opt-in via the DEMO toggle (mizan_demo=1).
+  const[demoMode,setDemoMode]=useState(()=>{
+    try{return localStorage.getItem("mizan_demo")==="1";}catch{return false;}
+  });
   // Unified Plaid accounts state — every type (depository / credit / loan /
   // investment / brokerage / other) is held here, so the Overview, Finances,
   // and Portfolio tabs can all consume the same source of truth. The numeric
@@ -9554,19 +9563,6 @@ export default function Mizan(){
   const[snapAccounts,setSnapAccounts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_accounts_cache")||"[]");}catch{return[];}});
   const[snapActivities,setSnapActivities]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]");}catch{return[];}});
   const[snapDocuments,setSnapDocuments]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_documents_cache")||"[]");}catch{return[];}});
-  // Demo defaults to ON for users with no real connections (so they don't land
-  // on an empty app), OFF for users who have connected brokers. Explicit user
-  // toggle (mizan_demo = "0" or "1") always wins.
-  const[demoMode,setDemoMode]=useState(()=>{
-    try{
-      // Default OFF: a newly signed-in user with no connections sees their REAL
-      // (empty) state — $0 net worth + the Welcome/Connect card — NOT the demo
-      // persona's 8-figure book. Demo is opt-in via the DEMO toggle, which sets
-      // mizan_demo="1". (Previously defaulted ON for new users, which routed the
-      // demo's ~$41M into their net-worth headline as if it were real.)
-      return localStorage.getItem("mizan_demo")==="1";
-    }catch{return false;}
-  });
   const[hasRealData,setHasRealData]=useState(()=>{try{return localStorage.getItem("mizan_has_real_data")==="1";}catch{return false;}});
   const[disabledAccts,setDisabledAccts]=useState(()=>{try{return new Set(JSON.parse(localStorage.getItem("mizan_disabled_accts")||"[]"));}catch{return new Set();}});
   // Auto-sync defaults ON now (every 90 s) so figures match the user's
