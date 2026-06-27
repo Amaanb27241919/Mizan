@@ -2207,7 +2207,7 @@ function AAOIFIScreener({holdings=[]}){
         <div style={{maxWidth:680}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SHARIA COMPLIANCE</div>
           <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,letterSpacing:"-0.005em"}}>
-            Live screening across {Object.keys(STANDARDS).length} frameworks. Pick a primary standard for row badges; every standard runs in the background so you see a per-position pass count. Data: Finnhub fundamentals.
+            Live screening across {Object.keys(STANDARDS).length} frameworks. Pick a primary standard for row badges; every standard runs in the background so you see a per-position pass count. Data: Finnhub fundamentals. Full methodology &amp; Sharia governance in Settings → Methodology.
           </p>
         </div>
         <div style={{display:"flex",gap:T.s2,alignItems:"center",flexShrink:0}}>
@@ -6672,6 +6672,108 @@ function SessionsPanel(){
   </div>;
 }
 
+/* ─── SHARIA METHODOLOGY & GOVERNANCE ─────────────────── */
+// Trust/credibility page. Mirrors the REAL engine (lib/sharia.mjs + the local
+// STANDARDS table) — no marketing claims beyond what the code actually does.
+// Governance is stated honestly: methodology is AAOIFI-aligned; named scholar
+// certification is in progress (do NOT fabricate a board here).
+function ShariaMethodology(){
+  const EB={fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2};
+  const P={fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.6,letterSpacing:"-0.005em",margin:0};
+  const excluded=["Conventional banks & financial services","Insurance (conventional)","Mortgage & consumer finance","Alcohol & breweries","Tobacco","Gambling & casinos","Weapons & defense","Pork products","Adult entertainment"];
+  const review=["Hotels, resorts & leisure","Media & entertainment","Restaurants","Broadcasting"];
+  const ratios=[
+    {t:"Debt / market cap",lim:"< 33%",d:"Total interest-bearing debt over market cap."},
+    {t:"Cash & interest-bearing securities / market cap",lim:"< 33%",d:"Caps interest-earning assets."},
+    {t:"Accounts receivable / market cap",lim:"< 49%",d:"Limits illiquid / credit exposure."},
+    {t:"Non-permissible income / revenue",lim:"< 5%",d:"Impure income must be purified."},
+  ];
+  const chip=(label,color)=><span key={label} style={{fontFamily:FM,fontSize:11,fontWeight:600,color,background:`${color}14`,border:`1px solid ${color}33`,borderRadius:999,padding:`4px ${T.s3}`}}>{label}</span>;
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    {/* Intro */}
+    <BentoTile accent={T.gold}>
+      <div style={EB}>SHARIA SCREENING — METHODOLOGY & GOVERNANCE</div>
+      <p style={P}>Every holding in MĪZAN is screened by a single server-side engine, so the Screener, Overview compliance, the Rebalancer’s halal mode, and Purification always show the same verdict — never a per-screen disagreement. Screening follows <strong style={{color:T.text}}>AAOIFI Shariah Standard No. 21</strong>: a business-activity screen plus financial-ratio tests.</p>
+    </BentoTile>
+
+    {/* Two-layer screen */}
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s4}}>
+      <BentoTile accent={T.loss}>
+        <div style={EB}>LAYER 1 · BUSINESS ACTIVITY</div>
+        <p style={{...P,marginBottom:T.s3}}>A company is excluded if its core business is impermissible — regardless of its financials:</p>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:T.s3}}>{excluded.map(x=>chip(x,T.loss))}</div>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:T.s2}}>FLAGGED FOR REVIEW (mixed / case-by-case)</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{review.map(x=>chip(x,T.gold))}</div>
+      </BentoTile>
+      <BentoTile accent={T.gain}>
+        <div style={EB}>LAYER 2 · FINANCIAL RATIOS (AAOIFI)</div>
+        <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+          {ratios.map(r=><div key={r.t} style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:T.s2}}>
+              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.t}</span>
+              <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.gain,flexShrink:0}}>{r.lim}</span>
+            </div>
+            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.45,marginTop:2}}>{r.d}</div>
+          </div>)}
+        </div>
+      </BentoTile>
+    </div>
+
+    {/* Verdict logic */}
+    <BentoTile>
+      <div style={EB}>HOW THE VERDICT IS DECIDED</div>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s2,fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+        <div><span style={{color:T.loss,fontWeight:600}}>Prohibited sector</span> → <strong>Non-Compliant</strong> immediately; ratios aren’t evaluated.</div>
+        <div>Otherwise the holding is tested against all <strong>{Object.keys(STANDARDS).length} standards</strong>: <span style={{color:T.gain,fontWeight:600}}>≥5 pass → Halal</span>, <span style={{color:T.loss,fontWeight:600}}>≥4 fail → Non-Compliant</span>, anything in between → <span style={{color:T.gold,fontWeight:600}}>Review</span>.</div>
+        <div>Open any holding’s <strong>“Why →”</strong> in the Screener to see the exact ratios, thresholds, and per-standard result.</div>
+      </div>
+    </BentoTile>
+
+    {/* Standards table */}
+    <BentoTile>
+      <div style={EB}>SUPPORTED STANDARDS</div>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
+        {Object.entries(STANDARDS).map(([k,s])=><div key={k} style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${k==="AAOIFI"?T.gold:T.border}`,borderRadius:T.rMd}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s1,flexWrap:"wrap",gap:T.s1}}>
+            <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{s.name}{k==="AAOIFI"&&<span style={{fontFamily:FM,fontSize:9,color:T.gold,marginLeft:T.s2,letterSpacing:"0.1em"}}>DEFAULT</span>}</span>
+            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
+          </div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
+            {s.denominator==="totalAssets"?"vs total assets":"vs market cap"} · Debt &lt; {s.debtMax}% · Cash &lt; {s.cashMax}% · A/R &lt; {s.recvMax}% · Non-perm &lt; {s.nonPermMax}%
+          </div>
+        </div>)}
+      </div>
+      <p style={{...P,marginTop:T.s3}}><strong style={{color:T.text}}>Sector exclusion is universal</strong> across every standard; only the ratio thresholds and denominator differ. AAOIFI is the strict default.</p>
+    </BentoTile>
+
+    {/* Data transparency */}
+    <BentoTile>
+      <div style={EB}>DATA & TRANSPARENCY</div>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s2,fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+        <div><strong style={{color:T.text}}>Source:</strong> Finnhub fundamentals today; the engine swaps to <strong style={{color:T.text}}>Zoya</strong> when provisioned — adding a direct compliance verdict and the non-permissible-income test.</div>
+        <div><strong style={{color:T.text}}>Honest limit:</strong> Finnhub’s free tier has no revenue-segment data, so the non-permissible-income test isn’t separately evaluated there — the sector screen carries it (shown as “not evaluated” in the Screener).</div>
+        <div><strong style={{color:T.text}}>Freshness:</strong> verdicts cache once per day. Total debt is used as a close proxy for interest-bearing debt.</div>
+      </div>
+    </BentoTile>
+
+    {/* Governance — honest, no fabricated board */}
+    <BentoTile accent={T.blue}>
+      <div style={EB}>SHARIA GOVERNANCE</div>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+        <p style={P}>MĪZAN’s methodology is aligned to <strong style={{color:T.text}}>AAOIFI Shariah Standard No. 21</strong>. Screening is an <strong style={{color:T.text}}>informational research tool</strong> — it is not a fatwa, not investment advice, and MĪZAN is not a registered investment adviser.</p>
+        <p style={P}>A named, AAOIFI-credentialed Sharia advisory board is being established and will be published here. Until then, treat verdicts as a starting point and confirm decisions with a qualified scholar.</p>
+        <div style={{padding:`${T.s3} ${T.s4}`,background:`${T.blue}0F`,border:`1px solid ${T.blue}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.text,lineHeight:1.55}}>
+          Are you an AAOIFI-certified scholar or advisor? We’re forming our Sharia supervisory board — use the in-app feedback button to reach us.
+        </div>
+      </div>
+    </BentoTile>
+
+    <div style={{fontFamily:FM,fontSize:10,color:T.dim,lineHeight:1.5,letterSpacing:"0.02em",padding:`0 ${T.s1}`}}>
+      Verdicts and ratios are estimates from public financial data against AAOIFI-aligned thresholds; they can differ from tools that use other standards or denominators. Always consult a qualified scholar for your situation.
+    </div>
+  </div>;
+}
+
 function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[],plaidAccounts=[],bankBalance=0,onNav}){
   const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
   // Live-trading opt-in preference. "" = undecided, "enabled" = bot may place
@@ -6762,6 +6864,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
         ["notifications","Notifications"],
         ["assets","Assets"],
         ["docs","Documents"],
+        ["methodology","Methodology"],
         ["privacy","Privacy"],
         ["about","About"],
         ...(isRoot?[["admin","Admin"]]:[]),
@@ -6952,6 +7055,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
     {sub==="profile"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}><AccountPanel/><SecurityPanel/></div>}
     {sub==="notifications"&&<NotificationsPanel/>}
     {sub==="docs"&&<DocumentsPanel documents={documents} accounts={accounts}/>}
+    {sub==="methodology"&&<ShariaMethodology/>}
     {sub==="privacy"&&<PrivacyPanel/>}
     {sub==="about"&&<About/>}
     {sub==="admin"&&isRoot&&<AdminPanel/>}
