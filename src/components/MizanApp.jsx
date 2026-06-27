@@ -1714,6 +1714,18 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   // users saw a hardcoded sample portfolio.
   const isEmpty=snapAccounts.length===0&&merged.length===0;
 
+  // Why a holding screens non-compliant — read from the screener's day cache so
+  // the Overview alert can explain each verdict (sector exclusion or the failing
+  // ratio), not just list tickers. Same single source of truth as the Screener.
+  const screenCache=useMemo(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}},[]);
+  const reasonFor=tk=>{
+    const v=screenCache[tk];if(!v)return"";
+    if(v.reason)return v.reason;
+    const bs=v.byStandard?.AAOIFI;
+    const f=(bs?.tests||[]).find(t=>!t.pass)||bs?.fails?.[0];
+    return f?`Fails ${f.rule}${f.detail?` (${f.detail})`:""}`:"";
+  };
+
   // Allocation slices: equity vs cash vs (future: real estate, gold, etc.).
   // Built from positions grouped by Sharia-compliance status, plus cash.
   const allocSlices=(()=>{
@@ -1749,10 +1761,19 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       </div>
     </BentoTile>}
 
-    {/* Compliance alert ribbon */}
-    {haramV>0&&<div style={{padding:`${T.s2} ${T.s4}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:T.s2}}>
-      <span style={{fontFamily:FM,fontSize:12,color:T.loss}}>{haram.map(h=>h.tk).join(", ")} — Non-compliant · {mask(f$(haramV))}</span>
-      <button onClick={()=>onNav("portfolio")} style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.loss,background:"transparent",border:`1px solid ${T.loss}40`,borderRadius:T.rMd,padding:`4px ${T.s3}`,cursor:"pointer",letterSpacing:"0.08em"}}>EXIT PLAN →</button>
+    {/* Compliance alert — non-compliant holdings WITH the reason for each */}
+    {haramV>0&&<div style={{padding:`${T.s3} ${T.s4}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:T.s2,marginBottom:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.14em",fontWeight:600}}>NON-COMPLIANT HOLDINGS · {haram.length} · {mask(f$(haramV))}</span>
+        <button onClick={()=>onNav("portfolio")} style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.loss,background:"transparent",border:`1px solid ${T.loss}40`,borderRadius:T.rMd,padding:`4px ${T.s3}`,cursor:"pointer",letterSpacing:"0.08em"}}>EXIT PLAN →</button>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+        {haram.slice(0,5).map(h=>{const why=reasonFor(h.tk);return<div key={h.tk} style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:T.s2,fontFamily:FM,fontSize:11,color:T.text}}>
+          <span><span style={{fontWeight:600,color:T.loss}}>{h.tk}</span>{why?<span style={{color:T.muted}}> — {why}</span>:null}</span>
+          <span style={{color:T.muted,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{mask(f$(mv(h)))}</span>
+        </div>;})}
+        {haram.length>5&&<span style={{fontFamily:FM,fontSize:10,color:T.muted}}>+{haram.length-5} more — see Portfolio → Screener</span>}
+      </div>
     </div>}
 
     {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}
@@ -2105,6 +2126,8 @@ function AAOIFIScreener({holdings=[]}){
   const[busy,setBusy]=useState(false);
   const[primary,setPrimary]=useState(()=>{try{return localStorage.getItem("mizan_screen_standard")||"AAOIFI";}catch{return"AAOIFI";}});
   const setStandard=v=>{setPrimary(v);try{localStorage.setItem("mizan_screen_standard",v);}catch{}};
+  const[flt,setFlt]=useState("all");        // compliance filter: all|halal|review|haram|unknown
+  const[detail,setDetail]=useState(null);   // holding whose screening breakdown is open
   // Cache freshness: most recent asOf date across all cached results.
   const today=new Date().toISOString().slice(0,10);
   const cachedDates=Object.values(results).map(r=>r.asOf).filter(Boolean);
@@ -2174,6 +2197,8 @@ function AAOIFIScreener({holdings=[]}){
   const reviewPurification=reviewValue*0.005;
   const purification=haramPurification+reviewPurification;
   const haramPct=totalEquity>0?(haramValue/totalEquity)*100:0;
+  const sortByStatus=(a,b)=>{const o={haram:0,review:1,unknown:2,halal:3};return(o[a._screen.status]??9)-(o[b._screen.status]??9);};
+  const visibleRows=[...enriched].filter(h=>flt==="all"||(h._screen.status||"unknown")===flt).sort(sortByStatus);
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     {/* ─── Intro + framework selector ───────────── */}
@@ -2230,6 +2255,22 @@ function AAOIFIScreener({holdings=[]}){
       </BentoTile>
     </div>
 
+    {/* ─── Compliance filter (halal-only / non-compliant / etc.) ─── */}
+    <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+      {[["all","All"],["halal","Halal"],["review","Review"],["haram","Non-Compliant"],["unknown","Unscreened"]].map(([k,l])=>{
+        const n=k==="all"?enriched.length:(byStatus[k]||[]).length;
+        const on=flt===k;
+        const c=k==="halal"?T.gain:k==="haram"?T.loss:k==="review"?T.gold:k==="all"?T.blue:T.muted;
+        return<button key={k} onClick={()=>setFlt(k)} style={{
+          fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",
+          padding:`6px ${T.s3}`,borderRadius:999,cursor:"pointer",
+          background:on?`${c}1A`:"transparent",border:`1px solid ${on?c:T.border}`,
+          color:on?c:T.muted,transition:"all 0.15s",
+        }}>{l} <span style={{opacity:0.65,fontVariantNumeric:"tabular-nums"}}>{n}</span></button>;
+      })}
+      <span style={{marginLeft:"auto",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>Tap “Why →” for the breakdown</span>
+    </div>
+
     <BentoTile style={{padding:0,overflow:"hidden"}}>
       <Tbl cols={[
         {l:"Symbol",r_:r=><div><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r._screen.status==="haram"?T.loss:T.textHi}}>{r.tk}</div><div style={{fontFamily:FM,fontSize:9,color:T.muted}}>{r._screen.industry||r.ty||"—"}</div></div>},
@@ -2241,8 +2282,9 @@ function AAOIFIScreener({holdings=[]}){
         {l:"Status",r_:r=><Tag label={r._screen.status==="halal"?"Halal":r._screen.status==="haram"?"Non-Compliant":r._screen.status==="review"?"Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>},
         {l:"Pass / 7",r:true,mobileHide:true,r_:r=>{const bs=r._screen.byStandard;if(!bs)return<span style={{color:T.muted}}>—</span>;const pass=Object.values(bs).filter(s=>s.pass===true).length;return<span style={{fontFamily:FM,fontSize:11,color:pass>=6?T.gain:pass>=4?T.gold:T.loss}} title={Object.entries(bs).map(([k,v])=>`${STANDARDS[k]?.name||k}: ${v.pass===true?"pass":v.pass===false?"fail":"n/a"}`).join("\n")}>{pass}/{Object.keys(STANDARDS).length}</span>;}},
         {l:"Primary",mobileHide:true,r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return v.pass===true?<Icon name="check" size={14} color={T.gain}/>:v.pass===false?<Icon name="close" size={14} color={T.loss}/>:<span style={{color:T.muted}}>…</span>;}},
-        {l:"Action",r_:r=>r._screen.status==="haram"?<Tag label="Exit + purify" color={T.loss}/>:r._screen.status==="review"?<Tag label="Verify" color={T.gold}/>:r._screen.status==="halal"?<Tag label="Hold" color={T.gain}/>:<Tag label="—" color={T.muted}/>},
-      ]} rows={[...enriched].sort((a,b)=>{const o={haram:0,review:1,unknown:2,halal:3};return(o[a._screen.status]??9)-(o[b._screen.status]??9);})}/>
+        {l:"Why",r_:r=><button onClick={()=>setDetail(r)} title="Why this verdict?" style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.blue,background:"transparent",border:`1px solid ${T.blue}40`,borderRadius:T.rMd,padding:`3px ${T.s2}`,cursor:"pointer",whiteSpace:"nowrap"}}>Why →</button>},
+      ]} rows={visibleRows}/>
+      {visibleRows.length===0&&<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No {flt==="all"?"":flt==="haram"?"non-compliant ":flt+" "}positions{flt==="all"?" yet":""}.</div>}
     </BentoTile>
 
     <div className="bento-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s4}}>
@@ -2282,6 +2324,66 @@ function AAOIFIScreener({holdings=[]}){
         </div>
       </BentoTile>
     </div>
+
+    {/* ─── Screening transparency: why this verdict? ─── */}
+    {detail&&(()=>{
+      const sc=detail._screen||{};
+      const std=STANDARDS[primary]||STANDARDS.AAOIFI;
+      const isA=std.denominator==="totalAssets";
+      const bsP=sc.byStandard?.[primary];
+      const sectorExcluded=classifyIndustry(sc.industry)==="haram"||/prohibited sector/i.test(sc.reason||"");
+      const tests=bsP?.tests||(sc.debtR!=null?[
+        {rule:`Debt/${isA?"Assets":"MC"}`,pass:sc.debtR<std.debtMax,detail:`${sc.debtR.toFixed(1)}%`,limit:std.debtMax},
+        {rule:`Cash/${isA?"Assets":"MC"}`,pass:sc.cashR<std.cashMax,detail:`${sc.cashR.toFixed(1)}%`,limit:std.cashMax},
+        {rule:`A/R/${isA?"Assets":"MC"}`,pass:sc.recvR===0||sc.recvR<std.recvMax,detail:sc.recvR?`${sc.recvR.toFixed(1)}%`:"n/a",limit:std.recvMax},
+      ]:[]);
+      const statusColor=sc.status==="halal"?T.gain:sc.status==="haram"?T.loss:sc.status==="review"?T.gold:T.muted;
+      return<div onClick={()=>setDetail(null)} style={{position:"fixed",inset:0,zIndex:1001,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:460,maxHeight:"88vh",overflowY:"auto",background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:16,boxShadow:"var(--mz-glass-shadow-lg)",padding:T.s6,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s3,marginBottom:T.s1}}>
+            <div>
+              <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>{detail.tk}</div>
+              <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:2}}>{sc.name||detail.nm||""}{sc.industry?`${sc.name||detail.nm?" · ":""}${sc.industry}`:""}</div>
+            </div>
+            <Tag label={sc.status==="halal"?"Halal":sc.status==="haram"?"Non-Compliant":sc.status==="review"?"Review":"Unscreened"} color={statusColor}/>
+          </div>
+
+          {sectorExcluded
+            ?<div style={{padding:`${T.s3} ${T.s4}`,background:`${T.loss}12`,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,marginTop:T.s3}}>
+                <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>EXCLUDED — PROHIBITED SECTOR</div>
+                <div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.5}}>{sc.industry||"This industry"} is excluded under every standard (interest-based finance, alcohol, tobacco, gambling, weapons, conventional insurance, adult entertainment, pork). Financial ratios aren’t evaluated when the core business itself is non-compliant.</div>
+              </div>
+            :<>
+              <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,margin:`${T.s4} 0 ${T.s2}`}}>{std.name} RATIO TESTS</div>
+              {tests.length===0
+                ?<div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.5}}>Financial ratios aren’t available yet for {detail.tk}. Re-screen, or check back after the next data refresh.</div>
+                :<div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {tests.map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s2,padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${t.pass?T.gain:T.loss}`,borderRadius:T.rMd}}>
+                    <span style={{fontFamily:FM,fontSize:11,color:T.text}}>{t.rule}</span>
+                    <span style={{display:"flex",alignItems:"center",gap:T.s2}}>
+                      <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:t.pass?T.gain:T.loss,fontVariantNumeric:"tabular-nums"}}>{t.detail}</span>
+                      <span style={{fontFamily:FM,fontSize:10,color:T.muted}}>limit &lt;{t.limit}%</span>
+                      <Icon name={t.pass?"check":"close"} size={13} color={t.pass?T.gain:T.loss}/>
+                    </span>
+                  </div>)}
+                </div>}
+              {sc.nonPermPct==null&&<div style={{marginTop:T.s2,fontFamily:FM,fontSize:10,color:T.dim,fontStyle:"italic"}}>Non-permissible income % not evaluated on the current data provider — the sector screen carries that test.</div>}
+            </>}
+
+          {sc.byStandard&&<>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,margin:`${T.s4} 0 ${T.s2}`}}>ACROSS ALL STANDARDS</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {Object.entries(sc.byStandard).map(([k,v])=>{const c=v.pass===true?T.gain:v.pass===false?T.loss:T.muted;return<span key={k} title={STANDARDS[k]?.name||k} style={{fontFamily:FM,fontSize:10,fontWeight:600,color:c,background:`${c}14`,border:`1px solid ${c}33`,borderRadius:999,padding:`3px ${T.s2}`}}>{(STANDARDS[k]?.name||k).replace(/ \(.*\)/,"")} {v.pass===true?"✓":v.pass===false?"✕":"–"}</span>;})}
+            </div>
+          </>}
+
+          <div style={{marginTop:T.s4,fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5}}>
+            Data: {sc.source==="zoya"?"Zoya":"Finnhub"} fundamentals{sc.asOf?` · screened ${sc.asOf}`:""}. Verdicts are estimates from public financials against AAOIFI-aligned thresholds — confirm with a qualified scholar for your situation.
+          </div>
+          <button onClick={()=>setDetail(null)} className="btn-ghost" style={{marginTop:T.s4,width:"100%",fontSize:13,padding:"10px"}}>Close</button>
+        </div>
+      </div>;
+    })()}
   </div>;
 }
 
@@ -3389,6 +3491,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ZAKAT — {new Date().getFullYear()}</div>
         <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(zakatDue)}</div>
         <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"}</div>
+        <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and live nisab. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
         <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
           {[
             [settings.investmentMethod==="longterm_30"?"Brokerage × 30%":"Brokerage",fmtUSD(acctZakatable)],
@@ -3491,7 +3594,10 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
     </BentoTile>
 
     {/* ─── ROW 1.75: Dividend Purification ─────────── */}
-    <BentoTile accent={T.gold}>
+    {/* Gated for new users: purification only has meaning once dividends from
+        connected holdings exist. Hidden entirely until a brokerage is linked
+        (or in demo) to keep the Zakat tab uncluttered for first-time users. */}
+    {(accounts.length>0||demoMode)&&<BentoTile accent={T.gold}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s2,marginBottom:T.s4}}>
         <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
           <Icon name="leaf" size={20} color={T.gold}/>
@@ -3506,7 +3612,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         // Refresh sadaqah total from localStorage so the donation tally updates
         try{setSadaqah(JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]"))}catch{}
       }}/>
-    </BentoTile>
+    </BentoTile>}
 
     {/* ─── ROW 2: Log entry + import ───────────────── */}
     <BentoTile>
@@ -4183,7 +4289,7 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp })
 }
 
 /* ─── PORTFOLIO ──────────────────────────────────────── */
-function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav,bankBalance=0}){
+function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav,onConnect,bankBalance=0}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[sub,setSub]=useState("holdings");
   const[acct,setAcct]=useState("all");
@@ -4194,6 +4300,9 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
     ? snapAccounts.flatMap(a=>a.positions.map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0)
     : [];
   const merged=baseHoldings.map(h=>{const l=live.find(q=>q.tk===h.tk);return l?{...h,px:l.price||h.px,_p:l.pct||0,_live:true}:h;});
+  // Gate data-dependent sub-tabs for brand-new users: Tax (loss harvesting)
+  // is meaningless with no positions, so it stays hidden until holdings exist.
+  const hasHoldings=snapAccounts.length>0||merged.length>0;
 
   const tot=merged.reduce((s,h)=>s+mv(h),0);
   const totCost=merged.reduce((s,h)=>s+cost(h),0);
@@ -4223,7 +4332,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
   })();
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["holdings","Holdings"],["activity","Activity"],["rebalance","Rebalance"],["tax","Tax"],["backtest","Backtest"],["screener","Screener"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["holdings","Holdings"],["activity","Activity"],["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["backtest","Backtest"],["screener","Screener"]]} active={sub} onChange={setSub}/>
 
     {sub==="holdings"&&<>
       {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}
@@ -4343,12 +4452,16 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
       {/* ─── Holdings table ───────────────────────────── */}
       <BentoTile style={{padding:0,overflow:"hidden"}}>
         <HoldingsTable filtered={filtered} valuesHidden={valuesHidden} mask={mask} f$={f$} fp={fp} fc={fc} mv={mv} gv={gv} gp={gp}/>
-        {filtered.length===0&&merged.length===0&&snapAccounts.length===0
-          // No accounts connected → genuine empty state, show skeleton rows
-          // so users sense the table shape while their first sync runs in
-          // the background. After the first sync completes, the empty
-          // state below replaces this only if filters knocked everything out.
-          ?<div style={{padding:T.s4}}><SkeletonTable rows={8} cols={6}/></div>
+        {snapAccounts.length===0
+          // No brokerage connected → teaching connect-to-unlock state. (We no
+          // longer show perpetual skeleton rows here — that read as a stuck
+          // load for a user who simply hasn't linked an account yet.)
+          ?<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center"}}>
+            <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s3}}>HOLDINGS</div>
+            <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s2}}>Connect a brokerage to see your holdings</div>
+            <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.6,maxWidth:460,margin:`0 auto ${T.s5}`}}>Your positions, cost basis, live prices, P&amp;L, and per-holding Sharia screening appear here once you link a broker via SnapTrade.</div>
+            <button onClick={onConnect} className="btn-primary" style={{fontSize:13,padding:`11px ${T.s5}`}}>+ Connect Account</button>
+          </div>
           :filtered.length===0
             ?<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No positions match these filters.</div>
             :null}
@@ -5889,7 +6002,7 @@ Activity rows on file: ${activities.length}.`;
     const q=(question||input).trim();
     if(!q||busy)return;
     setTokenNotice(null);
-    const sys=`You are MIZAN's Sharia-aware personal finance advisor. Use AAOIFI screening rules. Be specific, numeric, and concise (under 150 words unless asked). Use the portfolio summary below to answer.\n\n${context}`;
+    const sys=`You are MIZAN's Sharia-aware financial EDUCATION assistant. You provide general, educational information about Islamic finance and how AAOIFI screening rules work — NOT personalized investment advice. MIZAN is not a registered investment adviser (RIA). Do NOT issue personalized directives to buy, sell, or hold specific securities; instead explain the relevant considerations and tradeoffs, present options neutrally, and remind the user to confirm decisions with a licensed financial adviser and a qualified scholar. Use AAOIFI screening rules. Be specific, numeric, and concise (under 150 words unless asked). You may reference the portfolio summary below for context.\n\n${context}`;
     // Pre-flight token count. We send the same {messages, system, model}
     // shape the chat call will use, so the server's count matches the bytes
     // it'll actually forward to Anthropic (incl. the server-owned advisor
@@ -5982,6 +6095,11 @@ Activity rows on file: ${activities.length}.`;
         </span>
         {msgs.length>0&&<button onClick={clearChat} className="btn-ghost" style={{fontSize:10,padding:`4px ${T.s3}`}}>Clear</button>}
       </div>
+    </div>
+
+    {/* Persistent advice disclaimer — always visible, not just on the empty state */}
+    <div style={{fontFamily:FM,fontSize:10,color:T.dim,letterSpacing:"0.03em",lineHeight:1.5,padding:`0 ${T.s1}`}}>
+      Educational information only — not investment advice. MĪZAN is not a registered investment adviser. Verify decisions with a licensed professional and a qualified scholar.
     </div>
 
     {/* ─── CHAT THREAD ────────────────────────────── */}
@@ -6554,7 +6672,7 @@ function SessionsPanel(){
   </div>;
 }
 
-function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[],onNav}){
+function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[],plaidAccounts=[],bankBalance=0,onNav}){
   const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
   // Live-trading opt-in preference. "" = undecided, "enabled" = bot may place
   // real orders, "declined" = user turned it off. Mirrored to localStorage +
@@ -6743,6 +6861,37 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
             </div>;
           })}
         </div>
+      </BentoTile>
+
+      {/* ─── BANK CONNECTIONS (Plaid — managed in Finances, surfaced here so
+          every connection lives in one place) ─── */}
+      <BentoTile>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BANK CONNECTIONS</div>
+            <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+              Linked via Plaid — read-only, your credentials never touch MĪZAN. Balances, transactions, budgets, and bills live in your Finances tab.
+            </p>
+          </div>
+          <button onClick={()=>onNav?.("finances")} className="btn-primary">+ Connect Bank</button>
+        </div>
+        {plaidAccounts.length>0
+          ?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:T.s2,marginTop:T.s4}}>
+            {plaidAccounts.map((a,i)=><div key={a.account_id||a.id||i} style={{
+              background:T.surface,
+              border:`1px solid ${T.gold}40`,
+              borderLeft:`3px solid ${T.gold}`,
+              borderRadius:T.rMd,
+              padding:`${T.s3} ${T.s4}`,
+            }}>
+              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{a.name||a.official_name||a.subtype||"Account"}</div>
+              <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:T.s2,letterSpacing:"0.04em",textTransform:"capitalize"}}>{(a.subtype||a.type||"bank")}{a.mask?` ·· ${a.mask}`:""}</div>
+              <Tag label="Connected" color={T.gain}/>
+            </div>)}
+          </div>
+          :<div style={{marginTop:T.s4,padding:`${T.s6} ${T.s5}`,textAlign:"center",border:`1px dashed ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55}}>
+            No banks linked yet. Connect one to track checking, savings, and credit alongside your portfolio.
+          </div>}
       </BentoTile>
 
       {/* ─── Live Trading opt-in (trading-bot users only) ─── */}
@@ -8886,9 +9035,50 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
 // no onboarding-complete flag). Progress persists to localStorage so a refresh
 // or tab close doesn't restart from step 1. Final step writes mizan_onboarded=1
 // to Supabase user_state which marks the user as fully onboarded.
+/* ─── FEATURE TOUR ───────────────────────────────────────
+   Optional, user-triggered walkthrough (launched from the "?" in the dock).
+   Deliberately NOT a forced linear tour and NOT auto-opened — research is
+   decisive that forced tab-by-tab tours get skipped and cause guidance
+   fatigue. This is opt-in: a short, skippable carousel where each step can
+   jump straight to the relevant tab. Leads with the no-connection hero path
+   (screen a stock / calculate Zakat) so value comes before any account link. */
+function FeatureTour({open,onClose,onNav}){
+  const STEPS=[
+    {eyebrow:"START HERE", t:"Welcome to MĪZAN",            d:"A quick lay of the land. Everything here is explorable free — screen any stock for Sharia compliance or calculate your Zakat without connecting a single account.", to:null,        cta:null},
+    {eyebrow:"PORTFOLIO",  t:"Holdings & Sharia screening", d:"Live positions, activity, and rebalancing — plus the Screener, which checks any ticker against AAOIFI rules with zero connection required.",               to:"portfolio", cta:"Open Portfolio"},
+    {eyebrow:"GOALS & ZAKAT",t:"Zakat, Sadaqah & goals",    d:"Live nisab from real gold and silver prices, dividend purification, and goal templates for Hajj, Mahr, Waqf, and FIRE.",                                  to:"goals",     cta:"Open Goals"},
+    {eyebrow:"OVERVIEW",   t:"Your money at a glance",      d:"Once you connect a broker or bank, net worth, performance, allocation, and top holdings all land here in one dashboard.",                              to:"overview",  cta:"Open Overview"},
+    {eyebrow:"FINANCES",   t:"Banking & spending",          d:"Link a bank via Plaid to track balances, transactions, budgets, and bills right next to your portfolio.",                                            to:"finances",  cta:"Open Finances"},
+    {eyebrow:"AI ADVISOR", t:"Ask anything",                d:"A Sharia-aware advisor that sees your real portfolio context — answers are specific to you.",                                                         to:"advisor",   cta:"Open AI Advisor"},
+  ];
+  const[i,setI]=useState(0);
+  useEffect(()=>{if(open)setI(0);},[open]);
+  if(!open)return null;
+  const s=STEPS[i];
+  const last=i===STEPS.length-1;
+  const go=()=>{if(s.to)onNav?.(s.to);onClose?.();};
+  return<div onClick={onClose} style={{position:"fixed",inset:0,zIndex:1001,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:440,background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:16,boxShadow:"var(--mz-glass-shadow-lg)",padding:`${T.s7} ${T.s6} ${T.s5}`,textAlign:"center",animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s3}}>{s.eyebrow}</div>
+      <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s2}}>{s.t}</div>
+      <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:380,margin:`0 auto ${T.s5}`}}>{s.d}</div>
+      <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:T.s5}}>
+        {STEPS.map((_,k)=><span key={k} style={{width:k===i?18:6,height:6,borderRadius:999,background:k===i?T.blue:T.border,transition:"all 0.2s"}}/>)}
+      </div>
+      <div style={{display:"flex",gap:T.s2,justifyContent:"center",flexWrap:"wrap"}}>
+        {s.cta&&<button onClick={go} className="btn-primary" style={{fontSize:13,padding:`10px ${T.s5}`}}>{s.cta} →</button>}
+        {last
+          ?<button onClick={onClose} className="btn-ghost" style={{fontSize:13,padding:`9px ${T.s5}`}}>Done</button>
+          :<button onClick={()=>setI(i+1)} className="btn-ghost" style={{fontSize:13,padding:`9px ${T.s5}`}}>Next →</button>}
+      </div>
+      <button onClick={onClose} style={{marginTop:T.s4,background:"none",border:"none",color:T.muted,fontFamily:FM,fontSize:11,letterSpacing:"0.04em",cursor:"pointer"}}>Skip tour</button>
+    </div>
+  </div>;
+}
+
 function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}){
   const STORAGE_KEY="mizan_onboarding_step";
-  const[step,setStepRaw]=useState(()=>{try{const v=+localStorage.getItem(STORAGE_KEY);return Number.isFinite(v)&&v>=0&&v<5?v:0;}catch{return 0;}});
+  const[step,setStepRaw]=useState(()=>{try{const v=+localStorage.getItem(STORAGE_KEY);return Number.isFinite(v)&&v>=0&&v<2?v:0;}catch{return 0;}});
   const[dir,setDir]=useState(0); // -1 prev, +1 next; drives slide direction
   const[mounted,setMounted]=useState(false);
   const setStep=n=>{
@@ -8897,9 +9087,6 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
     try{localStorage.setItem(STORAGE_KEY,String(n));}catch{}
   };
   useEffect(()=>{setMounted(true);},[]);
-
-  // Auto-advance step 2 once a broker is actually connected during the tour.
-  useEffect(()=>{if(step===1&&snapAccountsLen>0)setStep(2);},[snapAccountsLen]); // eslint-disable-line
 
   const finish=async()=>{
     try{localStorage.setItem("mizan_onboarded","1");}catch{}
@@ -8925,13 +9112,13 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
     </div>
     <div style={{fontFamily:FU,fontSize:30,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.15,maxWidth:560,margin:`0 auto ${T.s3}`}}>Your Halal Financial Terminal</div>
     <div style={{fontFamily:FU,fontSize:15,color:T.muted,lineHeight:1.6,maxWidth:560,margin:`0 auto ${T.s6}`,letterSpacing:"-0.005em"}}>
-      Brokerages, banking, AI insights — unified and Sharia-screened, in one place.
+      Brokerages, banking, and Zakat — unified and Sharia-screened, in one place.
     </div>
     <div style={{display:"flex",flexDirection:"column",gap:T.s2,maxWidth:480,margin:"0 auto",textAlign:"left"}}>
       {[
         {accent:T.blue,t:"Real portfolio",d:"Live balances + positions from every connected broker (Fidelity, Robinhood, Schwab, Coinbase, and 60+ more)."},
         {accent:T.gold,t:"Sharia-screened",d:"Every position screened against AAOIFI + 6 other frameworks. Automatic Zakat + purification math."},
-        {accent:T.gain,t:"AI advisor with context",d:"Ask anything about your portfolio. Claude sees your accounts, positions, and activity — answers are specific to you."},
+        {accent:T.gain,t:"Banking & spending",d:"Link your bank via Plaid to see balances, transactions, budgets, and bills right next to your portfolio — one complete picture."},
       ].map(b=><div key={b.t} style={{padding:`${T.s3} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${b.accent}`,borderRadius:T.rMd}}>
         <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.t}</div>
         <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{b.d}</div>
@@ -8939,37 +9126,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
     </div>
   </>;
 
-  // ───── STEP 2 — Connect brokerage ──────────
-  const StepConnect=<>
-    <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Connect your brokerage</div>
-    <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
-      MĪZAN reads your accounts directly via SnapTrade — your credentials never touch our servers. Read-only by default.
-    </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s2,maxWidth:560,margin:`0 auto ${T.s5}`}}>
-      {[
-        {n:"Fidelity",  c:T.blue},
-        {n:"Robinhood", c:T.gain},
-        {n:"Schwab",    c:T.loss},
-        {n:"Empower",   c:"#7C3AED"},
-        {n:"Coinbase",  c:T.gold},
-        {n:"Chase",     c:"#0F4C81"},
-      ].map(b=><div key={b.n} style={{
-        padding:`${T.s3} ${T.s2}`,
-        background:T.surface,
-        border:`1px solid ${T.border}`,
-        borderTop:`3px solid ${b.c}`,
-        borderRadius:T.rMd,
-        textAlign:"center",
-        fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",
-      }}>{b.n}</div>)}
-    </div>
-    <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.06em",marginBottom:T.s4}}>+ 60 more available</div>
-    {snapAccountsLen>0
-      ?<div style={{padding:`${T.s3} ${T.s4}`,background:T.gainBg,border:`1px solid ${T.gain}40`,borderRadius:T.rMd,fontFamily:FM,fontSize:13,color:T.gain,maxWidth:420,margin:"0 auto"}}>● Connected — {snapAccountsLen} account{snapAccountsLen===1?"":"s"} linked.</div>
-      :<button onClick={onConnect} className="btn-primary" style={{fontSize:14,padding:`12px ${T.s6}`}}>+ Connect Account</button>}
-  </>;
-
-  // ───── STEP 3 — Import CSV ──────────
+  // ───── Import CSV (defined but unused — see note below) ──────────
   const csvRef=useRef(null);
   const[csvBroker,setCsvBroker]=useState("Fidelity");
   const[csvStatus,setCsvStatus]=useState(null);
@@ -9015,83 +9172,13 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
     {csvStatus&&<div style={{maxWidth:520,margin:"0 auto",padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:csvStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(csvStatus.ok?T.gain:T.loss)+"30"}`,color:csvStatus.ok?T.gain:T.loss}}>{csvStatus.ok?ICON_OK:ICON_NO}{csvStatus.msg}</div>}
   </>;
 
-  // ───── STEP 4 — First AI question ──────────
-  const PRESET_QUESTION="How is my portfolio performing vs. halal benchmarks?";
-  const[aiQ]=useState(PRESET_QUESTION);
-  const[aiAnswer,setAiAnswer]=useState("");
-  const[aiBusy,setAiBusy]=useState(false);
-  const[aiErr,setAiErr]=useState(null);
-  const[aiStarted,setAiStarted]=useState(false);
-  const askAi=useCallback(async()=>{
-    if(aiBusy||aiAnswer)return;
-    setAiBusy(true);setAiErr(null);
-    try{
-      const r=await apiFetch("/api/advisor",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          system:"You are MIZAN's Sharia-aware personal finance advisor. Use AAOIFI screening rules. Be specific, numeric, and concise (under 150 words). This is the user's first conversation — be welcoming.",
-          messages:[{role:"user",content:aiQ}],
-          max_tokens:600,
-        }),
-      });
-      const d=await r.json();
-      if(!r.ok||d.error)throw new Error(d.error?.message||d.error||`HTTP ${r.status}`);
-      const text=(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
-      setAiAnswer(text||"(empty response)");
-    }catch(err){setAiErr(err.message||"Request failed");}
-    finally{setAiBusy(false);}
-  },[aiBusy,aiAnswer,aiQ]);
-  // Auto-fire when the Advisor step opens (once). It's index 2 now that the CSV
-  // import step was removed from the flow.
-  useEffect(()=>{if(step===2&&!aiStarted){setAiStarted(true);askAi();}},[step,aiStarted,askAi]);
-  const StepAdvisor=<>
-    <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Ask your AI advisor</div>
-    <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
-      This is how every conversation works on the AI Advisor tab. The advisor sees your real account context — answers are tailored to you.
-    </div>
-    <div style={{maxWidth:560,margin:"0 auto",display:"flex",flexDirection:"column",gap:T.s3,textAlign:"left"}}>
-      {/* User bubble */}
-      <div style={{display:"flex",justifyContent:"flex-end",gap:T.s2}}>
-        <div style={{
-          maxWidth:"82%",
-          padding:`${T.s3} ${T.s4}`,
-          borderRadius:T.rLg,
-          background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
-          color:"#fff",
-          fontFamily:FP,fontSize:14,lineHeight:1.55,letterSpacing:"-0.005em",
-          boxShadow:`0 4px 14px ${T.blue}40`,
-        }}>{aiQ}</div>
-        <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:T.surface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FP,fontSize:13,fontWeight:600,color:T.text}}>Y</div>
-      </div>
-      {/* Assistant bubble */}
-      <div style={{display:"flex",gap:T.s2,alignItems:"flex-start"}}>
-        <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FP,fontSize:13,fontWeight:700,color:"#fff",boxShadow:`0 2px 8px ${T.blue}40`}}>M</div>
-        <div style={{
-          maxWidth:"82%",
-          padding:`${T.s3} ${T.s4}`,
-          borderRadius:T.rLg,
-          background:T.surface,
-          border:`1px solid ${T.border}`,
-          color:T.text,
-          fontFamily:FP,fontSize:14,lineHeight:1.6,letterSpacing:"-0.005em",
-          whiteSpace:"pre-wrap",
-          minHeight:60,
-        }}>
-          {aiBusy
-            ?<div style={{display:"flex",gap:T.s1}}>{[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:T.muted,animation:"blink 1.4s infinite",animationDelay:`${i*0.15}s`}}/>)}</div>
-            :aiErr?<span style={{color:T.loss}}>{aiErr}</span>:aiAnswer||"…"}
-        </div>
-      </div>
-    </div>
-  </>;
-
-  // ───── STEP 5 — Tour complete ──────────
+  // ───── Final step — Tour complete ──────────
   const navItems=[
     {n:"Overview",   d:"Net worth, performance, allocation, top holdings — all in one bento."},
     {n:"Finances",   d:"Bank balances, transactions, spending by category, recurring (Plaid)."},
     {n:"Portfolio",  d:"Holdings, activity, tax planning, backtest, rebalance, Sharia screener."},
     {n:"Goals",      d:"Savings goals, Zakat & Sadaqah ledger, retirement (FIRE) projection."},
-    {n:"AI Advisor", d:"Sharia-aware, context-rich chat (you just tried this)."},
+    {n:"AI Advisor", d:"Sharia-aware chat with your full portfolio context — ask anything."},
     {n:"Settings",   d:"Brokers, 2FA, manual assets, documents, demo mode."},
   ];
   const StepDone=<>
@@ -9112,13 +9199,16 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
         <span style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.5,letterSpacing:"-0.005em"}}>{it.d}</span>
       </div>)}
     </div>
+    <div style={{fontFamily:FM,fontSize:10,color:T.dim,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:520,margin:`${T.s5} auto 0`}}>
+      MĪZAN provides Sharia screening, Zakat, and educational tools — not investment advice, and not a registered investment adviser. Compliance verdicts and Zakat figures are estimates; confirm important decisions with a qualified scholar and a licensed professional.
+    </div>
   </>;
 
   // CSV/document import is intentionally NOT part of onboarding — new users
   // shouldn't be asked to upload anything before they ever see the app. It still
   // lives in Settings for anyone who wants to backfill history. (StepImport is
   // left defined but unused.)
-  const steps=[StepWelcome,StepConnect,StepAdvisor,StepDone];
+  const steps=[StepWelcome,StepDone];
   const LAST=steps.length-1;
   const ctaLabel=step===0?"Let's get started →":step===LAST?"Open MĪZAN →":"Continue →";
   const onCta=()=>{if(step===LAST)return finish();setStep(step+1);};
@@ -9318,6 +9408,7 @@ export default function Mizan(){
   // closure of those handlers.
   const palette=useCommandPalette();
   const[shortcutHelpOpen,setShortcutHelpOpen]=useState(false);
+  const[tourOpen,setTourOpen]=useState(false);
 
   // ── PWA install prompt ──────────────────────────────────────────────────
   // Capture beforeinstallprompt so we can show a button instead of relying
@@ -10541,7 +10632,7 @@ export default function Mizan(){
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
-        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} bankBalance={bankBalance}/>}
+        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} onConnect={()=>{setConnMode("read");setConn(true);}} bankBalance={bankBalance}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} live={live} mapPosition={mapPosition} activities={snapActivities} onNav={setNav} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={botIsRoot} consented={botConsented} demoMode={demoMode}/>}
         {nav==="goals"     &&<GoalsHub
           snapAccounts={visibleAccounts}
@@ -10553,7 +10644,7 @@ export default function Mizan(){
           bankBalance={bankBalance}
         />}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>{setConnMode("read");setConn(true);}} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} onNav={setNav}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>{setConnMode("read");setConn(true);}} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} plaidAccounts={plaidAccounts} bankBalance={bankBalance} onNav={setNav}/>}
       </div>
     </main>
 
@@ -10605,6 +10696,14 @@ export default function Mizan(){
           boxShadow:active?`0 6px 18px ${T.blue}60`:"none",
         }}>{n.l}</button>;
       })}
+      {/* Optional, user-triggered tour launcher (not a forced walkthrough). */}
+      <button onClick={()=>setTourOpen(true)} title="Take a tour" aria-label="Take a tour" className="dock-off" style={{
+        width:36,height:36,padding:0,marginLeft:T.s1,flexShrink:0,
+        display:"flex",alignItems:"center",justifyContent:"center",
+        background:"transparent",border:"1px solid var(--mz-glass-border)",borderRadius:999,
+        color:T.text,fontFamily:FM,fontSize:14,fontWeight:600,cursor:"pointer",
+        transition:"all 0.18s cubic-bezier(.34,1.56,.64,1)",
+      }}>?</button>
     </nav>
 
     {showConn&&<ConnectModal onClose={()=>{setConn(false);setConnMode("read");}} snapId={apiKeys.snapId} connectionType={connMode} onConnected={()=>{
@@ -10635,6 +10734,7 @@ export default function Mizan(){
       onClose={()=>setShortcutHelpOpen(false)}
       shortcuts={isAdmin?SHORTCUT_REFERENCE:Object.fromEntries(Object.entries(SHORTCUT_REFERENCE).filter(([k])=>k!=="g t"))}
     />
+    <FeatureTour open={tourOpen} onClose={()=>setTourOpen(false)} onNav={setNav}/>
     <CommandPalette
       open={palette.open}
       onClose={palette.close}
@@ -10652,6 +10752,7 @@ export default function Mizan(){
         {id:"act-connect",  label:"Connect Account",     group:"Actions",  icon:"+",             action:()=>setConn(true)},
         {id:"act-demo",     label:demoMode?"Disable demo mode":"Enable demo mode", group:"Actions", icon:"◧", action:()=>toggleDemo()},
         {id:"act-help",     label:"Keyboard shortcuts",  group:"Actions",  hint:"?",   icon:<Icon name="keyboard" size={14}/>, action:()=>setShortcutHelpOpen(true)},
+        {id:"act-tour",     label:"Take a tour",         group:"Actions",  icon:"◎",             action:()=>setTourOpen(true)},
       ]}
       onSelect={()=>{/* command.action already fired in the palette */}}
     />

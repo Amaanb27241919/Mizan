@@ -120,7 +120,7 @@ const styles = {
   buttonDisabled: { opacity: 0.55, cursor: 'not-allowed', boxShadow: 'none' },
   notice: {
     fontSize: 13,
-    color: '#117a52',
+    color: '#1c1b19',
     background: 'rgba(30,78,140,0.07)',
     border: '1px solid rgba(30,78,140,0.20)',
     padding: 14,
@@ -328,7 +328,7 @@ export default function Login() {
 
         {mode === 'verify-sent' ? (
           <div style={styles.notice}>
-            <div style={{ fontWeight: 600, color: '#E6E8EE', marginBottom: 6 }}>
+            <div style={{ fontWeight: 600, color: '#1e4e8c', marginBottom: 6 }}>
               Confirm your email
             </div>
             We sent a confirmation link to <strong>{email}</strong>. Click it to
