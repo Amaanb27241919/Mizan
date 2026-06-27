@@ -6,7 +6,10 @@
  *  - Network-first for /api/* and HTML navigations (with cache fallback)
  */
 
-const CACHE_NAME = "mizan-v3";
+// Bump this on any release that must invalidate cached app assets. The activate
+// handler deletes every cache whose name !== CACHE_NAME, so a new version forces
+// all clients to re-fetch fresh JS/CSS on next load (no stale-bundle lag).
+const CACHE_NAME = "mizan-v4";
 
 const STATIC_ASSET_EXTS = [
   ".js",
