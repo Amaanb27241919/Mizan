@@ -4332,7 +4332,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
   })();
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["holdings","Holdings"],["activity","Activity"],["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["backtest","Backtest"],["screener","Screener"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["holdings","Holdings"],["screener","Screener"],["activity","Activity"],["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["backtest","Backtest"],["assets","Assets"]]} active={sub} onChange={setSub}/>
 
     {sub==="holdings"&&<>
       {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}
@@ -4487,6 +4487,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
     {sub==="backtest"&&<HistoricalBacktest/>}
 
     {sub==="screener"&&<AAOIFIScreener holdings={merged}/>}
+    {sub==="assets"&&<ManualAssets demoMode={demoMode}/>}
   </div>;
 }
 
@@ -6902,7 +6903,6 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
         ...(isRoot?[["keys","API Keys"]]:[]),
         ["connections","Connections"],
         ["account","Account"],
-        ["assets","Assets"],
         ["docs","Documents"],
         ["methodology","Methodology"],
         ...(isRoot?[["admin","Admin"]]:[]),
@@ -6910,8 +6910,6 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       active={sub}
       onChange={setSub}
     />
-
-    {sub==="assets"&&<ManualAssets demoMode={demoMode}/>}
 
     {/* ─── API KEYS (Root only) ───────────────────── */}
     {sub==="keys"&&isRoot&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -9441,9 +9439,17 @@ export default function Mizan(){
   // to re-walk the list. Hydrated from localStorage on first paint, then
   // refreshed every 90s on the app-wide auto-sync cadence.
   const[plaidAccounts,setPlaidAccounts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_plaid_accounts")||"[]");}catch{return[];}});
-  useEffect(()=>{try{localStorage.setItem("mizan_plaid_accounts",JSON.stringify(plaidAccounts));}catch{}},[plaidAccounts]);
+  useEffect(()=>{if(demoMode)return;try{localStorage.setItem("mizan_plaid_accounts",JSON.stringify(plaidAccounts));}catch{}},[plaidAccounts,demoMode]);
   useEffect(()=>{
     let cancel=false;
+    // Demo mode: feed the local bank fixtures into the SHARED plaidAccounts +
+    // bankBalance so Overview's Cash on Hand and net worth match the Finances
+    // tab (which also renders DEMO_BANK_ACCOUNTS). No real Plaid call in demo.
+    if(demoMode){
+      setPlaidAccounts(DEMO_BANK_ACCOUNTS);
+      setBankBalance(DEMO_BANK_ACCOUNTS.reduce((s,a)=>{const v=+a.current_bal||0;return isBankDebt(a)?s-v:isBankAsset(a)?s+v:s;},0));
+      return;
+    }
     const pull=async()=>{
       try{
         const r=await apiFetch("/api/plaid/accounts");
@@ -9468,7 +9474,7 @@ export default function Mizan(){
     pull();
     const tick=setInterval(pull,90*1000);
     return()=>{cancel=true;clearInterval(tick);};
-  },[]);
+  },[demoMode]);
 
   // ── Account nicknames ─────────────────────────────────
   // Per-user, per-account-id display overrides. Hydrated from
