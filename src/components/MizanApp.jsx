@@ -1695,6 +1695,10 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         if(histByMonth[k])p.value=+histByMonth[k].total.toFixed(2);
       });
     }
+    // Always pin the final point to the live net worth so the chart's tip
+    // matches the headline number — a stale current-month snapshot must never
+    // override "now". (1D/1W already pin their tip above.)
+    if(tot>0&&series.length)series[series.length-1]={...series[series.length-1],value:+tot.toFixed(2)};
     return series;
   },[activities,netWorthHistory,totBucket,range,intraday,tot,snap1D]);
 
@@ -1843,7 +1847,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
                   if(range==="1W")return d.toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});
                   return d.toLocaleDateString("en-US",{year:"numeric",month:"short"});
                 }}
-                formatter={(v,name)=>[fmtUSD(v),name==="value"?"Portfolio":"Contributions"]}
+                formatter={(v,name)=>[fmtUSD(v),name==="value"?"Net Worth":"Contributions"]}
                 contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)"}}
                 itemStyle={{color:T.textHi}} labelStyle={{color:T.muted,fontSize:10}}/>
               <Area type="monotone" dataKey="value" stroke={T.blue} strokeWidth={2} fill="url(#hero-g)" dot={false}/>
