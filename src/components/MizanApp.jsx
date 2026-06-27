@@ -5192,10 +5192,16 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
   const saveNlStrategy=async()=>{
     if(!nlResult||!riskAck)return;
     if(!nlAccount){setNlErr("Select a brokerage account to run this strategy on.");return;}
+    // Deployable cap (authoritative): capital_allocated = deploy_pct% of the
+    // selected account's buying power, hard-capped at 50% so the rest is reserved.
+    const acc=snapAccounts.find(a=>acctId(a)===nlAccount);
+    const bp=Number(acc?.cash ?? acc?.balance ?? 0);
+    const deployPct=Math.min(100,Math.max(5,Math.round(Number(nlResult.params?.deploy_pct||25))||25));
+    const capital=bp>0?Math.floor(bp*deployPct/100):Number(nlResult.capital_allocated||0);
     try{
       const r=await apiFetch("/api/bot/strategies",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...nlResult,account_id:nlAccount,layer:defaultLayer,nl_description:nlInput,nl_risk_disclosed:true}),
+        body:JSON.stringify({...nlResult,capital_allocated:capital,params:{...(nlResult.params||{}),deploy_pct:deployPct},account_id:nlAccount,layer:defaultLayer,nl_description:nlInput,nl_risk_disclosed:true}),
       });
       const d=await r.json().catch(()=>({}));
       if(r.ok){setNlResult(null);setNlInput("");setRiskAck(false);setNlErr(null);await loadStrategies();}
@@ -5405,8 +5411,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           ["Strategy type",nlResult.strategy_type||"—"],
           ["Entry rules",rule(entryRules)],
           ["Exit rules",rule(exitRules)],
-          ["Position size",posSize!=null?`${posSize}% of allocated capital`:"—"],
-          ["Capital allocated",`$${Number(nlResult.capital_allocated||0).toLocaleString()}`],
+          ["Position size",posSize!=null?`${posSize}% of deployable capital`:"—"],
           ["Profit target (GOAL)",`${nlResult.profit_target_pct}%`],
           ["Stop loss",`${nlResult.stop_loss_pct}%`],
           ["Max drawdown",nlResult.max_drawdown_pct!=null?`${nlResult.max_drawdown_pct}%`:"—"],
@@ -5433,6 +5438,45 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             </select>}
           {nlResult.account_id&&!snapAccounts.find(a=>acctId(a)===nlResult.account_id)&&<div style={{fontFamily:FM,fontSize:10,color:T.gold,marginTop:4}}>Couldn’t match “{nlResult.account_id}” to a connected account — pick one above.</div>}
         </div>
+
+        {/* Deployable capital — how much of THIS account's buying power the strategy
+            may use. Hard-capped at 50%; the rest stays untouched in every mode. */}
+        {(()=>{
+          const acc=snapAccounts.find(a=>acctId(a)===nlAccount);
+          const bp=Number(acc?.cash ?? acc?.balance ?? 0);
+          const f=n=>"$"+Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0});
+          const pct=Math.min(100,Math.max(5,Math.round(Number(nlResult.params?.deploy_pct ?? (bp>0?(Number(nlResult.capital_allocated||0)/bp)*100:25))||25)));
+          const deployable=bp>0?Math.floor(bp*pct/100):Number(nlResult.capital_allocated||0);
+          const reserve=Math.max(0,bp-deployable);
+          const setPct=np=>{const c=Math.min(100,Math.max(5,np));setNlResult(prev=>({...prev,capital_allocated:bp>0?Math.floor(bp*c/100):prev.capital_allocated,params:{...(prev.params||{}),deploy_pct:c}}));};
+          return<div style={{marginBottom:T.s3}}>
+            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s2}}>DEPLOYABLE CAPITAL</div>
+            {bp>0?<>
+              <div style={{display:"flex",justifyContent:"space-between",gap:T.s2,fontFamily:FM,fontSize:11,marginBottom:T.s2,flexWrap:"wrap"}}>
+                <span style={{color:T.muted}}>Buying power <span style={{color:T.textHi,fontWeight:600}}>{f(bp)}</span></span>
+                <span style={{color:T.muted}}>Deploy <span style={{color:T.blue,fontWeight:600}}>{pct}% = {f(deployable)}</span></span>
+                <span style={{color:T.muted}}>Reserved <span style={{color:T.gain,fontWeight:600}}>{f(reserve)}</span></span>
+              </div>
+              <input type="range" min={5} max={100} step={5} value={pct} onChange={e=>setPct(+e.target.value)} style={{width:"100%",accentColor:T.blue}}/>
+              <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:4,lineHeight:1.5}}>Deploy as much or as little as you choose — the reserved portion stays untouched in every mode (Manual · Semi · Full).</div>
+            </>:<div style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>Select a funded brokerage account to set a deployable %. Current allocation: {f(nlResult.capital_allocated)}.</div>}
+          </div>;
+        })()}
+
+        {/* Faithfully captured trader rules + honest "approximated" label. */}
+        {(()=>{
+          const dr=nlResult.params?.detailed_rules||nlResult.detailed_rules;
+          const ex=nlResult.params?.executed_as||nlResult.executed_as;
+          if(!dr&&!ex)return null;
+          return<div style={{marginBottom:T.s3,padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
+            <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s2,flexWrap:"wrap"}}>
+              <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600}}>YOUR RULES — CAPTURED</span>
+              <span style={{fontFamily:FM,fontSize:9,fontWeight:600,color:T.gold,background:`${T.gold}14`,border:`1px solid ${T.gold}33`,borderRadius:999,padding:`2px ${T.s2}`,letterSpacing:"0.04em"}}>APPROXIMATED · DAILY LONG-ONLY · NOT TICK-BY-TICK</span>
+            </div>
+            {dr&&<div style={{fontFamily:FP,fontSize:12,color:T.text,lineHeight:1.55,marginBottom:ex?T.s2:0}}>{dr}</div>}
+            {ex&&<div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5}}><span style={{fontWeight:600}}>Executed as:</span> {ex}</div>}
+          </div>;
+        })()}
 
         {/* Client-side backtest reality check + mismatch warning + risk disclosure */}
         <StrategyReality strat={nlResult}/>
