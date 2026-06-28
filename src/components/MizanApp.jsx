@@ -9095,7 +9095,7 @@ function FeatureTour({open,onClose,onNav}){
   </div>;
 }
 
-function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}){
+function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,resolvedTheme}){
   const STORAGE_KEY="mizan_onboarding_step";
   const[step,setStepRaw]=useState(()=>{try{const v=+localStorage.getItem(STORAGE_KEY);return Number.isFinite(v)&&v>=0&&v<2?v:0;}catch{return 0;}});
   const[dir,setDir]=useState(0); // -1 prev, +1 next; drives slide direction
@@ -9117,16 +9117,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav}
   // ───── STEP 1 — Welcome ──────────
   const StepWelcome=<>
     <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:T.s3,marginBottom:T.s5}}>
-      <svg width={56} height={56} viewBox="0 0 32 32" fill="none">
-        <circle cx="16" cy="7" r="2" fill={T.blue}/>
-        <rect x="5" y="8.5" width="22" height="2" rx="1" fill={T.blue}/>
-        <rect x="6" y="10.5" width="1.5" height="4.5" rx="0.75" fill={T.blue}/>
-        <rect x="24.5" y="10.5" width="1.5" height="4.5" rx="0.75" fill={T.blue}/>
-        <path d="M3.5 15.5 Q6.75 19.5 10 15.5" stroke={T.blue} strokeWidth="1.75" strokeLinecap="round"/>
-        <path d="M22 15.5 Q25.25 19.5 28.5 15.5" stroke={T.blue} strokeWidth="1.75" strokeLinecap="round"/>
-        <rect x="15.25" y="10.5" width="1.5" height="12" rx="0.75" fill={T.blue}/>
-        <rect x="11" y="22.5" width="10" height="2" rx="1" fill={T.blue}/>
-      </svg>
+      <img src={resolvedTheme==="dark"?"/mark-light.png":"/mark.png"} alt="" width={56} height={56} style={{display:"block"}}/>
       <span style={{fontFamily:FU,fontSize:38,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>MĪZAN</span>
     </div>
     <div style={{fontFamily:FU,fontSize:30,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.15,maxWidth:560,margin:`0 auto ${T.s3}`}}>Your Halal Financial Terminal</div>
@@ -10453,6 +10444,8 @@ export default function Mizan(){
   const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},...(isAdmin?[{id:"trade",l:"Trade"}]:[]),{id:"goals",l:"Goals"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"}];
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
+    {/* Atmospheric Arabic wordmark (ميزان) — fixed, translucent, sits behind all content */}
+    <div aria-hidden="true" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontFamily:FU,fontSize:"clamp(200px,28vw,460px)",fontWeight:800,letterSpacing:"-0.04em",whiteSpace:"nowrap",lineHeight:1,color:resolvedTheme==="dark"?"rgba(239,233,221,0.05)":"rgba(30,78,140,0.06)",userSelect:"none",pointerEvents:"none",zIndex:0}}>ميزان</div>
     <style>{`
       *{box-sizing:border-box;margin:0;padding:0;}
       html,body{background:${T.bg};-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
@@ -10604,7 +10597,7 @@ export default function Mizan(){
     {/* STATUS BAR — slim, glanceable, single row. Brand left, info middle, actions right. */}
     <header className="mz-status glass" style={{minHeight:"calc(48px + env(safe-area-inset-top, 0px))",padding:`env(safe-area-inset-top, 0px) ${T.s5} 0`,borderBottom:`1px solid var(--mz-glass-border)`,display:"flex",alignItems:"center",gap:T.s4,position:"sticky",top:0,zIndex:100}}>
       <div style={{display:"flex",alignItems:"center",gap:T.s2,flexShrink:0}}>
-        <svg width={18} height={18} viewBox="0 0 16 16" fill="none"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={T.blue}/><stop offset="100%" stopColor={T.gold}/></linearGradient></defs><path d="M8 1L15 7L8 13L1 7Z" stroke="url(#lg)" strokeWidth={1.5} fill="none"/><circle cx="8" cy="7" r="2" fill={T.blue} opacity={0.9}/></svg>
+        <img src={resolvedTheme==="dark"?"/mark-light.png":"/mark.png"} alt="" width={18} height={18} style={{display:"block",flexShrink:0}}/>
         <span style={{fontFamily:FU,fontSize:15,fontWeight:700,color:T.textHi,letterSpacing:"0.04em"}}>MĪZAN</span>
         <span style={{fontFamily:FM,fontSize:8,fontWeight:600,color:T.blue,letterSpacing:"0.18em",background:`${T.blue}18`,border:`1px solid ${T.blue}30`,padding:"3px 7px",borderRadius:999}}>HALAL</span>
       </div>
@@ -10665,7 +10658,7 @@ export default function Mizan(){
       transition:"color 0.15s",
     }}>{ptrReady?"↑ Release to refresh":"↓ Pull to refresh"}</div>}
 
-    <main style={{maxWidth:1320,margin:"0 auto",padding:`24px 24px calc(110px + env(safe-area-inset-bottom, 0px))`}}>
+    <main style={{position:"relative",zIndex:1,maxWidth:1320,margin:"0 auto",padding:`24px 24px calc(110px + env(safe-area-inset-bottom, 0px))`}}>
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode} pendingSignals={pendingSignals}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
@@ -10808,6 +10801,7 @@ export default function Mizan(){
           onImportCSV={importCSV}
           onComplete={()=>{setOnboardingDismissed(true);setOnboardingForce(false);}}
           onNav={setNav}
+          resolvedTheme={resolvedTheme}
         />}
   </div>;
 }

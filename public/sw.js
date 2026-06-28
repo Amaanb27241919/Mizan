@@ -9,7 +9,7 @@
 // Bump this on any release that must invalidate cached app assets. The activate
 // handler deletes every cache whose name !== CACHE_NAME, so a new version forces
 // all clients to re-fetch fresh JS/CSS on next load (no stale-bundle lag).
-const CACHE_NAME = "mizan-v4";
+const CACHE_NAME = "mizan-v5";
 
 const STATIC_ASSET_EXTS = [
   ".js",
@@ -32,7 +32,9 @@ const PRECACHE_URLS = [
   "/manifest.webmanifest",
   "/icon-192.png",
   "/icon-512.png",
-  "/favicon.svg",
+  "/favicon.png",
+  "/mark.png",
+  "/mark-light.png",
   "/offline.html",
 ];
 
