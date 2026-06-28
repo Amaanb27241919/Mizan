@@ -10451,7 +10451,7 @@ export default function Mizan(){
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     {/* Atmospheric Arabic wordmark (ميزان) — fixed, translucent, sits behind all content */}
-    <div aria-hidden="true" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(82vw,820px)",aspectRatio:"1095 / 418",background:resolvedTheme==="dark"?"#efe9dd":"#1e4e8c",opacity:0.08,WebkitMaskImage:"url(/wordmark-ar.png)",maskImage:"url(/wordmark-ar.png)",WebkitMaskRepeat:"no-repeat",maskRepeat:"no-repeat",WebkitMaskPosition:"center",maskPosition:"center",WebkitMaskSize:"contain",maskSize:"contain",userSelect:"none",pointerEvents:"none",zIndex:0}}></div>
+    <div aria-hidden="true" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(82vw,820px)",aspectRatio:"1058 / 380",background:resolvedTheme==="dark"?"#efe9dd":"#1e4e8c",opacity:0.08,WebkitMaskImage:"url(/wordmark-ar.png)",maskImage:"url(/wordmark-ar.png)",WebkitMaskRepeat:"no-repeat",maskRepeat:"no-repeat",WebkitMaskPosition:"center",maskPosition:"center",WebkitMaskSize:"contain",maskSize:"contain",userSelect:"none",pointerEvents:"none",zIndex:0}}></div>
     <style>{`
       *{box-sizing:border-box;margin:0;padding:0;}
       html,body{background:${T.bg};-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
