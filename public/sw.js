@@ -9,7 +9,7 @@
 // Bump this on any release that must invalidate cached app assets. The activate
 // handler deletes every cache whose name !== CACHE_NAME, so a new version forces
 // all clients to re-fetch fresh JS/CSS on next load (no stale-bundle lag).
-const CACHE_NAME = "mizan-v7";
+const CACHE_NAME = "mizan-v8";
 
 const STATIC_ASSET_EXTS = [
   ".js",
@@ -83,7 +83,17 @@ async function cacheFirst(request) {
   if (cached) return cached;
   try {
     const response = await fetch(request);
-    if (response && response.status === 200 && response.type !== "opaque") {
+    // Guard against MIME-poisoning: when a stale client requests an old hashed
+    // asset that no longer exists, Vercel's SPA rewrite returns index.html
+    // (text/html, 200). Never cache or serve that HTML for a JS/CSS module
+    // request — it crashes module loading ("Expected a JavaScript module but
+    // got text/html"). Fall back to network/error instead so a reload recovers.
+    const ct = (response && response.headers.get("content-type")) || "";
+    const wantsScript = /\.(js|mjs|css)$/i.test(new URL(request.url).pathname);
+    if (wantsScript && ct.includes("text/html")) {
+      return cached || Response.error();
+    }
+    if (response && response.status === 200 && response.type !== "opaque" && !ct.includes("text/html")) {
       const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());
     }
