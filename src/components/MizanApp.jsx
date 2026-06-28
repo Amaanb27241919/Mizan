@@ -20,6 +20,7 @@ import BugReportButton from "./BugReportButton.jsx";
 //   slate → unscreened, violet → crypto.
 const T = {
   bg:"var(--mz-bg)", surface:"var(--mz-surface)", card:"var(--mz-card)",
+  tileFill:"var(--mz-tile-fill)",   // translucent bento fill — lets the canvas watermark read through
   border:"var(--mz-border)", borderHi:"var(--mz-borderHi)",
   blue:"#1e4e8c",  blueDim:"#15396b",    // navy — primary accent, active chips, links, CTAs
   gold:"#b8842a",  goldDim:"#8a6218",    // amber — zakat, warnings, secondary
@@ -55,25 +56,30 @@ const THEME_CSS = `
     /* Bento tile depth — soft, layered (light theme tuned: gentle, not harsh) */
     --mz-tile: 0 1px 2px rgba(28,27,25,0.04), 0 6px 20px rgba(28,27,25,0.06);
     --mz-tile-hover: 0 4px 10px rgba(30,78,140,0.07), 0 16px 40px rgba(28,27,25,0.10);
+    /* Translucent bento fill — slightly see-through so the ميزان watermark reads behind */
+    --mz-tile-fill: rgba(255,255,255,0.74);
     color-scheme: light;
   }
   :root[data-theme="dark"] {
-    /* Ink-base dark theme */
-    --mz-bg: #1c1b19; --mz-surface: #232220; --mz-card: #292724;
-    --mz-border: #393631; --mz-borderHi: #4c4841;
-    --mz-text: #c5c0b6; --mz-textHi: #faf8f4;
-    --mz-muted: #8a857b; --mz-dim: #393631;
-    --mz-gainBg: #13241b; --mz-lossBg: #271513;
-    --mz-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 28px rgba(0,0,0,0.6);
+    /* Midnight-navy dark theme — the cool inverse of the warm paper light face,
+       built on the brand navy accent (not the old warm "ink" brown). */
+    --mz-bg: #0e1626; --mz-surface: #16213a; --mz-card: #1c2945;
+    --mz-border: #2b3a57; --mz-borderHi: #3d4f70;
+    --mz-text: #bcc4d4; --mz-textHi: #f4f2ec;
+    --mz-muted: #828ca0; --mz-dim: #2b3a57;
+    --mz-gainBg: #0f2b1e; --mz-lossBg: #2c1622;
+    --mz-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 28px rgba(0,0,0,0.55);
     /* Glass material — chrome elements only (nav, modals, overlays) */
-    --mz-glass: rgba(28,27,25,0.68);
-    --mz-glass-strong: rgba(28,27,25,0.91);
-    --mz-glass-border: rgba(76,72,65,0.65);
+    --mz-glass: rgba(14,22,38,0.68);
+    --mz-glass-strong: rgba(14,22,38,0.92);
+    --mz-glass-border: rgba(61,79,112,0.60);
     --mz-glass-shadow: inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 8px 32px rgba(0,0,0,0.45);
     --mz-glass-shadow-lg: inset 0 1px 0 0 rgba(255,255,255,0.06), inset 0 -1px 0 0 rgba(0,0,0,0.28), 0 20px 60px rgba(0,0,0,0.60);
-    /* Bento tile depth — layered, deeper for the ink theme */
-    --mz-tile: 0 1px 2px rgba(0,0,0,0.30), 0 8px 28px rgba(0,0,0,0.45);
-    --mz-tile-hover: 0 6px 16px rgba(0,0,0,0.50), 0 22px 50px rgba(0,0,0,0.60);
+    /* Bento tile depth — layered, deeper for the navy theme */
+    --mz-tile: 0 1px 2px rgba(0,0,0,0.32), 0 8px 28px rgba(0,0,0,0.48);
+    --mz-tile-hover: 0 6px 16px rgba(0,0,0,0.52), 0 22px 50px rgba(0,0,0,0.62);
+    /* Translucent bento fill — slightly see-through so the ميزان watermark reads behind */
+    --mz-tile-fill: rgba(28,41,69,0.72);
     color-scheme: dark;
   }
   :root {
@@ -867,7 +873,7 @@ function Donut({slices,size=180,thickness=22,centerLabel,centerValue}){
 // When `onClick` is set: pointer cursor + scale hint in CSS.
 function BentoTile({children,span="auto",accent,gradient,glass,style,onClick}){
   const baseStyle={
-    background:gradient||(glass?T.glass:T.card),
+    background:gradient||(glass?T.glass:T.tileFill),
     border:`1px solid ${T.border}`,
     borderTop: accent ? `2px solid ${accent}` : `1px solid ${T.border}`,
     borderLeft: accent ? `1px solid ${accent}30` : `1px solid ${T.border}`,
@@ -10445,7 +10451,7 @@ export default function Mizan(){
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     {/* Atmospheric Arabic wordmark (ميزان) — fixed, translucent, sits behind all content */}
-    <div aria-hidden="true" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontFamily:FU,fontSize:"clamp(200px,28vw,460px)",fontWeight:800,letterSpacing:"-0.04em",whiteSpace:"nowrap",lineHeight:1,color:resolvedTheme==="dark"?"rgba(239,233,221,0.05)":"rgba(30,78,140,0.06)",userSelect:"none",pointerEvents:"none",zIndex:0}}>ميزان</div>
+    <div aria-hidden="true" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontFamily:FU,fontSize:"clamp(200px,28vw,460px)",fontWeight:800,letterSpacing:"-0.04em",whiteSpace:"nowrap",lineHeight:1,color:resolvedTheme==="dark"?"rgba(239,233,221,0.07)":"rgba(30,78,140,0.08)",userSelect:"none",pointerEvents:"none",zIndex:0}}>ميزان</div>
     <style>{`
       *{box-sizing:border-box;margin:0;padding:0;}
       html,body{background:${T.bg};-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
