@@ -5,7 +5,7 @@
 **Contact:** khanstyle02@gmail.com
 
 This document describes the security practices that govern MĪZAN
-(https://mizan-puce.vercel.app), a personal finance dashboard that
+(https://app.mizan.exchange), a personal finance dashboard that
 aggregates bank, brokerage, and market data via Plaid, SnapTrade, and
 related read-only APIs.
 
@@ -94,7 +94,7 @@ infrastructure, vendors, or data flows occurs (whichever is sooner).
 
 ## 6. Privacy and Data Handling
 
-Refer to the Privacy Policy at https://mizan-puce.vercel.app/privacy
+Refer to the Privacy Policy at https://app.mizan.exchange/privacy
 for the full data-handling disclosure to end users.
 
 ### Data categories
@@ -178,4 +178,4 @@ Security questions or vulnerability reports: khanstyle02@gmail.com
 
 For end-user data requests (access, deletion, correction), refer to the
 contact channel listed in the Privacy Policy at
-https://mizan-puce.vercel.app/privacy.
+https://app.mizan.exchange/privacy.

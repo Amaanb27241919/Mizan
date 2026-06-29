@@ -15,7 +15,7 @@ export default function Privacy() {
       <p>
         MĪZAN is operated by Amaan Khan as an individual operator (referred
         to throughout this policy as "we" or "the operator"). The service is
-        hosted at <a href="https://mizan-puce.vercel.app">https://mizan-puce.vercel.app</a>.
+        hosted at <a href="https://app.mizan.exchange">https://app.mizan.exchange</a>.
         For all privacy-related questions or data-subject requests,
         contact <a href="mailto:khanstyle02@gmail.com">khanstyle02@gmail.com</a>.
       </p>

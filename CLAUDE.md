@@ -23,7 +23,7 @@
 Frontend:  React 18 (JSX, not TypeScript) · Vite 5 · Recharts · Single-file SPA
 Backend:   Node.js ESM · Vercel serverless (api/[...path].mjs) · lib/handlers.mjs
 Database:  Supabase (PostgreSQL + Auth + RLS) · 22 migrations applied
-Hosting:   Vercel (team: mizan-s-projects2) · prod URL: mizan-puce.vercel.app
+Hosting:   Vercel (team: mizan-s-projects2) · prod URL: app.mizan.exchange (mizan-puce.vercel.app)
 External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alpaca (paper)
 ```
 
@@ -470,11 +470,11 @@ vercel ls                            # Check latest deployment status
 # or use Vercel MCP: list_deployments with team_1jpYtfQNP39boDKElAshCOOL
 
 # 5. Smoke test live site
-curl -sI https://mizan-puce.vercel.app   # Should return 200
+curl -sI https://app.mizan.exchange   # Should return 200
 ```
 
 **Vercel project**: `mizan` in team `mizan-s-projects2` (`team_1jpYtfQNP39boDKElAshCOOL`).
-**Production URL**: `https://mizan-puce.vercel.app`
+**Production URL**: `https://app.mizan.exchange`
 
 ---
 

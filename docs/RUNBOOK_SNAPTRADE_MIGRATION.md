@@ -124,7 +124,7 @@ for this app), the new keys are live.
 Quick smoke test from the deploy:
 
 ```bash
-curl -s https://mizan-puce.vercel.app/api/snaptrade/brokerages | head -c 200
+curl -s https://app.mizan.exchange/api/snaptrade/brokerages | head -c 200
 ```
 
 Should return a JSON array of brokerages, not a 503 or auth error.
@@ -133,7 +133,7 @@ Should return a JSON array of brokerages, not a 503 or auth error.
 
 ## Step 5 — Reconnect your brokers (5 min)
 
-1. Open https://mizan-puce.vercel.app, sign in as yourself
+1. Open https://app.mizan.exchange, sign in as yourself
 2. Click **Settings → Connect Accounts** (or **+ Connect** in the status bar)
 3. Reconnect each broker:
    - [ ] Fidelity
@@ -168,7 +168,7 @@ from each broker on first connection).
 The 3 users who couldn't connect before should retry now. Either:
 
 - Email them directly ("MIZAN's brokerage integration is unblocked —
-  please try connecting again at https://mizan-puce.vercel.app")
+  please try connecting again at https://app.mizan.exchange")
 - Or wait — they may retry on their own and the new account has room
 
 The new account starts at 0 connected users so there's no quota issue.

@@ -74,7 +74,7 @@ export default function Contact() {
       <p>
         Operated by <strong>Amaan Khan</strong> as an individual.
         MĪZAN is hosted at{" "}
-        <a href="https://mizan-puce.vercel.app">https://mizan-puce.vercel.app</a>.
+        <a href="https://app.mizan.exchange">https://app.mizan.exchange</a>.
       </p>
     </LegalLayout>
   );

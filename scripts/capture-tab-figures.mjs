@@ -33,7 +33,7 @@ function loadEnvLocal() {
 }
 loadEnvLocal();
 
-const APP_URL = process.env.MIZAN_URL || "https://mizan-puce.vercel.app";
+const APP_URL = process.env.MIZAN_URL || "https://app.mizan.exchange";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const OUT = path.join(ROOT, "legal", "qa-screenshots");
 fs.mkdirSync(OUT, { recursive: true });
