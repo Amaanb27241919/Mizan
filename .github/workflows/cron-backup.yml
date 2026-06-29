@@ -1,0 +1,33 @@
+name: Cron Backup (external scheduler)
+
+on:
+  schedule:
+    - cron: "30 6 * * *"
+    - cron: "30 18 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: cron-backup
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger /api/cron/sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repo secret is not set"; exit 1
+          fi
+          code=$(curl -sS --max-time 120 -o response.json -w "%{http_code}" \
+            -X GET "https://app.mizan.exchange/api/cron/sync" \
+            -H "Authorization: Bearer ${CRON_SECRET}")
+          echo "HTTP ${code}"
+          head -c 800 response.json || true
+          echo ""
+          if [ "$code" != "200" ]; then
+            echo "::error::cron sync returned HTTP ${code}"; exit 1
+          fi
+          echo "sync triggered successfully"
