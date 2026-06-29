@@ -7137,6 +7137,31 @@ function NotificationsPanel(){
   const[vapidKey,setVapidKey]=useState(null);
   const[err,setErr]=useState(null);
   const[ok,setOk]=useState(null);
+  const[digest,setDigest]=useState(null); // null = loading
+  const[digestBusy,setDigestBusy]=useState(false);
+  const[digestMsg,setDigestMsg]=useState(null); // {ok:boolean,text:string}
+
+  // Load the weekly-digest opt-out preference.
+  useEffect(()=>{
+    let cancel=false;
+    apiFetch("/api/user/features")
+      .then(r=>r.ok?r.json():null)
+      .then(j=>{if(!cancel&&j&&typeof j.email_digest==="boolean")setDigest(j.email_digest);})
+      .catch(()=>{});
+    return()=>{cancel=true;};
+  },[]);
+
+  const toggleDigest=async()=>{
+    const next=!digest;
+    setDigestBusy(true);setDigestMsg(null);
+    try{
+      const r=await apiFetch("/api/user/email-digest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:next})});
+      if(!r.ok)throw new Error(`Server returned ${r.status}`);
+      setDigest(next);
+      setDigestMsg({ok:true,text:next?"Weekly digest enabled.":"Weekly digest disabled."});
+    }catch(e){setDigestMsg({ok:false,text:e.message||"Couldn't update digest preference"});}
+    finally{setDigestBusy(false);}
+  };
 
   // Probe current subscription state on mount.
   useEffect(()=>{
@@ -7257,6 +7282,24 @@ function NotificationsPanel(){
       </div>}
       {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain}}>{ICON_OK}{ok}</div>}
       {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
+    </BentoTile>
+
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,marginBottom:T.s3,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>WEEKLY EMAIL DIGEST</div>
+          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+            A Monday email summarizing your net-worth change over the past 7 days, sent to your account email.
+          </p>
+        </div>
+        <Tag label={digest===null?"…":digest?"On":"Off"} color={digest?T.gain:T.muted}/>
+      </div>
+      <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+        <button onClick={toggleDigest} disabled={digest===null||digestBusy} className={digest?"btn-ghost":"btn-primary"}>
+          {digestBusy?"Working…":digest?"Turn off":"Turn on"}
+        </button>
+      </div>
+      {digestMsg&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:digestMsg.ok?T.gainBg:`${T.loss}10`,border:`1px solid ${digestMsg.ok?T.gain:T.loss}40`,fontFamily:FM,fontSize:11,color:digestMsg.ok?T.gain:T.loss}}>{digestMsg.ok?ICON_OK:ICON_NO}{digestMsg.text}</div>}
     </BentoTile>
 
     <BentoTile>
