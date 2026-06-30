@@ -4931,14 +4931,21 @@ function StrategyProgressCard({strat}){
   const held=p&&p.held_ticker;
   const cands=Array.isArray(strat.params?.universe_tickers)?strat.params.universe_tickers:[];
   const headline=held||(cands.length>1?`${cands.length} halal names`:(cands[0]||strat.ticker));
+  // DCA (accumulation) strategies have no profit target / stop / horizon — read
+  // them as "deploy & hold" instead of showing meaningless 0% values.
+  const isDca=strat.strategy_type==="dca";
+  const cadence=Number(strat.params?.dca_cadence_days)||7;
+  const barLabel=isDca?"CAPITAL DEPLOYED":"PROGRESS TO TARGET";
+  const barPct=isDca?(capital>0&&current!=null?Math.max(0,Math.min(100,(current/capital)*100)):0):pctToTarget;
   return<BentoTile accent={pnl!=null?(pnl>=0?T.gain:T.loss):T.blue} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
         <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{headline}</span>
         {held&&cands.length>1&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.06em"}}>HELD</span>}
         <Tag label={lyr.toUpperCase()} color={lyrColor}/>
+        {isDca&&<Tag label="DCA" color={T.gain}/>}
       </div>
-      <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em"}}>TARGET {strat.profit_target_pct}%</span>
+      <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em"}}>{isDca?`ACCUMULATE · ${cadence}D`:`TARGET ${strat.profit_target_pct}%`}</span>
     </div>
     {noData?<div style={{fontFamily:FP,fontSize:12,color:T.muted}}>Progress data not available yet — check back after the next bot run.</div>:<>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
@@ -4954,16 +4961,16 @@ function StrategyProgressCard({strat}){
       </div>
       <div>
         <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4,fontVariantNumeric:"tabular-nums"}}>
-          <span style={{letterSpacing:"0.08em"}}>PROGRESS TO TARGET</span>
-          <span style={{color:T.textHi,fontWeight:600}}>{pctToTarget!=null?`${pctToTarget.toFixed(0)}%`:"—"}</span>
+          <span style={{letterSpacing:"0.08em"}}>{barLabel}</span>
+          <span style={{color:T.textHi,fontWeight:600}}>{barPct!=null?`${barPct.toFixed(0)}%`:"—"}</span>
         </div>
         <div style={{height:8,background:T.surface,borderRadius:999,overflow:"hidden",border:`1px solid ${T.border}`}}>
-          <div style={{height:"100%",width:`${pctToTarget||0}%`,background:`linear-gradient(90deg, ${T.gain}, ${T.blue})`,borderRadius:999,transition:"width 300ms cubic-bezier(0.16,1,0.3,1)"}}/>
+          <div style={{height:"100%",width:`${barPct||0}%`,background:`linear-gradient(90deg, ${T.gain}, ${T.blue})`,borderRadius:999,transition:"width 300ms cubic-bezier(0.16,1,0.3,1)"}}/>
         </div>
       </div>
       <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums",borderTop:`1px solid ${T.border}`,paddingTop:T.s2}}>
-        <span>{daysElapsed!=null?`Day ${daysElapsed}`:"Day —"}{daysHorizon!=null?` of ${daysHorizon}`:""}</span>
-        <span>{trades!=null?`${trades} trade${trades===1?"":"s"} executed`:"— trades"}</span>
+        <span>{isDca?`Accumulate · hold (no auto-sell)`:`${daysElapsed!=null?`Day ${daysElapsed}`:"Day —"}${daysHorizon!=null?` of ${daysHorizon}`:""}`}</span>
+        <span>{trades!=null?`${trades} ${isDca?"buy":"trade"}${trades===1?"":"s"}${isDca?"":" executed"}`:"— trades"}</span>
       </div>
       {realized!=null&&closedCount>0&&<div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
         <span style={{color:T.muted}}>Realized ({closedCount} closed)</span>
@@ -5656,9 +5663,10 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           <div style={{display:"flex",gap:T.s2,alignItems:"center",marginBottom:4}}>
             <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{uniLabel}</span>
             <Tag label={LAYER_META[lyr].label.toUpperCase()} color={LAYER_META[lyr].color}/>
+            {s.strategy_type==="dca"&&<Tag label="DCA" color={T.gain}/>}
             {!s.enabled&&<Tag label="PAUSED" color={T.muted}/>}
           </div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}${Number(s.capital_allocated).toLocaleString()} · Target: {s.profit_target_pct}% · Stop: {s.stop_loss_pct}%</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}{`$${Number(s.capital_allocated).toLocaleString()} · `}{s.strategy_type==="dca"?`DCA · every ${Number(s.params?.dca_cadence_days)||7}d · holds (no auto-sell)`:`Target: ${s.profit_target_pct}% · Stop: ${s.stop_loss_pct}%`}</div>
         </div>
         <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
           {/* Layer selector — switching opens the acknowledgment gate */}
