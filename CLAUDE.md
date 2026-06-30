@@ -410,6 +410,7 @@ These are documented constraints, not undiscovered issues:
 | `/api/cron/weekly-digest` | Mon 1 PM | Weekly portfolio digest push notification |
 | `/api/cron/dividend-check` | Daily 11 AM | Dividend detection + purification push notification |
 | `/api/cron/bill-reminders` | Daily 2 PM | Bill reminder push notifications |
+| `/api/cron/bot-signals` | Vercel `0 14 * * 1-5` (daily backstop) **+ GitHub Actions `*/15 * * * 1-5`** | Trading-bot strategy eval + signal generation/execution. The 15-min weekday cadence is driven by `.github/workflows/cron-bot-signals.yml` (Vercel Hobby = daily-only; public repo = free Actions minutes), hitting the endpoint with the `CRON_SECRET` bearer. |
 
 ---
 
