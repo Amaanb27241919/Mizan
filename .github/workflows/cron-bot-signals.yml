@@ -1,0 +1,45 @@
+name: Bot Signals (external scheduler)
+
+# Vercel Hobby only allows DAILY crons, so vercel.json can fire bot-signals
+# just once/day. The trading bot needs to react to a breakout intraday, so we
+# drive it from GitHub Actions every 15 minutes on weekdays (this repo is
+# public -> unlimited Actions minutes). The handler is idempotent-ish: a daily
+# trade cap + "never open a second position while one is held" guard the
+# repeated calls. Off-hours runs simply find no breakout and no-op.
+#
+# UTC days 1-5 = Mon-Fri; this comfortably covers the full CDT (UTC-5) trading
+# week around the clock. Requires the CRON_SECRET repo secret (same one used by
+# cron-backup.yml); cronUnauthorized() is fail-closed, so a missing/!match 401s.
+
+on:
+  schedule:
+    - cron: "*/15 * * * 1-5"
+  workflow_dispatch: {}
+
+concurrency:
+  # Serialize runs so two overlapping invocations can't race on the same
+  # strategy (the handler has no DB-level lock).
+  group: cron-bot-signals
+  cancel-in-progress: false
+
+jobs:
+  bot-signals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger /api/cron/bot-signals
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repo secret is not set"; exit 1
+          fi
+          code=$(curl -sS --max-time 120 -o response.json -w "%{http_code}" \
+            -X GET "https://app.mizan.exchange/api/cron/bot-signals" \
+            -H "Authorization: Bearer ${CRON_SECRET}")
+          echo "HTTP ${code}"
+          head -c 800 response.json || true
+          echo ""
+          if [ "$code" != "200" ]; then
+            echo "::error::cron bot-signals returned HTTP ${code}"; exit 1
+          fi
+          echo "bot-signals triggered successfully"
