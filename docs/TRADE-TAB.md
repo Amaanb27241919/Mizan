@@ -350,21 +350,39 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
   once-daily. Restoring `*/15 9-16 * * 1-5` requires Vercel Pro.
 - Per enabled strategy it: expires stale signals → resets daily trade counts →
   checks the daily cap (`max_trades_per_day`) → resolves the effective **layer** →
-  reconstructs the net position → **runs the exit engine** (below). If flat, it runs
-  the **screener**: builds the candidate set from `params.universe_tickers` (or the
-  `HALAL_UNIVERSE_DEFAULT` set), re-filters it through the Sharia gate, fetches a Finnhub
-  quote for **each** candidate, scores by day momentum, and **picks the single strongest
-  name above +1.5%** — that's the "bot picks the ticker" behavior. It then sizes qty
-  from `position_size_pct` (or an even split of `capital_allocated`) and inserts one
-  **buy** `pending_signals` row on the picked ticker. **Buys come only from the screener;
-  SELLs come only from the exit engine — the bot never shorts.** One open position per
-  strategy at a time, so position accounting stays unambiguous.
-- **Exit engine** (reconstructs the net position + the **held ticker** from executed
-  signals, quotes that ticker, then by priority): **stop-loss or max-drawdown hit →
-  exit + PAUSE the strategy** (overrides the target, non-negotiable); **horizon expired
-  → close out + pause**; **target hit → take profit**. Full-auto exits execute via
-  SnapTrade; semi pushes a "sell?" notification; manual stays quiet in the panel.
-  Audited as `bot.strategy.stopped_out` / `horizon_closed` / `target_hit`.
+  branches on `strategy_type`:
+  - **`dca` (long-term accumulation)** — its own branch BEFORE the momentum/exit
+    engine. Buys whole shares of the target on a fixed cadence (`params.dca_cadence_days`,
+    default 7) up to `params.dca_amount` (default = `capital_allocated`), capped by
+    remaining capital exposure, and **HOLDS** — no momentum entry, **no stop/target/
+    trailing exits** (you exit manually, ideally past 1yr for long-term cap-gains). It can
+    add to an existing position and is never auto-sold. One attempt/day guard; the cadence
+    advances only on a **real fill**, so an unfunded/closed-market account retries daily
+    until the first buy lands, then accumulates on cadence. Audited `bot.dca.*`.
+  - **`momentum|ma_crossover|breakout`** — reconstruct the net position → **run the exit
+    engine** (below). If flat, run the **screener**: candidate set from
+    `params.universe_tickers` (or `HALAL_UNIVERSE_DEFAULT`), re-filtered through the Sharia
+    gate; a Finnhub quote per candidate, scored by day momentum; **picks the single
+    strongest name that (a) clears the per-strategy threshold `params.entry_threshold_pct`
+    (default 1.5%) AND (b) is AFFORDABLE — `floor(deployable/price) >= 1`.** The
+    affordability filter is essential: without it the bot locks onto the biggest mover even
+    when it's too pricey to buy (e.g. AMD @ $582 on a $100 budget) and trades nothing while
+    cheaper qualifying names wait. Sizes qty from `position_size_pct` (or an even split of
+    `capital_allocated`) and inserts one **buy** signal on the picked ticker. **Buys come
+    only from the screener; SELLs come only from the exit engine — the bot never shorts.**
+    One open position per strategy at a time.
+- **Exit engine** (momentum types only; reconstructs the net position + **held ticker**,
+  quotes it, then by priority): **stop-loss or max-drawdown → exit + PAUSE** (overrides
+  the target, non-negotiable); **horizon expired → close + pause**; **target hit → take
+  profit** (keeps running); **trailing stop** → take profit (keeps running). The trailing
+  stop tracks the position high-water (`params.high_water`, updated each tick, cleared on
+  close); once the peak is up ≥ `params.trail_activate_pct` (default 10%), a `params.trail_pct`
+  (default 6%) pullback from the peak sells — **profit-only** (the hard stop owns the
+  downside). Full-auto exits execute via SnapTrade; semi pushes "sell?"; manual stays quiet.
+  Audited `bot.strategy.stopped_out` / `horizon_closed` / `target_hit` / `trailing_stop`.
+- **Market hours:** the cron fires `*/15` all weekday hours, but the broker rejects market
+  orders outside RTH (`impact 403: exchanges not open`) — harmless, but a market-hours gate
+  (via the planned Alpaca data integration) is the clean fix.
 - **Manual (Layer 1):** signal is created and waits silently in the panel — no push.
   You tap **Approve/Execute** when ready.
 - **Semi-auto (Layer 2):** sends an approval push notification; the trade executes via
@@ -384,9 +402,9 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
   approval, cron generation, and inside `executeSnapTradeOrder()` itself — re-checked at
   execution, not just on display. A blocked ticker is rejected and audited.
 
-### Database tables (migrations `020_trading_bot.sql`, `021_full_auto_per_account.sql`)
+### Database tables (migrations `020_trading_bot.sql`, `021_full_auto_per_account.sql`, `023_bot_strategy_type_dca.sql`)
 - `bot_strategies` — one row per strategy: ticker (the **primary**/first candidate),
-  strategy_type (`momentum|ma_crossover|breakout`), mode (`semi|full`, **derived from
+  strategy_type (`momentum|ma_crossover|breakout|dca`), mode (`semi|full`, **derived from
   the layer**), capital_allocated, profit_target_pct, **stop_loss_pct**, max_drawdown_pct,
   time_horizon_days, max_trades_per_day, trades_today, enabled, account_id, user_id,
   and `params` jsonb (**`layer`** manual/semi/full, **`universe_tickers`** candidate

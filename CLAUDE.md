@@ -22,7 +22,7 @@
 ```
 Frontend:  React 18 (JSX, not TypeScript) · Vite 5 · Recharts · Single-file SPA
 Backend:   Node.js ESM · Vercel serverless (api/[...path].mjs) · lib/handlers.mjs
-Database:  Supabase (PostgreSQL + Auth + RLS) · 22 migrations applied
+Database:  Supabase (PostgreSQL + Auth + RLS) · 23 migrations applied
 Hosting:   Vercel (team: mizan-s-projects2) · prod URL: app.mizan.exchange (mizan-puce.vercel.app)
 External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alpaca (paper)
 ```
@@ -64,7 +64,7 @@ lib/sentry.mjs                 — Sentry backend init
 server.js                      — Dev server (Vite middleware + API on :3000)
 ```
 
-### Database (22 Migrations — all applied in prod)
+### Database (23 Migrations — all applied in prod)
 ```
 001_init.sql                   — Core tables: user_snaptrade, user_state, user_keys, profiles
 002_plaid.sql                  — plaid_tokens, plaid_accounts, plaid_transactions
@@ -88,6 +88,7 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 020_trading_bot.sql            — bot_strategies + pending_signals (owner/beta trading bot)
 021_full_auto_per_account.sql  — account_full_auto (per-account Layer-3 opt-in, default false)
 022_trading_bot_beta.sql       — profiles.trading_bot_enabled (beta allowlist) + trading_bot_consent_at
+023_bot_strategy_type_dca.sql  — allow 'dca' (long-term accumulation) strategy_type in bot_strategies CHECK
 ```
 
 ---
