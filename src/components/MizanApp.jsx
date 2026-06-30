@@ -781,6 +781,10 @@ const f$=(v,d=2)=>v!=null&&!isNaN(v)?`$${Math.abs(+v).toLocaleString("en-US",{mi
 const fp=v=>v!=null&&!isNaN(v)?`${+v>0?"+":""}${(+v).toFixed(2)}%`:"-";
 const fc=v=>!v||isNaN(v)?T.muted:+v>0?T.gain:+v<0?T.loss:T.muted;
 const kf=v=>v>=1e9?`$${(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(1)}M`:`$${v.toLocaleString()}`;
+// Common ticker-symbol typo corrections (mirrors the server NL builder's map),
+// so a mistyped symbol is fixed before it's watched, screened, or traded.
+const TICKER_TYPOS={APPL:"AAPL",APPLE:"AAPL",NTFLX:"NFLX",NETFLIX:"NFLX",NFLIX:"NFLX",TESLA:"TSLA",AMAZON:"AMZN",AMZ:"AMZN",MICROSOFT:"MSFT",NVIDIA:"NVDA",NVDIA:"NVDA",FACEBOOK:"META",FB:"META",GOOGLE:"GOOGL",ALPHABET:"GOOGL",BRK:"BRK.B",BERKSHIRE:"BRK.B"};
+const fixTicker=s=>{const u=String(s||"").replace(/\s+/g,"").toUpperCase().trim();return TICKER_TYPOS[u]||u;};
 
 // Inline status glyphs (success / failure) — shared so status lines stay terse.
 // They inherit the container's currentColor (green ok-banner / red error-banner).
@@ -10081,7 +10085,7 @@ export default function Mizan(){
   const[watchlist,setWatchlist]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_watchlist")||"[]");}catch{return[];}});
   const persistWatchlist=next=>{setWatchlist(next);try{localStorage.setItem("mizan_watchlist",JSON.stringify(next));}catch{}persistUserState("mizan_watchlist",next);};
   const addToWatchlist=(sym)=>{
-    const tk=(sym||"").trim().toUpperCase();
+    const tk=fixTicker(sym); // auto-correct common typos (APPL→AAPL, etc.)
     if(!tk||watchlist.some(w=>w.symbol===tk))return;
     const px=live.find(l=>l.tk===tk)?.price||0;
     persistWatchlist([...watchlist,{symbol:tk,addedAt:new Date().toISOString().slice(0,10),addPrice:px}]);
@@ -10090,6 +10094,32 @@ export default function Mizan(){
   const setAlert=(sym,key,value)=>{
     persistWatchlist(watchlist.map(w=>w.symbol===sym?{...w,[key]:value===""||value==null?null:Number(value),[key+"Fired"]:false}:w));
   };
+  // Keep the watchlist in sync with every ticker the bot strategies track —
+  // active OR paused — so the user can follow them without opening the brokerage.
+  // Admin only; idempotent (only appends missing symbols); typo-corrected.
+  useEffect(()=>{
+    if(!isAdmin||demoMode)return;
+    let cancelled=false;
+    apiFetch("/api/bot/strategies").then(r=>r.ok?r.json():null).then(d=>{
+      if(cancelled||!d?.strategies)return;
+      const want=new Set();
+      for(const s of d.strategies){
+        (Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[]).forEach(t=>{const f=fixTicker(t);if(f)want.add(f);});
+        const ft=fixTicker(s.ticker); if(ft)want.add(ft);
+      }
+      if(!want.size)return;
+      setWatchlist(prev=>{
+        const have=new Set(prev.map(w=>w.symbol));
+        const adds=[...want].filter(t=>!have.has(t)).map(symbol=>({symbol,addedAt:new Date().toISOString().slice(0,10),addPrice:null,fromStrategy:true}));
+        if(!adds.length)return prev;
+        const next=[...prev,...adds];
+        try{localStorage.setItem("mizan_watchlist",JSON.stringify(next));}catch{}
+        persistUserState("mizan_watchlist",next);
+        return next;
+      });
+    }).catch(()=>{});
+    return()=>{cancelled=true;};
+  },[isAdmin,demoMode]);
   const requestAlertPermission=async()=>{
     if(!("Notification"in window))return alert("This browser doesn't support notifications.");
     if(Notification.permission==="granted")return;
