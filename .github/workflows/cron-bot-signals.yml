@@ -1,19 +1,19 @@
 name: Bot Signals (external scheduler)
 
-# Vercel Hobby only allows DAILY crons, so vercel.json can fire bot-signals
-# just once/day. The trading bot needs to react to a breakout intraday, so we
-# drive it from GitHub Actions every 15 minutes on weekdays (this repo is
-# public -> unlimited Actions minutes). The handler is idempotent-ish: a daily
-# trade cap + "never open a second position while one is held" guard the
-# repeated calls. Off-hours runs simply find no breakout and no-op.
+# The intraday */15 scheduler now runs in Supabase (pg_cron + pg_net job
+# `bot-signals-15min`, every 15 min Mon-Fri UTC), which fires far more reliably
+# than GitHub's best-effort cron. To avoid two schedulers double-firing at the
+# same :15 tick and racing on the same strategy (the handler has no DB-level
+# lock -> could open two positions), the GitHub `schedule:` trigger is DISABLED.
+# This workflow is kept only as a manual `workflow_dispatch` backstop.
 #
-# UTC days 1-5 = Mon-Fri; this comfortably covers the full CDT (UTC-5) trading
-# week around the clock. Requires the CRON_SECRET repo secret (same one used by
-# cron-backup.yml); cronUnauthorized() is fail-closed, so a missing/!match 401s.
+# To re-enable GitHub as the primary again, uncomment the `schedule:` block
+# below AND unschedule the Supabase job so only one scheduler is active.
+# Requires the CRON_SECRET repo secret; cronUnauthorized() is fail-closed.
 
 on:
-  schedule:
-    - cron: "*/15 * * * 1-5"
+  # schedule:
+  #   - cron: "*/15 * * * 1-5"   # disabled — superseded by Supabase pg_cron
   workflow_dispatch: {}
 
 concurrency:
