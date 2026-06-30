@@ -385,7 +385,7 @@ These are documented constraints, not undiscovered issues:
 
 | Integration | What It Does | Key Env Vars | Notes |
 |-------------|-------------|--------------|-------|
-| SnapTrade | Brokerage aggregation | `VITE_SNAPTRADE_CLIENT_ID`, `VITE_SNAPTRADE_CONSUMER_KEY` | userSecret AES-256-GCM encrypted in DB |
+| SnapTrade | Brokerage aggregation | `VITE_SNAPTRADE_CLIENT_ID`, `VITE_SNAPTRADE_CONSUMER_KEY` | userSecret AES-256-GCM encrypted in DB. **Trading varies by broker**: Fidelity = read-only (no orders); E\*Trade = whole-shares only; Robinhood = trade + fractional + instant deposits. See memory `snaptrade-broker-capabilities`. Trading needs `connection_type="trade"`. |
 | Plaid | Bank accounts + transactions | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | access_token server-only, never reaches browser |
 | Anthropic | AI Advisor chat | `ANTHROPIC_KEY` | claude-sonnet-4-6, 60/hr rate limit, streaming |
 | Stooq | Gold/silver spot prices | None (free) | CSV proxy — no API key needed |
