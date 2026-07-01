@@ -5807,7 +5807,52 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
   </div>;
 }
 
-function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOrderPlaced,activities=[],onNav,isAdmin=false,fullAutoEnabled=false,isRoot=false,consented=false,demoMode=false}){
+/* ─── Brokerage trading support (reconnect notice + per-broker capability matrix) ───
+   For Mizan to place orders, a brokerage must be connected WITH TRADE PERMISSION — a
+   read-only/data connection can view balances but can't trade. What each broker allows
+   also differs (fractional vs whole-share, read-only, custodial restrictions). Sourced
+   from SnapTrade's per-broker trading support; capabilities can change over time. */
+function TradeConnectionsPanel({onConnectTrade}){
+  const[open,setOpen]=useState(false);
+  const CAPS=[
+    {name:"Robinhood",     tier:"full",    label:"Trade · fractional",   note:"Full trading, fractional shares, and instant deposits."},
+    {name:"E*TRADE",       tier:"whole",   label:"Trade · whole shares", note:"Trading supported, but whole shares only — no fractional."},
+    {name:"Charles Schwab",tier:"whole",   label:"Trade · whole shares", note:"Trading supported through the API (whole shares)."},
+    {name:"Fidelity",      tier:"readonly",label:"Read-only",            note:"View-only — Fidelity does not permit order placement through the API."},
+    {name:"Coinbase",      tier:"na",      label:"Crypto only",          note:"Equities trading isn’t available; crypto accounts are view-only here."},
+  ];
+  const TIER={full:T.gain,whole:T.gold,readonly:T.slate,na:T.slate};
+  return<BentoTile>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
+      <div style={{maxWidth:600}}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BROKERAGE TRADING SUPPORT</div>
+        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55}}>
+          For Mizan to place orders, connect your brokerage <strong style={{color:T.text}}>with trade permission</strong>. A read-only (data) connection shows balances and holdings but <strong style={{color:T.text}}>cannot trade</strong> — reconnect and choose “Connect for trading.” What each broker allows differs; see the details below.
+        </p>
+      </div>
+      {onConnectTrade&&<button onClick={onConnectTrade} className="btn-ghost" style={{flexShrink:0}}>Reconnect for trading</button>}
+    </div>
+    <button onClick={()=>setOpen(o=>!o)} style={{marginTop:T.s3,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",color:T.blue}}>
+      {open?"Hide broker details ▲":"Show broker details ▾"}
+    </button>
+    {open&&<div style={{marginTop:T.s3,paddingTop:T.s3,borderTop:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:T.s3}}>
+      {CAPS.map(b=>(
+        <div key={b.name} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s3}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.text}}>{b.name}</div>
+            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.5}}>{b.note}</div>
+          </div>
+          <div style={{flexShrink:0}}><Tag label={b.label} color={TIER[b.tier]}/></div>
+        </div>
+      ))}
+      <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.5,paddingTop:T.s2,borderTop:`1px dashed ${T.border}`}}>
+        <strong style={{color:T.text}}>Custodial accounts</strong> (UGMA/UTMA) usually can’t be traded through the API even when funded — connect an individual brokerage account instead. Support depends on SnapTrade and each broker and can change.
+      </div>
+    </div>}
+  </BentoTile>;
+}
+
+function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOrderPlaced,activities=[],onNav,onConnectTrade,isAdmin=false,fullAutoEnabled=false,isRoot=false,consented=false,demoMode=false}){
   // Trade is the admin trading hub: bot Strategies + Signals, plus the analysis
   // tools (Screener / Rebalance / Backtest, reused from Portfolio) and an ad-hoc
   // Opens on Signals (pending approvals are the most time-sensitive view).
@@ -5944,6 +5989,9 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     {/* Screener / Rebalance / Backtest are NOT duplicated here — they live in
         the Portfolio tab (one home each). Trade stays focused on the bot. */}
     <TabBar tabs={[["signals","Signals"],["strategies","Strategies"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    {/* Persistent reference: how brokerage connections map to trade features, and the
+        reconnect-with-trade-permission requirement. Collapsed by default. */}
+    <TradeConnectionsPanel onConnectTrade={onConnectTrade}/>
     {/* Bot panel, split into Strategies + Signals views (same component, shared state). */}
     {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
 
@@ -10750,7 +10798,7 @@ export default function Mizan(){
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode} pendingSignals={pendingSignals}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} onConnect={()=>{setConnMode("read");setConn(true);}} bankBalance={bankBalance}/>}
-        {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} live={live} mapPosition={mapPosition} activities={snapActivities} onNav={setNav} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={botIsRoot} consented={botConsented} demoMode={demoMode}/>}
+        {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} live={live} mapPosition={mapPosition} activities={snapActivities} onNav={setNav} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={botIsRoot} consented={botConsented} demoMode={demoMode}/>}
         {nav==="goals"     &&<GoalsHub
           snapAccounts={visibleAccounts}
           plaidAccounts={plaidAccounts}
