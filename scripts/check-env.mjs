@@ -44,7 +44,7 @@ const OPTIONAL_VARS = [
   { name: "ENCRYPTION_KEY",          feature: "AES-256-GCM application-layer encryption of secrets at rest (generate: openssl rand -hex 32)" },
   // Alerting
   { name: "RESEND_API_KEY",          feature: "Email alerts (brute-force, cron staleness, SnapTrade spike, new device)" },
-  { name: "ALERT_FROM",              feature: "From: header for alert emails (defaults to alerts@mizan.app)" },
+  { name: "ALERT_FROM",              feature: "From: header for all Mizan emails — MUST be on the verified Resend domain mizan.exchange (defaults to 'MIZAN <no-reply@mizan.exchange>')" },
   // Alpaca paper trading
   { name: "ALPACA_KEY_ID",           feature: "Alpaca paper trading" },
   { name: "ALPACA_SECRET",           feature: "Alpaca paper trading" },
