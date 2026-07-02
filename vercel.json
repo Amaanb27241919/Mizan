@@ -38,16 +38,6 @@
   ],
   "headers": [
     {
-      "//": "Public brand images must load cross-origin (email clients, external embeds). Placed FIRST so its CORP value wins. Exact source to rule out regex-match issues.",
-      "source": "/logo.png",
-      "headers": [
-        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
-        { "key": "X-Content-Type-Options",    "value": "nosniff" },
-        { "key": "Referrer-Policy",           "value": "strict-origin-when-cross-origin" },
-        { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" }
-      ]
-    },
-    {
       "source": "/(.*)",
       "headers": [
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
