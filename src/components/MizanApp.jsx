@@ -2770,13 +2770,29 @@ function DocumentsPanel({documents=[],accounts=[]}){
 }
 
 /* ─── ACTIVITY (transaction history) ─────────────────── */
-function ActivityPanel({activities=[],accounts=[]}){
+function ActivityPanel({activities=[],accounts=[],botFills=[]}){
   const[type,setType]=useState("all");
   const[acctF,setAcctF]=useState("all");
   const[range,setRange]=useState("1y");
 
   const acctNameById=Object.fromEntries(accounts.map(a=>[a.accountId,`${a.brokerage} — ${a.accountName}`]));
   const acctOptions=["all",...accounts.map(a=>a.accountId)];
+
+  // Merge the bot's executed fills so a bot trade appears here IMMEDIATELY — the
+  // broker feed (snapActivities) only catches up on SnapTrade's sync cadence, so
+  // without this the Activity tab lags the Trade tab. Dedup: once the broker
+  // reports the same ticker+side+units within ~4 days, that authoritative row
+  // wins and the tagged bot dupe drops. Display-only — botFills are NOT in
+  // snapActivities, so net-worth/flow calcs stay broker-sourced.
+  const symOf=s=>{if(!s)return"";if(typeof s==="string")return s.toUpperCase();let c=s,d=0;while(c&&typeof c==="object"&&c.symbol&&typeof c.symbol==="object"&&d<3){c=c.symbol;d++;}return String(c?.symbol||c?.raw_symbol||c?.ticker||"").toUpperCase();};
+  const ms=x=>{const d=new Date(x);return isNaN(d.getTime())?0:d.getTime();};
+  const brokerTrades=activities.filter(a=>["BUY","SELL"].includes((a.type||"").toUpperCase()));
+  const botRows=(botFills||[]).filter(b=>!brokerTrades.some(a=>
+    symOf(a.symbol)===String(b.symbol||"").toUpperCase()
+    &&(a.type||"").toUpperCase()===b.type
+    &&Math.round(Number(a.units)||0)===Math.round(Number(b.units)||0)
+    &&Math.abs(ms(a.trade_date||a.settlement_date)-ms(b.trade_date))<=4*86400000));
+  const allActs=[...botRows,...activities];
 
   const cutoff=(()=>{
     const d=new Date();
@@ -2788,7 +2804,7 @@ function ActivityPanel({activities=[],accounts=[]}){
     return d.toISOString().slice(0,10);
   })();
 
-  const rows=activities.filter(a=>{
+  const rows=allActs.filter(a=>{
     if(type!=="all"&&(a.type||"").toUpperCase()!==type)return false;
     if(acctF!=="all"&&a.account?.id!==acctF)return false;
     if(cutoff&&(a.trade_date||a.settlement_date||"")<cutoff)return false;
@@ -2901,7 +2917,7 @@ function ActivityPanel({activities=[],accounts=[]}){
       <BentoTile style={{padding:0,overflow:"hidden"}}>
         <Tbl cols={[
           {l:"Date",   r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.trade_date||r.settlement_date||"—"}</span>},
-          {l:"Type",   r_:r=>{const t=(r.type||"").toUpperCase();return<Tag label={t||"—"} color={colorOf(t)}/>;}},
+          {l:"Type",   r_:r=>{const t=(r.type||"").toUpperCase();return<span style={{display:"inline-flex",gap:4,alignItems:"center"}}><Tag label={t||"—"} color={colorOf(t)}/>{r._bot&&<Tag label="BOT" color={T.blue}/>}</span>;}},
           {l:"Symbol", r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{fmtSym(r.symbol)}</span>},
           {l:"Account",mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{acctNameById[r.account?.id]||r.institution_name||"—"}</span>},
           {l:"Quantity",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.units?(+r.units).toLocaleString("en-US",{maximumFractionDigits:4}):"—"}</span>},
@@ -4335,7 +4351,7 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp })
 }
 
 /* ─── PORTFOLIO ──────────────────────────────────────── */
-function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav,onConnect,bankBalance=0}){
+function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav,onConnect,bankBalance=0}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[sub,setSub]=useState("holdings");
   const[acct,setAcct]=useState("all");
@@ -4522,7 +4538,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],documents=[],
       <Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>
     </>}
 
-    {sub==="activity"&&<ActivityPanel activities={activities} accounts={snapAccounts}/>}
+    {sub==="activity"&&<ActivityPanel activities={activities} accounts={snapAccounts} botFills={botFills}/>}
 
     {sub==="rebalance"&&<Rebalancer holdings={merged} snapAccounts={snapAccounts} onNav={onNav}/>}
 
@@ -9627,10 +9643,22 @@ export default function Mizan(){
   // the user doesn't have to sit on the Trade tab to catch them. Trading
   // users only (isAdmin), never in demo. Polls on the 90s cadence.
   const[pendingSignals,setPendingSignals]=useState(0);
+  // Executed bot fills, surfaced in the Activity tab BEFORE SnapTrade's broker
+  // feed syncs (display-only; never merged into snapActivities so net-worth/flow
+  // calcs stay broker-sourced). Same 90s cadence + bot-user/demo gating.
+  const[botFills,setBotFills]=useState([]);
   useEffect(()=>{
-    if(!isAdmin||demoMode){setPendingSignals(0);return;}
+    if(!isAdmin||demoMode){setPendingSignals(0);setBotFills([]);return;}
     let cancel=false;
-    const pull=async()=>{try{const r=await apiFetch("/api/bot/signals");if(!r.ok||cancel)return;const d=await r.json();const n=(d.signals||[]).filter(s=>s.status==="pending").length;if(!cancel)setPendingSignals(n);}catch{}};
+    const pull=async()=>{try{
+      const[rs,ra]=await Promise.all([apiFetch("/api/bot/signals"),apiFetch("/api/bot/activity")]);
+      if(cancel)return;
+      if(rs.ok){const d=await rs.json();setPendingSignals((d.signals||[]).filter(s=>s.status==="pending").length);}
+      if(ra.ok){const d=await ra.json();setBotFills((d.items||[]).filter(s=>s.status==="executed"&&s.executed_at).map(s=>{
+        const sell=(s.side||"").toUpperCase()==="SELL";const q=Number(s.qty)||0,px=Number(s.suggested_price)||0;
+        return{_bot:true,id:"bot-"+s.id,type:sell?"SELL":"BUY",symbol:s.ticker,units:q,price:px,amount:(sell?1:-1)*q*px,trade_date:String(s.executed_at).slice(0,10)};
+      }));}
+    }catch{}};
     pull();
     const t=setInterval(pull,90*1000);
     return()=>{cancel=true;clearInterval(t);};
@@ -10812,7 +10840,7 @@ export default function Mizan(){
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode} pendingSignals={pendingSignals}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
-        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} onConnect={()=>{setConnMode("read");setConn(true);}} bankBalance={bankBalance}/>}
+        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} botFills={botFills} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} onConnect={()=>{setConnMode("read");setConn(true);}} bankBalance={bankBalance}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} live={live} mapPosition={mapPosition} activities={snapActivities} onNav={setNav} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={botIsRoot} consented={botConsented} demoMode={demoMode}/>}
         {nav==="goals"     &&<GoalsHub
           snapAccounts={visibleAccounts}
