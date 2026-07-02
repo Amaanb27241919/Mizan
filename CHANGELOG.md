@@ -17,6 +17,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **activity:** Surface bot fills in the Activity tab so it syncs with the Trade tab (`f2665c2`)
 
 ### Docs
+- State-audit — Bogleheads basket, BDS overlay, activity sync, changelog+hook (2026-07-02 cont.) (`555cd31`)
 - Add generated CHANGELOG.md + gen-changelog script (`4e98ac4`)
 - **trade-tab:** Correct gating model — bot is trading_bot_enabled allowlist; full-auto decoupled from is_root to full_auto_enabled allowlist (2026-07-02) (`1d153ce`)
 - **CLAUDE:** Resend now sends all Mizan email from verified mizan.exchange (branded shell + logo) (`127577e`)
