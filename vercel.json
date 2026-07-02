@@ -49,6 +49,13 @@
         { "key": "Cross-Origin-Resource-Policy", "value": "same-origin" },
         { "key": "Content-Security-Policy",   "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.plaid.com https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.snaptrade.com https://app.snaptrade.com https://finnhub.io https://*.polygon.io https://api.sunrise-sunset.org https://*.plaid.com https://cdn.plaid.com https://*.tradingview.com wss://*.tradingview.com; frame-src 'self' https://app.snaptrade.com https://cdn.plaid.com https://*.plaid.com https://*.tradingview.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests" }
       ]
+    },
+    {
+      "//": "Brand image assets are embedded cross-origin (emails, external pages). CORP same-origin (from the catch-all above) blocks that, so override to cross-origin for these public logos/icons only. Everything else stays same-origin.",
+      "source": "/(logo\\.png|logo\\.svg|logo-en\\.svg|logo-ar\\.svg|mark\\.png|mark-light\\.png|favicon\\.png|icon-192\\.png|icon-512\\.png|wordmark-ar\\.png)",
+      "headers": [
+        { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" }
+      ]
     }
   ]
 }
