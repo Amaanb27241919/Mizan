@@ -2163,6 +2163,11 @@ function AAOIFIScreener({holdings=[]}){
   const setStandard=v=>{setPrimary(v);try{localStorage.setItem("mizan_screen_standard",v);}catch{}};
   const[flt,setFlt]=useState("all");        // compliance filter: all|halal|review|haram|unknown
   const[detail,setDetail]=useState(null);   // holding whose screening breakdown is open
+  // Ethical / BDS overlay — an optional layer ON TOP of the AAOIFI verdict that
+  // flags divestment-target names. Off by default; the Sharia status is never
+  // altered, only an extra exclusion is surfaced when the user opts in.
+  const[ethical,setEthical]=useState(()=>{try{return localStorage.getItem("mizan_ethical_overlay")==="1";}catch{return false;}});
+  const setEthicalPref=v=>{setEthical(v);try{localStorage.setItem("mizan_ethical_overlay",v?"1":"0");}catch{}persistUserState("mizan_ethical_overlay",v?"1":"0");};
   // Cache freshness: most recent asOf date across all cached results.
   const today=new Date().toISOString().slice(0,10);
   const cachedDates=Object.values(results).map(r=>r.asOf).filter(Boolean);
@@ -2218,6 +2223,7 @@ function AAOIFIScreener({holdings=[]}){
   useEffect(()=>{if(tickers.length)runScreen(false); /* eslint-disable-next-line */},[tickers.join(",")]);
 
   const enriched=holdings.map(h=>({...h,_screen:results[h.tk]||{status:h.sh_||"unknown"}}));
+  const bdsExcluded=ethical?enriched.filter(h=>h._screen?.ethical?.excluded):[];
   const byStatus={halal:[],review:[],haram:[],unknown:[]};
   enriched.forEach(h=>(byStatus[h._screen.status]||byStatus.unknown).push(h));
   const totalEquity=enriched.reduce((s,h)=>s+mv(h),0);
@@ -2246,6 +2252,7 @@ function AAOIFIScreener({holdings=[]}){
           </p>
         </div>
         <div style={{display:"flex",gap:T.s2,alignItems:"center",flexShrink:0}}>
+          <button onClick={()=>setEthicalPref(!ethical)} title="Ethical / BDS overlay — flag divestment-target names on top of the Sharia screen (does not change the Sharia verdict)" style={{fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",padding:`6px ${T.s3}`,borderRadius:999,cursor:"pointer",background:ethical?`${T.loss}1A`:"transparent",border:`1px solid ${ethical?T.loss:T.border}`,color:ethical?T.loss:T.muted,transition:"all 0.15s",whiteSpace:"nowrap"}}>Ethical/BDS {ethical?"ON":"OFF"}</button>
           <select value={primary} onChange={e=>setStandard(e.target.value)} className="field" style={{width:"auto",fontSize:12,cursor:"pointer"}}>
             {Object.entries(STANDARDS).map(([k,s])=><option key={k} value={k}>{s.name}</option>)}
           </select>
@@ -2306,6 +2313,10 @@ function AAOIFIScreener({holdings=[]}){
       <span style={{marginLeft:"auto",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>Tap “Why →” for the breakdown</span>
     </div>
 
+    {ethical&&<div style={{padding:`${T.s2} ${T.s4}`,background:`${T.loss}0D`,border:`1px solid ${T.loss}33`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.55}}>
+      <span style={{color:T.loss,fontWeight:600}}>Ethical / BDS overlay ON</span> · {bdsExcluded.length} holding{bdsExcluded.length===1?"":"s"} flagged{bdsExcluded.length?`: ${bdsExcluded.map(h=>h.tk).join(", ")}`:""}. A curated divestment-target list layered on top of the Sharia verdict — it does not change the Sharia status.
+    </div>}
+
     <BentoTile style={{padding:0,overflow:"hidden"}}>
       <Tbl cols={[
         {l:"Symbol",r_:r=><div><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r._screen.status==="haram"?T.loss:T.textHi}}>{r.tk}</div><div style={{fontFamily:FM,fontSize:9,color:T.muted}}>{r._screen.industry||r.ty||"—"}</div></div>},
@@ -2314,7 +2325,7 @@ function AAOIFIScreener({holdings=[]}){
         {l:"Debt/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.debtR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
         {l:"Cash/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.cashR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
         {l:"A/R/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.recvR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<49?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
-        {l:"Status",r_:r=><Tag label={r._screen.status==="halal"?"Halal":r._screen.status==="haram"?"Non-Compliant":r._screen.status==="review"?"Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>},
+        {l:"Status",r_:r=><span style={{display:"inline-flex",gap:4,alignItems:"center",flexWrap:"wrap"}}><Tag label={r._screen.status==="halal"?"Halal":r._screen.status==="haram"?"Non-Compliant":r._screen.status==="review"?"Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>{ethical&&r._screen.ethical?.excluded&&<Tag label="BDS" color={T.loss}/>}</span>},
         {l:"Pass / 7",r:true,mobileHide:true,r_:r=>{const bs=r._screen.byStandard;if(!bs)return<span style={{color:T.muted}}>—</span>;const pass=Object.values(bs).filter(s=>s.pass===true).length;return<span style={{fontFamily:FM,fontSize:11,color:pass>=6?T.gain:pass>=4?T.gold:T.loss}} title={Object.entries(bs).map(([k,v])=>`${STANDARDS[k]?.name||k}: ${v.pass===true?"pass":v.pass===false?"fail":"n/a"}`).join("\n")}>{pass}/{Object.keys(STANDARDS).length}</span>;}},
         {l:"Primary",mobileHide:true,r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return v.pass===true?<Icon name="check" size={14} color={T.gain}/>:v.pass===false?<Icon name="close" size={14} color={T.loss}/>:<span style={{color:T.muted}}>…</span>;}},
         {l:"Why",r_:r=><button onClick={()=>setDetail(r)} title="Why this verdict?" style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.blue,background:"transparent",border:`1px solid ${T.blue}40`,borderRadius:T.rMd,padding:`3px ${T.s2}`,cursor:"pointer",whiteSpace:"nowrap"}}>Why →</button>},
@@ -9802,8 +9813,12 @@ export default function Mizan(){
             :(acctName||broker||"Unknown");
     // Live screen wins; hardcoded map is the instant fallback; "review" last.
     const live=shariaScreen[tk]&&shariaScreen[tk].status&&shariaScreen[tk].status!=="unknown"?shariaScreen[tk].status:null;
+    // Ethical/BDS overlay flag from the screen verdict (independent of sh_). The
+    // app only ACTS on it when the user turns the overlay on (see ethicalOverlay).
+    const bds=shariaScreen[tk]&&shariaScreen[tk].ethical&&shariaScreen[tk].ethical.excluded?shariaScreen[tk].ethical:null;
     return{tk,nm,sh,ac,px,ty,
       sh_:live||SHARIA_MAP[tk]||(ty==="Crypto"||ty==="cryptocurrency"?"halal":"review"),
+      bds_:bds,
       ac_,br:broker,_live:true,_fromSnap:true};
   },[shariaScreen]);
 
