@@ -18,7 +18,7 @@ The **Trade** tab is MĪZAN's halal trading surface. It has two jobs:
    hand, screened against AAOIFI Sharia rules before it reaches a broker (live via
    SnapTrade, or paper via Alpaca). Not how the bot trades — just a manual escape hatch.
 
-It is **admin/root-only** and intentionally gated at several layers (see §3).
+It is **gated** — Trade access needs root OR the `trading_bot_enabled` beta allowlist, and full-auto needs the `full_auto_enabled` allowlist on top (see §3).
 
 ---
 
@@ -59,29 +59,34 @@ server gate that a tampered client cannot bypass.
 The client gates are convenience only — to a non-admin the tab **"literally doesn't
 exist."** The server gate is the real boundary: a tampered client still gets `403`.
 
-**Who counts as admin?** `canUseTradingBot(user) === isRootUser(user)` — i.e.
-`profiles.is_root = true` **OR** the `OWNER_EMAIL` env (backend) / `VITE_OWNER_EMAIL`
-(frontend) fallback. The env value **wins over the DB** and requires a redeploy to
-re-bind (backend caches it in an in-memory `_rootCache`, cleared on cold start). As of
-2026-06-25 the sole root/owner is **akhan.industries@gmail.com**.
+**Who can use the bot?** `canUseTradingBot(user)` = `isRootUser(user)` **OR**
+`profiles.trading_bot_enabled = true` — a **beta allowlist** (migration 022, default
+false), NOT root-only. Root is still `profiles.is_root = true` **OR** the `OWNER_EMAIL`
+(backend) / `VITE_OWNER_EMAIL` (frontend) env fallback (env wins over DB, needs a redeploy
+to re-bind; cached in `_rootCache`, cleared on cold start). Sole root/owner is
+**akhan.industries@gmail.com**; beta testers (e.g. `khanstyle02`, `mmfarooki`) get
+Manual/Semi via `trading_bot_enabled`.
 
-**Full-auto** is stricter and now **per-account**. Layer 3 executes only when ALL hold:
-`strategy.mode = 'full'` **AND** `profiles.full_auto_enabled = true` (master switch)
-**AND** the specific account is opted in via the `account_full_auto` table
-(`accountFullAutoEnabled()`), which **defaults to false even for the owner**. Managed
-through `GET/PATCH /api/bot/full-auto-accounts`. There is a compliance note in the
-code: enabling full-auto for non-owner accounts likely requires RIA registration — do
-not change without legal review.
+**Full-auto** is stricter — an **allowlist**, decoupled from `is_root` on **2026-07-02**
+(commit `05e6de0`). `canUseFullAuto(user)` = `profiles.full_auto_enabled = true`
+(owner-controlled; set only via SQL, no self-serve). Layer 3 executes only when ALL hold:
+`strategy.mode = 'full'` **AND** `full_auto_enabled = true` **AND** the specific account is
+opted in via `account_full_auto` (`accountFullAutoEnabled()`, defaults to false even for
+the owner; managed via `GET/PATCH /api/bot/full-auto-accounts`). Strategy create/edit
+full-auto layer + the per-account opt-in PATCH now require `canUseFullAuto` (were `isRoot`).
+COMPLIANCE note in the code: keep the allowlist to accounts the owner is personally
+authorized to trade — extending full-auto beyond that may require RIA registration; revisit
+before any compensated/commercial arrangement.
 
 ### How to grant a user access
 
 ```sql
--- Trading bot (manual + semi-auto):
-UPDATE profiles SET is_root = true WHERE id = (
+-- Trading bot (manual + semi-auto) — beta allowlist (NOT is_root):
+UPDATE profiles SET trading_bot_enabled = true WHERE id = (
   SELECT id FROM auth.users WHERE email = 'user@example.com'
 );
 
--- Full-auto MASTER switch (root only):
+-- Full-auto MASTER switch — allowlist (owner-authorized accounts only):
 UPDATE profiles SET full_auto_enabled = true WHERE id = (
   SELECT id FROM auth.users WHERE email = 'user@example.com'
 );
@@ -113,7 +118,7 @@ applying. Shown as cards in the non-admin "Coming Soon" view (`MizanApp.jsx:4865
 |-------|--------------|------------------------|
 | 🎯 **Manual** | Bot posts a ready-to-go, fully-formed signal (ticker/qty/price picked). No push, no auto. | You — tap Execute on each signal in the panel |
 | 🤖 **Semi-auto** | Same bot-picked signal, delivered as a push to Approve/Reject. | You — one tap per signal |
-| ⚡ **Full-auto** | The strategy signals **and** executes within your caps, stop-loss, and the Sharia gate. | Nobody — autonomous (root + master switch + **per-account opt-in**) |
+| ⚡ **Full-auto** | The strategy signals **and** executes within your caps, stop-loss, and the Sharia gate. | Nobody — autonomous (`full_auto_enabled` allowlist + `mode='full'` + **per-account opt-in**) |
 
 > The DB `mode` column (`semi`/`full`) is derived from the layer and is the real
 > full-auto safety gate. Only `layer="full"` maps to `mode="full"`, so a tampered
