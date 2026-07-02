@@ -21,6 +21,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade-tab:** Correct gating model — bot is trading_bot_enabled allowlist; full-auto decoupled from is_root to full_auto_enabled allowlist (2026-07-02) (`1d153ce`)
 - **CLAUDE:** Resend now sends all Mizan email from verified mizan.exchange (branded shell + logo) (`127577e`)
 
+### Maintenance
+- Auto-regenerate CHANGELOG.md via pre-commit hook (`10a8059`)
+
 ## 2026-07-01
 
 ### Added
