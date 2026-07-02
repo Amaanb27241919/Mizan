@@ -13,7 +13,8 @@
     "gen:icons": "node scripts/gen-pwa-icons.mjs",
     "test": "vitest run",
     "test:ui": "vitest --ui",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@playwright/test": "^1.61.0",

@@ -1,0 +1,27 @@
+#!/bin/sh
+# Auto-regenerate CHANGELOG.md from the git history on each commit and stage it.
+#
+# NOTE: pre-commit runs BEFORE the commit is created, so the changelog reflects
+# COMMITTED history — the commit you're making now appears on your NEXT commit.
+# Best-effort: this hook NEVER blocks a commit if regeneration fails.
+#
+# Wired via core.hooksPath=.githooks (set by `npm install`'s prepare script, or
+# manually: git config core.hooksPath .githooks).
+
+# Skip during rebase / merge / cherry-pick — regenerating per-commit there causes
+# churn and conflicts.
+git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
+if [ -d "$git_dir/rebase-merge" ] || [ -d "$git_dir/rebase-apply" ] || \
+   [ -f "$git_dir/MERGE_HEAD" ] || [ -f "$git_dir/CHERRY_PICK_HEAD" ]; then
+  exit 0
+fi
+
+# No node → skip quietly (don't block the commit).
+command -v node >/dev/null 2>&1 || exit 0
+
+if node scripts/gen-changelog.mjs >/dev/null 2>&1; then
+  git add CHANGELOG.md 2>/dev/null || true
+else
+  echo "pre-commit: CHANGELOG regen skipped (gen-changelog failed) — commit continues"
+fi
+exit 0
