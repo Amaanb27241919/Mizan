@@ -56,7 +56,7 @@ lib/handlers.mjs               — 4,200+ lines. Every API route in one file.
 lib/sharia.mjs                 — Sharia screening service (provider seam: Finnhub now, Zoya when ZOYA_API_KEY set). screenSymbol/screenBatch power /api/screen → governs h.sh_ app-wide
 lib/crypto.mjs                 — AES-256-GCM encrypt/decrypt (APP_ENCRYPTION_KEY)
 lib/anomaly.mjs                — 4 anomaly detectors (brute force, 5xx spike, cron staleness, new device)
-lib/alerts.mjs                 — Resend email alerts (anomaly notifications to owner)
+lib/alerts.mjs                 — Resend email: owner anomaly alerts + user emails (digest, re-auth, bug reports, invites) via a branded HTML shell (renderBrandedEmail, logo header). From = ALERT_FROM on the verified mizan.exchange domain
 lib/rateLimit.mjs              — DB-backed rate limiting (increment_rate_limit RPC)
 lib/fetchWithRetry.mjs         — Retry wrapper with exponential backoff
 lib/logger.mjs                 — Structured logging
@@ -394,7 +394,7 @@ These are documented constraints, not undiscovered issues:
 | Polygon | OHLC bars (backtester only) | `POLYGON_KEY` | 5 req/min free, 2yr history |
 | Alpaca | Paper trading | `ALPACA_KEY_ID`, `ALPACA_SECRET` | Paper only — no production keys |
 | Supabase | DB + Auth | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Paid plan |
-| Resend | Owner alert emails | `RESEND_API_KEY` | Anomaly alerts only — no user emails |
+| Resend | All Mizan email (owner alerts + user emails) | `RESEND_API_KEY`, `ALERT_FROM` | Sends owner anomaly alerts AND user emails (weekly digest, Plaid re-auth, bug-report receipts, trade invites) via `lib/alerts.mjs` (branded HTML shell w/ logo). **From = `ALERT_FROM`, which MUST be on the verified `mizan.exchange` domain** (set to `alerts@mizan.exchange` in Vercel; code default `MIZAN <no-reply@mizan.exchange>`). Was `mizan.app` — migrated 2026-07-02. Supabase **Auth** emails (signup/reset) send separately via Supabase custom SMTP → Resend, sender `no-reply@mizan.exchange`. |
 | Vercel Cron | Scheduled jobs auth | `CRON_SECRET` | **Required.** `cronUnauthorized()` is fail-closed (`!CRON_SECRET` → all crons 401). Vercel auto-attaches `Authorization: Bearer $CRON_SECRET` to cron paths ONLY when this exact var is set. Set in Vercel Prod 2026-06-25 after it was missing (crons hadn't run). Note: a Vercel **Redeploy** reuses the old env snapshot — bind new env vars with a fresh git build. |
 | Sentry | Error tracking | `VITE_SENTRY_DSN`, `SENTRY_DSN` | Frontend + backend, v10.52 |
 | Web Push | Push notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | VAPID, per-device subscriptions |
