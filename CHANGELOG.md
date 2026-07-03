@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-03
+
+### Added
+- **trade:** One-tap Halal Bogleheads preset picker + DCA weekly-amount (`88c559f`)
+
 ## 2026-07-02
 
 ### Added

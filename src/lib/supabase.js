@@ -11,31 +11,16 @@ const hasCredentials = Boolean(SUPABASE_URL) && Boolean(SUPABASE_ANON_KEY);
 
 export const isSupabaseConfigured = hasCredentials;
 
-// Per-tab session: keep the auth session in sessionStorage instead of the SDK
-// default (localStorage). This scopes the login to a single browser tab —
-//   • opening the app in a NEW tab or window starts LOGGED OUT
-//   • the same tab stays logged in across refreshes (sessionStorage survives reload)
-//   • closing the tab (or the browser) ends the session
-// localStorage is shared across every tab of a browser profile, which is why a
-// new tab used to inherit the session. sessionStorage is not shared, so it can't.
-// (Private/incognito windows were already storage-isolated; the only way one ever
-// inherited a session is via auth tokens in a URL — see the one-time purge below.)
-// Falls back to the SDK default only if sessionStorage is unavailable (SSR/prerender),
-// which never happens in the live SPA.
-const tabStorage =
-  typeof window !== 'undefined' && window.sessionStorage ? window.sessionStorage : undefined;
-
-// One-time migration: purge any pre-existing session left in localStorage by the
-// old (cross-tab) config so a stale shared token can't linger. Harmless and
-// idempotent — once cleared there's nothing to remove on subsequent loads.
-if (typeof window !== 'undefined' && window.localStorage) {
-  try {
-    for (let i = window.localStorage.length - 1; i >= 0; i--) {
-      const k = window.localStorage.key(i);
-      if (k && /^sb-.*-auth-token$/.test(k)) window.localStorage.removeItem(k);
-    }
-  } catch { /* private-mode / disabled storage — nothing to purge */ }
-}
+// Persistent session (the SDK default): keep the auth session in localStorage so
+// the login survives until the user explicitly signs out.
+//   • the session persists across refreshes, new tabs, new windows, and browser
+//     restarts — every tab of the profile shares one login
+//   • it ends only on an explicit signOut() (or token expiry with no refresh)
+// localStorage is per-origin and shared across tabs, which is exactly what makes
+// a new tab stay logged in. Private/incognito windows keep their own isolated
+// storage, so this never leaks a session into an incognito session.
+const authStorage =
+  typeof window !== 'undefined' && window.localStorage ? window.localStorage : undefined;
 
 export const supabase = hasCredentials
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -43,7 +28,7 @@ export const supabase = hasCredentials
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storage: tabStorage,
+        storage: authStorage,
       },
     })
   : null;
