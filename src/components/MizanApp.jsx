@@ -5130,6 +5130,13 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
   const[nlAccount,setNlAccount]=useState(""); // brokerage account the strategy runs on
   const[riskAck,setRiskAck]=useState(false);
   const acctId=a=>a.accountId||a.id; // SnapTrade accounts expose either shape
+  // Halal Bogleheads quick-preset picker. Sleeves come from the server (single
+  // source of truth); the user picks a ticker per sleeve + optional tilts, and we
+  // POST the selection back for a server-validated preset that reuses the review flow.
+  const[bogleSleeves,setBogleSleeves]=useState([]);
+  const[bogleOpen,setBogleOpen]=useState(false);
+  const[bogleSel,setBogleSel]=useState({us:"SPUS",intl:"SPWO",sukuk:"SPSK"});
+  const[bogleBusy,setBogleBusy]=useState(false);
   const[killSwitchBusy,setKillSwitchBusy]=useState(false);
   const[killSwitchMsg,setKillSwitchMsg]=useState(null);
   // Per-account full-auto opt-in map: { [accountId]: true }
@@ -5257,6 +5264,36 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       const resolved=snapAccounts.find(a=>acctId(a)===d.strategy.account_id);
       setNlAccount(resolved?acctId(resolved):(snapAccounts[0]?acctId(snapAccounts[0]):""));
     }catch(e){setNlErr(e.message||"Network error");}finally{setNlBusy(false);}
+  };
+
+  // Load the Bogleheads sleeve menu once the panel is live (trading-enabled only).
+  useEffect(()=>{
+    if(!isAdmin||demoMode)return;
+    apiFetch("/api/bot/bogleheads").then(r=>r.ok?r.json():null).then(d=>{if(d?.sleeves)setBogleSleeves(d.sleeves);}).catch(()=>{});
+  },[isAdmin,demoMode]);
+
+  // Toggle a sleeve pick. Core sleeves always keep one selection; optional tilts
+  // (tech/reit) toggle off when their active ticker is clicked again.
+  const pickSleeve=(sleeve,ticker)=>setBogleSel(prev=>{
+    const next={...prev};
+    if(!sleeve.core&&next[sleeve.key]===ticker)delete next[sleeve.key];
+    else next[sleeve.key]=ticker;
+    return next;
+  });
+
+  // Build a server-validated preset from the current sleeve picks and hand it to
+  // the same review + activate flow the NL builder uses (setNlResult).
+  const buildBoglehead=async()=>{
+    if(bogleBusy)return;setBogleBusy(true);setNlErr(null);
+    try{
+      const account=nlAccount||(snapAccounts[0]?acctId(snapAccounts[0]):null);
+      const r=await apiFetch("/api/bot/bogleheads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({account_id:account,sel:bogleSel})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d.strategy){setNlErr(d.error==="invalid_selection"?"Pick a ticker for the three core sleeves (US · International · Sukuk).":(d.error||"Couldn't build the preset."));return;}
+      setNlResult(d.strategy);setRiskAck(false);setBogleOpen(false);
+      const resolved=snapAccounts.find(a=>acctId(a)===d.strategy.account_id);
+      setNlAccount(resolved?acctId(resolved):(snapAccounts[0]?acctId(snapAccounts[0]):""));
+    }catch(e){setNlErr(e.message||"Network error");}finally{setBogleBusy(false);}
   };
 
   const saveNlStrategy=async()=>{
@@ -5458,6 +5495,55 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       {defaultLayer==="full"&&<div style={{marginTop:T.s2,fontFamily:FM,fontSize:11,color:T.loss}}>Full-auto still requires the per-account AUTO ON toggle below — off by default even here.</div>}
     </BentoTile>}
 
+    {/* Quick Preset — Halal Bogleheads lazy portfolio. One-tap, per-sleeve pickable
+        (US · International · Sukuk core, optional tech & REIT tilts). Builds a
+        server-validated DCA basket and drops into the same review flow below. */}
+    {showStrat&&!needsConsent&&<BentoTile accent={T.gain}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s3,flexWrap:"wrap"}}>
+        <div style={{minWidth:200,flex:1}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>QUICK PRESET · HALAL LAZY PORTFOLIO</div>
+          <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:4}}>Halal Bogleheads</div>
+          <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:0}}>The Islamic three-fund lazy portfolio — US equity, international, and sukuk (halal fixed income). Weekly DCA that rebalances via new contributions and holds long-term. Never auto-sells.</p>
+        </div>
+        <button onClick={()=>setBogleOpen(o=>!o)} className={bogleOpen?"btn-ghost":"btn-primary"} style={{fontSize:11,whiteSpace:"nowrap"}}>{bogleOpen?"Close":"Configure →"}</button>
+      </div>
+
+      {bogleOpen&&<div style={{marginTop:T.s4,paddingTop:T.s4,borderTop:`1px solid ${T.border}`}}>
+        {bogleSleeves.length===0
+          ?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Loading preset options…</div>
+          :<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+            {bogleSleeves.map(s=>{
+              const active=bogleSel[s.key];
+              const included=s.core||!!active;
+              return<div key={s.key} style={{opacity:included?1:0.6}}>
+                <div style={{display:"flex",alignItems:"baseline",gap:T.s2,marginBottom:T.s2,flexWrap:"wrap"}}>
+                  <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,letterSpacing:"0.02em"}}>{s.label}</span>
+                  <span style={{fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums"}}>~{Math.round(s.weight*100)}%</span>
+                  {s.core
+                    ?<span style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.08em"}}>CORE</span>
+                    :<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.08em"}}>{active?"ON · tap to remove":"OPTIONAL TILT"}</span>}
+                </div>
+                <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+                  {s.options.map(o=>{
+                    const on=active===o.ticker;
+                    return<button key={o.ticker} onClick={()=>pickSleeve(s,o.ticker)} style={{
+                      display:"flex",flexDirection:"column",gap:2,alignItems:"flex-start",textAlign:"left",
+                      padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,cursor:"pointer",transition:"all 0.15s",
+                      border:`1px solid ${on?T.gain:T.border}`,background:on?`${T.gain}14`:"transparent",minWidth:150,
+                    }}>
+                      <span style={{fontFamily:FM,fontSize:12,fontWeight:600,color:on?T.gain:T.textHi,letterSpacing:"0.04em"}}>{o.ticker}</span>
+                      <span style={{fontFamily:FP,fontSize:10,color:T.muted,lineHeight:1.4}}>{o.name} · {o.expense}% ER</span>
+                    </button>;
+                  })}
+                </div>
+              </div>;
+            })}
+            <div style={{fontFamily:FM,fontSize:10,color:T.dim,lineHeight:1.5,marginTop:T.s1}}>Weights are targets — the bot buys the most-underweight affordable member each week to converge on them. You set the weekly amount + account in the review below.</div>
+            <div><button onClick={buildBoglehead} disabled={bogleBusy} className="btn-primary" style={{fontSize:11,opacity:bogleBusy?0.6:1}}>{bogleBusy?"Building…":"Build Halal Bogleheads →"}</button></div>
+          </div>}
+      </div>}
+    </BentoTile>}
+
     {/* NL Strategy Builder */}
     {showStrat&&!needsConsent&&<BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>NATURAL LANGUAGE STRATEGY BUILDER</div>
@@ -5532,6 +5618,21 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             </>:<div style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>Select a funded brokerage account to set a deployable %. Current allocation: {f(nlResult.capital_allocated)}.</div>}
           </div>;
         })()}
+
+        {/* Weekly DCA amount — how much the accumulation basket deploys each period.
+            Only for dca strategies; blank/0 falls back to deploying the full
+            allocation as whole shares become affordable. */}
+        {nlResult.strategy_type==="dca"&&<div style={{marginBottom:T.s3}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s2}}>WEEKLY AMOUNT</div>
+          <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
+            <span style={{fontFamily:FM,fontSize:14,color:T.muted}}>$</span>
+            <input type="number" min={0} step={10} value={nlResult.params?.dca_amount||""} placeholder="e.g. 50"
+              onChange={e=>{const v=Math.max(0,Number(e.target.value)||0);setNlResult(prev=>({...prev,params:{...(prev.params||{}),dca_amount:v}}));}}
+              className="field" style={{width:140,fontVariantNumeric:"tabular-nums"}}/>
+            <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>every {nlResult.params?.dca_cadence_days||7} days</span>
+          </div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:4,lineHeight:1.5}}>Each period the bot buys whole shares of the most-underweight member up to this amount, capped by your deployable allocation above. Leave blank to deploy the full allocation as shares become affordable.</div>
+        </div>}
 
         {/* Faithfully captured trader rules + honest "approximated" label. */}
         {(()=>{

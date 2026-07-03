@@ -14,6 +14,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **bot:** Halal Bogleheads DCA basket — selectable per-sleeve options (`7488b5d`)
 
 ### Fixed
+- Atomic compare-and-swap on bot signal approval to prevent duplicate orders (`eafae77`)
 - **activity:** Surface bot fills in the Activity tab so it syncs with the Trade tab (`f2665c2`)
 
 ### Docs
