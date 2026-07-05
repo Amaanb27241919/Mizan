@@ -13,6 +13,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **screener:** Curate all 7 halal ETFs + ticker normalization; bind ALPHAVANTAGE_KEY via fresh build (`13b5b43`)
 - **screener:** ETF Overlap Analyzer — halal fund holdings overlap + diversification (incl. Amana funds) (`8e786bf`)
 
+### Fixed
+- **etf:** Sequential AV fetch + short TTL on ETF curated-fallback rows (`03d0504`)
+
 ### Docs
 - State-audit + CLAUDE.md — ETF Overlap Analyzer, migration 024, ALPHAVANTAGE_KEY (2026-07-05) (`0018c72`)
 - Sync state-audit + CLAUDE.md to 2026-07-03 (Bogleheads picker, persistent session, migration/line-count drift) (`6eeeb53`)

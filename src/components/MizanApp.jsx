@@ -897,6 +897,36 @@ function BentoTile({children,span="auto",accent,gradient,glass,style,onClick}){
   return<div className={`bento-tile${onClick?" bento-tile--click":""}`} onClick={onClick} style={baseStyle}>{children}</div>;
 }
 
+// CollapsibleTile — a BentoTile whose header toggles its body. The header (title +
+// optional one-line subtitle) is ALWAYS visible so the feature stays discoverable
+// even when collapsed; only the body folds away, keeping long views short. Open
+// state persists per `storageKey`. Use for SECONDARY / advanced panels; keep the
+// primary content of a view as a plain BentoTile so it's always in view. `right`
+// renders a node (badge, status dot) on the header's right edge.
+function CollapsibleTile({title,subtitle,defaultOpen=false,storageKey,accent,right,children,style}){
+  const skey=storageKey?`mizan_ct_${storageKey}`:null;
+  const[open,setOpen]=useState(()=>{
+    if(!skey)return defaultOpen;
+    try{const v=localStorage.getItem(skey);return v===null?defaultOpen:v==="1";}catch{return defaultOpen;}
+  });
+  const toggle=()=>setOpen(o=>{const n=!o;if(skey){try{localStorage.setItem(skey,n?"1":"0");}catch{}}return n;});
+  return<BentoTile accent={accent} style={{padding:0,...(style||{})}}>
+    <button onClick={toggle} aria-expanded={open} style={{
+      width:"100%",display:"flex",alignItems:"center",gap:T.s3,padding:`${T.s4} ${T.s5}`,
+      background:"transparent",border:"none",cursor:"pointer",textAlign:"left",
+    }}>
+      <span aria-hidden="true" style={{color:open?T.blue:T.muted,fontSize:11,lineHeight:1,flexShrink:0,
+        display:"inline-block",transform:open?"rotate(90deg)":"none",transition:"transform 0.18s"}}>▸</span>
+      <span style={{flex:1,minWidth:0}}>
+        <span style={{display:"block",fontFamily:FM,fontSize:11,letterSpacing:"0.14em",fontWeight:600,color:T.textHi}}>{title}</span>
+        {subtitle&&<span style={{display:"block",fontFamily:FP,fontSize:11,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{subtitle}</span>}
+      </span>
+      {right&&<span style={{flexShrink:0,marginLeft:T.s2}}>{right}</span>}
+    </button>
+    {open&&<div style={{padding:`0 ${T.s5} ${T.s5}`}}>{children}</div>}
+  </BentoTile>;
+}
+
 function TT2({active,payload}){if(!active||!payload?.length)return null;return<div style={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:8,padding:"6px 12px",fontFamily:FM,fontSize:11,color:T.textHi}}>${payload[0]?.value?.toLocaleString?.("en-US",{minimumFractionDigits:2})}</div>;}
 
 // Data table — fintech-style. Tabular numerics, hover row highlight,
@@ -2205,22 +2235,14 @@ function ETFOverlapPanel(){
     </button>;
   };
 
-  return <BentoTile accent={T.blue} style={{marginTop:T.s5}}>
-    <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:T.s3}}>
-      <div>
-        <div style={{fontFamily:FM,fontSize:10,letterSpacing:1.5,color:T.blue,fontWeight:600}}>DIVERSIFICATION · HALAL FUNDS</div>
-        <div style={{fontFamily:FU,fontSize:20,color:T.textHi,marginTop:2}}>ETF Overlap Analyzer</div>
-      </div>
-      <div style={{fontFamily:FP,fontSize:11,color:T.muted,maxWidth:280,textAlign:"right",lineHeight:1.4}}>Pick 2–4 funds. Shared holdings mean you own the same companies twice.</div>
-    </div>
-
+  return <CollapsibleTile title="ETF OVERLAP ANALYZER" subtitle="Compare 2–4 halal funds — shared holdings mean you own the same companies twice" accent={T.blue} storageKey="etf_overlap" defaultOpen={false} style={{marginTop:T.s5}}>
     {/* fund pickers */}
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:T.s4}}>
       {(universe.length?universe:sel.map(s=>({symbol:s,vehicle:"etf",assetClass:"equity"}))).map(chip)}
     </div>
 
-    {err&&<div style={{fontFamily:FM,fontSize:12,color:T.loss,padding:`${T.s3}px 0`}}>{err} <button onClick={()=>setSel(s=>[...s])} style={{fontFamily:FM,fontSize:11,color:T.blue,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Retry</button></div>}
-    {busy&&!data&&<div style={{fontFamily:FM,fontSize:12,color:T.muted,padding:`${T.s4}px 0`}}>Loading holdings…</div>}
+    {err&&<div style={{fontFamily:FM,fontSize:12,color:T.loss,padding:`${T.s3} 0`}}>{err} <button onClick={()=>setSel(s=>[...s])} style={{fontFamily:FM,fontSize:11,color:T.blue,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Retry</button></div>}
+    {busy&&!data&&<div style={{fontFamily:FM,fontSize:12,color:T.muted,padding:`${T.s4} 0`}}>Loading holdings…</div>}
 
     {focus&&!err&&<>
       {/* headline overlap for the strongest comparable pair */}
@@ -2275,8 +2297,8 @@ function ETFOverlapPanel(){
       {unavailable.length>0&&<div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:6}}>Holdings for {unavailable.join(", ")} activate once the ETF data source is connected.</div>}
     </>}
 
-    {!focus&&!busy&&!err&&<div style={{fontFamily:FP,fontSize:13,color:T.muted,padding:`${T.s4}px 0`}}>Select at least two funds with available holdings to compare.</div>}
-  </BentoTile>;
+    {!focus&&!busy&&!err&&<div style={{fontFamily:FP,fontSize:13,color:T.muted,padding:`${T.s4} 0`}}>Select at least two funds with available holdings to compare.</div>}
+  </CollapsibleTile>;
 }
 
 function AAOIFIScreener({holdings=[]}){
@@ -7709,8 +7731,7 @@ function LegalDocsPanel(){
     {l:"Access Controls Policy",desc:"RBAC, MFA, periodic access reviews, secret management.",     href:"/legal/ACCESS_CONTROLS_POLICY.pdf", ext:true},
     {l:"Data Retention Policy",desc:"What we keep, how long, when it's deleted, vendor handling.",  href:"/legal/DATA_RETENTION_POLICY.pdf",  ext:true},
   ];
-  return<BentoTile>
-    <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>LEGAL DOCUMENTS</div>
+  return<CollapsibleTile title="LEGAL DOCUMENTS" subtitle="Privacy, terms, security & data policies" storageKey="settings_legal" defaultOpen={false}>
     <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:600}}>
       Our public-facing policies. Always available without a login at the same URLs — Plaid, Supabase, and your auditors can reach them too.
     </p>
@@ -7732,7 +7753,7 @@ function LegalDocsPanel(){
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em",flexShrink:0}}>{d.ext?"PDF ↗":"OPEN ↗"}</span>
       </a>)}
     </div>
-  </BentoTile>;
+  </CollapsibleTile>;
 }
 
 function PrivacyPanel(){
