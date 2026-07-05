@@ -4554,10 +4554,10 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
       // under a single "Tools" group so the top row stays ~5 tabs instead of 7 and
       // stops scrolling off-screen on narrow viewports. `sub` keeps its original
       // per-tool values; the top row derives its active state from them.
-      const TOOLS=["rebalance","tax","backtest"];
+      const TOOLS=["rebalance","tax","dividends","backtest"];
       const topActive=TOOLS.includes(sub)?"tools":sub;
       const topTabs=[["holdings","Holdings"],["screener","Screener"],["activity","Activity"],["assets","Assets"],["tools","Tools"]];
-      const toolTabs=[["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["backtest","Backtest"]];
+      const toolTabs=[["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["dividends","Dividends"],["backtest","Backtest"]];
       return<>
         <TabBar tabs={topTabs} active={topActive} onChange={v=>{if(v==="tools"){if(!TOOLS.includes(sub))setSub("rebalance");}else setSub(v);}}/>
         {topActive==="tools"&&<TabBar tabs={toolTabs} active={sub} onChange={setSub} accent={T.slate}/>}
@@ -4714,6 +4714,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
 
     {/* Backtest moved here from the dropped Trade tab — it's a Portfolio
         research tool by nature, not a trading one. Uses Polygon for OHLC. */}
+    {sub==="dividends"&&<DividendPlanner holdings={merged} portfolioValue={tot}/>}
     {sub==="backtest"&&<HistoricalBacktest/>}
 
     {sub==="screener"&&<><AAOIFIScreener holdings={merged}/><ETFOverlapPanel/></>}
@@ -4780,6 +4781,114 @@ function EarningsWidget({earnings=[]}){
 
 /* ─── TRADE & BOT ────────────────────────────────────── */
 /* ─── FIRE / RETIREMENT CALCULATOR ───────────────────── */
+// Dividend Income Planner — forward-projects annual dividend income from a
+// starting balance + monthly contributions + reinvestment (DRIP) + growth.
+// Mizan-unique: shows GROSS dividends → minus PURIFICATION (impurity %) → the NET
+// income you actually keep, since the impure fraction of a halal-fund dividend is
+// owed to charity, not to you. Only the net (purified) portion is reinvested.
+function DividendPlanner({holdings=[],portfolioValue=0}){
+  // Published yields from the ETF catalog (e.g. "~0.9%") → decimals, so we can
+  // blend a starting yield from the user's real halal-fund holdings when known.
+  const yieldLookup=Object.fromEntries(ETF_LIST.map(f=>[f.tk,(parseFloat(String(f.div).replace(/[~%]/g,""))||0)/100]));
+  const derivedYield=(()=>{
+    let tv=0,dy=0;
+    holdings.forEach(h=>{const v=mv(h),y=yieldLookup[h.tk];if(v>0&&y!=null){tv+=v;dy+=v*y;}});
+    return tv>0?dy/tv:null;
+  })();
+
+  const[start,setStart]=useState(()=>Math.max(0,Math.round(portfolioValue))||10000);
+  const[monthly,setMonthly]=useState(100);
+  const[yld,setYld]=useState(()=>Math.round((derivedYield??0.018)*1000)/10);   // % on value
+  const[growth,setGrowth]=useState(5);        // annual price appreciation %
+  const[impurity,setImpurity]=useState(1.7);  // purification % (halal-fund blended avg)
+  const[drip,setDrip]=useState(true);
+  const[years,setYears]=useState(20);
+
+  const proj=useMemo(()=>{
+    const rows=[]; let bal=start, totGross=0, totPurif=0;
+    for(let y=1;y<=years;y++){
+      const gross=bal*(yld/100);
+      const purif=gross*(impurity/100);
+      const net=gross-purif;
+      totGross+=gross; totPurif+=purif;
+      rows.push({year:y,label:`Y${y}`,gross:+gross.toFixed(0),net:+net.toFixed(0)});
+      bal=bal*(1+growth/100)+monthly*12+(drip?net:0);
+    }
+    return {rows,totGross,totPurif,finalBal:bal};
+  },[start,monthly,yld,growth,impurity,drip,years]);
+
+  const last=proj.rows[proj.rows.length-1]||{net:0,gross:0};
+  const first=proj.rows[0]||{net:0};
+  const num=(v,set,step=1,min=0)=><input type="number" value={v} min={min} step={step} onChange={e=>set(Math.max(min,+e.target.value||0))} className="field" style={{width:"100%",fontSize:13,padding:`8px ${T.s3}`,fontVariantNumeric:"tabular-nums"}}/>;
+  const Field=({label,children,hint})=><div><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:6}}>{label}</div>{children}{hint&&<div style={{fontFamily:FP,fontSize:10,color:T.dim,marginTop:4,lineHeight:1.4}}>{hint}</div>}</div>;
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
+    <BentoTile accent={T.gain} style={{background:`radial-gradient(circle at 100% 0%, ${T.gain}12, transparent 55%), ${T.card}`}}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s2}}>DIVIDEND INCOME · YEAR {years}</div>
+      <div style={{display:"flex",gap:T.s6,flexWrap:"wrap",alignItems:"baseline"}}>
+        <div>
+          <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(last.net))}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s2}}>net dividends / yr · ~{mask(fmtUSD(Math.round(last.net/12)))}/mo</div>
+        </div>
+        <div>
+          <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.gold,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(Math.round(proj.totPurif)))}</div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>purification owed over {years}y</div>
+        </div>
+        <div>
+          <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(Math.round(proj.finalBal)))}</div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>projected balance</div>
+        </div>
+      </div>
+      <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:T.s3,lineHeight:1.5,maxWidth:560}}>Estimates only. The impure fraction of a halal-fund dividend ({impurity}%) is owed to charity, so only the <strong style={{color:T.text}}>net</strong> is yours to keep or reinvest. Confirm each fund's actual impurity % in Zakat → Dividend Purification.</div>
+    </BentoTile>
+
+    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"minmax(240px,1fr) 2fr",gap:T.s4}}>
+      <BentoTile>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ASSUMPTIONS</div>
+        <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+          <Field label="STARTING BALANCE">{num(start,setStart,100)}</Field>
+          <Field label="MONTHLY CONTRIBUTION">{num(monthly,setMonthly,25)}</Field>
+          <Field label={`DIVIDEND YIELD · ${yld}%`} hint={derivedYield!=null?"Blended from your current halal-fund holdings.":"Halal-fund blended default."}>{num(yld,setYld,0.1)}</Field>
+          <Field label={`PRICE GROWTH · ${growth}%/yr`}>{num(growth,setGrowth,0.5)}</Field>
+          <Field label={`PURIFICATION · ${impurity}%`} hint="Impure share of dividends owed to charity.">{num(impurity,setImpurity,0.1)}</Field>
+          <label style={{display:"flex",alignItems:"center",gap:T.s2,cursor:"pointer",fontFamily:FP,fontSize:13,color:T.text}}>
+            <input type="checkbox" checked={drip} onChange={e=>setDrip(e.target.checked)}/> Reinvest dividends (DRIP)
+          </label>
+          <div>
+            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:6}}>HORIZON</div>
+            <div style={{display:"flex",gap:T.s1,flexWrap:"wrap"}}>
+              {[5,10,15,20,30].map(y=><button key={y} onClick={()=>setYears(y)} style={{padding:`5px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:11,fontWeight:600,cursor:"pointer",background:years===y?T.gain:"transparent",border:`1px solid ${years===y?T.gain:T.border}`,color:years===y?"#fff":T.muted}}>{y}y</button>)}
+            </div>
+          </div>
+        </div>
+      </BentoTile>
+
+      <BentoTile>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PROJECTED ANNUAL DIVIDENDS · GROSS vs NET</div>
+        <div style={{height:280}}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={proj.rows} margin={{top:8,right:8,left:0,bottom:0}}>
+              <defs>
+                <linearGradient id="divNet" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.gain} stopOpacity={0.35}/><stop offset="100%" stopColor={T.gain} stopOpacity={0}/></linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.dim} vertical={false}/>
+              <XAxis dataKey="label" tick={{fontSize:10,fontFamily:FM,fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false} interval="preserveStartEnd"/>
+              <YAxis tick={{fontSize:10,fontFamily:FM,fill:T.muted}} axisLine={false} tickLine={false} width={54} tickFormatter={v=>`$${kf(v)}`}/>
+              <Tooltip formatter={(v,n)=>[mask(fmtUSD(v)),n==="net"?"Net (yours)":"Gross"]} labelFormatter={l=>`Year ${l.replace("Y","")}`} contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12}}/>
+              <Area type="monotone" dataKey="gross" stroke={T.gold} strokeWidth={1.5} fill="none" strokeDasharray="4 3"/>
+              <Area type="monotone" dataKey="net" stroke={T.gain} strokeWidth={2} fill="url(#divNet)"/>
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{display:"flex",gap:T.s4,marginTop:T.s2,flexWrap:"wrap"}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.gain}}>● Net (after purification) — Y1 {mask(fmtUSD(first.net))} → Y{years} {mask(fmtUSD(last.net))}</span>
+          <span style={{fontFamily:FM,fontSize:10,color:T.gold}}>┄ Gross</span>
+        </div>
+      </BentoTile>
+    </div>
+  </div>;
+}
+
 function FireCalculator({currentNW=0,ytdContrib=0}){
   const[age,setAge]=useState(28);
   const[targetAge,setTargetAge]=useState(50);
