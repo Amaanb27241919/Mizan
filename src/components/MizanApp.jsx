@@ -4714,10 +4714,8 @@ function Watchlist({live=[],watchlist=[],onAdd,onRemove,onSetAlert,onAlertPermis
   const submit=(e)=>{e.preventDefault();if(!input.trim())return;onAdd(input);setInput("");};
   const notifPerm=typeof Notification!=="undefined"?Notification.permission:"unsupported";
 
-  return<BentoTile>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
-      <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>WATCHLIST{watchlist.length>0?<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {watchlist.length} symbols</span>:""}</span>
-      <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
+  return<CollapsibleTile title="WATCHLIST" subtitle={watchlist.length>0?`${watchlist.length} symbol${watchlist.length!==1?"s":""} tracked`:"Track prices + set price alerts"} storageKey="pf_watchlist" defaultOpen={false}>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:T.s2,alignItems:"center",flexWrap:"wrap",marginBottom:T.s4}}>
         {notifPerm!=="granted"&&<button onClick={onAlertPermission} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:`${T.gold}18`,border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>{notifPerm==="denied"?"Alerts blocked":"Enable alerts"}</button>}
         <form onSubmit={submit} style={{display:"flex",gap:T.s2}}>
           <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())} placeholder="Add ticker"
@@ -4725,7 +4723,6 @@ function Watchlist({live=[],watchlist=[],onAdd,onRemove,onSetAlert,onAlertPermis
           <button type="submit" className="btn-primary" style={{fontSize:11,padding:`6px ${T.s4}`}}>+ Add</button>
         </form>
       </div>
-    </div>
     {watchlist.length===0
       ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
           No symbols yet. Add a ticker above to track price + set alerts.
@@ -4748,7 +4745,7 @@ function Watchlist({live=[],watchlist=[],onAdd,onRemove,onSetAlert,onAlertPermis
             {l:"",r_:r=><button onClick={()=>onRemove(r.symbol)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}><Icon name="close" size={12}/></button>},
           ]} rows={watchlist}/>
         </div>}
-  </BentoTile>;
+  </CollapsibleTile>;
 }
 
 /* ─── EARNINGS WIDGET ────────────────────────────────── */

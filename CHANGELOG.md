@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-05
 
 ### Added
+- **ui:** Collapsible reorg — Overview + Settings (iteration 2) (`7efc096`)
 - **ui:** Collapsible-tile primitive + first pass (reorg iteration 1) (`f3717a9`)
 - **screener:** Curate all 7 halal ETFs + ticker normalization; bind ALPHAVANTAGE_KEY via fresh build (`13b5b43`)
 - **screener:** ETF Overlap Analyzer — halal fund holdings overlap + diversification (incl. Amana funds) (`8e786bf`)
