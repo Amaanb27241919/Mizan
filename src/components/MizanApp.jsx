@@ -10204,16 +10204,21 @@ export default function Mizan(){
             :b.includes("coinbase")?"Crypto"
             :b.includes("chase")?"Chase"
             :(acctName||broker||"Unknown");
-    // Live screen wins; hardcoded map is the instant fallback; "review" last.
+    // The live ENGINE verdict (/api/screen) is the ONLY source of truth for a real
+    // user's holdings — nothing is hardcoded. In DEMO mode the persona's SHARIA_MAP
+    // supplies labels; for real users an unscreened / unknown / crypto holding shows
+    // "review" (flag it, never bless it) until the engine returns a verdict. This
+    // fixes the old bug where crypto auto-labeled "halal" (mislabeling DOGE/XRP) and
+    // the demo persona's hardcoded map leaked into real users' screening.
     const live=shariaScreen[tk]&&shariaScreen[tk].status&&shariaScreen[tk].status!=="unknown"?shariaScreen[tk].status:null;
     // Ethical/BDS overlay flag from the screen verdict (independent of sh_). The
     // app only ACTS on it when the user turns the overlay on (see ethicalOverlay).
     const bds=shariaScreen[tk]&&shariaScreen[tk].ethical&&shariaScreen[tk].ethical.excluded?shariaScreen[tk].ethical:null;
     return{tk,nm,sh,ac,px,ty,
-      sh_:live||SHARIA_MAP[tk]||(ty==="Crypto"||ty==="cryptocurrency"?"halal":"review"),
+      sh_:live||(demoMode?SHARIA_MAP[tk]:null)||"review",
       bds_:bds,
       ac_,br:broker,_live:true,_fromSnap:true};
-  },[shariaScreen]);
+  },[shariaScreen,demoMode]);
 
   // Screen the user's real holdings server-side so h.sh_ reflects the live
   // verdict app-wide (not just when the Screener tab is open). Only tickers not
@@ -10222,8 +10227,22 @@ export default function Mizan(){
   useEffect(()=>{
     if(demoMode)return;
     const today=new Date().toISOString().slice(0,10);
-    const held=[...new Set(snapAccounts.flatMap(a=>(a.positions||[]).map(p=>readSymbol(p).tk)).filter(Boolean))];
-    const todo=held.filter(tk=>!shariaScreen[tk]||shariaScreen[tk].asOf!==today);
+    // Gather held tickers WITH their connector-reported asset type. Crypto has no
+    // Finnhub fundamentals, so it's handled explicitly (flagged "review" — status is
+    // token-specific + scholar-dependent) rather than sent to the ratio engine and
+    // coming back "unknown" (which previously let it fall through to auto-"halal").
+    const heldMap=new Map();
+    snapAccounts.forEach(a=>(a.positions||[]).forEach(p=>{const{tk,ty}=readSymbol(p);if(tk&&!heldMap.has(tk))heldMap.set(tk,ty);}));
+    const stale=tk=>!shariaScreen[tk]||shariaScreen[tk].asOf!==today;
+    const isCryptoTy=t=>/crypto/i.test(String(t||""));
+    const cryptoTodo=[...heldMap].filter(([tk,ty])=>isCryptoTy(ty)&&stale(tk)).map(([tk])=>tk);
+    if(cryptoTodo.length)setShariaScreen(prev=>{
+      const next={...prev};
+      cryptoTodo.forEach(tk=>{next[tk]={status:"review",reason:"Cryptocurrency — Sharia status is token-specific and scholar-dependent; Mizan does not auto-classify crypto. Consult a qualified scholar.",asOf:today,assetType:"crypto"};});
+      try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(next));}catch{}
+      return next;
+    });
+    const todo=[...heldMap].filter(([tk,ty])=>!isCryptoTy(ty)&&stale(tk)).map(([tk])=>tk);
     if(!todo.length)return;
     let cancelled=false;
     (async()=>{
