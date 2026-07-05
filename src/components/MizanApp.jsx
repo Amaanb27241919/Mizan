@@ -4547,7 +4547,20 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
   })();
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["holdings","Holdings"],["screener","Screener"],["activity","Activity"],["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["backtest","Backtest"],["assets","Assets"]]} active={sub} onChange={setSub}/>
+    {(()=>{
+      // Two-level tabs: the three planning tools (Rebalance / Tax / Backtest) live
+      // under a single "Tools" group so the top row stays ~5 tabs instead of 7 and
+      // stops scrolling off-screen on narrow viewports. `sub` keeps its original
+      // per-tool values; the top row derives its active state from them.
+      const TOOLS=["rebalance","tax","backtest"];
+      const topActive=TOOLS.includes(sub)?"tools":sub;
+      const topTabs=[["holdings","Holdings"],["screener","Screener"],["activity","Activity"],["assets","Assets"],["tools","Tools"]];
+      const toolTabs=[["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["backtest","Backtest"]];
+      return<>
+        <TabBar tabs={topTabs} active={topActive} onChange={v=>{if(v==="tools"){if(!TOOLS.includes(sub))setSub("rebalance");}else setSub(v);}}/>
+        {topActive==="tools"&&<TabBar tabs={toolTabs} active={sub} onChange={setSub} accent={T.slate}/>}
+      </>;
+    })()}
 
     {sub==="holdings"&&<>
       {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}

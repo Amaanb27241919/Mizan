@@ -23,6 +23,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - State-audit + CLAUDE.md — ETF Overlap Analyzer, migration 024, ALPHAVANTAGE_KEY (2026-07-05) (`0018c72`)
 - Sync state-audit + CLAUDE.md to 2026-07-03 (Bogleheads picker, persistent session, migration/line-count drift) (`6eeeb53`)
 
+### Other
+- **ui:** Overview Top Holdings + Accounts default to open (`36b234e`)
+
 ## 2026-07-03
 
 ### Added
