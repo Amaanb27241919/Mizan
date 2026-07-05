@@ -26,6 +26,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **etf:** Sequential AV fetch + short TTL on ETF curated-fallback rows (`03d0504`)
 
 ### Docs
+- State-audit — screening now 100% engine-driven (labels + bot gate); no hardcoded halal/haram (`2f0e09c`)
 - State-audit — trading plan recalibrated to realistic DCA-core (owner buy-and-hold insight) (`56819bc`)
 - State-audit — Dividend Planner shipped + halal momentum-core rebuild + July-9 trading plan (`46d8be2`)
 - Sync state-audit + CLAUDE.md — AV key live, full tab reorg, CollapsibleTile primitive (2026-07-05) (`839fe32`)
