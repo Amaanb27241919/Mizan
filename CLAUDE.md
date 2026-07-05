@@ -33,7 +33,7 @@ External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alp
 
 ### Frontend (the monolith)
 ```
-src/components/MizanApp.jsx   — 9,200+ lines. ALL views, ALL state, ALL charts.
+src/components/MizanApp.jsx   — 11,000+ lines. ALL views, ALL state, ALL charts.
                                  DO NOT split unless explicitly asked.
 src/components/Goals.jsx       — Goals tab (extracted component)
 src/components/Budgeting.jsx   — Budget tab (extracted component)
@@ -52,7 +52,7 @@ src/lib/useKeyboard.js         — Global keyboard shortcuts
 ### Backend
 ```
 api/[...path].mjs              — Vercel catch-all. Routes to lib/handlers.mjs.
-lib/handlers.mjs               — 4,200+ lines. Every API route in one file.
+lib/handlers.mjs               — 5,900+ lines. Every API route in one file.
 lib/sharia.mjs                 — Sharia screening service (provider seam: Finnhub now, Zoya when ZOYA_API_KEY set). screenSymbol/screenBatch power /api/screen → governs h.sh_ app-wide
 lib/crypto.mjs                 — AES-256-GCM encrypt/decrypt (APP_ENCRYPTION_KEY)
 lib/anomaly.mjs                — 4 anomaly detectors (brute force, 5xx spike, cron staleness, new device)
@@ -498,8 +498,8 @@ Current gaps in order of user value (from MIZAN-STATE-AUDIT.md Section 6):
 
 ## 17. FILE SIZE WARNINGS
 
-🚨 **MizanApp.jsx** (~9,200 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
+🚨 **MizanApp.jsx** (~11,000 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
 
-🚨 **handlers.mjs** (~4,200 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
+🚨 **handlers.mjs** (~5,900 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
 
 Both files exceed the 800-line guideline by design — this is a known, accepted tradeoff for this project phase.

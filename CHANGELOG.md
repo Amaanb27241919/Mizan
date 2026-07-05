@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **trade:** One-tap Halal Bogleheads preset picker + DCA weekly-amount (`88c559f`)
 
+### Fixed
+- **auth:** Persist session until explicit sign-out (revert per-tab isolation) (`9ee5fa1`)
+
 ## 2026-07-02
 
 ### Added
