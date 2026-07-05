@@ -28,6 +28,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **etf:** Sequential AV fetch + short TTL on ETF curated-fallback rows (`03d0504`)
 
 ### Docs
+- State-audit — AI screening-explanations feature + Codex review results (`a85befa`)
 - Security audit results + corrections (spike detector is DB-backed not in-memory; migration table 023×2/024; line counts) (`bfba08f`)
 - State-audit — screening now 100% engine-driven (labels + bot gate); no hardcoded halal/haram (`2f0e09c`)
 - State-audit — trading plan recalibrated to realistic DCA-core (owner buy-and-hold insight) (`56819bc`)

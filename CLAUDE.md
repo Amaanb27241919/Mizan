@@ -13,7 +13,7 @@
 2. Zakat calculation with live nisab (gold/silver via Stooq)
 3. Dividend purification tracking (impurity ratios per ETF, per-dividend log)
 4. Unified brokerage + bank view (SnapTrade + Plaid)
-5. AI advisor with Islamic finance guardrails (Claude Sonnet 4)
+5. AI with Islamic finance guardrails (Claude Sonnet via `/api/advisor` — **auth-gated**, per-user 60/hr): the chat advisor + **grounded-AI features** (fed only real data, explain-don't-judge, never invent a number). Shipped: plain-English Sharia-screening explanations. Roadmap: see memory `ai-roadmap` (Zakat guidance, portfolio insights, AI digest, per-token crypto). Reuse `/api/advisor` — don't build new AI plumbing.
 6. Goal templates rooted in Muslim financial life (Hajj, Mahr, Waqf, Emergency)
 
 **Tone**: Professional, trustworthy, elegant. This is a tool for financially literate Muslims who care about both returns and deen. The design reflects that — light-first paper canvas with navy accents (green/red reserved for compliant/loss semantics), editorial typography, no noise.
