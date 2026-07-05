@@ -24,6 +24,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **etf:** Sequential AV fetch + short TTL on ETF curated-fallback rows (`03d0504`)
 
 ### Docs
+- State-audit — Dividend Planner shipped + halal momentum-core rebuild + July-9 trading plan (`46d8be2`)
 - Sync state-audit + CLAUDE.md — AV key live, full tab reorg, CollapsibleTile primitive (2026-07-05) (`839fe32`)
 - State-audit + CLAUDE.md — ETF Overlap Analyzer, migration 024, ALPHAVANTAGE_KEY (2026-07-05) (`0018c72`)
 - Sync state-audit + CLAUDE.md to 2026-07-03 (Bogleheads picker, persistent session, migration/line-count drift) (`6eeeb53`)
