@@ -3741,7 +3741,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         nisab standard (gold vs silver) and investment-zakat method
         (full market value vs 30% long-term rule). Saved to
         localStorage and broadcast so the Overview tile re-renders. */}
-    <BentoTile>
+    <CollapsibleTile title="ZAKAT METHODOLOGY" subtitle="Nisab standard + investment-zakat method" storageKey="zakat_method">
       <div style={{display:"flex",flexWrap:"wrap",gap:T.s4,alignItems:"flex-start",justifyContent:"space-between"}}>
         <div style={{minWidth:0,flex:"1 1 240px"}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NISAB STANDARD</div>
@@ -3806,7 +3806,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
           ? "Spot prices unavailable — using static fallback values."
           : `Live spot via ${liveNisab.source} · refreshed ${liveNisab.refreshed_at?new Date(liveNisab.refreshed_at).toLocaleString():"recently"}`}
       </div>
-    </BentoTile>
+    </CollapsibleTile>
 
     {/* ─── ROW 1.75: Dividend Purification ─────────── */}
     {/* Gated for new users: purification only has meaning once dividends from
@@ -3829,7 +3829,8 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
       }}/>
     </BentoTile>}
 
-    {/* ─── ROW 2: Log entry + import ───────────────── */}
+    {/* ─── SADAQAH — collapsible charity log (log entry + filter + history) ─── */}
+    <CollapsibleTile flat title="SADAQAH — CHARITY LOG" subtitle="Log donations, track pledges & view history" storageKey="zakat_sadaqah">
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
         <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
@@ -3949,6 +3950,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
               </div>},
           ]} rows={filtered}/>}
     </BentoTile>
+    </CollapsibleTile>
   </div>;
 }
 
