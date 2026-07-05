@@ -22,6 +22,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **screener:** ETF Overlap Analyzer — halal fund holdings overlap + diversification (incl. Amana funds) (`8e786bf`)
 
 ### Fixed
+- Address 2 Codex review findings (crypto cache bypass + ETF retry no-op) (`86bb174`)
 - **bot:** Engine-verified halal gate on picked candidates — no more hardcoded-only screen (`027b9f8`)
 - **sharia:** Holdings labels are 100% engine-driven for real users — kill hardcoded fallbacks (`c0bfbbc`)
 - **etf:** Sequential AV fetch + short TTL on ETF curated-fallback rows (`03d0504`)
