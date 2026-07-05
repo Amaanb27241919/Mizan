@@ -2316,6 +2316,29 @@ function AAOIFIScreener({holdings=[]}){
   const setStandard=v=>{setPrimary(v);try{localStorage.setItem("mizan_screen_standard",v);}catch{}};
   const[flt,setFlt]=useState("all");        // compliance filter: all|halal|review|haram|unknown
   const[detail,setDetail]=useState(null);   // holding whose screening breakdown is open
+  // AI plain-language explanation of the open verdict (grounded in the real ratio
+  // data — never free-form). Cleared whenever a different holding's modal opens.
+  const[aiExplain,setAiExplain]=useState("");
+  const[aiBusy,setAiBusy]=useState(false);
+  useEffect(()=>{setAiExplain("");setAiBusy(false);},[detail?.tk]);
+  const explainVerdict=async(d)=>{
+    const sc=d?._screen||{};
+    setAiBusy(true);setAiExplain("");
+    // Only the verdict FACTS go to the model — it explains, it doesn't re-judge.
+    const facts={ticker:d.tk,name:sc.name||d.nm,status:sc.status,industry:sc.industry,
+      byStandard:sc.byStandard,debtRatioPct:sc.debtR,cashRatioPct:sc.cashR,receivablesRatioPct:sc.recvR,
+      nonPermissibleIncomePct:sc.nonPermPct,reason:sc.reason,dataSource:sc.source,assetType:sc.assetType};
+    const system="You are MIZAN's Sharia-screening explainer for Muslim investors. You are given a holding's AAOIFI screening verdict as JSON. Explain in warm, plain, jargon-free English: (1) WHY it got this status, (2) the specific test that drove it — cite the actual number vs the threshold from the data, (3) what it means practically (if 'review': purification of the impure dividend share; if 'haram': consider exiting; if 'halal': it passed; if crypto: token-specific + scholar-dependent). 3-5 short sentences, no headers. NEVER invent a number that isn't in the data. This is an estimate, not a fatwa — end by noting a qualified scholar should confirm.";
+    try{
+      const r=await apiFetch("/api/advisor",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({system,max_tokens:400,messages:[{role:"user",content:`Explain this Sharia screening verdict:\n${JSON.stringify(facts,null,2)}`}]})});
+      if(!r.ok)throw new Error("advisor_failed");
+      const j=await r.json();
+      const text=((j&&j.content)||[]).filter(b=>b&&b.type==="text").map(b=>b.text).join("").trim();
+      setAiExplain(text||"Couldn't generate an explanation right now.");
+    }catch{setAiExplain("Couldn't reach the AI explainer — try again in a moment.");}
+    finally{setAiBusy(false);}
+  };
   // Ethical / BDS overlay — an optional layer ON TOP of the AAOIFI verdict that
   // flags divestment-target names. Off by default; the Sharia status is never
   // altered, only an extra exclusion is surfaced when the user opts in.
@@ -2575,6 +2598,16 @@ function AAOIFIScreener({holdings=[]}){
               {Object.entries(sc.byStandard).map(([k,v])=>{const c=v.pass===true?T.gain:v.pass===false?T.loss:T.muted;return<span key={k} title={STANDARDS[k]?.name||k} style={{fontFamily:FM,fontSize:10,fontWeight:600,color:c,background:`${c}14`,border:`1px solid ${c}33`,borderRadius:999,padding:`3px ${T.s2}`}}>{(STANDARDS[k]?.name||k).replace(/ \(.*\)/,"")} {v.pass===true?"✓":v.pass===false?"✕":"–"}</span>;})}
             </div>
           </>}
+
+          {/* AI plain-language explanation — grounded in the ratio data above. */}
+          <div style={{marginTop:T.s4}}>
+            {!aiExplain&&!aiBusy&&<button onClick={()=>explainVerdict(detail)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:T.s2,padding:"10px",borderRadius:T.rMd,cursor:"pointer",background:`${T.blue}12`,border:`1px solid ${T.blue}40`,color:T.blue,fontFamily:FM,fontSize:12,fontWeight:600,letterSpacing:"0.04em"}}>✦ Explain in plain English</button>}
+            {aiBusy&&<div style={{fontFamily:FM,fontSize:12,color:T.muted,textAlign:"center",padding:"10px"}}>Reading the ratios…</div>}
+            {aiExplain&&<div style={{padding:`${T.s3} ${T.s4}`,background:`${T.blue}0C`,border:`1px solid ${T.blue}28`,borderRadius:T.rMd}}>
+              <div style={{fontFamily:FM,fontSize:9,letterSpacing:"0.14em",color:T.blue,fontWeight:600,marginBottom:T.s2}}>✦ AI EXPLANATION</div>
+              <div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{aiExplain}</div>
+            </div>}
+          </div>
 
           <div style={{marginTop:T.s4,fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5}}>
             Data: {sc.source==="zoya"?"Zoya":"Finnhub"} fundamentals{sc.asOf?` · screened ${sc.asOf}`:""}. Verdicts are estimates from public financials against AAOIFI-aligned thresholds — confirm with a qualified scholar for your situation.
