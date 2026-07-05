@@ -34,6 +34,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - Sync state-audit + CLAUDE.md to 2026-07-03 (Bogleheads picker, persistent session, migration/line-count drift) (`6eeeb53`)
 
 ### Other
+- Fix advisor auth-bypass (CRITICAL) + 6 hardening wins from audit (`1c34aed`)
 - **ui:** Overview Top Holdings + Accounts default to open (`36b234e`)
 
 ## 2026-07-03

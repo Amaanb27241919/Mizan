@@ -22,7 +22,7 @@
 ```
 Frontend:  React 18 (JSX, not TypeScript) · Vite 5 · Recharts · Single-file SPA
 Backend:   Node.js ESM · Vercel serverless (api/[...path].mjs) · lib/handlers.mjs
-Database:  Supabase (PostgreSQL + Auth + RLS) · 23 migrations applied
+Database:  Supabase (PostgreSQL + Auth + RLS) · 24 migrations applied
 Hosting:   Vercel (team: mizan-s-projects2) · prod URL: app.mizan.exchange (mizan-puce.vercel.app)
 External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alpaca (paper)
 ```
@@ -33,7 +33,7 @@ External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alp
 
 ### Frontend (the monolith)
 ```
-src/components/MizanApp.jsx   — 11,200+ lines. ALL views, ALL state, ALL charts.
+src/components/MizanApp.jsx   — 11,400+ lines. ALL views, ALL state, ALL charts.
                                  DO NOT split unless explicitly asked.
 src/components/Goals.jsx       — Goals tab (extracted component)
 src/components/Budgeting.jsx   — Budget tab (extracted component)
@@ -52,7 +52,7 @@ src/lib/useKeyboard.js         — Global keyboard shortcuts
 ### Backend
 ```
 api/[...path].mjs              — Vercel catch-all. Routes to lib/handlers.mjs.
-lib/handlers.mjs               — 6,000+ lines. Every API route in one file.
+lib/handlers.mjs               — 6,100+ lines. Every API route in one file.
 lib/sharia.mjs                 — Sharia screening service (provider seam: Finnhub now, Zoya when ZOYA_API_KEY set). screenSymbol/screenBatch power /api/screen → governs h.sh_ app-wide
 lib/crypto.mjs                 — AES-256-GCM encrypt/decrypt (APP_ENCRYPTION_KEY)
 lib/anomaly.mjs                — 4 anomaly detectors (brute force, 5xx spike, cron staleness, new device)
@@ -64,7 +64,7 @@ lib/sentry.mjs                 — Sentry backend init
 server.js                      — Dev server (Vite middleware + API on :3000)
 ```
 
-### Database (23 Migrations — all applied in prod)
+### Database (24 Migrations — all applied in prod)
 ```
 001_init.sql                   — Core tables: user_snaptrade, user_state, user_keys, profiles
 002_plaid.sql                  — plaid_tokens, plaid_accounts, plaid_transactions
@@ -89,6 +89,8 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 021_full_auto_per_account.sql  — account_full_auto (per-account Layer-3 opt-in, default false)
 022_trading_bot_beta.sql       — profiles.trading_bot_enabled (beta allowlist) + trading_bot_consent_at
 023_bot_strategy_type_dca.sql  — allow 'dca' (long-term accumulation) strategy_type in bot_strategies CHECK
+023_email_digest.sql           — (note: TWO files share the 023 prefix — dca + email_digest)
+024_etf_holdings_cache.sql     — service-role-only holdings cache for the ETF Overlap Analyzer
 ```
 
 ---
@@ -375,7 +377,7 @@ These are documented constraints, not undiscovered issues:
 
 4. **Sharia screening runs through one provider seam** (`lib/sharia.mjs`): Finnhub fundamentals today, Zoya when `ZOYA_API_KEY` is set (Zoya adds the non-permissible-income test + a direct verdict; Finnhub can't supply revenue-segment data so that one test is sector-only). Verdicts cache per-day. `h.sh_` now flows from this — `SHARIA_MAP` is only the pre-load fallback. The Zoya adapter's response mapping is best-effort and must be confirmed against the live API when the key is provisioned (it falls back to Finnhub on any shape mismatch, so it can't break prod).
 
-5. **SnapTrade 5xx spike detector is in-memory** — `_snaptradeFailures` Map resets on cold starts. DB-backed IP blocking (`security_events`) is in place but the spike counter specifically is in-memory. Documented risk.
+5. **~~SnapTrade 5xx spike detector is in-memory~~ — CORRECTED 2026-07-05**: this was stale. `trackSnapTradeError` (`lib/anomaly.mjs:110-132`) is **DB-backed** via `security_events`, same as the brute-force/IP-block detector — no cold-start reset. (Verified in the 2026-07-05 security audit.)
 
 6. **Purification history is localStorage-mirrored** — unlike Sadaqah (backed by `user_state` in Supabase), purification state lives in localStorage + user_state but the purification LOG isn't in a dedicated table. New devices lose the purification history.
 
@@ -505,8 +507,8 @@ Current gaps in order of user value (from MIZAN-STATE-AUDIT.md Section 6):
 
 ## 17. FILE SIZE WARNINGS
 
-🚨 **MizanApp.jsx** (~11,200 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
+🚨 **MizanApp.jsx** (~11,400 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
 
-🚨 **handlers.mjs** (~6,000 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
+🚨 **handlers.mjs** (~6,100 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
 
 Both files exceed the 800-line guideline by design — this is a known, accepted tradeoff for this project phase.
