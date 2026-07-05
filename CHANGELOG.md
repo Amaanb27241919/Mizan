@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-05
 
 ### Added
+- **ui:** Collapsible reorg — Goals/Zakat tab (iteration 4) (`4fb6552`)
 - **ui:** Group Portfolio sub-tabs — 7 → 5 with a Tools group (`df488a8`)
 - **ui:** Collapsible reorg — Portfolio Holdings watchlist (iteration 3) (`94fd8ed`)
 - **ui:** Collapsible reorg — Overview + Settings (iteration 2) (`7efc096`)

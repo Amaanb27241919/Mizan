@@ -5864,9 +5864,8 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       };
       const labelFor=a=>(a.status==="approved"&&a.error_msg)?{label:"FAILED",color:T.loss}:(META[a.status]||{label:(a.status||"—").toUpperCase(),color:T.muted});
       const stratLabel=id=>{const s=strategies.find(x=>x.id===id);if(!s)return null;const c=Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[];return c.length>1?`${c.length} halal names`:(c[0]||s.ticker);};
-      return<BentoTile>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>BOT ACTIVITY · ALL ACTIONS</div>
+      return<CollapsibleTile title="BOT ACTIVITY · ALL ACTIONS" subtitle="Every signal the bot generated + its outcome" storageKey="bot_activity">
+        <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",marginBottom:T.s3}}>
           <button onClick={loadActivity} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingActivity?"Loading…":"Refresh"}</button>
         </div>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5,marginBottom:T.s2}}>Every signal the bot generated and what became of it — buys, sells (exits), approvals, and failures. Updates the moment the bot acts, independent of broker sync.</div>
@@ -5888,7 +5887,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
               {m.label==="FAILED"&&a.error_msg&&<div style={{flexBasis:"100%",fontFamily:FM,fontSize:10,color:T.loss}}>{a.error_msg}</div>}
             </div>);})}
          </div>}
-      </BentoTile>;
+      </CollapsibleTile>;
     })()}
 
     {/* Strategy Progress — one card per enabled strategy, target is always a goal */}
@@ -5905,9 +5904,8 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     {showStrat&&ledger&&ledger.closed_count>0&&(()=>{
       const net=Number(ledger.realized_pnl)||0;
       const pos=net>=0;
-      return<BentoTile accent={pos?T.gain:T.loss} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s2}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>REALIZED P&L · CLOSED TRADES</div>
+      return<CollapsibleTile accent={pos?T.gain:T.loss} title="REALIZED P&L · CLOSED TRADES" subtitle="Net realized gains from the bot's closed round-trips" storageKey="bot_pnl">
+        <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
           <button onClick={loadLedger} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>Refresh</button>
         </div>
         <div style={{display:"flex",gap:T.s6,flexWrap:"wrap",alignItems:"baseline"}}>
@@ -5936,7 +5934,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           </div>)}
           {ledger.trades.length>8&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,paddingTop:T.s2}}>+{ledger.trades.length-8} more closed trade{ledger.trades.length-8===1?"":"s"}</div>}
         </div>
-      </BentoTile>;
+      </CollapsibleTile>;
     })()}
 
     {/* Strategy List */}
@@ -9216,11 +9214,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const now=new Date();
       const monthLabel=now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
       const fmtCat=s=>s.split("_").map(w=>w==="AND"?"&":w[0].toUpperCase()+w.slice(1).toLowerCase()).join(" ");
-      return<BentoTile>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SPENDING BY CATEGORY · {monthLabel}</span>
-          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(monthTotal)}</span>
-        </div>
+      return<CollapsibleTile title="SPENDING BY CATEGORY" subtitle={`${monthLabel} · ${fmtUSD(monthTotal)} spent`} storageKey="fin_spending">
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {entries.map(s=>{
             const pct=monthTotal>0?(s.total/monthTotal)*100:0;
@@ -9235,7 +9229,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             </div>;
           })}
         </div>
-      </BentoTile>;
+      </CollapsibleTile>;
     })()}
 
     {/* ─── DEBT PAYMENTS & TRANSFERS ──────────── */}
@@ -9244,11 +9238,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const now=new Date();
       const monthLabel=now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
       const CAT_LABEL={LOAN_PAYMENTS:"Loan & Card Payments",TRANSFER_OUT:"Outbound Transfers",BANK_FEES:"Bank Fees"};
-      return<BentoTile>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DEBT PAYMENTS & TRANSFERS · {monthLabel}</span>
-          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(outTotal)}</span>
-        </div>
+      return<CollapsibleTile title="DEBT PAYMENTS & TRANSFERS" subtitle={`${monthLabel} · ${fmtUSD(outTotal)}`} storageKey="fin_debt">
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {outEntries.map(e=>{
             const pct=outTotal>0?(e.total/outTotal)*100:0;
@@ -9267,7 +9257,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
           <span style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.14em",fontWeight:600}}>INCOME & INFLOWS THIS MONTH</span>
           <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(incomeTotal)}</span>
         </div>}
-      </BentoTile>;
+      </CollapsibleTile>;
     })()}
 
     {/* ─── RECURRING SUBSCRIPTIONS ─────────────── */}
@@ -9319,14 +9309,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const active=rows.filter(r=>r.active);
       const inactive=rows.filter(r=>!r.active);
       const totalMonthly=active.reduce((s,r)=>s+r.estMonthly,0);
-      return<BentoTile accent={T.gold}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-          <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
-            <span style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>RECURRING SUBSCRIPTIONS · {active.length} active</span>
-            {usingPlaid&&<span style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>}
-          </div>
-          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.gold,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalMonthly)}<span style={{fontFamily:FM,fontSize:10,fontWeight:400,color:T.muted,marginLeft:4}}>/mo</span></span>
-        </div>
+      return<CollapsibleTile accent={T.gold} title="RECURRING SUBSCRIPTIONS" subtitle={`${active.length} active · ${fmtUSD(totalMonthly)}/mo`} storageKey="fin_subs" right={usingPlaid?<span style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>:null}>
         <div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
             {l:"Merchant",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
@@ -9339,7 +9322,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
           ]} rows={[...active,...inactive].slice(0,25)}/>
         </div>
-      </BentoTile>;
+      </CollapsibleTile>;
     })()}
 
     {/* Empty-state when a bank is connected but transactions haven't landed yet. */}
