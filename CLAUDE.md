@@ -33,7 +33,7 @@ External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alp
 
 ### Frontend (the monolith)
 ```
-src/components/MizanApp.jsx   — 11,000+ lines. ALL views, ALL state, ALL charts.
+src/components/MizanApp.jsx   — 11,200+ lines. ALL views, ALL state, ALL charts.
                                  DO NOT split unless explicitly asked.
 src/components/Goals.jsx       — Goals tab (extracted component)
 src/components/Budgeting.jsx   — Budget tab (extracted component)
@@ -52,7 +52,7 @@ src/lib/useKeyboard.js         — Global keyboard shortcuts
 ### Backend
 ```
 api/[...path].mjs              — Vercel catch-all. Routes to lib/handlers.mjs.
-lib/handlers.mjs               — 5,900+ lines. Every API route in one file.
+lib/handlers.mjs               — 6,000+ lines. Every API route in one file.
 lib/sharia.mjs                 — Sharia screening service (provider seam: Finnhub now, Zoya when ZOYA_API_KEY set). screenSymbol/screenBatch power /api/screen → governs h.sh_ app-wide
 lib/crypto.mjs                 — AES-256-GCM encrypt/decrypt (APP_ENCRYPTION_KEY)
 lib/anomaly.mjs                — 4 anomaly detectors (brute force, 5xx spike, cron staleness, new device)
@@ -202,6 +202,12 @@ All spacing uses `T.s1`–`T.s12` (4px–48px scale). Never hardcode `padding: 1
 ```
 <BentoTile>         — Every content tile/card. 2px top accent bar, hover lift, click press.
                        DO NOT use raw <div> as a card container.
+<CollapsibleTile>   — A BentoTile with an always-visible title+subtitle header that folds its
+                       body (state persists per storageKey in localStorage as mizan_ct_<key>).
+                       Use for SECONDARY/advanced panels so long views stay short but every
+                       feature stays discoverable by its header. `flat` variant = header bar,
+                       no card wrapper — for wrapping a panel that already renders its own card(s).
+                       Defined right after BentoTile in MizanApp.jsx. Used across all 6 tabs.
 <BentoRow>          — Grid row within a bento layout. CSS grid with border-gap technique.
 className="glass"   — Chrome only: nav bar, tab bar, modals, floating overlays
 className="glass-strong" — Stronger blur: modal overlays
@@ -392,7 +398,7 @@ These are documented constraints, not undiscovered issues:
 | Finnhub | News, earnings, profile, dividends, quote, **Sharia screening fundamentals** | `FINNHUB_KEY` / `VITE_FINNHUB_KEY` | 60 req/min free tier |
 | Zoya | Sharia screening (optional provider — overrides Finnhub when keyed) | `ZOYA_API_KEY`, `ZOYA_API_BASE` (opt) | NOT yet provisioned. When set, `lib/sharia.mjs` routes screening to Zoya (adds non-permissible-income test + direct verdict); falls back to Finnhub on any error. Adapter response-mapping must be verified against the live API. |
 | Polygon | OHLC bars (backtester only) | `POLYGON_KEY` | 5 req/min free, 2yr history |
-| Alpha Vantage | ETF constituent holdings (ETF Overlap Analyzer) | `ALPHAVANTAGE_KEY` | Free tier **25 req/day** — fetch server-side ONLY + cache ~24h in `etf_holdings_cache` (7 halal ETFs = 7 calls/day). `ETF_PROFILE` returns full holdings + weights + sectors. **ETF-only** (Amana mutual funds use curated snapshots in `lib/etfHoldings.mjs`). Pending provisioning as of 2026-07-05. |
+| Alpha Vantage | ETF constituent holdings (ETF Overlap Analyzer) | `ALPHAVANTAGE_KEY` | **LIVE (set in Vercel 2026-07-05, verified — HLAL returned 210 holdings).** Free tier **25 req/day** → fetch server-side ONLY + cache ~24h in `etf_holdings_cache` (7 halal ETFs = 7 calls/day). The overlap route fetches symbols **sequentially** (concurrent bursts get throttled → curated fallback). `ETF_PROFILE` returns full holdings + weights + sectors. **ETF-only** (Amana mutual funds use curated snapshots in `lib/etfHoldings.mjs`; all 7 ETFs also curated-seeded as fallback). Stored **Sensitive**, so `vercel env pull` shows it empty — verify via `etf_holdings_cache.source`. |
 | Alpaca | Paper trading | `ALPACA_KEY_ID`, `ALPACA_SECRET` | Paper only — no production keys |
 | Supabase | DB + Auth | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Paid plan |
 | Resend | All Mizan email (owner alerts + user emails) | `RESEND_API_KEY`, `ALERT_FROM` | Sends owner anomaly alerts AND user emails (weekly digest, Plaid re-auth, bug-report receipts, trade invites) via `lib/alerts.mjs` (branded HTML shell w/ logo). **From = `ALERT_FROM`, which MUST be on the verified `mizan.exchange` domain** (set to `alerts@mizan.exchange` in Vercel; code default `MIZAN <no-reply@mizan.exchange>`). Was `mizan.app` — migrated 2026-07-02. Supabase **Auth** emails (signup/reset) send separately via Supabase custom SMTP → Resend, sender `no-reply@mizan.exchange`. |
@@ -499,8 +505,8 @@ Current gaps in order of user value (from MIZAN-STATE-AUDIT.md Section 6):
 
 ## 17. FILE SIZE WARNINGS
 
-🚨 **MizanApp.jsx** (~11,000 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
+🚨 **MizanApp.jsx** (~11,200 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
 
-🚨 **handlers.mjs** (~5,900 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
+🚨 **handlers.mjs** (~6,000 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
 
 Both files exceed the 800-line guideline by design — this is a known, accepted tradeoff for this project phase.
