@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-07-05
 
+### Added
+- **screener:** ETF Overlap Analyzer — halal fund holdings overlap + diversification (incl. Amana funds) (`8e786bf`)
+
 ### Docs
 - Sync state-audit + CLAUDE.md to 2026-07-03 (Bogleheads picker, persistent session, migration/line-count drift) (`6eeeb53`)
 
