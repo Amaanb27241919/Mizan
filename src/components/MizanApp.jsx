@@ -2207,6 +2207,7 @@ function ETFOverlapPanel(){
   const[data,setData]=useState(null);
   const[busy,setBusy]=useState(false);
   const[err,setErr]=useState(null);
+  const[retryN,setRetryN]=useState(0);   // bump to force a refetch of the SAME selection
 
   useEffect(()=>{let on=true;apiFetch("/api/etf/universe").then(r=>r.json()).then(d=>{if(on)setUniverse(d.universe||[]);}).catch(()=>{});return()=>{on=false;};},[]);
   useEffect(()=>{
@@ -2218,7 +2219,7 @@ function ETFOverlapPanel(){
       .catch(()=>{if(on){setErr("Couldn't load holdings. Try again in a moment.");setBusy(false);}});
     try{localStorage.setItem("mizan_etf_overlap_sel",JSON.stringify(sel));}catch{}
     return()=>{on=false;};
-  },[sel.join(",")]);
+  },[sel.join(","),retryN]);
 
   const toggle=(s)=>setSel(prev=>prev.includes(s)?(prev.length>2?prev.filter(x=>x!==s):prev):(prev.length<4?[...prev,s]:prev));
   const pctS=(v)=>`${Math.round((v||0)*100)}%`;
@@ -2249,7 +2250,7 @@ function ETFOverlapPanel(){
       {(universe.length?universe:sel.map(s=>({symbol:s,vehicle:"etf",assetClass:"equity"}))).map(chip)}
     </div>
 
-    {err&&<div style={{fontFamily:FM,fontSize:12,color:T.loss,padding:`${T.s3} 0`}}>{err} <button onClick={()=>setSel(s=>[...s])} style={{fontFamily:FM,fontSize:11,color:T.blue,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Retry</button></div>}
+    {err&&<div style={{fontFamily:FM,fontSize:12,color:T.loss,padding:`${T.s3} 0`}}>{err} <button onClick={()=>setRetryN(n=>n+1)} style={{fontFamily:FM,fontSize:11,color:T.blue,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Retry</button></div>}
     {busy&&!data&&<div style={{fontFamily:FM,fontSize:12,color:T.muted,padding:`${T.s4} 0`}}>Loading holdings…</div>}
 
     {focus&&!err&&<>
@@ -10268,7 +10269,11 @@ export default function Mizan(){
     snapAccounts.forEach(a=>(a.positions||[]).forEach(p=>{const{tk,ty}=readSymbol(p);if(tk&&!heldMap.has(tk))heldMap.set(tk,ty);}));
     const stale=tk=>!shariaScreen[tk]||shariaScreen[tk].asOf!==today;
     const isCryptoTy=t=>/crypto/i.test(String(t||""));
-    const cryptoTodo=[...heldMap].filter(([tk,ty])=>isCryptoTy(ty)&&stale(tk)).map(([tk])=>tk);
+    // Force the crypto "review" verdict whenever the cached entry isn't ALREADY it —
+    // regardless of freshness — so a stale/old cached "halal" (e.g. a DOGE that was
+    // screened before this fix) can't keep showing green until the cache expires.
+    // Idempotent: once an entry is assetType:"crypto" it's skipped, so no re-loop.
+    const cryptoTodo=[...heldMap].filter(([tk,ty])=>isCryptoTy(ty)&&shariaScreen[tk]?.assetType!=="crypto").map(([tk])=>tk);
     if(cryptoTodo.length)setShariaScreen(prev=>{
       const next={...prev};
       cryptoTodo.forEach(tk=>{next[tk]={status:"review",reason:"Cryptocurrency — Sharia status is token-specific and scholar-dependent; Mizan does not auto-classify crypto. Consult a qualified scholar.",asOf:today,assetType:"crypto"};});
