@@ -2156,6 +2156,129 @@ async function screenTicker(tk){
     return{tk,status:"unknown",reason:err.message||"Screen failed"};
   }
 }
+// ETF Overlap Analyzer — compares the halal ETFs / Amana funds a user holds (or
+// is weighing) to expose duplicated holdings. The halal fund universe is small
+// and heavily overlapping (SPUS vs HLAL share nearly all their large caps), so
+// "I'm diversified across three funds" is often one bet in a trench coat. ETF
+// holdings come from Alpha Vantage (daily, full constituents); the Amana mutual
+// funds from a curated quarterly snapshot. Weights are 0..1 fractions; overlap %
+// = Σ min(weightA, weightB) — the share of each fund duplicated by the other.
+function ETFOverlapPanel(){
+  const[universe,setUniverse]=useState([]);
+  const[sel,setSel]=useState(()=>{try{const s=JSON.parse(localStorage.getItem("mizan_etf_overlap_sel")||"null");return Array.isArray(s)&&s.length>=2?s.slice(0,4):["SPUS","HLAL"];}catch{return["SPUS","HLAL"];}});
+  const[data,setData]=useState(null);
+  const[busy,setBusy]=useState(false);
+  const[err,setErr]=useState(null);
+
+  useEffect(()=>{let on=true;apiFetch("/api/etf/universe").then(r=>r.json()).then(d=>{if(on)setUniverse(d.universe||[]);}).catch(()=>{});return()=>{on=false;};},[]);
+  useEffect(()=>{
+    if(sel.length<2){setData(null);return;}
+    let on=true;setBusy(true);setErr(null);
+    apiFetch(`/api/etf/overlap?symbols=${encodeURIComponent(sel.join(","))}`)
+      .then(r=>r.ok?r.json():Promise.reject(new Error("overlap_failed")))
+      .then(d=>{if(on){setData(d);setBusy(false);}})
+      .catch(()=>{if(on){setErr("Couldn't load holdings. Try again in a moment.");setBusy(false);}});
+    try{localStorage.setItem("mizan_etf_overlap_sel",JSON.stringify(sel));}catch{}
+    return()=>{on=false;};
+  },[sel.join(",")]);
+
+  const toggle=(s)=>setSel(prev=>prev.includes(s)?(prev.length>2?prev.filter(x=>x!==s):prev):(prev.length<4?[...prev,s]:prev));
+  const pctS=(v)=>`${Math.round((v||0)*100)}%`;
+  const sev=(v)=>v>=0.5?T.gold:v>=0.2?T.blue:T.slate;   // high overlap = redundancy warning (amber)
+  const sevLabel=(v)=>v>=0.5?"Heavy overlap":v>=0.2?"Moderate overlap":"Low overlap";
+
+  const funds=data?.funds||[];
+  const pairs=data?.pairs||[];
+  const fundMap=Object.fromEntries(funds.map(f=>[f.symbol,f]));
+  const comparablePairs=pairs.filter(p=>p.comparable);
+  const focus=comparablePairs.slice().sort((a,b)=>b.overlapPct-a.overlapPct)[0]||pairs[0]||null;
+  const unavailable=funds.filter(f=>!f.available).map(f=>f.symbol);
+  const srcNote=(f)=>!f?"":f.source==="alphavantage"?"full holdings · updated daily":f.source==="curated"?`top holdings${f.asOf?` · ${String(f.asOf).slice(0,10)}`:""}`:"awaiting data source";
+
+  const chip=(u)=>{
+    const on=sel.includes(u.symbol);
+    return <button key={u.symbol} onClick={()=>toggle(u.symbol)}
+      style={{fontFamily:FM,fontSize:11,letterSpacing:.3,padding:"6px 10px",borderRadius:8,cursor:"pointer",
+        border:`1px solid ${on?T.blue:T.border}`,background:on?`${T.blue}18`:"transparent",
+        color:on?T.blue:T.muted,fontWeight:on?600:400,display:"inline-flex",alignItems:"center",gap:6,transition:"all .15s"}}>
+      {u.symbol}{u.vehicle==="mutual_fund"&&<span style={{fontSize:8,opacity:.7}}>MF</span>}{u.assetClass==="sukuk"&&<span style={{fontSize:8,opacity:.7}}>SUKUK</span>}
+    </button>;
+  };
+
+  return <BentoTile accent={T.blue} style={{marginTop:T.s5}}>
+    <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:T.s3}}>
+      <div>
+        <div style={{fontFamily:FM,fontSize:10,letterSpacing:1.5,color:T.blue,fontWeight:600}}>DIVERSIFICATION · HALAL FUNDS</div>
+        <div style={{fontFamily:FU,fontSize:20,color:T.textHi,marginTop:2}}>ETF Overlap Analyzer</div>
+      </div>
+      <div style={{fontFamily:FP,fontSize:11,color:T.muted,maxWidth:280,textAlign:"right",lineHeight:1.4}}>Pick 2–4 funds. Shared holdings mean you own the same companies twice.</div>
+    </div>
+
+    {/* fund pickers */}
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:T.s4}}>
+      {(universe.length?universe:sel.map(s=>({symbol:s,vehicle:"etf",assetClass:"equity"}))).map(chip)}
+    </div>
+
+    {err&&<div style={{fontFamily:FM,fontSize:12,color:T.loss,padding:`${T.s3}px 0`}}>{err} <button onClick={()=>setSel(s=>[...s])} style={{fontFamily:FM,fontSize:11,color:T.blue,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Retry</button></div>}
+    {busy&&!data&&<div style={{fontFamily:FM,fontSize:12,color:T.muted,padding:`${T.s4}px 0`}}>Loading holdings…</div>}
+
+    {focus&&!err&&<>
+      {/* headline overlap for the strongest comparable pair */}
+      <div style={{display:"flex",alignItems:"center",gap:T.s5,flexWrap:"wrap",marginBottom:T.s4}}>
+        <div>
+          <div style={{fontFamily:FU,fontSize:52,lineHeight:1,color:sev(focus.overlapPct),fontVariantNumeric:"tabular-nums"}}>{focus.comparable?pctS(focus.overlapPct):"—"}</div>
+          <div style={{fontFamily:FM,fontSize:10,letterSpacing:1,color:T.muted,marginTop:4}}>{focus.comparable?`${sevLabel(focus.overlapPct).toUpperCase()} · ${focus.a} ∩ ${focus.b}`:"NOT COMPARABLE"}</div>
+        </div>
+        <div style={{flex:1,minWidth:200}}>
+          {focus.comparable?<>
+            <div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.5}}>{focus.a} and {focus.b} share <strong style={{color:T.textHi}}>{focus.sharedCount}</strong> holdings. About <strong style={{color:sev(focus.overlapPct)}}>{pctS(focus.overlapPct)}</strong> of each fund is the same underlying companies.</div>
+            {/* overlap vs unique bar */}
+            <div style={{display:"flex",height:10,borderRadius:6,overflow:"hidden",marginTop:T.s3,border:`1px solid ${T.border}`}}>
+              <div style={{width:pctS(focus.overlapPct),background:sev(focus.overlapPct)}} title={`Overlap ${pctS(focus.overlapPct)}`}/>
+              <div style={{flex:1,background:T.slate,opacity:.25}} title="Unique"/>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:9,letterSpacing:.5,color:T.muted,marginTop:4}}><span>SHARED</span><span>UNIQUE</span></div>
+          </>:<div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.5}}>{focus.a} and {focus.b} are different asset classes (equity vs sukuk), so a holdings-overlap % isn’t meaningful. They’re complementary, not redundant.</div>}
+        </div>
+      </div>
+
+      {/* pairwise matrix when 3+ funds selected */}
+      {pairs.length>1&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:T.s4}}>
+        {pairs.map(p=><span key={`${p.a}-${p.b}`} style={{fontFamily:FM,fontSize:11,padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,color:T.muted}}>
+          {p.a}×{p.b} <strong style={{color:p.comparable?sev(p.overlapPct):T.slate}}>{p.comparable?pctS(p.overlapPct):"n/a"}</strong>
+        </span>)}
+      </div>}
+
+      {/* shared holdings table for the focus pair */}
+      {focus.comparable&&focus.shared?.length>0&&<div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FM,fontSize:12}}>
+          <thead><tr style={{color:T.muted,fontSize:9,letterSpacing:.8}}>
+            <th style={{textAlign:"left",padding:"6px 8px",fontWeight:600}}>SHARED HOLDING</th>
+            <th style={{textAlign:"right",padding:"6px 8px",fontWeight:600}}>{focus.a}</th>
+            <th style={{textAlign:"right",padding:"6px 8px",fontWeight:600}}>{focus.b}</th>
+          </tr></thead>
+          <tbody>{focus.shared.slice(0,12).map(s=><tr key={s.symbol} style={{borderTop:`1px solid ${T.dim}`}}>
+            <td style={{padding:"6px 8px",color:T.textHi,fontWeight:600}}>{s.symbol}</td>
+            <td style={{padding:"6px 8px",textAlign:"right",color:T.text,fontVariantNumeric:"tabular-nums"}}>{(s.weightA*100).toFixed(1)}%</td>
+            <td style={{padding:"6px 8px",textAlign:"right",color:T.text,fontVariantNumeric:"tabular-nums"}}>{(s.weightB*100).toFixed(1)}%</td>
+          </tr>)}</tbody>
+        </table>
+        {focus.shared.length>12&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,padding:"6px 8px"}}>+{focus.shared.length-12} more shared holdings</div>}
+      </div>}
+
+      {/* per-fund source provenance */}
+      <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:T.s3,paddingTop:T.s3,borderTop:`1px solid ${T.dim}`}}>
+        {funds.map(f=><span key={f.symbol} style={{fontFamily:FM,fontSize:9,letterSpacing:.3,color:T.muted}}>
+          <strong style={{color:f.available?T.text:T.slate}}>{f.symbol}</strong> · {srcNote(f)}
+        </span>)}
+      </div>
+      {unavailable.length>0&&<div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:6}}>Holdings for {unavailable.join(", ")} activate once the ETF data source is connected.</div>}
+    </>}
+
+    {!focus&&!busy&&!err&&<div style={{fontFamily:FP,fontSize:13,color:T.muted,padding:`${T.s4}px 0`}}>Select at least two funds with available holdings to compare.</div>}
+  </BentoTile>;
+}
+
 function AAOIFIScreener({holdings=[]}){
   const[results,setResults]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
   const[busy,setBusy]=useState(false);
@@ -4548,7 +4671,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
         research tool by nature, not a trading one. Uses Polygon for OHLC. */}
     {sub==="backtest"&&<HistoricalBacktest/>}
 
-    {sub==="screener"&&<AAOIFIScreener holdings={merged}/>}
+    {sub==="screener"&&<><AAOIFIScreener holdings={merged}/><ETFOverlapPanel/></>}
     {sub==="assets"&&<ManualAssets demoMode={demoMode}/>}
   </div>;
 }

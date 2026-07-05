@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-05
+
+### Docs
+- Sync state-audit + CLAUDE.md to 2026-07-03 (Bogleheads picker, persistent session, migration/line-count drift) (`6eeeb53`)
+
 ## 2026-07-03
 
 ### Added
