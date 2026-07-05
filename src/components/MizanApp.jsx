@@ -2002,7 +2002,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     </div>
 
     {/* ─── BENTO ROW 3: Top Holdings ────────────────── */}
-    {top.length>0&&<CollapsibleTile title="TOP HOLDINGS" subtitle={`${top.length} position${top.length!==1?"s":""} by value`} storageKey="ov_top" defaultOpen={false}
+    {top.length>0&&<CollapsibleTile title="TOP HOLDINGS" subtitle={`${top.length} position${top.length!==1?"s":""} by value`} storageKey="ov_top" defaultOpen
       right={snapAccounts.length>0?<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.06em"}}>● REAL</span>:null}>
       <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
         {top.map(h=>{
@@ -2029,7 +2029,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     </CollapsibleTile>}
 
     {/* ─── BENTO ROW 4: Accounts (unified SnapTrade + Plaid) ───── */}
-    {acctsForCards.length>0&&<CollapsibleTile title="ACCOUNTS" storageKey="ov_accts" defaultOpen={false}
+    {acctsForCards.length>0&&<CollapsibleTile title="ACCOUNTS" storageKey="ov_accts" defaultOpen
       subtitle={`${acctsForCards.length} linked${snapCards.length>0?` · ${snapCards.length} brokerage`:""}${plaidCards.length>0?` · ${plaidCards.length} bank/credit`:""}${disabledAccts.size>0?` · ${disabledAccts.size} hidden`:""}`}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:T.s2}}>
         {acctsForCards.map(a=>{
