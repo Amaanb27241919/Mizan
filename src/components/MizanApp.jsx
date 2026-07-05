@@ -902,27 +902,33 @@ function BentoTile({children,span="auto",accent,gradient,glass,style,onClick}){
 // even when collapsed; only the body folds away, keeping long views short. Open
 // state persists per `storageKey`. Use for SECONDARY / advanced panels; keep the
 // primary content of a view as a plain BentoTile so it's always in view. `right`
-// renders a node (badge, status dot) on the header's right edge.
-function CollapsibleTile({title,subtitle,defaultOpen=false,storageKey,accent,right,children,style}){
+// renders a node (badge, status dot) on the header's right edge. `flat` drops the
+// card wrapper (just a header bar + body) — use it to wrap a panel that already
+// renders its OWN card(s), so collapsing doesn't create a card-inside-a-card.
+function CollapsibleTile({title,subtitle,defaultOpen=false,storageKey,accent,right,children,style,flat=false}){
   const skey=storageKey?`mizan_ct_${storageKey}`:null;
   const[open,setOpen]=useState(()=>{
     if(!skey)return defaultOpen;
     try{const v=localStorage.getItem(skey);return v===null?defaultOpen:v==="1";}catch{return defaultOpen;}
   });
   const toggle=()=>setOpen(o=>{const n=!o;if(skey){try{localStorage.setItem(skey,n?"1":"0");}catch{}}return n;});
+  const header=<button onClick={toggle} aria-expanded={open} style={{
+    width:"100%",display:"flex",alignItems:"center",gap:T.s3,
+    padding:flat?`${T.s3} 0`:`${T.s4} ${T.s5}`,
+    background:"transparent",border:"none",borderBottom:flat?`1px solid ${T.dim}`:"none",
+    cursor:"pointer",textAlign:"left",
+  }}>
+    <span aria-hidden="true" style={{color:open?T.blue:T.muted,fontSize:11,lineHeight:1,flexShrink:0,
+      display:"inline-block",transform:open?"rotate(90deg)":"none",transition:"transform 0.18s"}}>▸</span>
+    <span style={{flex:1,minWidth:0}}>
+      <span style={{display:"block",fontFamily:FM,fontSize:11,letterSpacing:"0.14em",fontWeight:600,color:T.textHi}}>{title}</span>
+      {subtitle&&<span style={{display:"block",fontFamily:FP,fontSize:11,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{subtitle}</span>}
+    </span>
+    {right&&<span style={{flexShrink:0,marginLeft:T.s2}}>{right}</span>}
+  </button>;
+  if(flat)return<div style={{display:"flex",flexDirection:"column",gap:T.s4,...(style||{})}}>{header}{open&&children}</div>;
   return<BentoTile accent={accent} style={{padding:0,...(style||{})}}>
-    <button onClick={toggle} aria-expanded={open} style={{
-      width:"100%",display:"flex",alignItems:"center",gap:T.s3,padding:`${T.s4} ${T.s5}`,
-      background:"transparent",border:"none",cursor:"pointer",textAlign:"left",
-    }}>
-      <span aria-hidden="true" style={{color:open?T.blue:T.muted,fontSize:11,lineHeight:1,flexShrink:0,
-        display:"inline-block",transform:open?"rotate(90deg)":"none",transition:"transform 0.18s"}}>▸</span>
-      <span style={{flex:1,minWidth:0}}>
-        <span style={{display:"block",fontFamily:FM,fontSize:11,letterSpacing:"0.14em",fontWeight:600,color:T.textHi}}>{title}</span>
-        {subtitle&&<span style={{display:"block",fontFamily:FP,fontSize:11,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{subtitle}</span>}
-      </span>
-      {right&&<span style={{flexShrink:0,marginLeft:T.s2}}>{right}</span>}
-    </button>
+    {header}
     {open&&<div style={{padding:`0 ${T.s5} ${T.s5}`}}>{children}</div>}
   </BentoTile>;
 }
@@ -1167,6 +1173,10 @@ function parseCSV(text,broker){
 /* ─── MARKET HEATMAP (TradingView embed) ─────────────── */
 function MarketHeatmap(){
   const ref=useRef(null);
+  // Collapsible + lazy: the TradingView widget only builds when open (see the
+  // effect's `open` guard/dep), so a collapsed heatmap costs nothing until opened.
+  const[open,setOpen]=useState(()=>{try{return localStorage.getItem("mizan_ct_ov_heatmap")==="1";}catch{return false;}});
+  const toggleOpen=()=>setOpen(o=>{const n=!o;try{localStorage.setItem("mizan_ct_ov_heatmap",n?"1":"0");}catch{}return n;});
   const[colorTheme,setColorTheme]=useState(()=>
     document.documentElement.getAttribute("data-theme")==="light"?"light":"dark"
   );
@@ -1178,6 +1188,7 @@ function MarketHeatmap(){
     return()=>obs.disconnect();
   },[]);
   useEffect(()=>{
+    if(!open)return;                 // don't build the widget until the section is expanded
     const el=ref.current;
     if(!el)return;
     while(el.firstChild)el.removeChild(el.firstChild);
@@ -1200,14 +1211,21 @@ function MarketHeatmap(){
     });
     el.appendChild(s);
     return()=>{ while(el.firstChild)el.removeChild(el.firstChild); };
-  },[colorTheme]);
+  },[colorTheme,open]);
   return(
     <BentoTile accent={T.slate} style={{padding:0,overflow:"hidden"}}>
-      <div style={{padding:`${T.s3} ${T.s4} 0`}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>MARKET SECTORS — S&P 500</span>
-        <span style={{fontFamily:FM,fontSize:9,color:T.dim,letterSpacing:"0.06em",marginLeft:T.s3}}>via TradingView · live</span>
-      </div>
-      <div ref={ref} className="tradingview-widget-container" style={{width:"100%"}}/>
+      <button onClick={toggleOpen} aria-expanded={open} style={{
+        width:"100%",display:"flex",alignItems:"center",gap:T.s3,padding:`${T.s4} ${T.s5}`,
+        background:"transparent",border:"none",cursor:"pointer",textAlign:"left",
+      }}>
+        <span aria-hidden="true" style={{color:open?T.blue:T.muted,fontSize:11,lineHeight:1,flexShrink:0,
+          display:"inline-block",transform:open?"rotate(90deg)":"none",transition:"transform 0.18s"}}>▸</span>
+        <span style={{flex:1,minWidth:0}}>
+          <span style={{display:"block",fontFamily:FM,fontSize:11,letterSpacing:"0.14em",fontWeight:600,color:T.textHi}}>MARKET SECTORS — S&P 500</span>
+          <span style={{display:"block",fontFamily:FP,fontSize:11,color:T.muted,marginTop:2}}>Live sector heatmap via TradingView</span>
+        </span>
+      </button>
+      {open&&<div ref={ref} className="tradingview-widget-container" style={{width:"100%",padding:`0 ${T.s3} ${T.s3}`}}/>}
     </BentoTile>
   );
 }
@@ -1984,11 +2002,8 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     </div>
 
     {/* ─── BENTO ROW 3: Top Holdings ────────────────── */}
-    {top.length>0&&<BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TOP HOLDINGS</span>
-        {snapAccounts.length>0&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.06em"}}>● REAL POSITIONS</span>}
-      </div>
+    {top.length>0&&<CollapsibleTile title="TOP HOLDINGS" subtitle={`${top.length} position${top.length!==1?"s":""} by value`} storageKey="ov_top" defaultOpen={false}
+      right={snapAccounts.length>0?<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.06em"}}>● REAL</span>:null}>
       <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
         {top.map(h=>{
           const gpct=gp(h),pof=tot>0?mv(h)/tot*100:0;
@@ -2011,18 +2026,11 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
           </div>;
         })}
       </div>
-    </BentoTile>}
+    </CollapsibleTile>}
 
     {/* ─── BENTO ROW 4: Accounts (unified SnapTrade + Plaid) ───── */}
-    {acctsForCards.length>0&&<BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>
-          ACCOUNTS · {acctsForCards.length} total
-          {snapCards.length>0&&<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {snapCards.length} brokerage</span>}
-          {plaidCards.length>0&&<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {plaidCards.length} bank/credit</span>}
-          {disabledAccts.size>0&&<span style={{color:T.muted,marginLeft:T.s2,fontWeight:400}}>· {disabledAccts.size} hidden</span>}
-        </span>
-      </div>
+    {acctsForCards.length>0&&<CollapsibleTile title="ACCOUNTS" storageKey="ov_accts" defaultOpen={false}
+      subtitle={`${acctsForCards.length} linked${snapCards.length>0?` · ${snapCards.length} brokerage`:""}${plaidCards.length>0?` · ${plaidCards.length} bank/credit`:""}${disabledAccts.size>0?` · ${disabledAccts.size} hidden`:""}`}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:T.s2}}>
         {acctsForCards.map(a=>{
           const dim=a.disabled;
@@ -2081,7 +2089,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
           </div>;
         })}
       </div>
-    </BentoTile>}
+    </CollapsibleTile>}
 
     {/* Savings goals — compact overview widget */}
     <GoalsOverviewWidget
@@ -7450,9 +7458,17 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
     </div>}
 
     {/* Account = profile + security + data controls. (Notifications deferred until demand.) */}
-    {sub==="account"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}><AccountPanel/><SecurityPanel/><PrivacyPanel/></div>}
+    {sub==="account"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+      <AccountPanel/>
+      <CollapsibleTile flat title="SECURITY & SESSIONS" subtitle="Two-factor authentication + active sessions" storageKey="settings_security"><SecurityPanel/></CollapsibleTile>
+      <CollapsibleTile flat title="DATA & PRIVACY" subtitle="Export your data or delete your account" storageKey="settings_privacy"><PrivacyPanel/></CollapsibleTile>
+    </div>}
     {/* Documents = broker docs + CSV historical backfill + legal policies. */}
-    {sub==="docs"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}><DocumentsPanel documents={documents} accounts={accounts}/><CSVImporter onImport={onImportCSV} onDedupe={onDedupeCSV} onRetag={onRetagCSV}/><LegalDocsPanel/></div>}
+    {sub==="docs"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+      <CollapsibleTile flat title="BROKER DOCUMENTS" subtitle="Statements & tax forms synced from your brokerages" storageKey="settings_docs" defaultOpen><DocumentsPanel documents={documents} accounts={accounts}/></CollapsibleTile>
+      <CollapsibleTile flat title="IMPORT HISTORY (CSV)" subtitle="Backfill older activity from a broker CSV export" storageKey="settings_csv"><CSVImporter onImport={onImportCSV} onDedupe={onDedupeCSV} onRetag={onRetagCSV}/></CollapsibleTile>
+      <LegalDocsPanel/>
+    </div>}
     {sub==="methodology"&&<ShariaMethodology/>}
     {sub==="admin"&&isRoot&&<AdminPanel/>}
   </div>;
