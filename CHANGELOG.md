@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-05
 
 ### Added
+- **portfolio:** Dividend Income Planner — forward projection w/ gross→net-of-purification (`dc37b63`)
 - **ui:** Collapsible reorg — Finances + Trade (iteration 5, closes the set) (`4c1b566`)
 - **ui:** Collapsible reorg — Goals/Zakat tab (iteration 4) (`4fb6552`)
 - **ui:** Group Portfolio sub-tabs — 7 → 5 with a Tools group (`df488a8`)
