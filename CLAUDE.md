@@ -38,7 +38,11 @@ src/components/MizanApp.jsx   — 11,400+ lines. ALL views, ALL state, ALL chart
 src/components/Goals.jsx       — Goals tab (extracted). Savings goals + DEBT PAYOFF TRACKER
                                  (manual/recurring/balance-linked debts, counting down to $0)
                                  + PAYOFF PLANNER (snowball/avalanche/riba-first, amortization,
-                                 inline-SVG burn-down). Debts persist to localStorage mizan_debts.
+                                 inline-SVG burn-down) + DEBT-PAYMENT AUTO-LINKING (detects a
+                                 recurring payment via src/lib/recurring.js, links it, auto-advances
+                                 paydown from posted transactions). Debts persist to mizan_debts.
+                                 NOTE: personal debts live here; credit-card subscriptions/bills
+                                 stay categorized in the Finances tab (don't move them into Goals).
 src/components/PerformancePanel.jsx — Overview "RETURN & RISK" panel: money-weighted return
                                  (XIRR), realized/unrealized P&L split, risk metrics. Pure math
                                  in src/lib/performance.js.
@@ -54,6 +58,9 @@ src/lib/auth.jsx               — Supabase Auth wrapper (TOTP MFA, session revo
 src/lib/performance.js         — Pure portfolio analytics (XIRR/money-weighted return,
                                  realized/unrealized split, max drawdown/volatility/Sharpe).
                                  No React/DOM/storage. Tested: src/test/performance.test.js.
+src/lib/recurring.js           — Pure recurring-transaction detection + debt-payment matching
+                                 (normalize payee, cadence from median gap, score debt↔stream).
+                                 Powers Goals debt-payment auto-linking. Tested: recurring.test.js.
 src/lib/userState.js           — localStorage ↔ Supabase state sync (mizan_debts is a TRACKED_KEY)
 src/lib/useKeyboard.js         — Global keyboard shortcuts
 ```

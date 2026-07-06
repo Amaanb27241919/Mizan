@@ -20,7 +20,7 @@
 | 1 | **Payoff optimizer**: snowball / avalanche / **riba-first**, debt-free date, total interest, payoff order | `cwinland/DebtPaymentPlan` (big apps lack it) | M | **✅ Phase 1 (shipped)** |
 | 2 | **Amortization** for interest-bearing debts (interest-aware payoff months) | Maybe `app/models/loan.rb` | S | **✅ Phase 1 (shipped)** |
 | 3 | **Burn-down chart** (total balance → $0, inline SVG) | Ghostfolio `AccountBalance` | S | **✅ Phase 1 (shipped)** |
-| 4 | **Auto-detect a debt payment in checking → link it to the debt** | Copilot recurring filter + Actual `find-schedules.ts` | M | Pending |
+| 4 | **Auto-detect a debt payment in checking → link it to the debt** — **✅ Phase 3 shipped** (`src/lib/recurring.js` + Goals cards; detects a recurring payment, links it, auto-advances paydown from posted transactions; the step Copilot skips) | Copilot recurring filter + Actual `find-schedules.ts` | M |
 | 5 | **`direction` bit: qard hasan you *lent* vs owe** | Firefly `liability_direction` | S | Pending |
 | 6 | **Grounded-AI debt answers** ("total debt", "pay riba-debt vs invest") via `/api/advisor` | Origin's #1 AI use-case | S | Pending |
 | 7 | **Optional `min_payment` field** on the debt form (planner currently estimates it) | Maybe `credit_cards.minimum_payment` | S | Pending |
@@ -36,7 +36,7 @@
 | 2 | **Rules engine** (`rules`/`triggers`/`actions`) + Islamic actions `set_islamic_category` / `flag_for_purification` / `mark_zakatable` (**closes §16 Muslim-categories gap**) | firefly `SearchRuleEngine.php`; actual `server/rules/` | M |
 | 3 | **P&L split: realized/unrealized** — **✅ Phase 2 shipped** (`RETURN & RISK` panel). Day-weighted-average-capital % return still pending (XIRR covers money-weighted) | ghostfolio `calculator/roai/portfolio-calculator.ts:668-835` | M |
 | 4 | **Sharia X-Ray rules panel**: haram-concentration, purification-due, compliance-drift, fee-ratio, emergency-fund | ghostfolio `apps/api/src/models/rules/` | M |
-| 5 | **Recurring-transaction detection** for BillsCalendar (slide start dates, match ±2d + amount + payee, rank `1/(dayDiff+1)`) | actual `server/schedules/find-schedules.ts`; firefly `CalculateXOccurrences.php` (date math) | M |
+| 5 | **Recurring-transaction detection** — **✅ engine shipped** as `src/lib/recurring.js` (normalize payee, ≥2 occurrences, cadence from median gap; used by debt-payment linking). *Still pending:* applying it to upgrade the Finances BillsCalendar/subscriptions heuristic (those stay finance-categorized). | actual `server/schedules/find-schedules.ts`; firefly `CalculateXOccurrences.php` (date math) | M |
 | 6 | **Risk metrics**: max drawdown, annualized volatility, Sharpe (0% riba-safe risk-free rate) — **✅ Phase 2 shipped** (gated on ≥20 daily snapshots; lights up as `net_worth_history` accrues → fully unblocked by T2 #1) | inputs already stored (`net_worth_history` + Polygon OHLC) | M |
 | 7 | **AI tool-calling with per-user enum'd schemas + single-hop loop** on `/api/advisor` (symbol enum = user's tickers, verdict from `shariaScreen`) → structurally blocks hallucinated numbers/verdicts | maybe `assistant/`; wealthfolio `crates/agent-tools/`; investbrain | M |
 | 8 | **XIRR / money-weighted return** (the IRR Ghostfolio never finished) — **✅ Phase 2 shipped** (`src/lib/performance.js`, Newton's + bisection, 16 Vitest cases, Excel-fixture validated) | paisa `internal/xirr/xirr.go` (~60 lines, Newton's method) | S–M |
@@ -61,7 +61,7 @@
 
 - **Phase 1 — Debt (✅ shipped, commit `0dcb37e`):** payoff optimizer + amortization + burn-down. Pure-function, no migration.
 - **Phase 2 — Correctness (✅ shipped, commits `87ece9b` + `b7fca08`):** money-weighted return (XIRR), realized/unrealized P&L split, risk metrics (max drawdown / volatility / Sharpe) in the Overview `RETURN & RISK` panel. Pure math in `src/lib/performance.js` (16 Vitest cases). Also fixed cross-metric reconciliation: demo account `balance` now derives from `cash + Σ(positions)` (the real SnapTrade invariant) so Net Worth / Allocation / Market Value / the panel all agree; panel Total P&L is position-derived so it equals the hero's Total Return exactly. *Remaining in the correctness track:* day-weighted-average-capital % return (ROAI denominator, T2 #3) — XIRR already covers money-weighted; risk metrics fully unblock once T2 #1 gives a dense daily curve.
-- **Phase 3 — Automation (M) ← NEXT:** rules engine + Islamic categories + recurring detection → unlocks debt-payment auto-linking (T2 #2, #5; T1 #4).
+- **Phase 3 — Automation (IN PROGRESS):** ✅ **recurring-detection engine + debt-payment auto-linking** shipped (commit `0a83a1f`) — `src/lib/recurring.js` (11 Vitest cases) detects a recurring payment toward a tracked debt and links it so paydown auto-advances from posted transactions (the "sync monthly statements" ask; the step Copilot skips). Boundary held: **personal debts live in Goals; credit-card subscriptions/bills stay categorized in Finances** (untouched). *Remaining in Phase 3:* rules engine + Islamic budget categories (Sadaqah/Masjid/Zakat/Halal-food — T2 #2, closes §16); apply the recurring engine to the Finances subscriptions view (T2 #5).
 - **Phase 4 — Foundations (L):** materialized balance table + reverse calculator (T2 #1); then envelope rollover, Sharia X-Ray, AI tool-calling (T2 #9, #4, #7).
 
 ## Verified non-issues (don't re-open)
