@@ -1111,9 +1111,19 @@ function debtPayoffLabel(debt, remaining) {
   const mode = debtMode(debt);
   if (mode === "recurring") {
     const amt = Number(debt.payment_amount) || 0;
+    const apr = Number(debt.apr) || 0;
     if (amt > 0) {
-      const periods = Math.ceil(remaining / amt);
       const per = PERIOD_DAYS[debt.cadence] || PERIOD_DAYS.monthly;
+      if (apr > 0) {
+        // Interest-aware: amortize the balance at the monthly rate using the
+        // monthly-equivalent payment, so a card's payoff isn't under-counted.
+        const monthlyPmt = monthlyFromCadence(amt, debt.cadence);
+        const nMonths = monthsToPayoff(remaining, apr / 100 / 12, monthlyPmt);
+        if (!Number.isFinite(nMonths)) return `${fmtUSD(amt)}/${CADENCE_LABEL[debt.cadence] || "month"} barely covers interest`;
+        const eta = new Date(Date.now() + nMonths * 30.44 * 86_400_000);
+        return `~${nMonths} mo at ${apr}% · debt-free ~${fmtDate(eta.toISOString().slice(0, 10))}`;
+      }
+      const periods = Math.ceil(remaining / amt);
       const eta = new Date(Date.now() + periods * per * 86_400_000);
       return `${periods} × ${fmtUSD(amt)} left · debt-free ~${fmtDate(eta.toISOString().slice(0, 10))}`;
     }
@@ -1133,6 +1143,133 @@ function debtPayoffLabel(debt, remaining) {
   if (debt.target_date) return `Target: ${fmtDate(debt.target_date)}`;
   if (mode === "balance") return ""; // tracks live — no projection needed
   return "Log a payment to project";
+}
+
+// ── Amortization + payoff optimizer (pure) ────────────────────────────────────
+// Standard amortization: months to clear `balance` at `monthlyRate` paying `pmt`
+// each month. Returns Infinity when the payment can't cover the monthly interest
+// (the balance would never fall). monthlyRate = APR/100/12.
+function monthsToPayoff(balance, monthlyRate, pmt) {
+  if (!(balance > 0)) return 0;
+  if (!(pmt > 0)) return Infinity;
+  if (monthlyRate <= 0) return Math.ceil(balance / pmt);
+  if (pmt <= balance * monthlyRate) return Infinity; // interest ≥ payment
+  const n = -Math.log(1 - (monthlyRate * balance) / pmt) / Math.log(1 + monthlyRate);
+  return Math.ceil(n);
+}
+
+// Normalize a recurring plan's payment to a monthly figure.
+function monthlyFromCadence(amount, cadence) {
+  const per = cadence === "weekly" ? 4.333 : cadence === "biweekly" ? 2.167 : 1;
+  return (Number(amount) || 0) * per;
+}
+
+// The monthly minimum we assume for a debt in the payoff plan. Priority:
+//   1) recurring plan's payment (normalized to monthly)
+//   2) an explicitly-set min_payment
+//   3) an estimate: interest-bearing → 2% of balance (floor $25, card-style);
+//      interest-free with a target date → spread evenly to the target;
+//      otherwise a gentle 24-month spread.
+function monthlyMinFor(debt, remaining) {
+  const mode = debtMode(debt);
+  if (mode === "recurring" && Number(debt.payment_amount) > 0) {
+    return monthlyFromCadence(debt.payment_amount, debt.cadence);
+  }
+  if (Number(debt.min_payment) > 0) return Number(debt.min_payment);
+  const apr = Number(debt.apr) || 0;
+  if (apr > 0) return Math.max(25, remaining * 0.02);
+  if (debt.target_date) {
+    const months = Math.max(1, Math.round((new Date(debt.target_date).getTime() - Date.now()) / (30.44 * 86_400_000)));
+    return remaining / months;
+  }
+  return remaining / 24;
+}
+
+// Order debts by payoff strategy. Riba-first is the Islamic default: clear
+// interest-bearing (riba) debt fastest to minimize interest paid, then the
+// interest-free loans. Avalanche = highest APR first (least total interest).
+// Snowball = smallest balance first (fastest wins for motivation).
+function sortByStrategy(items, strategy) {
+  const arr = [...items];
+  if (strategy === "snowball") return arr.sort((a, b) => a.balance - b.balance);
+  if (strategy === "avalanche") return arr.sort((a, b) => b.apr - a.apr || a.balance - b.balance);
+  // riba-first: interest-bearing group first (by APR desc), interest-free last (by balance asc)
+  return arr.sort((a, b) => {
+    const aRiba = a.apr > 0 ? 1 : 0, bRiba = b.apr > 0 ? 1 : 0;
+    if (aRiba !== bRiba) return bRiba - aRiba;
+    return aRiba ? (b.apr - a.apr) : (a.balance - b.balance);
+  });
+}
+
+const PLAN_MAX_MONTHS = 1200; // 100-year guard against a never-clearing plan
+
+// Simulate a whole-portfolio payoff: pay each debt its monthly minimum, then
+// funnel `extraPerMonth` (plus any freed-up minimums from cleared debts — the
+// "snowball rollover") to the highest-priority debt. Interest accrues monthly on
+// interest-bearing debts. Returns the month-by-month total-balance series (for
+// the burn-down chart), months-to-debt-free, total interest paid, and the order
+// debts clear in. Deterministic + pure.
+function computePayoffPlan(planDebts, extraPerMonth, strategy) {
+  const items = planDebts
+    .map((d) => ({
+      id: d.id, name: d.name, icon: d.icon,
+      apr: Number(d.apr) || 0,
+      rate: (Number(d.apr) || 0) / 100 / 12,
+      balance: d.remaining,
+      min: monthlyMinFor(d, d.remaining),
+      interestFree: !(Number(d.apr) > 0),
+    }))
+    .filter((it) => it.balance > 0.005);
+
+  const startTotal = items.reduce((s, it) => s + it.balance, 0);
+  const series = [{ month: 0, total: startTotal }];
+  const order = [];
+  const extra = Math.max(0, Number(extraPerMonth) || 0);
+  let months = 0, totalInterest = 0;
+
+  const active = () => items.filter((it) => it.balance > 0.005);
+  while (active().length && months < PLAN_MAX_MONTHS) {
+    months++;
+    // 1) accrue interest
+    items.forEach((it) => {
+      if (it.balance > 0.005 && it.rate > 0) {
+        const interest = it.balance * it.rate;
+        it.balance += interest;
+        totalInterest += interest;
+      }
+    });
+    // 2) pool = every active debt's minimum + the user's extra. Freed minimums
+    //    from already-cleared debts stay in the pool automatically (rollover).
+    let budget = extra + active().reduce((s, it) => s + it.min, 0);
+    // pay each active its minimum first (capped at its balance)
+    active().forEach((it) => {
+      const pay = Math.min(it.min, it.balance, budget);
+      it.balance -= pay; budget -= pay;
+    });
+    // funnel the remainder to debts in priority order
+    for (const it of sortByStrategy(active(), strategy)) {
+      if (budget <= 0.005) break;
+      const pay = Math.min(budget, it.balance);
+      it.balance -= pay; budget -= pay;
+    }
+    // record any debt that cleared this month
+    items.forEach((it) => {
+      if (it.balance <= 0.005 && !order.some((o) => o.id === it.id)) {
+        it.balance = 0;
+        order.push({ id: it.id, name: it.name, icon: it.icon, month: months, interestFree: it.interestFree });
+      }
+    });
+    series.push({ month: months, total: items.reduce((s, it) => s + it.balance, 0) });
+  }
+
+  return {
+    months,
+    totalInterest: Math.round(totalInterest * 100) / 100,
+    series,
+    order,
+    feasible: months < PLAN_MAX_MONTHS,
+    startTotal,
+  };
 }
 
 function DEMO_DEBTS(accounts) {
@@ -1550,6 +1687,169 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
   );
 }
 
+// Lightweight inline-SVG burn-down: total remaining balance falling to $0 over
+// the projected months. No Recharts import (keeps this file's bundle lean).
+function BurnDownChart({ series, months }) {
+  const W = 560, H = 130, PADX = 6, PADY = 10;
+  if (!series || series.length < 2) return null;
+  const maxT = Math.max(...series.map((p) => p.total), 1);
+  const maxM = Math.max(series[series.length - 1].month, 1);
+  const x = (m) => PADX + (m / maxM) * (W - 2 * PADX);
+  const y = (t) => PADY + (1 - t / maxT) * (H - 2 * PADY);
+  const line = series.map((p) => `${x(p.month).toFixed(1)},${y(p.total).toFixed(1)}`).join(" ");
+  const area = `${PADX},${(H - PADY).toFixed(1)} ${line} ${x(maxM).toFixed(1)},${(H - PADY).toFixed(1)}`;
+  // A few year gridlines so long payoffs stay readable.
+  const yearMarks = [];
+  for (let m = 12; m <= maxM; m += 12) yearMarks.push(m);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img" aria-label="Projected debt burn-down">
+      <defs>
+        <linearGradient id="burnFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={T.loss} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={T.loss} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      {yearMarks.map((m) => (
+        <line key={m} x1={x(m)} y1={PADY} x2={x(m)} y2={H - PADY} stroke={T.border} strokeWidth="1" strokeDasharray="2 4" />
+      ))}
+      <polygon points={area} fill="url(#burnFill)" />
+      <polyline points={line} fill="none" stroke={T.loss} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={x(maxM)} cy={y(0)} r="3.5" fill={T.gain} />
+    </svg>
+  );
+}
+
+const STRATEGIES = [
+  { id: "riba", label: "Riba-first", hint: "Clear interest-bearing debt fastest — least interest paid, on-mission." },
+  { id: "avalanche", label: "Avalanche", hint: "Highest APR first — mathematically least total interest." },
+  { id: "snowball", label: "Snowball", hint: "Smallest balance first — quick wins for momentum." },
+];
+
+// Debt-payoff planner: pick a strategy + an optional extra monthly payment, and
+// see the debt-free date, total interest, payoff order, and a burn-down chart.
+// All math is the pure computePayoffPlan simulation — nothing is stored.
+function PayoffPlanner({ planDebts }) {
+  const [strategy, setStrategy] = useState("riba");
+  const [extra, setExtra] = useState("");
+  const plan = useMemo(
+    () => computePayoffPlan(planDebts, extra, strategy),
+    [planDebts, extra, strategy],
+  );
+  const idToDebt = useMemo(() => new Map(planDebts.map((d) => [d.id, d])), [planDebts]);
+  if (planDebts.length === 0) return null;
+
+  const freeDate = plan.feasible && plan.months > 0
+    ? fmtDate(new Date(Date.now() + plan.months * 30.44 * 86_400_000).toISOString().slice(0, 10))
+    : null;
+  const yrs = Math.floor(plan.months / 12), mos = plan.months % 12;
+  const durLabel = plan.months <= 0 ? "—"
+    : `${yrs ? `${yrs}y ` : ""}${mos}mo`;
+
+  return (
+    <div className="bento-tile" style={{
+      background: `linear-gradient(135deg, ${T.blue}0c, transparent 60%), ${T.card}`,
+      border: `1px solid ${T.border}`,
+      borderTop: `2px solid ${T.blue}`,
+      borderLeft: `1px solid ${T.blue}30`,
+      borderRadius: T.rLg,
+      padding: T.s5,
+      display: "flex", flexDirection: "column", gap: T.s4,
+      boxShadow: "var(--sh-md)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: T.s3 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontFamily: FM, fontSize: 11, color: T.blue, letterSpacing: "0.18em", fontWeight: 600 }}>PAYOFF PLANNER</span>
+          <span style={{ fontFamily: FP, fontSize: 12, color: T.muted }}>How fast can you be debt-free? Choose an order and add anything extra.</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: T.s2 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>EXTRA / MO</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "2px 8px" }}>
+            <span style={{ fontFamily: FM, fontSize: 12, color: T.muted }}>$</span>
+            <input
+              value={extra}
+              onChange={(e) => setExtra(e.target.value)}
+              inputMode="decimal"
+              placeholder="0"
+              style={{ fontFamily: FM, fontSize: 13, color: T.textHi, background: "transparent", border: "none", outline: "none", width: 72 }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Strategy toggle */}
+      <div style={{ display: "flex", gap: T.s2, flexWrap: "wrap" }}>
+        {STRATEGIES.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setStrategy(s.id)}
+            title={s.hint}
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2,
+              flex: "1 1 150px", textAlign: "left",
+              fontFamily: FM, fontSize: 12, fontWeight: 600,
+              color: strategy === s.id ? T.blue : T.text,
+              background: strategy === s.id ? `${T.blue}12` : T.surface,
+              border: `1px solid ${strategy === s.id ? T.blue + "60" : T.border}`,
+              borderRadius: T.rMd, padding: `${T.s2} ${T.s3}`, cursor: "pointer",
+            }}
+          >
+            {s.label}
+            <span style={{ fontFamily: FP, fontSize: 10, fontWeight: 400, color: T.muted, lineHeight: 1.35 }}>{s.hint}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Headline stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: T.s3 }}>
+        <div>
+          <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>DEBT-FREE IN</div>
+          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>{plan.feasible ? durLabel : "—"}</div>
+          {freeDate && <div style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>~{freeDate}</div>}
+        </div>
+        <div>
+          <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>INTEREST PAID</div>
+          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: plan.totalInterest > 0 ? T.loss : T.gain, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(plan.totalInterest)}</div>
+          <div style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>{plan.totalInterest > 0 ? "riba over the plan" : "no interest — qard hasan"}</div>
+        </div>
+        <div>
+          <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>STARTING TOTAL</div>
+          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(plan.startTotal)}</div>
+        </div>
+      </div>
+
+      {!plan.feasible && (
+        <div style={{ fontFamily: FP, fontSize: 12, color: T.gold, padding: `${T.s2} ${T.s3}`, background: `${T.gold}10`, border: `1px solid ${T.gold}30`, borderRadius: T.rSm }}>
+          At these payments the balance never clears (interest outpaces payments). Add an extra monthly amount to see a debt-free date.
+        </div>
+      )}
+
+      {plan.feasible && plan.series.length > 2 && <BurnDownChart series={plan.series} months={plan.months} />}
+
+      {/* Payoff order */}
+      {plan.order.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.12em", fontWeight: 600 }}>PAYOFF ORDER</span>
+          {plan.order.map((o, i) => {
+            const eta = fmtDate(new Date(Date.now() + o.month * 30.44 * 86_400_000).toISOString().slice(0, 10));
+            return (
+              <div key={o.id} style={{ display: "flex", alignItems: "center", gap: T.s2 }}>
+                <span style={{ fontFamily: FM, fontSize: 11, color: T.blue, fontWeight: 600, width: 18 }}>{i + 1}.</span>
+                <Icon name={o.icon || "scale"} size={14} color={o.interestFree ? T.gain : T.loss} style={{ flexShrink: 0 }} />
+                <span style={{ fontFamily: FP, fontSize: 13, color: T.textHi, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
+                <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, fontVariantNumeric: "tabular-nums" }}>~{eta}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ fontFamily: FP, fontSize: 10, color: T.muted, lineHeight: 1.5 }}>
+        Estimate only. Assumes each debt's minimum (its recurring amount, your set minimum, or a card-style estimate) plus your extra, with freed-up payments rolling to the next debt. Not financial advice.
+      </div>
+    </div>
+  );
+}
+
 function DebtSection({ plaidAccounts = [], demoMode = false }) {
   const [debts, setDebts] = useState([]);
   const [creating, setCreating] = useState(false);
@@ -1618,6 +1918,14 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
     return { remaining, original, paid, pct: original > 0 ? (paid / original) * 100 : 0 };
   }, [debts, plaidAccounts]);
 
+  // Debts (with live remaining + APR) fed to the payoff planner. Only those with
+  // a balance left; a debt in edit mode is excluded so the plan doesn't flicker.
+  const planDebts = useMemo(() => debts
+    .filter((d) => d.id !== editingId)
+    .map((d) => ({ id: d.id, name: d.name, icon: iconForDebt(d), apr: Number(d.apr) || 0, remaining: debtState(d, plaidAccounts).remaining,
+                   payment_amount: d.payment_amount, cadence: d.cadence, min_payment: d.min_payment, mode: d.mode, target_date: d.target_date }))
+    .filter((d) => d.remaining > 0.005), [debts, plaidAccounts, editingId]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: T.s4, marginTop: T.s5 }}>
       <div className="bento-tile" style={{
@@ -1652,6 +1960,10 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
       {creating && (
         <DebtForm liabilityAccounts={liabilityAccounts} fundingAccounts={fundingAccounts} onSave={addDebt} onCancel={() => setCreating(false)} />
       )}
+
+      {/* Payoff planner — appears once there are ≥2 outstanding debts, where
+          strategy/order actually changes the outcome. */}
+      {planDebts.length >= 2 && <PayoffPlanner planDebts={planDebts} />}
 
       {!creating && debts.length === 0 && (
         <div style={{

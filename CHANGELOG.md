@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **goals:** Flexible debt tracking — creditor, recurring plans, funding accounts (`26c5313`)
 
+### Docs
+- Benchmark roadmap — Origin/Copilot + OSS finance apps vs Mizan (`833696e`)
+
 ## 2026-07-05
 
 ### Added
