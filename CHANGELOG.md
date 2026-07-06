@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-05
 
 ### Added
+- **goals:** Debt payoff tracker — balances that count down to $0 (`c1cc295`)
 - **ai:** Plain-English Sharia-screening explanations in the verdict modal (`60e86fd`)
 - **portfolio:** Dividend Income Planner — forward projection w/ gross→net-of-purification (`dc37b63`)
 - **ui:** Collapsible reorg — Finances + Trade (iteration 5, closes the set) (`4c1b566`)

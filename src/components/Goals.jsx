@@ -1026,13 +1026,22 @@ export function GoalsOverviewWidget({
 }
 
 // ── Debt payoff tracker ───────────────────────────────────────────────────────
-// "Origin-style" debt tracker for the Goals tab. Each debt counts DOWN toward
-// $0 as the user logs payments (manual mode) or as a linked Finance-tab
-// credit/loan balance falls (linked mode). Stored in localStorage (`mizan_debts`)
-// mirrored to Supabase user_state — the same no-migration pattern as manual
-// assets. This is a standalone payoff tracker: it does NOT feed net worth
-// (linked accounts are already counted there via Plaid, and adding manual
-// debts to the headline would double-count / distort it).
+// "Origin-style" debt tracker for the Goals tab. A debt counts DOWN toward $0.
+// Tracking is deliberately flexible — a debt can be owed to a bank OR a person,
+// and paid three ways:
+//   - manual    → log payments whenever (friend loan, cash, irregular amounts)
+//   - balance   → reads a linked Plaid credit/loan account's live balance
+//                 (overdue card, bank loan that reports to Plaid)
+//   - recurring → a set amount on a cadence (e.g. $500/month) paid FROM a
+//                 funding account (checking); autopay counts each scheduled
+//                 period automatically, else confirm one-click each period.
+// Interest-free (qard hasan) is the default — APR is optional and only meant
+// for an interest-bearing balance like an overdue conventional card.
+//
+// Stored in localStorage (`mizan_debts`) mirrored to Supabase user_state — the
+// same no-migration pattern as manual assets. Standalone payoff tracker: it
+// does NOT feed net worth (a balance-linked account is already counted there
+// via Plaid, and manual/recurring debts would distort the headline).
 const DEBT_KEY = "mizan_debts";
 
 const DEBT_TEMPLATES = [
@@ -1041,12 +1050,19 @@ const DEBT_TEMPLATES = [
   { id: "student",  icon: "book",   name: "Student Loan" },
   { id: "home",     icon: "home",   name: "Home Financing" },
   { id: "personal", icon: "bank",   name: "Personal Loan" },
+  { id: "qard",     icon: "leaf",   name: "Family / Friend (Qard Hasan)" },
   { id: "custom",   icon: "pencil", name: "Custom Debt" },
 ];
+
+// Days per payment period, used to accrue recurring plans + project payoff.
+const PERIOD_DAYS = { weekly: 7, biweekly: 14, monthly: 30.44 };
+const CADENCE_LABEL = { weekly: "week", biweekly: "2 wks", monthly: "month" };
 
 const isDebtAcct = (a) => a?.type === "credit" || a?.type === "loan";
 const iconForDebt = (d) => DEBT_TEMPLATES.find((t) => t.name === d.name)?.icon || d.icon || "scale";
 const genDebtId = () => `debt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+// Legacy debts stored mode:"linked" — treat as the renamed "balance" mode.
+const debtMode = (d) => (d?.mode === "linked" ? "balance" : (d?.mode || "manual"));
 
 function readDebts() {
   try {
@@ -1057,29 +1073,52 @@ function readDebts() {
 
 const debtPaidTotal = (d) => (d.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
-// Resolve the live owed balance + amount paid for a debt. Linked debts read
-// the current credit/loan balance from Plaid so the number tracks the Finance
-// tab automatically; manual debts subtract the logged payment total from the
-// original balance. Returns clamped, never-negative values.
-function debtState(debt, plaidAccounts) {
-  const original = Number(debt.original) || 0;
-  if (debt.mode === "linked" && debt.linked_account_id) {
-    const acct = (plaidAccounts || []).find(
-      (a) => String(a.account_id) === String(debt.linked_account_id),
-    );
-    const remaining = acct ? Math.abs(Number(acct.current_bal) || 0) : original;
-    const base = Math.max(original, remaining); // original should be ≥ current owed
-    return { original: base, remaining, paid: Math.max(0, base - remaining), linkedMissing: !acct };
-  }
-  const paid = debtPaidTotal(debt);
-  const remaining = Math.max(0, original - paid);
-  return { original, remaining, paid, linkedMissing: false };
+// How many full payment periods have elapsed since a recurring plan started.
+function recurringElapsedPeriods(debt) {
+  const startRaw = debt.start_date || debt.created_at;
+  const start = startRaw ? new Date(startRaw).getTime() : Date.now();
+  const days = Math.max(0, (Date.now() - start) / 86_400_000);
+  const per = PERIOD_DAYS[debt.cadence] || PERIOD_DAYS.monthly;
+  return Math.floor(days / per);
 }
 
-// Estimate a debt-free date from the user's payment pace (manual debts only).
+// Resolve live owed balance + amount paid for a debt.
+//   balance    → reads the linked liability account's current balance
+//   recurring  → accrues elapsed scheduled payments (when autopay) + any logged
+//   manual     → sums logged payments against the original balance
+function debtState(debt, accounts) {
+  const original = Number(debt.original) || 0;
+  const mode = debtMode(debt);
+  if (mode === "balance" && debt.linked_account_id) {
+    const acct = (accounts || []).find((a) => String(a.account_id) === String(debt.linked_account_id));
+    const remaining = acct ? Math.abs(Number(acct.current_bal) || 0) : original;
+    const base = Math.max(original, remaining); // original should be ≥ current owed
+    return { mode, original: base, remaining, paid: Math.max(0, base - remaining), linkedMissing: !acct };
+  }
+  if (mode === "recurring") {
+    const logged = debtPaidTotal(debt);
+    const scheduled = debt.autopay ? recurringElapsedPeriods(debt) * (Number(debt.payment_amount) || 0) : 0;
+    const paid = Math.min(original, Math.max(0, logged + scheduled));
+    return { mode, original, remaining: Math.max(0, original - paid), paid, linkedMissing: false };
+  }
+  const paid = Math.min(original, debtPaidTotal(debt));
+  return { mode, original, remaining: Math.max(0, original - paid), paid, linkedMissing: false };
+}
+
+// Compact payoff projection shown on each card.
 function debtPayoffLabel(debt, remaining) {
-  if (remaining <= 0) return "Paid off — alhamdulillah";
-  if (debt.mode !== "linked" && debt.created_at) {
+  if (remaining <= 0.005) return "Paid off — alhamdulillah";
+  const mode = debtMode(debt);
+  if (mode === "recurring") {
+    const amt = Number(debt.payment_amount) || 0;
+    if (amt > 0) {
+      const periods = Math.ceil(remaining / amt);
+      const per = PERIOD_DAYS[debt.cadence] || PERIOD_DAYS.monthly;
+      const eta = new Date(Date.now() + periods * per * 86_400_000);
+      return `${periods} × ${fmtUSD(amt)} left · debt-free ~${fmtDate(eta.toISOString().slice(0, 10))}`;
+    }
+  }
+  if (mode === "manual" && debt.created_at) {
     const paid = debtPaidTotal(debt);
     const days = Math.max(1, (Date.now() - new Date(debt.created_at).getTime()) / 86_400_000);
     const perDay = paid / days;
@@ -1091,31 +1130,42 @@ function debtPayoffLabel(debt, remaining) {
       }
     }
   }
-  return debt.target_date ? `Target: ${fmtDate(debt.target_date)}` : "Log a payment to project";
+  if (debt.target_date) return `Target: ${fmtDate(debt.target_date)}`;
+  if (mode === "balance") return ""; // tracks live — no projection needed
+  return "Log a payment to project";
 }
 
-function DEMO_DEBTS(plaidAccounts) {
-  const cc = (plaidAccounts || []).find((a) => a.type === "credit");
+function DEMO_DEBTS(accounts) {
+  const cc = (accounts || []).find((a) => a.type === "credit");
+  const checking = (accounts || []).find((a) => a.type === "depository" && a.subtype === "checking");
   const now = Date.now();
   return [
     {
-      id: "demo-debt-1", name: "Auto Financing (Ijara)", icon: "scale",
+      id: "demo-debt-1", name: "Auto Financing (Ijara)", creditor: "Guidance Residential", icon: "scale",
       original: 32000, apr: 0, mode: "manual",
       target_date: new Date(now + 540 * 86_400_000).toISOString().slice(0, 10),
       payments: [{ id: "dp1", amount: 17500, date: new Date(now - 120 * 86_400_000).toISOString(), note: "Payments to date" }],
       created_at: new Date(now - 400 * 86_400_000).toISOString(),
     },
+    {
+      id: "demo-debt-2", name: "Loan from my brother", creditor: "Yusuf (family)", icon: "leaf",
+      original: 6000, apr: null, mode: "recurring",
+      payment_amount: 500, cadence: "monthly", autopay: true,
+      funding_account_id: checking ? checking.account_id : null,
+      start_date: new Date(now - 165 * 86_400_000).toISOString(),
+      payments: [], created_at: new Date(now - 165 * 86_400_000).toISOString(),
+    },
     ...(cc ? [{
-      id: "demo-debt-2", name: cc.name || "Credit Card", icon: "bank",
-      original: 8000, apr: 0, mode: "linked", linked_account_id: cc.account_id,
+      id: "demo-debt-3", name: cc.name || "Credit Card", creditor: cc.institution_name || "Chase", icon: "bank",
+      original: 8000, apr: 22.9, mode: "balance", linked_account_id: cc.account_id,
       payments: [], created_at: new Date(now - 200 * 86_400_000).toISOString(),
     }] : []),
   ];
 }
 
-// Inline "log a payment" control shown on manual-mode debt cards.
-function LogPaymentRow({ onLog, onCancel }) {
-  const [amount, setAmount] = useState("");
+// Inline "log a payment" control (manual + recurring extra/off-schedule).
+function LogPaymentRow({ label = "Log payment", defaultAmount = "", onLog, onCancel }) {
+  const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : "");
   const [note, setNote] = useState("");
   const submit = () => {
     const n = Number(amount);
@@ -1140,19 +1190,28 @@ function LogPaymentRow({ onLog, onCancel }) {
         onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") onCancel(); }}
         style={{ ...inputStyle, fontSize: 12, padding: "5px 9px", flex: 1, minWidth: 120 }}
       />
-      <button onClick={submit} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>Log payment</button>
+      <button onClick={submit} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>{label}</button>
       <button onClick={onCancel} style={smallBtnStyle}>Cancel</button>
     </div>
   );
 }
 
-function DebtCard({ debt, plaidAccounts, accountLabel, onEdit, onDelete, onLogPayment, onMarkPaid }) {
-  const { original, remaining, paid, linkedMissing } = debtState(debt, plaidAccounts);
+function DebtCard({ debt, accounts, labelFor, onEdit, onDelete, onLogPayment, onConfirmScheduled, onMarkPaid }) {
+  const { mode, original, remaining, paid, linkedMissing } = debtState(debt, accounts);
   const pct = original > 0 ? (paid / original) * 100 : 0;
   const done = remaining <= 0.005;
   const color = done ? T.gain : T.blue;
   const [logging, setLogging] = useState(false);
   const payoff = debtPayoffLabel(debt, remaining);
+  const amt = Number(debt.payment_amount) || 0;
+  const fundLabel = debt.funding_account_id ? labelFor(debt.funding_account_id) : "";
+
+  // Sub-line under the name: who it's owed to + how it's tracked.
+  const trackLine = mode === "balance"
+    ? `Linked${labelFor(debt.linked_account_id) ? ` · ${labelFor(debt.linked_account_id)}` : ""}`
+    : mode === "recurring"
+      ? `${fmtUSD(amt)}/${CADENCE_LABEL[debt.cadence] || "month"}${fundLabel ? ` · from ${fundLabel}` : ""}${debt.autopay ? " · auto" : ""}`
+      : "Manual";
 
   return (
     <div className="bento-tile" style={{
@@ -1175,9 +1234,10 @@ function DebtCard({ debt, plaidAccounts, accountLabel, onEdit, onDelete, onLogPa
               {debt.name}
             </div>
             <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.04em" }}>
-              {debt.mode === "linked"
-                ? <>Linked{accountLabel ? ` · ${accountLabel}` : ""}</>
-                : <>Manual{debt.apr ? ` · ${debt.apr}% APR` : ""}</>}
+              {debt.creditor ? <>{debt.creditor} · </> : null}{trackLine}
+              {Number(debt.apr) > 0
+                ? <span style={{ color: T.loss }}> · {debt.apr}% APR</span>
+                : <span style={{ color: T.gain }}> · interest-free</span>}
             </div>
           </div>
         </div>
@@ -1228,19 +1288,34 @@ function DebtCard({ debt, plaidAccounts, accountLabel, onEdit, onDelete, onLogPa
         </div>
       )}
 
-      {/* Actions — only manual debts log payments; linked debts track live. */}
+      {/* Actions vary by mode. */}
       <div style={{ paddingTop: T.s2, borderTop: `1px solid ${T.border}` }}>
-        {debt.mode === "linked" ? (
+        {done ? (
+          <span style={{ fontFamily: FM, fontSize: 11, color: T.gain, fontWeight: 600 }}>✓ Fully paid off</span>
+        ) : mode === "balance" ? (
           <span style={{ fontFamily: FP, fontSize: 11, color: T.muted }}>
             Tracks your linked balance automatically as payments post.
           </span>
-        ) : done ? (
-          <span style={{ fontFamily: FM, fontSize: 11, color: T.gain, fontWeight: 600 }}>✓ Fully paid off</span>
         ) : logging ? (
           <LogPaymentRow
-            onLog={(amt, note) => { onLogPayment(debt.id, amt, note); setLogging(false); }}
+            label="Log payment"
+            onLog={(a, note) => { onLogPayment(debt.id, a, note); setLogging(false); }}
             onCancel={() => setLogging(false)}
           />
+        ) : mode === "recurring" ? (
+          <div style={{ display: "flex", gap: T.s2, alignItems: "center", flexWrap: "wrap" }}>
+            {debt.autopay ? (
+              <span style={{ fontFamily: FP, fontSize: 11, color: T.muted }}>
+                Auto-counting {fmtUSD(amt)}/{CADENCE_LABEL[debt.cadence] || "month"}{fundLabel ? ` from ${fundLabel}` : ""}.
+              </span>
+            ) : (
+              <button onClick={() => onConfirmScheduled(debt.id)} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>
+                ✓ Confirm {CADENCE_LABEL[debt.cadence] || "month"}ly payment · {fmtUSD(amt)}
+              </button>
+            )}
+            <button onClick={() => setLogging(true)} style={smallBtnStyle}>{debt.autopay ? "+ Log extra" : "Other amount"}</button>
+            <button onClick={() => onMarkPaid(debt.id)} style={smallBtnStyle}>Mark paid off</button>
+          </div>
         ) : (
           <div style={{ display: "flex", gap: T.s2, alignItems: "center", flexWrap: "wrap" }}>
             <button onClick={() => setLogging(true)} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>+ Log payment</button>
@@ -1252,28 +1327,59 @@ function DebtCard({ debt, plaidAccounts, accountLabel, onEdit, onDelete, onLogPa
   );
 }
 
-function DebtForm({ initial, debtAccounts, onSave, onCancel }) {
+// Compact radio list of accounts for the form (liability picker or funding picker).
+function AccountRadioList({ accounts, selectedId, onPick, emptyHint }) {
+  if (accounts.length === 0) {
+    return (
+      <div style={{ fontFamily: FP, fontSize: 12, color: T.muted, padding: T.s3, textAlign: "center", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
+        {emptyHint}
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 200, overflowY: "auto", padding: T.s2, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
+      {accounts.map((a) => (
+        <label key={a.id} style={{
+          display: "flex", alignItems: "center", gap: T.s2, padding: `6px ${T.s2}`, borderRadius: T.rSm, cursor: "pointer",
+          background: selectedId === a.id ? `${T.blue}18` : "transparent",
+          border: `1px solid ${selectedId === a.id ? T.blue + "60" : T.border}`,
+        }}>
+          <input type="radio" checked={selectedId === a.id} onChange={() => onPick(a.id)} style={{ cursor: "pointer" }}/>
+          <span style={{ fontFamily: FP, fontSize: 12, color: T.text, flex: 1 }}>{a.label}</span>
+          <span style={{ fontFamily: FM, fontSize: 11, color: a.isDebt ? T.loss : T.muted }}>{fmtUSD(a.balance)}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || "");
+  const [creditor, setCreditor] = useState(initial?.creditor || "");
   const [icon, setIcon] = useState(initial?.icon || "scale");
   const [original, setOriginal] = useState(initial?.original != null ? String(initial.original) : "");
   const [apr, setApr] = useState(initial?.apr != null ? String(initial.apr) : "");
   const [targetDate, setTargetDate] = useState(initial?.target_date || "");
-  const [mode, setMode] = useState(initial?.mode || "manual");
+  const [mode, setMode] = useState(initial ? debtMode(initial) : "manual");
   const [linkedId, setLinkedId] = useState(initial?.linked_account_id || "");
+  const [paymentAmount, setPaymentAmount] = useState(initial?.payment_amount != null ? String(initial.payment_amount) : "");
+  const [cadence, setCadence] = useState(initial?.cadence || "monthly");
+  const [autopay, setAutopay] = useState(initial?.autopay ?? true);
+  const [fundingId, setFundingId] = useState(initial?.funding_account_id || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
   const pickTemplate = (t) => {
     setName(t.name === "Custom Debt" ? "" : t.name);
     setIcon(t.icon);
+    if (t.id === "credit") setMode("balance");
+    else if (t.id === "qard" || t.id === "personal") setMode("recurring");
   };
 
-  // When linking an account, default the original to its current balance so
-  // "paid so far" starts at $0 (unless the user already typed one).
   const pickLinked = (id) => {
     setLinkedId(id);
     if (!original) {
-      const a = debtAccounts.find((x) => x.id === id);
+      const a = liabilityAccounts.find((x) => x.id === id);
       if (a) setOriginal(String(Math.round(a.balance)));
     }
   };
@@ -1284,17 +1390,26 @@ function DebtForm({ initial, debtAccounts, onSave, onCancel }) {
     const amt = Number(original);
     if (!nm) { setErr("Give this debt a name."); return; }
     if (!Number.isFinite(amt) || amt <= 0) { setErr("Original balance must be a positive number."); return; }
-    if (mode === "linked" && !linkedId) { setErr("Pick a credit/loan account to link, or switch to Manual."); return; }
+    if (mode === "balance" && !linkedId) { setErr("Pick a credit/loan account to link, or choose another track mode."); return; }
+    if (mode === "recurring") {
+      const p = Number(paymentAmount);
+      if (!Number.isFinite(p) || p <= 0) { setErr("Enter the recurring payment amount."); return; }
+    }
     setBusy(true);
     try {
       await onSave({
         name: nm,
+        creditor: creditor.trim() || null,
         icon,
         original: amt,
         apr: apr === "" ? null : (Number(apr) || 0),
         target_date: targetDate || null,
         mode,
-        linked_account_id: mode === "linked" ? linkedId : null,
+        linked_account_id: mode === "balance" ? linkedId : null,
+        payment_amount: mode === "recurring" ? Number(paymentAmount) || 0 : null,
+        cadence: mode === "recurring" ? cadence : null,
+        autopay: mode === "recurring" ? autopay : false,
+        funding_account_id: mode === "recurring" ? (fundingId || null) : null,
       });
     } catch (e) {
       setErr(e?.message || "Save failed");
@@ -1302,6 +1417,12 @@ function DebtForm({ initial, debtAccounts, onSave, onCancel }) {
       setBusy(false);
     }
   };
+
+  const modeHelp = mode === "balance"
+    ? "Reads the linked account's live balance — best for a card or loan that reports to Plaid."
+    : mode === "recurring"
+      ? "Track a set payment on a schedule (e.g. paying a friend or a card from checking). Autopay counts each scheduled payment automatically."
+      : "Log each payment yourself, any amount, whenever you pay.";
 
   return (
     <div style={{
@@ -1335,21 +1456,25 @@ function DebtForm({ initial, debtAccounts, onSave, onCancel }) {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>NAME</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Auto financing" style={inputStyle}/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>ORIGINAL BALANCE ($)</span>
-          <input value={original} onChange={(e) => setOriginal(e.target.value)} inputMode="decimal" placeholder="32000" style={inputStyle}/>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>OWED TO · OPT</span>
+          <input value={creditor} onChange={(e) => setCreditor(e.target.value)} placeholder="Bank or person" style={inputStyle}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>ORIGINAL ($)</span>
+          <input value={original} onChange={(e) => setOriginal(e.target.value)} inputMode="decimal" placeholder="6000" style={inputStyle}/>
         </label>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>APR (%) · OPT</span>
-          <input value={apr} onChange={(e) => setApr(e.target.value)} inputMode="decimal" placeholder="0" style={inputStyle}/>
+          <input value={apr} onChange={(e) => setApr(e.target.value)} inputMode="decimal" placeholder="0 (interest-free)" style={inputStyle}/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>PAYOFF BY · OPT</span>
@@ -1359,34 +1484,58 @@ function DebtForm({ initial, debtAccounts, onSave, onCancel }) {
           <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TRACK MODE</span>
           <select value={mode} onChange={(e) => setMode(e.target.value)} style={inputStyle}>
             <option value="manual">Manual payments</option>
-            <option value="linked">Linked account</option>
+            <option value="recurring">Recurring plan</option>
+            <option value="balance">Linked balance</option>
           </select>
         </label>
       </div>
 
-      {mode === "linked" && (
+      <div style={{ fontFamily: FP, fontSize: 11, color: T.muted, lineHeight: 1.5, marginTop: -6 }}>
+        {modeHelp} Leave APR blank for interest-free loans (qard hasan); set it only for an interest-bearing balance like an overdue card.
+      </div>
+
+      {mode === "balance" && (
         <div style={{ display: "flex", flexDirection: "column", gap: T.s2 }}>
           <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>CREDIT / LOAN ACCOUNT</span>
-          {debtAccounts.length === 0 ? (
-            <div style={{ fontFamily: FP, fontSize: 12, color: T.muted, padding: T.s3, textAlign: "center", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
-              No credit or loan accounts connected. Link one in Finances, or switch to Manual payments.
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 200, overflowY: "auto", padding: T.s2, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
-              {debtAccounts.map((a) => (
-                <label key={a.id} style={{
-                  display: "flex", alignItems: "center", gap: T.s2, padding: `6px ${T.s2}`, borderRadius: T.rSm, cursor: "pointer",
-                  background: linkedId === a.id ? `${T.blue}18` : "transparent",
-                  border: `1px solid ${linkedId === a.id ? T.blue + "60" : T.border}`,
-                }}>
-                  <input type="radio" name="debt-linked" checked={linkedId === a.id} onChange={() => pickLinked(a.id)} style={{ cursor: "pointer" }}/>
-                  <span style={{ fontFamily: FP, fontSize: 12, color: T.text, flex: 1 }}>{a.label}</span>
-                  <span style={{ fontFamily: FM, fontSize: 11, color: T.loss }}>{fmtUSD(a.balance)}</span>
-                </label>
-              ))}
-            </div>
-          )}
+          <AccountRadioList
+            accounts={liabilityAccounts}
+            selectedId={linkedId}
+            onPick={pickLinked}
+            emptyHint="No credit or loan accounts connected. Link one in Finances, or use Manual / Recurring."
+          />
         </div>
+      )}
+
+      {mode === "recurring" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: T.s3, alignItems: "end" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>PAYMENT ($)</span>
+              <input value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} inputMode="decimal" placeholder="500" style={inputStyle}/>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>EVERY</span>
+              <select value={cadence} onChange={(e) => setCadence(e.target.value)} style={inputStyle}>
+                <option value="weekly">Week</option>
+                <option value="biweekly">2 weeks</option>
+                <option value="monthly">Month</option>
+              </select>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={autopay} onChange={(e) => setAutopay(e.target.checked)} style={{ cursor: "pointer" }}/>
+              <span style={{ fontFamily: FP, fontSize: 12, color: T.text }}>Autopay</span>
+            </label>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: T.s2 }}>
+            <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>FUNDING ACCOUNT · OPT (WHERE PAYMENTS COME FROM)</span>
+            <AccountRadioList
+              accounts={fundingAccounts}
+              selectedId={fundingId}
+              onPick={(id) => setFundingId(id === fundingId ? "" : id)}
+              emptyHint="No accounts connected. You can still track the plan without linking a funding account."
+            />
+          </div>
+        </>
       )}
 
       {err && (
@@ -1406,8 +1555,6 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
-  // Load from localStorage (or demo fixtures). Re-seed demo debts when the
-  // demo bank accounts arrive so the linked demo card resolves its balance.
   useEffect(() => {
     if (demoMode) { setDebts(DEMO_DEBTS(plaidAccounts)); return; }
     setDebts(readDebts());
@@ -1418,20 +1565,22 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
     if (!demoMode) setLocalAndSync(DEBT_KEY, next);
   }, [demoMode]);
 
-  const debtAccounts = useMemo(() => (plaidAccounts || [])
+  // Liability accounts (credit/loan) for balance-linked mode; ALL accounts as
+  // funding-source choices for recurring plans (checking is the common case).
+  const liabilityAccounts = useMemo(() => (plaidAccounts || [])
     .filter(isDebtAcct)
-    .map((a) => ({
-      id: String(a.account_id || ""),
-      label: `${a.institution_name || "Bank"} — ${a.name || a.subtype || a.type || "Account"}`,
-      balance: Math.abs(Number(a.current_bal) || 0),
-    }))
+    .map((a) => ({ id: String(a.account_id || ""), label: `${a.institution_name || "Bank"} — ${a.name || a.subtype || a.type || "Account"}`, balance: Math.abs(Number(a.current_bal) || 0), isDebt: true }))
     .filter((a) => a.id), [plaidAccounts]);
 
-  const accountLabelFor = useCallback((id) =>
-    debtAccounts.find((a) => a.id === String(id))?.label || "", [debtAccounts]);
+  const fundingAccounts = useMemo(() => (plaidAccounts || [])
+    .map((a) => ({ id: String(a.account_id || ""), label: `${a.institution_name || "Bank"} — ${a.name || a.subtype || a.type || "Account"}`, balance: Math.abs(Number(a.current_bal) || 0), isDebt: isDebtAcct(a) }))
+    .filter((a) => a.id), [plaidAccounts]);
+
+  const labelFor = useCallback((id) =>
+    fundingAccounts.find((a) => a.id === String(id))?.label || "", [fundingAccounts]);
 
   const addDebt = (payload) => {
-    persist([...debts, { id: genDebtId(), created_at: new Date().toISOString(), payments: [], ...payload }]);
+    persist([...debts, { id: genDebtId(), created_at: new Date().toISOString(), start_date: new Date().toISOString(), payments: [], ...payload }]);
     setCreating(false);
   };
   const saveDebt = (id, payload) => {
@@ -1448,6 +1597,11 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
     const pay = { id: genDebtId(), amount: Number(amount) || 0, date: new Date().toISOString(), note: note || "" };
     persist(debts.map((x) => x.id === id ? { ...x, payments: [...(x.payments || []), pay] } : x));
   };
+  const confirmScheduled = (id) => {
+    const d = debts.find((x) => x.id === id);
+    if (!d) return;
+    logPayment(id, Number(d.payment_amount) || 0, "Scheduled payment");
+  };
   const markPaid = (id) => {
     const d = debts.find((x) => x.id === id);
     if (!d) return;
@@ -1455,7 +1609,6 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
     if (remaining > 0) logPayment(id, remaining, "Marked fully paid off");
   };
 
-  // Aggregate totals across all debts.
   const totals = useMemo(() => {
     let remaining = 0, original = 0, paid = 0;
     debts.forEach((d) => {
@@ -1467,7 +1620,6 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: T.s4, marginTop: T.s5 }}>
-      {/* Section header — loss accent to distinguish "owe" from "save". */}
       <div className="bento-tile" style={{
         background: `radial-gradient(circle at 0% 0%, ${T.loss}14, transparent 55%), ${T.card}`,
         border: `1px solid ${T.border}`,
@@ -1489,7 +1641,7 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
           <span style={{ fontFamily: FP, fontSize: 13, color: T.muted, letterSpacing: "-0.005em" }}>
             {debts.length > 0
               ? <>{fmtUSD(totals.paid)} cleared · {Math.min(totals.pct, 100).toFixed(0)}% of {fmtUSD(totals.original)} original</>
-              : <>Track loans and balances that count down to $0. Log payments yourself or link a Finance-tab account.</>}
+              : <>Track any debt — a card, a bank loan, or money owed to a friend. Log payments, link a balance, or pay on a schedule from checking.</>}
           </span>
         </div>
         {!creating && (
@@ -1498,7 +1650,7 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
       </div>
 
       {creating && (
-        <DebtForm debtAccounts={debtAccounts} onSave={addDebt} onCancel={() => setCreating(false)} />
+        <DebtForm liabilityAccounts={liabilityAccounts} fundingAccounts={fundingAccounts} onSave={addDebt} onCancel={() => setCreating(false)} />
       )}
 
       {!creating && debts.length === 0 && (
@@ -1519,7 +1671,8 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
           <DebtForm
             key={d.id}
             initial={d}
-            debtAccounts={debtAccounts}
+            liabilityAccounts={liabilityAccounts}
+            fundingAccounts={fundingAccounts}
             onSave={(p) => saveDebt(d.id, p)}
             onCancel={() => setEditingId(null)}
           />
@@ -1527,11 +1680,12 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
           <DebtCard
             key={d.id}
             debt={d}
-            plaidAccounts={plaidAccounts}
-            accountLabel={accountLabelFor(d.linked_account_id)}
+            accounts={plaidAccounts}
+            labelFor={labelFor}
             onEdit={() => { setEditingId(d.id); setCreating(false); }}
             onDelete={deleteDebt}
             onLogPayment={logPayment}
+            onConfirmScheduled={confirmScheduled}
             onMarkPaid={markPaid}
           />
         ))}
