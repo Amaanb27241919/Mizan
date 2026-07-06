@@ -10,6 +10,7 @@
 // Named exports: GoalsOverviewWidget (used by Overview tab)
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/apiFetch.js";
+import { setLocalAndSync } from "../lib/userState.js";
 import { Icon } from "./Icon.jsx";
 
 // Reuse the global theme tokens by reading the CSS custom properties so
@@ -837,6 +838,9 @@ export default function Goals({
           );
         })}
       </div>
+
+      {/* Debt payoff tracker — money you owe, counting down to $0. */}
+      <DebtSection plaidAccounts={plaidAccounts} demoMode={demoMode} />
     </div>
   );
 }
@@ -882,6 +886,16 @@ export function GoalsOverviewWidget({
   );
 
   const previews = goals.slice(0, 3);
+
+  // Debt payoff summary — remaining owed across all tracked debts. Read from
+  // localStorage (linked debts resolve their live balance from plaidAccounts).
+  // Snapshot on mount; the Debts tab is the source of truth for edits.
+  const debtTotals = useMemo(() => {
+    const list = readDebts();
+    let remaining = 0, original = 0;
+    list.forEach((d) => { const s = debtState(d, plaidAccounts); remaining += s.remaining; original += s.original; });
+    return { count: list.length, remaining, original, pct: original > 0 ? ((original - remaining) / original) * 100 : 0 };
+  }, [plaidAccounts]);
 
   // Map template name → icon for display
   const iconFor = (g) => { const n = TEMPLATES.find((t) => t.name === g.name)?.icon; return n || "target"; };
@@ -979,6 +993,549 @@ export function GoalsOverviewWidget({
           )}
         </div>
       )}
+
+      {/* Debt payoff strip — only when the user is tracking debts. */}
+      {debtTotals.count > 0 && (
+        <button
+          onClick={() => onNav?.("goals")}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: T.s3,
+            padding: `${T.s2} ${T.s3}`, marginTop: goals.length > 0 ? T.s1 : 0,
+            background: `${T.loss}0e`, border: `1px solid ${T.loss}30`, borderRadius: T.rMd,
+            cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: T.s2, minWidth: 0 }}>
+            <Icon name="scale" size={15} color={T.loss} style={{ flexShrink: 0 }}/>
+            <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.14em", fontWeight: 600 }}>
+              DEBT · {debtTotals.count}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: T.s2, flexShrink: 0 }}>
+            <span style={{ fontFamily: FM, fontSize: 12, fontWeight: 600, color: T.loss, fontVariantNumeric: "tabular-nums" }}>
+              {mask(fmtUSD(debtTotals.remaining))} <span style={{ color: T.muted, fontWeight: 400 }}>left</span>
+            </span>
+            <span style={{ fontFamily: FM, fontSize: 10, color: T.gain, fontWeight: 600 }}>
+              {Math.min(debtTotals.pct, 100).toFixed(0)}% cleared
+            </span>
+          </div>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Debt payoff tracker ───────────────────────────────────────────────────────
+// "Origin-style" debt tracker for the Goals tab. Each debt counts DOWN toward
+// $0 as the user logs payments (manual mode) or as a linked Finance-tab
+// credit/loan balance falls (linked mode). Stored in localStorage (`mizan_debts`)
+// mirrored to Supabase user_state — the same no-migration pattern as manual
+// assets. This is a standalone payoff tracker: it does NOT feed net worth
+// (linked accounts are already counted there via Plaid, and adding manual
+// debts to the headline would double-count / distort it).
+const DEBT_KEY = "mizan_debts";
+
+const DEBT_TEMPLATES = [
+  { id: "credit",   icon: "bank",   name: "Credit Card" },
+  { id: "auto",     icon: "scale",  name: "Auto Financing" },
+  { id: "student",  icon: "book",   name: "Student Loan" },
+  { id: "home",     icon: "home",   name: "Home Financing" },
+  { id: "personal", icon: "bank",   name: "Personal Loan" },
+  { id: "custom",   icon: "pencil", name: "Custom Debt" },
+];
+
+const isDebtAcct = (a) => a?.type === "credit" || a?.type === "loan";
+const iconForDebt = (d) => DEBT_TEMPLATES.find((t) => t.name === d.name)?.icon || d.icon || "scale";
+const genDebtId = () => `debt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+function readDebts() {
+  try {
+    const a = JSON.parse(localStorage.getItem(DEBT_KEY) || "[]");
+    return Array.isArray(a) ? a : [];
+  } catch { return []; }
+}
+
+const debtPaidTotal = (d) => (d.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+// Resolve the live owed balance + amount paid for a debt. Linked debts read
+// the current credit/loan balance from Plaid so the number tracks the Finance
+// tab automatically; manual debts subtract the logged payment total from the
+// original balance. Returns clamped, never-negative values.
+function debtState(debt, plaidAccounts) {
+  const original = Number(debt.original) || 0;
+  if (debt.mode === "linked" && debt.linked_account_id) {
+    const acct = (plaidAccounts || []).find(
+      (a) => String(a.account_id) === String(debt.linked_account_id),
+    );
+    const remaining = acct ? Math.abs(Number(acct.current_bal) || 0) : original;
+    const base = Math.max(original, remaining); // original should be ≥ current owed
+    return { original: base, remaining, paid: Math.max(0, base - remaining), linkedMissing: !acct };
+  }
+  const paid = debtPaidTotal(debt);
+  const remaining = Math.max(0, original - paid);
+  return { original, remaining, paid, linkedMissing: false };
+}
+
+// Estimate a debt-free date from the user's payment pace (manual debts only).
+function debtPayoffLabel(debt, remaining) {
+  if (remaining <= 0) return "Paid off — alhamdulillah";
+  if (debt.mode !== "linked" && debt.created_at) {
+    const paid = debtPaidTotal(debt);
+    const days = Math.max(1, (Date.now() - new Date(debt.created_at).getTime()) / 86_400_000);
+    const perDay = paid / days;
+    if (perDay > 0) {
+      const daysToGo = remaining / perDay;
+      if (Number.isFinite(daysToGo) && daysToGo > 0 && daysToGo < 365 * 100) {
+        const eta = new Date(Date.now() + daysToGo * 86_400_000);
+        return `Debt-free ~${fmtDate(eta.toISOString().slice(0, 10))}`;
+      }
+    }
+  }
+  return debt.target_date ? `Target: ${fmtDate(debt.target_date)}` : "Log a payment to project";
+}
+
+function DEMO_DEBTS(plaidAccounts) {
+  const cc = (plaidAccounts || []).find((a) => a.type === "credit");
+  const now = Date.now();
+  return [
+    {
+      id: "demo-debt-1", name: "Auto Financing (Ijara)", icon: "scale",
+      original: 32000, apr: 0, mode: "manual",
+      target_date: new Date(now + 540 * 86_400_000).toISOString().slice(0, 10),
+      payments: [{ id: "dp1", amount: 17500, date: new Date(now - 120 * 86_400_000).toISOString(), note: "Payments to date" }],
+      created_at: new Date(now - 400 * 86_400_000).toISOString(),
+    },
+    ...(cc ? [{
+      id: "demo-debt-2", name: cc.name || "Credit Card", icon: "bank",
+      original: 8000, apr: 0, mode: "linked", linked_account_id: cc.account_id,
+      payments: [], created_at: new Date(now - 200 * 86_400_000).toISOString(),
+    }] : []),
+  ];
+}
+
+// Inline "log a payment" control shown on manual-mode debt cards.
+function LogPaymentRow({ onLog, onCancel }) {
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const submit = () => {
+    const n = Number(amount);
+    if (!Number.isFinite(n) || n <= 0) return;
+    onLog(n, note.trim());
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: T.s2, flexWrap: "wrap" }}>
+      <input
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        inputMode="decimal"
+        placeholder="Amount paid"
+        autoFocus
+        onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") onCancel(); }}
+        style={{ ...inputStyle, fontSize: 12, padding: "5px 9px", width: 120 }}
+      />
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Note (optional)"
+        onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") onCancel(); }}
+        style={{ ...inputStyle, fontSize: 12, padding: "5px 9px", flex: 1, minWidth: 120 }}
+      />
+      <button onClick={submit} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>Log payment</button>
+      <button onClick={onCancel} style={smallBtnStyle}>Cancel</button>
+    </div>
+  );
+}
+
+function DebtCard({ debt, plaidAccounts, accountLabel, onEdit, onDelete, onLogPayment, onMarkPaid }) {
+  const { original, remaining, paid, linkedMissing } = debtState(debt, plaidAccounts);
+  const pct = original > 0 ? (paid / original) * 100 : 0;
+  const done = remaining <= 0.005;
+  const color = done ? T.gain : T.blue;
+  const [logging, setLogging] = useState(false);
+  const payoff = debtPayoffLabel(debt, remaining);
+
+  return (
+    <div className="bento-tile" style={{
+      background: `linear-gradient(135deg, ${(done ? T.gain : T.loss)}0e, transparent 60%), ${T.card}`,
+      border: `1px solid ${T.border}`,
+      borderTop: `2px solid ${done ? T.gain : T.loss}`,
+      borderLeft: `1px solid ${(done ? T.gain : T.loss)}30`,
+      borderRadius: T.rLg,
+      padding: T.s5,
+      display: "flex", flexDirection: "column", gap: T.s3,
+      position: "relative", overflow: "hidden",
+      boxShadow: "var(--sh-md)",
+      transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: T.s3 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: T.s3, minWidth: 0 }}>
+          <Icon name={iconForDebt(debt)} size={20} color={done ? T.gain : T.loss} style={{ flexShrink: 0 }}/>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+            <div style={{ fontFamily: FU, fontSize: 17, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
+              {debt.name}
+            </div>
+            <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.04em" }}>
+              {debt.mode === "linked"
+                ? <>Linked{accountLabel ? ` · ${accountLabel}` : ""}</>
+                : <>Manual{debt.apr ? ` · ${debt.apr}% APR` : ""}</>}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button onClick={() => onEdit(debt)} style={smallBtnStyle}>Edit</button>
+          <button onClick={() => onDelete(debt)} style={{ ...smallBtnStyle, color: T.loss, borderColor: T.loss + "40" }}>Delete</button>
+        </div>
+      </div>
+
+      {/* Remaining balance — the number that counts down. */}
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: T.s3, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: 2 }}>REMAINING</div>
+          <div style={{ fontFamily: FU, fontSize: 26, fontWeight: 700, color: done ? T.gain : T.loss, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
+            {fmtUSD(remaining)}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontFamily: FM, fontSize: 11, color: T.gain, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+            {fmtUSD(paid)} paid
+          </div>
+          <div style={{ fontFamily: FM, fontSize: 11, color: color, fontWeight: 600 }}>
+            {Math.min(pct, 100).toFixed(1)}% cleared
+          </div>
+        </div>
+      </div>
+
+      <ProgressBar pct={pct} color={color} />
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: T.s3, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, fontVariantNumeric: "tabular-nums" }}>
+          of {fmtUSD(original)} original
+        </span>
+        <span style={{ fontFamily: FM, fontSize: 11, color: done ? T.gain : T.muted, letterSpacing: "0.04em" }}>
+          {payoff}
+        </span>
+      </div>
+
+      {linkedMissing && (
+        <div style={{
+          fontFamily: FP, fontSize: 11, color: T.gold, lineHeight: 1.5,
+          padding: `${T.s2} ${T.s3}`, background: `${T.gold}10`,
+          border: `1px solid ${T.gold}30`, borderRadius: T.rSm,
+          display: "flex", alignItems: "flex-start", gap: 6,
+        }}>
+          <Icon name="info" size={12} color={T.gold} style={{ marginTop: 1 }}/>
+          Linked account not found — reconnect it in Finances, or edit this debt to track manually.
+        </div>
+      )}
+
+      {/* Actions — only manual debts log payments; linked debts track live. */}
+      <div style={{ paddingTop: T.s2, borderTop: `1px solid ${T.border}` }}>
+        {debt.mode === "linked" ? (
+          <span style={{ fontFamily: FP, fontSize: 11, color: T.muted }}>
+            Tracks your linked balance automatically as payments post.
+          </span>
+        ) : done ? (
+          <span style={{ fontFamily: FM, fontSize: 11, color: T.gain, fontWeight: 600 }}>✓ Fully paid off</span>
+        ) : logging ? (
+          <LogPaymentRow
+            onLog={(amt, note) => { onLogPayment(debt.id, amt, note); setLogging(false); }}
+            onCancel={() => setLogging(false)}
+          />
+        ) : (
+          <div style={{ display: "flex", gap: T.s2, alignItems: "center", flexWrap: "wrap" }}>
+            <button onClick={() => setLogging(true)} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>+ Log payment</button>
+            <button onClick={() => onMarkPaid(debt.id)} style={smallBtnStyle}>Mark paid off</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DebtForm({ initial, debtAccounts, onSave, onCancel }) {
+  const [name, setName] = useState(initial?.name || "");
+  const [icon, setIcon] = useState(initial?.icon || "scale");
+  const [original, setOriginal] = useState(initial?.original != null ? String(initial.original) : "");
+  const [apr, setApr] = useState(initial?.apr != null ? String(initial.apr) : "");
+  const [targetDate, setTargetDate] = useState(initial?.target_date || "");
+  const [mode, setMode] = useState(initial?.mode || "manual");
+  const [linkedId, setLinkedId] = useState(initial?.linked_account_id || "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const pickTemplate = (t) => {
+    setName(t.name === "Custom Debt" ? "" : t.name);
+    setIcon(t.icon);
+  };
+
+  // When linking an account, default the original to its current balance so
+  // "paid so far" starts at $0 (unless the user already typed one).
+  const pickLinked = (id) => {
+    setLinkedId(id);
+    if (!original) {
+      const a = debtAccounts.find((x) => x.id === id);
+      if (a) setOriginal(String(Math.round(a.balance)));
+    }
+  };
+
+  const submit = async () => {
+    setErr(null);
+    const nm = name.trim();
+    const amt = Number(original);
+    if (!nm) { setErr("Give this debt a name."); return; }
+    if (!Number.isFinite(amt) || amt <= 0) { setErr("Original balance must be a positive number."); return; }
+    if (mode === "linked" && !linkedId) { setErr("Pick a credit/loan account to link, or switch to Manual."); return; }
+    setBusy(true);
+    try {
+      await onSave({
+        name: nm,
+        icon,
+        original: amt,
+        apr: apr === "" ? null : (Number(apr) || 0),
+        target_date: targetDate || null,
+        mode,
+        linked_account_id: mode === "linked" ? linkedId : null,
+      });
+    } catch (e) {
+      setErr(e?.message || "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{
+      background: T.card,
+      border: `1px solid ${T.borderHi}`,
+      borderRadius: T.rLg,
+      padding: T.s5,
+      display: "flex", flexDirection: "column", gap: T.s4,
+    }}>
+      <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
+        {initial?.id ? "EDIT DEBT" : "NEW DEBT"}
+      </div>
+
+      {!initial?.id && (
+        <div style={{ display: "flex", gap: T.s2, flexWrap: "wrap" }}>
+          {DEBT_TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => pickTemplate(t)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                fontFamily: FM, fontSize: 11, color: icon === t.icon ? T.blue : T.text,
+                background: icon === t.icon ? `${T.blue}14` : T.surface,
+                border: `1px solid ${icon === t.icon ? T.blue + "60" : T.border}`,
+                borderRadius: 999, padding: "6px 12px", cursor: "pointer",
+              }}
+            >
+              <Icon name={t.icon} size={14} color={icon === t.icon ? T.blue : T.muted}/>{t.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>NAME</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Auto financing" style={inputStyle}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>ORIGINAL BALANCE ($)</span>
+          <input value={original} onChange={(e) => setOriginal(e.target.value)} inputMode="decimal" placeholder="32000" style={inputStyle}/>
+        </label>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: T.s3 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>APR (%) · OPT</span>
+          <input value={apr} onChange={(e) => setApr(e.target.value)} inputMode="decimal" placeholder="0" style={inputStyle}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>PAYOFF BY · OPT</span>
+          <input type="date" value={targetDate || ""} onChange={(e) => setTargetDate(e.target.value)} style={inputStyle}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TRACK MODE</span>
+          <select value={mode} onChange={(e) => setMode(e.target.value)} style={inputStyle}>
+            <option value="manual">Manual payments</option>
+            <option value="linked">Linked account</option>
+          </select>
+        </label>
+      </div>
+
+      {mode === "linked" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: T.s2 }}>
+          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>CREDIT / LOAN ACCOUNT</span>
+          {debtAccounts.length === 0 ? (
+            <div style={{ fontFamily: FP, fontSize: 12, color: T.muted, padding: T.s3, textAlign: "center", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
+              No credit or loan accounts connected. Link one in Finances, or switch to Manual payments.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 200, overflowY: "auto", padding: T.s2, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
+              {debtAccounts.map((a) => (
+                <label key={a.id} style={{
+                  display: "flex", alignItems: "center", gap: T.s2, padding: `6px ${T.s2}`, borderRadius: T.rSm, cursor: "pointer",
+                  background: linkedId === a.id ? `${T.blue}18` : "transparent",
+                  border: `1px solid ${linkedId === a.id ? T.blue + "60" : T.border}`,
+                }}>
+                  <input type="radio" name="debt-linked" checked={linkedId === a.id} onChange={() => pickLinked(a.id)} style={{ cursor: "pointer" }}/>
+                  <span style={{ fontFamily: FP, fontSize: 12, color: T.text, flex: 1 }}>{a.label}</span>
+                  <span style={{ fontFamily: FM, fontSize: 11, color: T.loss }}>{fmtUSD(a.balance)}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {err && (
+        <div style={{ fontFamily: FP, fontSize: 12, color: T.loss, padding: T.s2, background: `${T.loss}15`, border: `1px solid ${T.loss}40`, borderRadius: T.rSm }}>{err}</div>
+      )}
+
+      <div style={{ display: "flex", gap: T.s2, justifyContent: "flex-end" }}>
+        <button onClick={onCancel} disabled={busy} style={ghostBtnStyle}>Cancel</button>
+        <button onClick={submit} disabled={busy} style={primaryBtnStyle}>{busy ? "Saving…" : (initial?.id ? "Save" : "Add debt")}</button>
+      </div>
+    </div>
+  );
+}
+
+function DebtSection({ plaidAccounts = [], demoMode = false }) {
+  const [debts, setDebts] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  // Load from localStorage (or demo fixtures). Re-seed demo debts when the
+  // demo bank accounts arrive so the linked demo card resolves its balance.
+  useEffect(() => {
+    if (demoMode) { setDebts(DEMO_DEBTS(plaidAccounts)); return; }
+    setDebts(readDebts());
+  }, [demoMode, plaidAccounts]);
+
+  const persist = useCallback((next) => {
+    setDebts(next);
+    if (!demoMode) setLocalAndSync(DEBT_KEY, next);
+  }, [demoMode]);
+
+  const debtAccounts = useMemo(() => (plaidAccounts || [])
+    .filter(isDebtAcct)
+    .map((a) => ({
+      id: String(a.account_id || ""),
+      label: `${a.institution_name || "Bank"} — ${a.name || a.subtype || a.type || "Account"}`,
+      balance: Math.abs(Number(a.current_bal) || 0),
+    }))
+    .filter((a) => a.id), [plaidAccounts]);
+
+  const accountLabelFor = useCallback((id) =>
+    debtAccounts.find((a) => a.id === String(id))?.label || "", [debtAccounts]);
+
+  const addDebt = (payload) => {
+    persist([...debts, { id: genDebtId(), created_at: new Date().toISOString(), payments: [], ...payload }]);
+    setCreating(false);
+  };
+  const saveDebt = (id, payload) => {
+    persist(debts.map((d) => d.id === id ? { ...d, ...payload } : d));
+    setEditingId(null);
+  };
+  const deleteDebt = (debt) => {
+    if (!confirm(`Delete "${debt.name}"? Its payment history will be removed.`)) return;
+    persist(debts.filter((d) => d.id !== debt.id));
+  };
+  const logPayment = (id, amount, note) => {
+    const d = debts.find((x) => x.id === id);
+    if (!d) return;
+    const pay = { id: genDebtId(), amount: Number(amount) || 0, date: new Date().toISOString(), note: note || "" };
+    persist(debts.map((x) => x.id === id ? { ...x, payments: [...(x.payments || []), pay] } : x));
+  };
+  const markPaid = (id) => {
+    const d = debts.find((x) => x.id === id);
+    if (!d) return;
+    const { remaining } = debtState(d, plaidAccounts);
+    if (remaining > 0) logPayment(id, remaining, "Marked fully paid off");
+  };
+
+  // Aggregate totals across all debts.
+  const totals = useMemo(() => {
+    let remaining = 0, original = 0, paid = 0;
+    debts.forEach((d) => {
+      const s = debtState(d, plaidAccounts);
+      remaining += s.remaining; original += s.original; paid += s.paid;
+    });
+    return { remaining, original, paid, pct: original > 0 ? (paid / original) * 100 : 0 };
+  }, [debts, plaidAccounts]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: T.s4, marginTop: T.s5 }}>
+      {/* Section header — loss accent to distinguish "owe" from "save". */}
+      <div className="bento-tile" style={{
+        background: `radial-gradient(circle at 0% 0%, ${T.loss}14, transparent 55%), ${T.card}`,
+        border: `1px solid ${T.border}`,
+        borderTop: `2px solid ${T.loss}`,
+        borderLeft: `1px solid ${T.loss}30`,
+        borderRadius: T.rLg,
+        padding: `${T.s6} ${T.s5}`,
+        display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: T.s3,
+        boxShadow: "var(--sh-md)",
+        transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontFamily: FM, fontSize: 11, color: T.loss, letterSpacing: "0.18em", fontWeight: 600 }}>
+            DEBTS · {debts.length} TRACKED
+          </span>
+          <span style={{ fontFamily: FU, fontSize: 22, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
+            {debts.length > 0 ? <>{fmtUSD(totals.remaining)} left to clear</> : <>Pay off what you owe</>}
+          </span>
+          <span style={{ fontFamily: FP, fontSize: 13, color: T.muted, letterSpacing: "-0.005em" }}>
+            {debts.length > 0
+              ? <>{fmtUSD(totals.paid)} cleared · {Math.min(totals.pct, 100).toFixed(0)}% of {fmtUSD(totals.original)} original</>
+              : <>Track loans and balances that count down to $0. Log payments yourself or link a Finance-tab account.</>}
+          </span>
+        </div>
+        {!creating && (
+          <button onClick={() => { setCreating(true); setEditingId(null); }} style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${T.loss}, #8a2b2d)` }}>+ Add debt</button>
+        )}
+      </div>
+
+      {creating && (
+        <DebtForm debtAccounts={debtAccounts} onSave={addDebt} onCancel={() => setCreating(false)} />
+      )}
+
+      {!creating && debts.length === 0 && (
+        <div style={{
+          fontFamily: FP, fontSize: 14, color: T.muted,
+          padding: T.s8, textAlign: "center",
+          border: `1px dashed ${T.border}`, borderRadius: T.rLg,
+          display: "flex", flexDirection: "column", alignItems: "center", gap: T.s3,
+        }}>
+          <Icon name="scale" size={28} color={T.muted}/>
+          <span>No debts tracked. Add one to watch the balance count down as you pay it off.</span>
+          <button onClick={() => setCreating(true)} style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${T.loss}, #8a2b2d)` }}>Add your first debt →</button>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: T.s4 }}>
+        {debts.map((d) => editingId === d.id ? (
+          <DebtForm
+            key={d.id}
+            initial={d}
+            debtAccounts={debtAccounts}
+            onSave={(p) => saveDebt(d.id, p)}
+            onCancel={() => setEditingId(null)}
+          />
+        ) : (
+          <DebtCard
+            key={d.id}
+            debt={d}
+            plaidAccounts={plaidAccounts}
+            accountLabel={accountLabelFor(d.linked_account_id)}
+            onEdit={() => { setEditingId(d.id); setCreating(false); }}
+            onDelete={deleteDebt}
+            onLogPayment={logPayment}
+            onMarkPaid={markPaid}
+          />
+        ))}
+      </div>
     </div>
   );
 }

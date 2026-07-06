@@ -16,6 +16,7 @@ export const TRACKED_KEYS = [
   'mizan_imports',                    // CSV-imported activity rows
   'mizan_watchlist',                  // watchlist + price alerts
   'mizan_manual_assets',              // gold, real estate, business equity
+  'mizan_debts',                      // debt-payoff tracker (manual + linked-account)
   'mizan_disabled_accts',             // per-account on/off toggle
   'mizan_networth_history',           // daily net-worth snapshots
   'mizan_screening_baseline',         // Sharia alert baseline
