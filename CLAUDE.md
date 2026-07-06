@@ -35,7 +35,13 @@ External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alp
 ```
 src/components/MizanApp.jsx   — 11,400+ lines. ALL views, ALL state, ALL charts.
                                  DO NOT split unless explicitly asked.
-src/components/Goals.jsx       — Goals tab (extracted component)
+src/components/Goals.jsx       — Goals tab (extracted). Savings goals + DEBT PAYOFF TRACKER
+                                 (manual/recurring/balance-linked debts, counting down to $0)
+                                 + PAYOFF PLANNER (snowball/avalanche/riba-first, amortization,
+                                 inline-SVG burn-down). Debts persist to localStorage mizan_debts.
+src/components/PerformancePanel.jsx — Overview "RETURN & RISK" panel: money-weighted return
+                                 (XIRR), realized/unrealized P&L split, risk metrics. Pure math
+                                 in src/lib/performance.js.
 src/components/Budgeting.jsx   — Budget tab (extracted component)
 src/components/BillsCalendar.jsx — Bills calendar
 src/components/ConnectionHealth.jsx — Account connection status
@@ -45,7 +51,10 @@ src/components/CommandPalette.jsx — Cmd+K command palette
 src/components/Login.jsx       — Auth page
 src/components/LegalLayout.jsx — Legal pages
 src/lib/auth.jsx               — Supabase Auth wrapper (TOTP MFA, session revocation)
-src/lib/userState.js           — localStorage ↔ Supabase state sync
+src/lib/performance.js         — Pure portfolio analytics (XIRR/money-weighted return,
+                                 realized/unrealized split, max drawdown/volatility/Sharpe).
+                                 No React/DOM/storage. Tested: src/test/performance.test.js.
+src/lib/userState.js           — localStorage ↔ Supabase state sync (mizan_debts is a TRACKED_KEY)
 src/lib/useKeyboard.js         — Global keyboard shortcuts
 ```
 
@@ -440,6 +449,8 @@ DEMO_PURIFICATION_ITEMS // Sample dividend purification items
 ```
 
 Demo mode is detected by checking if real accounts exist. The toggle shows/hides real accounts. Demo data must not leak into authenticated user views — check all conditional paths that gate on demo mode.
+
+**Demo balance invariant (added 2026-07-06).** Immediately after the `DEMO_ACCOUNTS` literal, a normalizer sets each account's `balance = cash + Σ(position price × units)` — the invariant every real SnapTrade account satisfies. The hand-authored `balance:` literals had drifted from their positions, which made Net Worth (built from `balance`) disagree with Allocation / Market Value / the Performance panel (built from positions). **Do not hardcode a `balance` that contradicts an account's `cash + positions`** — the normalizer will overwrite it anyway, and any surface that cross-references balances vs positions (like the RETURN & RISK panel) will surface the mismatch. Demo net worth is ~$58M (was mis-stated ~$44M before the fix). `DEMO_ACTIVITIES` deposit amounts are sized off `balance`, so they scale with it automatically.
 
 ---
 

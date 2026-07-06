@@ -14,6 +14,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **goals:** Debt payoff planner — snowball/avalanche/riba-first + burn-down (`0dcb37e`)
 - **goals:** Flexible debt tracking — creditor, recurring plans, funding accounts (`26c5313`)
 
+### Fixed
+- **overview:** Reconcile cross-metric numbers (demo balance invariant + P&L basis) (`b7fca08`)
+
 ### Docs
 - Benchmark roadmap — Origin/Copilot + OSS finance apps vs Mizan (`833696e`)
 

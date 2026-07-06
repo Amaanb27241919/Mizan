@@ -34,12 +34,12 @@
 |---|-------------|-------------------------|--------|
 | 1 | **Materialized daily balance table + reverse calculator** → backfill a real per-day net-worth curve from `snapActivities`; kills the localStorage intraday buffer + monthly buckets (**closes Known Limitation #1**) | maybe `app/models/balance/reverse_calculator.rb` | L |
 | 2 | **Rules engine** (`rules`/`triggers`/`actions`) + Islamic actions `set_islamic_category` / `flag_for_purification` / `mark_zakatable` (**closes §16 Muslim-categories gap**) | firefly `SearchRuleEngine.php`; actual `server/rules/` | M |
-| 3 | **ROAI-style P&L**: split realized/unrealized + day-weighted-average-capital % return | ghostfolio `calculator/roai/portfolio-calculator.ts:668-835` | M |
+| 3 | **P&L split: realized/unrealized** — **✅ Phase 2 shipped** (`RETURN & RISK` panel). Day-weighted-average-capital % return still pending (XIRR covers money-weighted) | ghostfolio `calculator/roai/portfolio-calculator.ts:668-835` | M |
 | 4 | **Sharia X-Ray rules panel**: haram-concentration, purification-due, compliance-drift, fee-ratio, emergency-fund | ghostfolio `apps/api/src/models/rules/` | M |
 | 5 | **Recurring-transaction detection** for BillsCalendar (slide start dates, match ±2d + amount + payee, rank `1/(dayDiff+1)`) | actual `server/schedules/find-schedules.ts`; firefly `CalculateXOccurrences.php` (date math) | M |
-| 6 | **Risk metrics**: max drawdown, annualized volatility, Sharpe (0% riba-safe risk-free rate) — greenfield, nobody ships it | inputs already stored (`net_worth_history` + Polygon OHLC) | M |
+| 6 | **Risk metrics**: max drawdown, annualized volatility, Sharpe (0% riba-safe risk-free rate) — **✅ Phase 2 shipped** (gated on ≥20 daily snapshots; lights up as `net_worth_history` accrues → fully unblocked by T2 #1) | inputs already stored (`net_worth_history` + Polygon OHLC) | M |
 | 7 | **AI tool-calling with per-user enum'd schemas + single-hop loop** on `/api/advisor` (symbol enum = user's tickers, verdict from `shariaScreen`) → structurally blocks hallucinated numbers/verdicts | maybe `assistant/`; wealthfolio `crates/agent-tools/`; investbrain | M |
-| 8 | **XIRR / money-weighted return** (the IRR Ghostfolio never finished) | paisa `internal/xirr/xirr.go` (~60 lines, Newton's method) | S–M |
+| 8 | **XIRR / money-weighted return** (the IRR Ghostfolio never finished) — **✅ Phase 2 shipped** (`src/lib/performance.js`, Newton's + bisection, 16 Vitest cases, Excel-fixture validated) | paisa `internal/xirr/xirr.go` (~60 lines, Newton's method) | S–M |
 | 9 | **Envelope rollover + "left to assign" pot** (`leftover = budgeted + spent + prevLeftoverPos`) | actual `budget/envelope.ts:52-66`; firefly `AvailableBudget.php` | M |
 | 10 | **Goal funding schedules** (`(target−saved)/monthsRemaining`) + **benchmark overlay** (normalize `value/base−1` vs SPUS/HLAL) | actual `budget/goal-template.ts`; ghostfolio `benchmark-comparator` | S each |
 
@@ -59,10 +59,14 @@
 
 ## Suggested build order
 
-- **Phase 1 — Debt (✅ shipped):** payoff optimizer + amortization + burn-down. Pure-function, no migration.
-- **Phase 2 — Correctness (M):** ROAI P&L + XIRR + risk metrics (T2 #3, #6, #8).
-- **Phase 3 — Automation (M):** rules engine + Islamic categories + recurring detection → unlocks debt-payment auto-linking (T2 #2, #5; T1 #4).
+- **Phase 1 — Debt (✅ shipped, commit `0dcb37e`):** payoff optimizer + amortization + burn-down. Pure-function, no migration.
+- **Phase 2 — Correctness (✅ shipped, commits `87ece9b` + `b7fca08`):** money-weighted return (XIRR), realized/unrealized P&L split, risk metrics (max drawdown / volatility / Sharpe) in the Overview `RETURN & RISK` panel. Pure math in `src/lib/performance.js` (16 Vitest cases). Also fixed cross-metric reconciliation: demo account `balance` now derives from `cash + Σ(positions)` (the real SnapTrade invariant) so Net Worth / Allocation / Market Value / the panel all agree; panel Total P&L is position-derived so it equals the hero's Total Return exactly. *Remaining in the correctness track:* day-weighted-average-capital % return (ROAI denominator, T2 #3) — XIRR already covers money-weighted; risk metrics fully unblock once T2 #1 gives a dense daily curve.
+- **Phase 3 — Automation (M) ← NEXT:** rules engine + Islamic categories + recurring detection → unlocks debt-payment auto-linking (T2 #2, #5; T1 #4).
 - **Phase 4 — Foundations (L):** materialized balance table + reverse calculator (T2 #1); then envelope rollover, Sharia X-Ray, AI tool-calling (T2 #9, #4, #7).
+
+## Verified non-issues (don't re-open)
+
+- **Cost-basis-reset bug** (flagged in early research) does **not** exist in Mizan (verified 2026-07-06). Unrealized P&L reads the broker's per-position `average_purchase_price` (broker resets on close); the YTD-realized Tax path uses current avg cost as a disclosed approximation (Known Limitation #3); the only self-accumulating weighted-average book — the bot's `botRealizedPnl` (`lib/handlers.mjs:1301`) — already resets basis on full close at line 1338. Nothing to fix.
 
 ---
 
