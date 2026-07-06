@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-06
 
 ### Added
+- **goals:** Debt payoff planner — snowball/avalanche/riba-first + burn-down (`0dcb37e`)
 - **goals:** Flexible debt tracking — creditor, recurring plans, funding accounts (`26c5313`)
 
 ### Docs

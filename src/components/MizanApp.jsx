@@ -9,6 +9,7 @@ import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Icon, ICONS } from "./Icon.jsx";
 import { Skeleton, SkeletonCard, SkeletonTable } from "./Skeleton.jsx";
 import Goals, { GoalsOverviewWidget } from "./Goals.jsx";
+import PerformancePanel from "./PerformancePanel.jsx";
 import ComingSoon from "./ComingSoon.jsx";
 import ConnectionHealth from "./ConnectionHealth.jsx";
 import BugReportButton from "./BugReportButton.jsx";
@@ -2090,6 +2091,17 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         })}
       </div>
     </CollapsibleTile>}
+
+    {/* Performance analytics — money-weighted return, position P&L, risk.
+        Collapsed by default; only meaningful once holdings exist. */}
+    {merged.length>0&&<PerformancePanel
+      holdings={merged}
+      activities={activities}
+      netWorthHistory={netWorthHistory}
+      currentValue={brokerageTot}
+      netInvested={Math.max(0,(metrics.allTimeContrib||0)-(metrics.allTimeWithdrawals||0))}
+      mask={mask}
+    />}
 
     {/* Savings goals — compact overview widget */}
     <GoalsOverviewWidget
@@ -10199,6 +10211,7 @@ export default function Mizan(){
       ytdFees:       Math.abs(sumByType(visibleActs,"FEE",ytdISO)),
       allTimeFees:   Math.abs(sumByType(visibleActs,"FEE",null)),
       ytdWithdrawals:Math.abs(sumByType(visibleActs,"WITHDRAWAL",ytdISO)),
+      allTimeWithdrawals:Math.abs(sumByType(visibleActs,"WITHDRAWAL",null)),
       activityCount: visibleActs.length,
     };
   },[snapActivities,disabledAccts.size]);
