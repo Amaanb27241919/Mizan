@@ -6353,6 +6353,29 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     }catch{}
   },[]);
 
+  // Live quote for whatever symbol is typed (any US ticker, via the Finnhub
+  // proxy → Alpaca/Yahoo fallback). Debounced so we don't fetch on every
+  // keystroke. Powers the price chip + the Estimated Total for MARKET orders.
+  const[quote,setQuote]=useState(null);
+  const[quoteBusy,setQuoteBusy]=useState(false);
+  useEffect(()=>{
+    const s=(sym||"").trim().toUpperCase();
+    if(!s){setQuote(null);return;}
+    let cancelled=false;
+    setQuoteBusy(true);
+    const h=setTimeout(async()=>{
+      try{
+        const r=await apiFetch(`/api/finnhub/quote?symbols=${encodeURIComponent(s)}`);
+        if(cancelled)return;
+        const d=await r.json().catch(()=>({}));
+        const hit=(d.quotes||[]).find(x=>x.tk===s)||null;
+        setQuote(hit&&hit.price>0?{price:hit.price,pct:hit.pct}:null);
+      }catch{if(!cancelled)setQuote(null);}
+      finally{if(!cancelled)setQuoteBusy(false);}
+    },400);
+    return()=>{cancelled=true;clearTimeout(h);};
+  },[sym]);
+
   // Step 1: preview (SnapTrade) or place (Alpaca paper) the order.
   // - SnapTrade: posts to /trade/impact, surfaces a modal, then user
   //   confirms via placeOrder() which calls /trade/place.
@@ -6433,8 +6456,15 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   const cancelPreview=()=>{setImpactPreview(null);setOrderErr(null);};
 
   const ORDERS=[["Market","Execute immediately at market price",true],["Limit","Execute at specified price or better",true],["Stop-Loss","Sells when price drops to stop level",true],["Stop-Limit","Stop triggers limit — price floor control",true],["Trailing Stop","Dynamic stop — locks in gains as price rises",true],["Short Sell","Selling unowned shares · Maisir — prohibited",false],["Options","Derivative contracts · Gharar — prohibited",false],["Margin","Borrowed capital with interest · Riba — prohibited",false]];
+  // Order-type names that map to a supported otype using ONLY the existing
+  // single-price form (market needs no price; limit uses LIMIT PRICE). Stop
+  // variants would need a stop-price field, so they stay display-only for now.
+  const OTYPE_BY_NAME={Market:"market",Limit:"limit"};
 
-  const estTotal=parseFloat(qty||0)*parseFloat(lpx||0);
+  // Market orders execute at the live price → base the estimate on the quote;
+  // limit orders use the entered LIMIT PRICE.
+  const estPx=otype==="market"?(quote?.price||0):parseFloat(lpx||0);
+  const estTotal=parseFloat(qty||0)*estPx;
 
   // Hard frontend gate: Trade does not exist for non-root users. The nav never
   // shows it and setNav bounces them, but this guarantees the surface renders
@@ -6496,15 +6526,40 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
           :<div style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
             <span style={{color:T.gold,fontWeight:600,letterSpacing:"0.06em"}}>PAPER MODE</span> — order routes to your Alpaca paper account (no real money). Halal-only: haram tickers blocked server-side.
           </div>}
-        {[["SYMBOL",sym,setSym,"text"],["QUANTITY",qty,setQty,"number"],["LIMIT PRICE",lpx,setLpx,"number"]].map(([l,v,set,type])=>
-          <div key={l}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{l}</div>
-            <input type={type} value={v} onChange={e=>set(type==="text"?e.target.value.toUpperCase():e.target.value)}
-              className="field" style={{fontSize:type==="text"?16:14,fontWeight:type==="text"?600:500,color:type==="text"?T.blue:T.text,letterSpacing:type==="text"?"-0.01em":"0",fontVariantNumeric:"tabular-nums"}}/>
-          </div>)}
+        {/* Symbol + live quote for whatever ticker is typed */}
+        <div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>SYMBOL</div>
+          <input type="text" value={sym} onChange={e=>setSym(e.target.value.toUpperCase())}
+            className="field" style={{fontSize:16,fontWeight:600,color:T.blue,letterSpacing:"-0.01em"}}/>
+          <div style={{marginTop:6,fontFamily:FM,fontSize:11,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            {quoteBusy&&!quote
+              ?<span style={{color:T.muted}}>Fetching live price…</span>
+              :quote
+                ?<>
+                  <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{f$(quote.price)}</span>
+                  {quote.pct!=null&&<span style={{color:fc(quote.pct),fontVariantNumeric:"tabular-nums"}}>{fp(quote.pct)}</span>}
+                  <span style={{color:T.gain,letterSpacing:"0.12em",fontWeight:600}}>● LIVE</span>
+                  {otype!=="market"&&<button onClick={()=>setLpx(String(quote.price))} style={{fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",color:T.blue,background:`${T.blue}14`,border:`1px solid ${T.blue}30`,borderRadius:T.rSm,padding:"2px 7px",cursor:"pointer"}}>USE →</button>}
+                </>
+                :<span style={{color:T.muted}}>No live price for {sym||"—"}</span>}
+          </div>
+        </div>
+        <div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>QUANTITY</div>
+          <input type="number" value={qty} onChange={e=>setQty(e.target.value)}
+            className="field" style={{fontSize:14,fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}/>
+        </div>
+        {/* Limit price only applies to limit orders — hidden for market. */}
+        {otype!=="market"&&<div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>LIMIT PRICE</div>
+          <input type="number" value={lpx} onChange={e=>setLpx(e.target.value)}
+            className="field" style={{fontSize:14,fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}/>
+        </div>}
         <div style={{background:T.surface,borderRadius:T.rMd,padding:`${T.s3} ${T.s4}`,border:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
-          <span style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.04em"}}>Estimated Total</span>
-          <span style={{fontFamily:FU,fontSize:16,fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{f$(estTotal)}</span>
+          <span style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.04em"}}>
+            Estimated Total <span style={{opacity:0.7}}>· {otype==="market"?(quote?"@ live price":"@ market"):"@ limit"}</span>
+          </span>
+          <span style={{fontFamily:FU,fontSize:16,fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{estPx>0?f$(estTotal):"—"}</span>
         </div>
         <div style={{background:`linear-gradient(135deg, ${T.gain}12, transparent 70%), ${T.surface}`,border:`1px solid ${T.gain}28`,borderRadius:T.rMd,padding:`${T.s2} ${T.s3}`}}>
           <div style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>● SHARIA PRE-CHECK</div>
@@ -6526,29 +6581,39 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
 
       {/* ─── Order Types card grid ─────────────────────── */}
       <BentoTile>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ORDER TYPES</div>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ORDER TYPES <span style={{color:T.blue}}>· click to select</span></div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:T.s2}}>
-          {ORDERS.map(([nm,desc,ok])=><div key={nm} style={{
-            background:T.surface,
-            border:`1px solid ${T.border}`,
-            borderLeft:`3px solid ${ok?T.gain:T.loss}`,
-            borderRadius:T.rMd,
-            padding:`${T.s3} ${T.s4}`,
-            display:"flex",gap:T.s3,alignItems:"flex-start",
-            opacity:ok?1:0.7,
-          }}>
-            <div style={{
-              width:18,height:18,borderRadius:T.rSm,flexShrink:0,marginTop:2,
-              background:ok?`${T.gain}22`:`${T.loss}22`,
-              border:`1px solid ${ok?T.gain:T.loss}40`,
-              display:"flex",alignItems:"center",justifyContent:"center",
-              fontFamily:FM,fontSize:10,color:ok?T.gain:T.loss,fontWeight:700,
-            }}>{ok?<Icon name="check" size={12}/>:<Icon name="close" size={12}/>}</div>
-            <div>
-              <div style={{fontFamily:FP,fontSize:13,fontWeight:600,color:ok?T.textHi:T.muted,letterSpacing:"-0.005em",marginBottom:T.s1}}>{nm}</div>
-              <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{desc}</div>
-            </div>
-          </div>)}
+          {ORDERS.map(([nm,desc,ok])=>{
+            const selectable=ok&&!!OTYPE_BY_NAME[nm];
+            const active=selectable&&otype===OTYPE_BY_NAME[nm];
+            return <div key={nm} onClick={selectable?()=>setOtype(OTYPE_BY_NAME[nm]):undefined} style={{
+              background:active?`${T.gain}12`:T.surface,
+              border:`1px solid ${active?T.gain+"66":T.border}`,
+              borderLeft:`3px solid ${ok?T.gain:T.loss}`,
+              borderRadius:T.rMd,
+              padding:`${T.s3} ${T.s4}`,
+              display:"flex",gap:T.s3,alignItems:"flex-start",
+              opacity:ok?1:0.7,
+              cursor:selectable?"pointer":"default",
+              transition:"background 0.15s, border-color 0.15s",
+            }}>
+              <div style={{
+                width:18,height:18,borderRadius:T.rSm,flexShrink:0,marginTop:2,
+                background:ok?`${T.gain}22`:`${T.loss}22`,
+                border:`1px solid ${ok?T.gain:T.loss}40`,
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontFamily:FM,fontSize:10,color:ok?T.gain:T.loss,fontWeight:700,
+              }}>{ok?<Icon name="check" size={12}/>:<Icon name="close" size={12}/>}</div>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
+                  <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:ok?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{nm}</span>
+                  {active&&<span style={{fontFamily:FM,fontSize:8,fontWeight:700,letterSpacing:"0.14em",color:T.gain,background:`${T.gain}1e`,border:`1px solid ${T.gain}40`,borderRadius:T.rSm,padding:"1px 5px"}}>SELECTED</span>}
+                  {selectable&&!active&&<span style={{fontFamily:FM,fontSize:8,fontWeight:600,letterSpacing:"0.1em",color:T.blue}}>SELECT</span>}
+                </div>
+                <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em",marginTop:T.s1}}>{desc}</div>
+              </div>
+            </div>;
+          })}
         </div>
       </BentoTile>
     </div>}

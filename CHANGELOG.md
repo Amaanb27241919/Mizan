@@ -19,6 +19,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **overview:** Reconcile cross-metric numbers (demo balance invariant + P&L basis) (`b7fca08`)
 
 ### Docs
+- Phase 3 start — debt-payment auto-linking (recurring engine) (`e0a509e`)
 - Sync roadmap + state-audit + CLAUDE.md for Phase 1/2 + reconciliation (`d73fdf7`)
 - Benchmark roadmap — Origin/Copilot + OSS finance apps vs Mizan (`833696e`)
 
