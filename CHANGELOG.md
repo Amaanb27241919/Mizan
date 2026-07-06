@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-06
 
 ### Added
+- **trade:** Live quote on symbol + selectable Market/Limit order type (`02db1c0`)
 - **goals:** Auto-detect + link recurring debt payments from the bank feed (`0a83a1f`)
 - **overview:** Performance analytics — money-weighted return (XIRR), P&L split, risk (`87ece9b`)
 - **goals:** Debt payoff planner — snowball/avalanche/riba-first + burn-down (`0dcb37e`)

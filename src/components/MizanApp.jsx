@@ -6365,7 +6365,9 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     setQuoteBusy(true);
     const h=setTimeout(async()=>{
       try{
-        const r=await apiFetch(`/api/finnhub/quote?symbols=${encodeURIComponent(s)}`);
+        // intent=order → dedicated rate-limit bucket so the ticket's quote is
+        // never starved by the app's background portfolio/watchlist polling.
+        const r=await apiFetch(`/api/finnhub/quote?symbols=${encodeURIComponent(s)}&intent=order`);
         if(cancelled)return;
         const d=await r.json().catch(()=>({}));
         const hit=(d.quotes||[]).find(x=>x.tk===s)||null;
