@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/apiFetch.js";
 import { setLocalAndSync } from "../lib/userState.js";
+import { normalizePlaidStreams, detectRecurringOutflows, matchDebtToStream, streamPaymentsSince } from "../lib/recurring.js";
 import { Icon } from "./Icon.jsx";
 
 // Reuse the global theme tokens by reading the CSS custom properties so
@@ -1300,6 +1301,23 @@ function DEMO_DEBTS(accounts) {
   ];
 }
 
+// Demo recurring outflow streams (stands in for Plaid's /recurring in demo).
+// The Guidance Residential stream matches the Auto Financing debt so the
+// "detected payment → link" flow is demonstrable without a live bank.
+function DEMO_DEBT_STREAMS() {
+  const now = Date.now();
+  const mo = (n) => new Date(now - n * 30.44 * 86_400_000).toISOString().slice(0, 10);
+  return [
+    {
+      key: "GUIDANCE RESIDENTIAL", merchant: "Guidance Residential", typicalAmount: 1200, lastAmount: 1200,
+      lastDate: mo(0), cadence: "monthly", medianGapDays: 30, count: 3, category: "LOAN_PAYMENTS", account_id: "d-chase-1",
+      txns: [
+        { date: mo(2), amount: 1200 }, { date: mo(1), amount: 1200 }, { date: mo(0), amount: 1200 },
+      ],
+    },
+  ];
+}
+
 // Inline "log a payment" control (manual + recurring extra/off-schedule).
 function LogPaymentRow({ label = "Log payment", defaultAmount = "", onLog, onCancel }) {
   const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : "");
@@ -1333,7 +1351,7 @@ function LogPaymentRow({ label = "Log payment", defaultAmount = "", onLog, onCan
   );
 }
 
-function DebtCard({ debt, accounts, labelFor, onEdit, onDelete, onLogPayment, onConfirmScheduled, onMarkPaid }) {
+function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkStream, onUnlinkStream, onEdit, onDelete, onLogPayment, onConfirmScheduled, onMarkPaid }) {
   const { mode, original, remaining, paid, linkedMissing } = debtState(debt, accounts);
   const pct = original > 0 ? (paid / original) * 100 : 0;
   const done = remaining <= 0.005;
@@ -1342,13 +1360,16 @@ function DebtCard({ debt, accounts, labelFor, onEdit, onDelete, onLogPayment, on
   const payoff = debtPayoffLabel(debt, remaining);
   const amt = Number(debt.payment_amount) || 0;
   const fundLabel = debt.funding_account_id ? labelFor(debt.funding_account_id) : "";
+  const streamPaidCount = (debt.payments || []).filter((p) => p.source === "stream").length;
 
   // Sub-line under the name: who it's owed to + how it's tracked.
   const trackLine = mode === "balance"
     ? `Linked${labelFor(debt.linked_account_id) ? ` · ${labelFor(debt.linked_account_id)}` : ""}`
-    : mode === "recurring"
-      ? `${fmtUSD(amt)}/${CADENCE_LABEL[debt.cadence] || "month"}${fundLabel ? ` · from ${fundLabel}` : ""}${debt.autopay ? " · auto" : ""}`
-      : "Manual";
+    : linkedStream
+      ? "Auto-synced from bank"
+      : mode === "recurring"
+        ? `${fmtUSD(amt)}/${CADENCE_LABEL[debt.cadence] || "month"}${fundLabel ? ` · from ${fundLabel}` : ""}${debt.autopay ? " · auto" : ""}`
+        : "Manual";
 
   return (
     <div className="bento-tile" style={{
@@ -1422,6 +1443,39 @@ function DebtCard({ debt, accounts, labelFor, onEdit, onDelete, onLogPayment, on
         }}>
           <Icon name="info" size={12} color={T.gold} style={{ marginTop: 1 }}/>
           Linked account not found — reconnect it in Finances, or edit this debt to track manually.
+        </div>
+      )}
+
+      {/* Detected recurring payment → offer to link it (auto-syncs paydown). */}
+      {suggestion && !linkedStream && onLinkStream && (
+        <div style={{
+          fontFamily: FP, fontSize: 11, color: T.gain, lineHeight: 1.5,
+          padding: `${T.s2} ${T.s3}`, background: `${T.gain}10`,
+          border: `1px solid ${T.gain}30`, borderRadius: T.rSm,
+          display: "flex", alignItems: "center", gap: T.s2, flexWrap: "wrap",
+        }}>
+          <Icon name="spark" size={12} color={T.gain} style={{ flexShrink: 0 }}/>
+          <span style={{ flex: 1, minWidth: 140 }}>
+            Detected a recurring {fmtUSD(suggestion.stream.typicalAmount)}
+            {suggestion.stream.cadence && suggestion.stream.cadence !== "unknown" ? `/${(CADENCE_LABEL[suggestion.stream.cadence] || suggestion.stream.cadence)}` : ""} payment to <strong>{suggestion.stream.merchant}</strong>.
+          </span>
+          <button onClick={() => onLinkStream(debt.id, suggestion.stream)} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>Link payments</button>
+        </div>
+      )}
+
+      {/* Linked: paydown auto-syncs from the bank feed. */}
+      {linkedStream && (
+        <div style={{
+          fontFamily: FP, fontSize: 11, color: T.muted, lineHeight: 1.5,
+          padding: `${T.s2} ${T.s3}`, background: `${T.gain}0c`,
+          border: `1px solid ${T.gain}25`, borderRadius: T.rSm,
+          display: "flex", alignItems: "center", gap: T.s2, flexWrap: "wrap",
+        }}>
+          <Icon name="check" size={12} color={T.gain} style={{ flexShrink: 0 }}/>
+          <span style={{ flex: 1, minWidth: 140, color: T.text }}>
+            Auto-synced from <strong>{linkedStream.merchant}</strong> · {streamPaidCount} payment{streamPaidCount === 1 ? "" : "s"} imported
+          </span>
+          <button onClick={() => onUnlinkStream(debt.id)} style={smallBtnStyle}>Unlink</button>
         </div>
       )}
 
@@ -1855,15 +1909,66 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
+  // Recurring outflow streams (bank/card payments), used to auto-detect and
+  // link payments toward tracked debts. Demo uses a fixture; real mode reads
+  // Plaid's native /recurring, falling back to detecting from transactions.
+  const [streams, setStreams] = useState([]);
+
   useEffect(() => {
     if (demoMode) { setDebts(DEMO_DEBTS(plaidAccounts)); return; }
     setDebts(readDebts());
   }, [demoMode, plaidAccounts]);
 
+  useEffect(() => {
+    if (demoMode) { setStreams(DEMO_DEBT_STREAMS()); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await apiFetch("/api/plaid/recurring");
+        if (!cancelled && r.ok) {
+          const d = await r.json().catch(() => ({}));
+          const s = normalizePlaidStreams(d);
+          if (s.length) { setStreams(s); return; }
+        }
+        // Fallback: detect from raw transactions when the native stream is empty.
+        const tr = await apiFetch("/api/plaid/transactions");
+        if (!cancelled && tr.ok) {
+          const td = await tr.json().catch(() => ({}));
+          setStreams(detectRecurringOutflows(Array.isArray(td?.transactions) ? td.transactions : []));
+        }
+      } catch { /* no streams → detection simply doesn't surface */ }
+    })();
+    return () => { cancelled = true; };
+  }, [demoMode]);
+
   const persist = useCallback((next) => {
     setDebts(next);
     if (!demoMode) setLocalAndSync(DEBT_KEY, next);
   }, [demoMode]);
+
+  // Reconcile linked debts: pull any newly-posted payments from their linked
+  // stream in as real payment entries (deduped by a stable extId), so paydown
+  // stays current with the bank feed. The extId guard makes this idempotent —
+  // a run that adds nothing never persists, so no render loop.
+  useEffect(() => {
+    if (!streams.length || !debts.length) return;
+    let changed = false;
+    const next = debts.map((d) => {
+      if (!d.payment_stream_key) return d;
+      const stream = streams.find((s) => s.key === d.payment_stream_key);
+      if (!stream) return d;
+      const since = d.link_since || d.start_date || d.created_at;
+      const have = new Set((d.payments || []).filter((p) => p.source === "stream").map((p) => p.extId));
+      const add = streamPaymentsSince(stream, since)
+        .map((p) => ({ extId: `${d.payment_stream_key}|${p.date}|${p.amount}`, ...p }))
+        .filter((p) => !have.has(p.extId))
+        .map((p) => ({ id: genDebtId(), amount: p.amount, date: new Date(p.date).toISOString(), note: `Auto — ${stream.merchant}`, source: "stream", streamKey: d.payment_stream_key, extId: p.extId }));
+      if (!add.length) return d;
+      changed = true;
+      return { ...d, payments: [...(d.payments || []), ...add] };
+    });
+    if (changed) persist(next);
+  }, [streams, debts, persist]);
 
   // Liability accounts (credit/loan) for balance-linked mode; ALL accounts as
   // funding-source choices for recurring plans (checking is the common case).
@@ -1908,6 +2013,35 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
     const { remaining } = debtState(d, plaidAccounts);
     if (remaining > 0) logPayment(id, remaining, "Marked fully paid off");
   };
+
+  // Link a detected recurring stream to a debt: import its posted payments and
+  // remember the stream so the reconcile effect keeps pulling new ones. A
+  // recurring debt's autopay ESTIMATE is turned off to avoid double-counting
+  // (real stream payments now drive the paydown).
+  const linkStream = (id, stream) => {
+    persist(debts.map((d) => {
+      if (d.id !== id) return d;
+      const since = d.start_date || d.created_at;
+      const imported = streamPaymentsSince(stream, since).map((p) => ({
+        id: genDebtId(), amount: p.amount, date: new Date(p.date).toISOString(),
+        note: `Auto — ${stream.merchant}`, source: "stream", streamKey: stream.key, extId: `${stream.key}|${p.date}|${p.amount}`,
+      }));
+      const kept = (d.payments || []).filter((p) => p.source !== "stream");
+      return { ...d, payment_stream_key: stream.key, link_since: since, autopay: false, payments: [...kept, ...imported] };
+    }));
+  };
+  const unlinkStream = (id) => {
+    persist(debts.map((d) => d.id !== id ? d
+      : { ...d, payment_stream_key: null, link_since: null, payments: (d.payments || []).filter((p) => p.source !== "stream") }));
+  };
+
+  // Suggested stream match per UNLINKED debt (name/amount scored). Balance-mode
+  // debts track live, so they don't need payment linking.
+  const suggestionFor = useCallback((debt) => {
+    if (debt.payment_stream_key || debtMode(debt) === "balance") return null;
+    const expected = debtMode(debt) === "recurring" ? monthlyFromCadence(debt.payment_amount, debt.cadence) : 0;
+    return matchDebtToStream(debt, streams, { expectedAmount: expected });
+  }, [streams]);
 
   const totals = useMemo(() => {
     let remaining = 0, original = 0, paid = 0;
@@ -1994,6 +2128,10 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
             debt={d}
             accounts={plaidAccounts}
             labelFor={labelFor}
+            suggestion={suggestionFor(d)}
+            linkedStream={d.payment_stream_key ? streams.find((s) => s.key === d.payment_stream_key) : null}
+            onLinkStream={linkStream}
+            onUnlinkStream={unlinkStream}
             onEdit={() => { setEditingId(d.id); setCreating(false); }}
             onDelete={deleteDebt}
             onLogPayment={logPayment}
