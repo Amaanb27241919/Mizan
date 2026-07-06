@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-06
+
+### Added
+- **goals:** Flexible debt tracking — creditor, recurring plans, funding accounts (`26c5313`)
+
 ## 2026-07-05
 
 ### Added
