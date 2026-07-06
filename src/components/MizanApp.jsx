@@ -341,7 +341,18 @@ const DEMO_ACCOUNTS = [
       _pos("NET",  "Cloudflare Inc.",                 480.0,  64.00, 112.40),
     ] },
 ];
-// Net ~$41M across 11 expanded accounts (Fidelity, JPM, Schwab ×2, Vanguard ×2, Robinhood, Empower, Coinbase, IBKR, Webull).
+// Enforce the real-brokerage invariant `balance === cash + Σ(position market
+// value)` on the demo fixtures. Real SnapTrade accounts always satisfy this;
+// the hand-authored literals above drifted from it, which made Net Worth (built
+// from balance) disagree with Allocation / Market Value / the Performance panel
+// (built from positions). Deriving balance here keeps every downstream metric
+// reconciled and can't drift when positions are edited. Runs before
+// DEMO_ACTIVITIES, whose contribution amounts are sized off balance.
+DEMO_ACCOUNTS.forEach(a => {
+  const posMV = (a.positions || []).reduce((s, p) => s + (p.price || 0) * (p.units || 0), 0);
+  a.balance = Math.round(((a.cash || 0) + posMV) * 100) / 100;
+});
+// Net ~$55M across 11 expanded accounts (Fidelity, JPM, Schwab ×2, Vanguard ×2, Robinhood, Empower, Coinbase, IBKR, Webull).
 // Tag the demo's non-overlapping tickers so the screener doesn't show
 // every position as "Review".
 // Demo transaction history — multi-year buys, sells, quarterly dividends,
@@ -2099,7 +2110,6 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       activities={activities}
       netWorthHistory={netWorthHistory}
       currentValue={brokerageTot}
-      netInvested={Math.max(0,(metrics.allTimeContrib||0)-(metrics.allTimeWithdrawals||0))}
       mask={mask}
     />}
 

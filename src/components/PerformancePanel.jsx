@@ -54,7 +54,6 @@ export default function PerformancePanel({
   activities = [],
   netWorthHistory = [],
   currentValue = 0,
-  netInvested = 0,
   mask = (v) => v,
 }) {
   const [open, setOpen] = useState(false);
@@ -67,13 +66,16 @@ export default function PerformancePanel({
     const avgCostBySymbol = {};
     holdings.forEach((h) => { if (h?.tk && Number(h.ac) > 0) avgCostBySymbol[String(h.tk).toUpperCase()] = Number(h.ac); });
     const { realized, missingBasis } = realizedFromActivities(activities, avgCostBySymbol, normSym);
-    // Simple (absolute) return vs net invested — the plain "what I put in vs what it's worth."
-    const totalGain = netInvested > 0 ? currentValue - netInvested : null;
-    const simplePct = netInvested > 0 ? (totalGain / netInvested) * 100 : null;
+    // Total P&L is position-derived (realized + unrealized) so it reconciles
+    // exactly with the Position P&L tiles below and the Overview hero's Total
+    // Return — never a separate account-balance-minus-deposits figure that could
+    // disagree. Simple return expresses it against the cost basis actually paid.
+    const totalPnl = realized + unrealized;
+    const simplePct = cost > 0 ? (totalPnl / cost) * 100 : null;
     const unrealizedPct = cost > 0 ? (unrealized / cost) * 100 : null;
     const risk = riskMetrics(netWorthHistory, activities, { minPoints: 20, riskFreeAnnual: 0 });
-    return { mwr, marketValue, cost, unrealized, unrealizedPct, realized, missingBasis, totalGain, simplePct, risk };
-  }, [holdings, activities, netWorthHistory, currentValue, netInvested]);
+    return { mwr, marketValue, cost, unrealized, unrealizedPct, realized, missingBasis, totalPnl, simplePct, risk };
+  }, [holdings, activities, netWorthHistory, currentValue]);
 
   const mwrPct = perf.mwr.rate != null ? perf.mwr.rate * 100 : null;
 
@@ -116,13 +118,14 @@ export default function PerformancePanel({
                 value={mwrPct != null ? fmtPct(mwrPct) : "—"}
                 sub={mwrPct != null ? "annualized · timing-aware" : (perf.mwr.hasFlows ? "not enough data" : "no contributions logged")}
                 color={mwrPct != null ? fc(mwrPct) : T.muted} />
-              <Stat label="TOTAL GAIN"
-                value={perf.totalGain != null ? mask(fmtUSD(perf.totalGain)) : "—"}
-                sub={perf.simplePct != null ? `${fmtPct(perf.simplePct)} vs invested` : "net invested unknown"}
-                color={perf.totalGain != null ? fc(perf.totalGain) : T.muted} />
-              <Stat label="NET INVESTED"
-                value={netInvested > 0 ? mask(fmtUSD(netInvested)) : "—"}
-                sub="deposits − withdrawals" />
+              <Stat label="TOTAL P&amp;L"
+                value={mask(fmtUSD(perf.totalPnl))}
+                sub="realized + unrealized"
+                color={fc(perf.totalPnl)} />
+              <Stat label="SIMPLE RETURN"
+                value={perf.simplePct != null ? fmtPct(perf.simplePct) : "—"}
+                sub="total P&amp;L ÷ cost basis"
+                color={perf.simplePct != null ? fc(perf.simplePct) : T.muted} />
             </div>
           </div>
 
