@@ -2,6 +2,8 @@
 
 > **SESSION PROTOCOL**: Read this file at the start of every session. Read `MIZAN-STATE-AUDIT.md` when you need architecture, schema, or feature status depth. Update `MIZAN-STATE-AUDIT.md` (last-audited date + any new findings) when you discover drift from what's documented. This file is the source of truth for how to work on Mizan correctly.
 
+> **⚙️ OPERATING MODE — MAINTENANCE (owner decision, 2026-07-07).** Mizan is feature-complete for now. **Do NOT build net-new features or "improvements" on your own initiative.** Only do work that is one of: (1) driven by **real user feedback**, (2) a fix for **something actually broken or incorrect**, or (3) **explicitly requested by the owner**. The deferred feature backlog lives in `BACKLOG.md` (buckets `N`/`M`/`P` are parked; bucket `F` = fixes, the only class green-lit by default). When you notice a possible improvement, **add it to `BACKLOG.md` and move on — do not implement it and do not pitch it** unless it fixes a real defect. The goal is a stable app the owner isn't perpetually extending.
+
 ---
 
 ## 1. WHAT THIS APP IS
