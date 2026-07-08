@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-08
 
 ### Fixed
+- **snaptrade:** Gate read-only brokers out of the trade-connect flow (`3689f40`)
 - **security:** Scope brute-force IP block to auth surface, shorten to 30m (`207a336`)
 
 ### Docs

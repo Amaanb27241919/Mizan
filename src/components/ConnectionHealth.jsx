@@ -96,6 +96,38 @@ function ProviderBadge({ provider }) {
   );
 }
 
+// Trade vs read-only badge for a SnapTrade brokerage connection. Blue =
+// can place orders; muted = read-only (either connected for data only, or a
+// broker SnapTrade can't trade at all, e.g. Robinhood). Renders nothing when
+// the capability is genuinely unknown — never asserts a false "can trade".
+function TradePill({ it }) {
+  if (it.provider !== "snaptrade") return null;
+  const canTrade = it.trade_type === "trade";
+  const brokerNoTrade = it.broker_allows_trading === false;
+  if (!canTrade && it.trade_type == null && it.broker_allows_trading == null) return null;
+  const color = canTrade ? T.blue : T.muted;
+  const title = canTrade
+    ? "This connection can place orders through Mizan."
+    : brokerNoTrade
+      ? "This broker only supports read-only access via SnapTrade — it can't place trades."
+      : "Connected for data only. Reconnect this broker for trading to place orders.";
+  return (
+    <span title={title} style={{
+      display: "inline-flex",
+      alignItems: "center",
+      padding: `2px ${T.s2}`,
+      background: `${color}14`,
+      border: `1px solid ${color}40`,
+      borderRadius: 999,
+      fontFamily: FM,
+      fontSize: 10,
+      fontWeight: 600,
+      letterSpacing: "0.08em",
+      color,
+    }}>{canTrade ? "Trade-enabled" : "Read-only"}</span>
+  );
+}
+
 // Renders the Plaid /item/get diagnostic for one Item. The aim is to make
 // "why is /transactions/sync empty?" answerable at a glance: did the user
 // consent to transactions, did Plaid record a last_successful_update, is
@@ -384,6 +416,7 @@ export default function ConnectionHealth({ onNav } = {}) {
                   <span style={{ fontFamily: FU, fontSize: 15, fontWeight: 600, color: T.textHi, letterSpacing: "-0.005em" }}>{it.institution}</span>
                   <ProviderBadge provider={it.provider} />
                   <StatusPill status={it.status} errorCode={it.error_code} />
+                  <TradePill it={it} />
                 </div>
                 <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, display: "flex", flexWrap: "wrap", gap: T.s3 }}>
                   <span title={it.last_sync_at || ""}>Last sync: <strong style={{ color: it.last_sync_at ? T.text : T.loss }}>{relativeTime(it.last_sync_at)}</strong></span>
