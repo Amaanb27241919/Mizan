@@ -4,6 +4,11 @@ import { useAuth } from "../lib/auth.jsx";
 import { apiFetch, recordAudit } from "../lib/apiFetch.js";
 import { persistUserState } from "../lib/userState.js";
 import { downloadCSV } from "../lib/exportCSV.js";
+import {
+  computeZakat, zakatDueOn, isAboveNisab,
+  investmentFactor, nisabValueFor,
+  NISAB_GOLD_USD, NISAB_SILVER_USD, DEFAULT_ZAKAT_SETTINGS,
+} from "../lib/zakat.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Icon, ICONS } from "./Icon.jsx";
@@ -1508,8 +1513,10 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     - manualLiabilities
   );
   const nisabOverview = nisabValueFor(zakatSettings, liveNisab);
-  const overviewAboveNisab = zakatableForOverview >= nisabOverview;
-  const zakatDueOverview = overviewAboveNisab ? zakatableForOverview * 0.025 : 0;
+  const overviewAboveNisab = isAboveNisab(zakatableForOverview, nisabOverview);
+  // Gated: nothing due below nisab (the Overview headline zeros out, unlike the
+  // Zakat tab which always shows the raw 2.5% figure).
+  const zakatDueOverview = overviewAboveNisab ? zakatDueOn(zakatableForOverview) : 0;
 
   // Purification owed — lazy-loaded once from API for the summary line
   const [purificationOwedTotal, setPurificationOwedTotal] = useState(null);
@@ -3152,24 +3159,14 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
 //             more inclusive of zakat obligation. Used by many contemporary
 //             fatwa councils for cash-rich modern populations.
 // Refresh spot price periodically; the constants below are 2026-05-31 spot.
-const NISAB_GOLD_USD   = 8310;  // 87.48 g × ~$95/g
-const NISAB_SILVER_USD = 670;   // 612.36 g × ~$1.09/g
-
-// Investment portfolio methodology — two scholarly approaches for users who
-// hold stocks/ETFs/mutual funds (not actively trading):
-//   · "full"        : 2.5% of full market value. Treats user as trader.
-//   · "longterm_30" : 2.5% of 30% of market value. Per AAOIFI guidance +
-//                     contemporary fatwas — approximates the share of
-//                     company assets that are zakatable (cash, receivables,
-//                     inventory) vs. exempt fixed assets (buildings, plant,
-//                     equipment). Appropriate for retirement / buy-and-hold.
-const INVESTMENT_FACTOR_FULL    = 1.0;
-const INVESTMENT_FACTOR_LONGTERM = 0.30;
-
-const DEFAULT_ZAKAT_SETTINGS = {
-  nisabStandard:    "silver",        // "gold" | "silver"
-  investmentMethod: "longterm_30",   // "full" | "longterm_30"
-};
+// Zakat/nisab constants + pure math (NISAB_GOLD_USD, NISAB_SILVER_USD,
+// INVESTMENT_FACTOR_*, DEFAULT_ZAKAT_SETTINGS, investmentFactor, nisabValueFor,
+// computeZakat, …) are extracted to src/lib/zakat.js and imported at the top of
+// this file. Investment methodology: "full" = 2.5% of full market value
+// (trader); "longterm_30" = 2.5% of 30% of market value (AAOIFI long-term
+// approximation of the zakatable share of company assets). Only the React
+// hooks (useLiveNisab / useZakatSettings) and the localStorage load/save stay
+// here — they touch storage/DOM and can't live in the pure module.
 
 function loadZakatSettings(){
   try{
@@ -3187,17 +3184,10 @@ function saveZakatSettings(s){
   // Broadcast so the Overview tile re-reads without a page reload.
   try{ window.dispatchEvent(new CustomEvent("mizan-zakat-settings")); }catch{}
 }
-function nisabValueFor(s, live){
-  // live is { nisab_gold_usd, nisab_silver_usd, source } from useLiveNisab,
-  // or null. When live data is present and successful, prefer it over the
-  // static fallback so spot-price drift doesn't silently mislead the user.
-  const gold   = (live && live.source !== "static" && Number.isFinite(live.nisab_gold_usd))   ? live.nisab_gold_usd   : NISAB_GOLD_USD;
-  const silver = (live && live.source !== "static" && Number.isFinite(live.nisab_silver_usd)) ? live.nisab_silver_usd : NISAB_SILVER_USD;
-  return s.nisabStandard==="gold" ? gold : silver;
-}
-function investmentFactor(s){
-  return s.investmentMethod==="full" ? INVESTMENT_FACTOR_FULL : INVESTMENT_FACTOR_LONGTERM;
-}
+// nisabValueFor(settings, live) + investmentFactor(settings) are imported from
+// src/lib/zakat.js (pure, unit-tested). The live-price fetch + settings store
+// below stay here because they touch apiFetch / localStorage / React.
+//
 // Subscribe a component to setting changes — returns the live settings and
 // re-renders on save (from either the Zakat tab or another tab via storage event).
 function useZakatSettings(){
@@ -3578,7 +3568,6 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
 
   const settings  = useZakatSettings();
   const liveNisab = useLiveNisab();
-  const invFactor = investmentFactor(settings);
   const nisabUsd  = nisabValueFor(settings, liveNisab);
   // Surface live nisab values in the methodology buttons so the user can
   // see the current threshold without leaving the page. Fall back to the
@@ -3590,13 +3579,8 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
     ?DEMO_MANUAL_ASSETS
     :(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
   const acctTotal       = accounts.reduce((s,a)=>s+(a.balance||0),0);
-  // Brokerage holdings are scaled by the user's chosen investment method:
-  //   · full:        treat as trading inventory → 2.5% of full value
-  //   · longterm_30: per AAOIFI / contemporary fatwa, ~30% of a public
-  //                  company's assets are zakatable (cash, receivables,
-  //                  inventory); the rest (fixed assets) is exempt
-  // Default is longterm_30 — most retail users buy and hold.
-  const acctZakatable   = acctTotal * invFactor;
+  // Zakatable manual assets add at full value; personal-use items
+  // (zakatable:false) and liabilities are excluded from this sum.
   const zakatableManual = manualAssets.filter(a=>a.zakatable && !a.liability).reduce((s,a)=>s+(a.value||0),0);
   // Deduct short-term debt from zakatable wealth per AAOIFI guidance.
   // Bank credit/loan balances flow in via bankBalance (negative component).
@@ -3604,10 +3588,14 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   const liabilityTotal = manualAssets
     .filter(a=>a.liability && a.zakatable !== false)
     .reduce((s,a)=>s+(+a.value||0),0);
-  const negativeBank   = bankBalance < 0 ? Math.abs(bankBalance) : 0;
-  const zakatable      = Math.max(0, acctZakatable + zakatableManual - liabilityTotal - negativeBank);
-  const zakatDue        = zakatable*0.025;
-  const aboveNisab      = zakatable >= nisabUsd;
+  // Net Zakat via the pure, unit-tested pipeline (src/lib/zakat.js): brokerage
+  // (acctTotal) scaled by the chosen investment method — "full" (2.5% of full
+  // value, trader) or "longterm_30" (2.5% of 30%, AAOIFI long-term
+  // approximation of a public company's zakatable asset share) — plus manual
+  // zakatable assets, minus short-term debt and any negative bank balance, at 2.5%.
+  const { acctZakatable, zakatable, zakatDue, aboveNisab } = computeZakat({
+    acctTotal, settings, zakatableManual, liabilityTotal, bankBalance, nisab: nisabUsd,
+  });
   const given           = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
   const pledged         = sadaqah.filter(s=>!s.done).reduce((a,b)=>a+(+b.amt||0),0);
   const fmtUSD          = v=>`$${(+v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
