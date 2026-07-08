@@ -3597,7 +3597,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   // value, trader) or "longterm_30" (2.5% of 30%, AAOIFI long-term
   // approximation of a public company's zakatable asset share) — plus manual
   // zakatable assets, minus short-term debt and any negative bank balance, at 2.5%.
-  const { acctZakatable, zakatable, zakatDue, aboveNisab } = computeZakat({
+  const { acctZakatable, negativeBank, zakatable, zakatDue, aboveNisab } = computeZakat({
     acctTotal, settings, zakatableManual, liabilityTotal, bankBalance, nisab: nisabUsd,
   });
   const given           = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);

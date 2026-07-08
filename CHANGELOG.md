@@ -16,6 +16,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **zakat:** Extract Zakat/nisab math to tested pure lib (`778cdb7`)
 
 ### Fixed
+- **zakat:** Unify Overview + tab on a signed bank balance (`7403ae7`)
 - **bot,finnhub:** Atomic cron claim-lease for duplicate-exec races + Finnhub retry (`0f12c1f`)
 
 ### Docs
