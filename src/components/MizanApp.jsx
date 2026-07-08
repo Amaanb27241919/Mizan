@@ -5,8 +5,7 @@ import { apiFetch, recordAudit } from "../lib/apiFetch.js";
 import { persistUserState } from "../lib/userState.js";
 import { downloadCSV } from "../lib/exportCSV.js";
 import {
-  computeZakat, zakatDueOn, isAboveNisab,
-  investmentFactor, nisabValueFor,
+  computeZakat, nisabValueFor,
   NISAB_GOLD_USD, NISAB_SILVER_USD, DEFAULT_ZAKAT_SETTINGS,
 } from "../lib/zakat.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
@@ -1504,19 +1503,24 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   // (primary residence, daily-driver car).
   const zakatSettings = useZakatSettings();
   const liveNisab     = useLiveNisab();
-  const invFactor = investmentFactor(zakatSettings);
-  const zakatableForOverview=Math.max(0,
-    Math.max(0,brokerageTot) * invFactor
-    + Math.max(0,bankBalance||0)
-    + plaidInvestmentTot * invFactor
-    + manualAssetZakatable
-    - manualLiabilities
-  );
   const nisabOverview = nisabValueFor(zakatSettings, liveNisab);
-  const overviewAboveNisab = isAboveNisab(zakatableForOverview, nisabOverview);
-  // Gated: nothing due below nisab (the Overview headline zeros out, unlike the
-  // Zakat tab which always shows the raw 2.5% figure).
-  const zakatDueOverview = overviewAboveNisab ? zakatDueOn(zakatableForOverview) : 0;
+  // Same pure pipeline as the Portfolio → Zakat tab (src/lib/zakat.js) so both
+  // surfaces report an identical, Islamically-correct figure: investment-class
+  // wealth scaled by the chosen factor, positive bank cash added, overdraft +
+  // manual liabilities deducted. gateDue:true zeroes the headline below nisab
+  // (the Overview shows nothing due; the tab exposes the raw 2.5%).
+  const {
+    aboveNisab: overviewAboveNisab,
+    zakatDue: zakatDueOverview,
+  } = computeZakat({
+    acctTotal: Math.max(0, brokerageTot) + plaidInvestmentTot,
+    settings: zakatSettings,
+    zakatableManual: manualAssetZakatable,
+    liabilityTotal: manualLiabilities,
+    bankBalance,
+    nisab: nisabOverview,
+    gateDue: true,
+  });
 
   // Purification owed — lazy-loaded once from API for the summary line
   const [purificationOwedTotal, setPurificationOwedTotal] = useState(null);

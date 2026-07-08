@@ -141,11 +141,14 @@ export function isAboveNisab(zakatable, nisab) {
   return (Number(zakatable) || 0) >= (Number(nisab) || 0);
 }
 
-// Full Zakat computation for the Portfolio → Zakat tab. Investment-class wealth
-// (`acctTotal`) is scaled by the chosen investment factor; zakatable manual
-// assets add at full value; short-term debt and any negative bank balance are
-// deducted. Returns the intermediate figures the UI displays plus the final
-// due + nisab verdict.
+// Full Zakat computation, shared by the Portfolio → Zakat tab AND the Overview
+// tile so both surfaces report an identical, Islamically-correct figure.
+// Investment-class wealth (`acctTotal`) is scaled by the chosen investment
+// factor; zakatable manual assets add at full value; the bank balance
+// contributes with its NATURAL SIGN — positive bank cash is zakatable (cash on
+// hand) and is added, a negative balance (overdraft / credit) is deducted as
+// short-term debt; manual short-term debt is also deducted. Returns the
+// intermediate figures the UI displays plus the final due + nisab verdict.
 //
 // `gateDue` (default false) mirrors the Zakat-tab behavior of always exposing
 // the raw 2.5% figure (the UI styles it by `aboveNisab`); pass true to zero the
@@ -162,12 +165,15 @@ export function computeZakat({
   const invFactor = investmentFactor(settings);
   const acctZakatable = (Number(acctTotal) || 0) * invFactor;
   const negativeBank = negativeBankAmount(bankBalance);
+  // Positive bank cash is zakatable; the negative part is deducted below via
+  // netZakatableWealth's bankBalance handling. Net effect: signed bank balance.
+  const bankCash = Math.max(0, Number(bankBalance) || 0);
   const zakatable = netZakatableWealth({
-    zakatableAssets: acctZakatable + (Number(zakatableManual) || 0),
+    zakatableAssets: acctZakatable + (Number(zakatableManual) || 0) + bankCash,
     shortTermDebt: liabilityTotal,
     bankBalance,
   });
   const aboveNisab = isAboveNisab(zakatable, nisab);
   const zakatDue = gateDue && !aboveNisab ? 0 : zakatDueOn(zakatable);
-  return { invFactor, acctZakatable, negativeBank, zakatable, zakatDue, aboveNisab };
+  return { invFactor, acctZakatable, negativeBank, bankCash, zakatable, zakatDue, aboveNisab };
 }

@@ -19,6 +19,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **bot,finnhub:** Atomic cron claim-lease for duplicate-exec races + Finnhub retry (`0f12c1f`)
 
 ### Docs
+- Switch Mizan to maintenance mode (feedback/bug-driven only) (`0826dc2`)
 - Add verified backlog (68 items, code-checked) (`4749ec0`)
 
 ## 2026-07-06

@@ -292,4 +292,28 @@ describe('computeZakat', () => {
     expect(r.zakatDue).toBe(0)
     expect(r.aboveNisab).toBe(true) // 0 >= 0
   })
+
+  it('adds positive bank cash to zakatable wealth (cash on hand is zakatable)', () => {
+    // acctZakatable = 10,000 × 1.0 = 10,000; + 5,000 bank cash = 15,000
+    const r = computeZakat({
+      acctTotal: 10000,
+      settings: { investmentMethod: 'full', nisabStandard: 'silver' },
+      bankBalance: 5000,
+      nisab: 670,
+    })
+    expect(r.bankCash).toBe(5000)
+    expect(r.negativeBank).toBe(0)
+    expect(r.zakatable).toBe(15000)
+    expect(r.zakatDue).toBe(375) // 15,000 × 2.5%
+  })
+
+  it('treats the bank balance with its natural sign (adds cash, deducts overdraft)', () => {
+    const base = { acctTotal: 10000, settings: { investmentMethod: 'full' }, nisab: 0 }
+    const pos = computeZakat({ ...base, bankBalance: 2000 })  // +2,000 cash  → 12,000
+    const neg = computeZakat({ ...base, bankBalance: -2000 }) // −2,000 debt  →  8,000
+    expect(pos.zakatable).toBe(12000)
+    expect(neg.zakatable).toBe(8000)
+    // the swing between +X cash and −X overdraft is exactly 2X
+    expect(pos.zakatable - neg.zakatable).toBe(4000)
+  })
 })
