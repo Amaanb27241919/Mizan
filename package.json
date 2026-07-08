@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node server.js",
     "vite": "vite",
-    "build": "vite build",
+    "lint": "eslint --config config/eslint.mjs .",
+    "build": "npm run lint && vite build",
     "start": "NODE_ENV=production node server.js",
     "preview": "vite preview",
     "gen:icons": "node scripts/gen-pwa-icons.mjs",
@@ -37,6 +38,9 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.1",
     "@vitest/ui": "^4.1.6",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0",
     "jsdom": "^29.1.1",
     "vite": "^5.4.1",
     "vitest": "^4.1.6"
