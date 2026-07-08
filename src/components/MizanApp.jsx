@@ -4835,6 +4835,10 @@ function EarningsWidget({earnings=[]}){
 // income you actually keep, since the impure fraction of a halal-fund dividend is
 // owed to charity, not to you. Only the net (purified) portion is reinvested.
 function DividendPlanner({holdings=[],portfolioValue=0}){
+  // Privacy mask + currency formatter — same pattern the other panels use.
+  // (Previously referenced but never defined here → the tool crashed on render.)
+  const { mask } = useHideValues();
+  const fmtUSD=v=>`$${(+v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   // Published yields from the ETF catalog (e.g. "~0.9%") → decimals, so we can
   // blend a starting yield from the user's real halal-fund holdings when known.
   const yieldLookup=Object.fromEntries(ETF_LIST.map(f=>[f.tk,(parseFloat(String(f.div).replace(/[~%]/g,""))||0)/100]));
