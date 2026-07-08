@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-07-07
 
+### Changed
+- **zakat:** Extract Zakat/nisab math to tested pure lib (`778cdb7`)
+
 ### Docs
 - Add verified backlog (68 items, code-checked) (`4749ec0`)
 

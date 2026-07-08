@@ -7,6 +7,7 @@
 import React, { useMemo, useState } from "react";
 import {
   moneyWeightedReturn,
+  averageCapitalReturn,
   unrealizedFromHoldings,
   realizedFromActivities,
   riskMetrics,
@@ -61,6 +62,9 @@ export default function PerformancePanel({
   const perf = useMemo(() => {
     // Money-weighted (XIRR) return over all external cashflows.
     const mwr = moneyWeightedReturn(activities, currentValue);
+    // Day-weighted-average-capital (Modified-Dietz / ROAI) return: the gain not
+    // explained by contributions ÷ the average capital actually invested.
+    const acr = averageCapitalReturn(activities, netWorthHistory, currentValue);
     // Position P&L: unrealized from holdings + realized from SELLs (avg cost).
     const { marketValue, cost, unrealized } = unrealizedFromHoldings(holdings);
     const avgCostBySymbol = {};
@@ -74,10 +78,11 @@ export default function PerformancePanel({
     const simplePct = cost > 0 ? (totalPnl / cost) * 100 : null;
     const unrealizedPct = cost > 0 ? (unrealized / cost) * 100 : null;
     const risk = riskMetrics(netWorthHistory, activities, { minPoints: 20, riskFreeAnnual: 0 });
-    return { mwr, marketValue, cost, unrealized, unrealizedPct, realized, missingBasis, totalPnl, simplePct, risk };
+    return { mwr, acr, marketValue, cost, unrealized, unrealizedPct, realized, missingBasis, totalPnl, simplePct, risk };
   }, [holdings, activities, netWorthHistory, currentValue]);
 
   const mwrPct = perf.mwr.rate != null ? perf.mwr.rate * 100 : null;
+  const acrPct = perf.acr.rate != null ? perf.acr.rate * 100 : null;
 
   return (
     <div className="bento-tile" style={{
@@ -118,6 +123,10 @@ export default function PerformancePanel({
                 value={mwrPct != null ? fmtPct(mwrPct) : "—"}
                 sub={mwrPct != null ? "annualized · timing-aware" : (perf.mwr.hasFlows ? "not enough data" : "no contributions logged")}
                 color={mwrPct != null ? fc(mwrPct) : T.muted} />
+              <Stat label="AVG-CAPITAL RETURN"
+                value={acrPct != null ? fmtPct(acrPct) : "—"}
+                sub={acrPct != null ? "gain ÷ avg capital deployed" : "needs net-worth history"}
+                color={acrPct != null ? fc(acrPct) : T.muted} />
               <Stat label="TOTAL P&amp;L"
                 value={mask(fmtUSD(perf.totalPnl))}
                 sub="realized + unrealized"
@@ -171,7 +180,7 @@ export default function PerformancePanel({
           </div>
 
           <div style={{ fontFamily: FP, fontSize: 10, color: T.muted, lineHeight: 1.5 }}>
-            Estimates. Money-weighted return (XIRR) uses your logged contributions/withdrawals + current value. Position P&amp;L uses average cost (broker doesn't supply lots). Risk uses the daily net-worth curve, flow-adjusted so deposits don't read as gains; Sharpe assumes a 0% risk-free rate (riba-free). Not financial advice.
+            Estimates. Money-weighted return (XIRR) uses your logged contributions/withdrawals + current value. Average-capital return (Modified-Dietz) divides that same gain by the day-weighted capital you actually had invested. Position P&amp;L uses average cost (broker doesn't supply lots). Risk uses the daily net-worth curve, flow-adjusted so deposits don't read as gains; Sharpe assumes a 0% risk-free rate (riba-free). Not financial advice.
           </div>
         </div>
       )}

@@ -3,6 +3,8 @@ import {
   xirr,
   buildCashflows,
   moneyWeightedReturn,
+  modifiedDietzReturn,
+  averageCapitalReturn,
   unrealizedFromHoldings,
   realizedFromActivities,
   dailyReturns,
@@ -82,6 +84,125 @@ describe('moneyWeightedReturn', () => {
 
   it('flags when there are no contributions', () => {
     expect(moneyWeightedReturn([], 1000).hasFlows).toBe(false)
+  })
+})
+
+describe('modifiedDietzReturn', () => {
+  it('matches a hand-computed day-weighted fixture', () => {
+    // period: 2024-01-01 → 2024-01-11  ⇒ periodDays = 10
+    // flow:   +500 deposit on 2024-01-06 ⇒ daysRemaining = 11−6 = 5, weight = 5/10 = 0.5
+    //   avgCapital = startValue + 500×0.5 = 1000 + 250        = 1250
+    //   gain       = endValue − startValue − ΣflowᵢΣ = 1600 − 1000 − 500 = 100
+    //   return     = gain / avgCapital = 100 / 1250            = 0.08  (+8%)
+    const r = modifiedDietzReturn({
+      startValue: 1000,
+      endValue: 1600,
+      startDate: '2024-01-01',
+      endDate: '2024-01-11',
+      flows: [{ date: '2024-01-06', amount: 500 }],
+    })
+    expect(r).toBeCloseTo(0.08, 10)
+  })
+
+  it('reduces to the simple return when there are no flows', () => {
+    // avgCapital = startValue, gain = endValue − startValue ⇒ (1200−1000)/1000 = 0.20
+    const r = modifiedDietzReturn({
+      startValue: 1000,
+      endValue: 1200,
+      startDate: '2024-01-01',
+      endDate: '2024-12-31',
+      flows: [],
+    })
+    const simple = (1200 - 1000) / 1000
+    expect(r).toBeCloseTo(simple, 10)
+    expect(r).toBeCloseTo(0.2, 10)
+  })
+
+  it('ignores flows dated outside the [start, end] window', () => {
+    // The 2023 deposit predates the start (baked into startValue); the 2025 one is
+    // after the end — both dropped, so this is identical to the no-flows case.
+    const r = modifiedDietzReturn({
+      startValue: 1000,
+      endValue: 1200,
+      startDate: '2024-01-01',
+      endDate: '2024-12-31',
+      flows: [{ date: '2023-06-01', amount: 400 }, { date: '2025-06-01', amount: 400 }],
+    })
+    expect(r).toBeCloseTo(0.2, 10)
+  })
+
+  it('weights a flow at the end date to zero and a flow at the start to one', () => {
+    // Deposit on the last day: weight 0 → not in denominator, but still netted out.
+    //   avgCapital = 1000, gain = 1500 − 1000 − 500 = 0 → return 0
+    const endFlow = modifiedDietzReturn({
+      startValue: 1000, endValue: 1500,
+      startDate: '2024-01-01', endDate: '2024-01-11',
+      flows: [{ date: '2024-01-11', amount: 500 }],
+    })
+    expect(endFlow).toBeCloseTo(0, 10)
+    // Deposit on the first day: weight 1 → full period.
+    //   avgCapital = 1000 + 500 = 1500, gain = 1600 − 1000 − 500 = 100 → 100/1500
+    const startFlow = modifiedDietzReturn({
+      startValue: 1000, endValue: 1600,
+      startDate: '2024-01-01', endDate: '2024-01-11',
+      flows: [{ date: '2024-01-01', amount: 500 }],
+    })
+    expect(startFlow).toBeCloseTo(100 / 1500, 10)
+  })
+
+  it('returns null for an empty / single-day period (periodDays ≤ 0)', () => {
+    expect(modifiedDietzReturn({
+      startValue: 1000, endValue: 1000,
+      startDate: '2024-01-01', endDate: '2024-01-01', flows: [],
+    })).toBeNull()
+    // end before start
+    expect(modifiedDietzReturn({
+      startValue: 1000, endValue: 1100,
+      startDate: '2024-02-01', endDate: '2024-01-01', flows: [],
+    })).toBeNull()
+  })
+
+  it('returns null when the day-weighted denominator is zero or negative', () => {
+    // A withdrawal at the start (weight 1) larger than the opening balance.
+    //   avgCapital = 100 + (−200)×1 = −100  → null
+    expect(modifiedDietzReturn({
+      startValue: 100, endValue: 50,
+      startDate: '2024-01-01', endDate: '2024-01-11',
+      flows: [{ date: '2024-01-01', amount: -200 }],
+    })).toBeNull()
+    // Zero start value and no flows → denominator 0 → null.
+    expect(modifiedDietzReturn({
+      startValue: 0, endValue: 100,
+      startDate: '2024-01-01', endDate: '2024-01-11', flows: [],
+    })).toBeNull()
+  })
+
+  it('returns null for missing start/end values or bounds', () => {
+    expect(modifiedDietzReturn({ startValue: undefined, endValue: 1200, startDate: '2024-01-01', endDate: '2024-06-01' })).toBeNull()
+    expect(modifiedDietzReturn({ startValue: 1000, endValue: NaN, startDate: '2024-01-01', endDate: '2024-06-01' })).toBeNull()
+    expect(modifiedDietzReturn({ startValue: 1000, endValue: 1200, startDate: null, endDate: '2024-06-01' })).toBeNull()
+    expect(modifiedDietzReturn()).toBeNull()
+  })
+})
+
+describe('averageCapitalReturn', () => {
+  it('anchors to the earliest snapshot and credits the market-driven gain', () => {
+    // start snapshot: 1000 on 2024-01-01; end value 1600 on 2024-01-11.
+    // deposit +500 on 2024-01-06 (weight 0.5) ⇒ same 0.08 fixture as above.
+    const history = [
+      { date: '2024-01-11', total: 1590 }, // out of order on purpose
+      { date: '2024-01-01', total: 1000 },
+    ]
+    const acts = [{ type: 'DEPOSIT', amount: 500, trade_date: '2024-01-06' }]
+    const { rate, hasFlows } = averageCapitalReturn(acts, history, 1600, new Date('2024-01-11'))
+    expect(hasFlows).toBe(true)
+    expect(rate).toBeCloseTo(0.08, 10)
+  })
+
+  it('returns { rate: null } when there is no net-worth history to anchor', () => {
+    const out = averageCapitalReturn([{ type: 'DEPOSIT', amount: 500, trade_date: '2024-01-06' }], [], 1600)
+    expect(out.rate).toBeNull()
+    expect(out.hasFlows).toBe(false)
   })
 })
 

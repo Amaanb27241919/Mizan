@@ -104,6 +104,70 @@ export function moneyWeightedReturn(activities, currentValue, asOf = new Date())
   return { rate: xirr(cfs), hasFlows: flowCount > 0, cashflows: cfs };
 }
 
+// ── Modified-Dietz / ROAI (day-weighted-average-capital return) ────────────────
+// Whole-period return that credits the gain against the *average* capital that
+// was actually at work — not just the opening balance. Each external flow is
+// weighted by the fraction of the period it was invested:
+//
+//   avgCapital = startValue + Σ( flowᵢ × daysRemainingᵢ / periodDays )
+//   gain       = endValue − startValue − Σ flowᵢ         (the part flows don't explain)
+//   return     = gain / avgCapital
+//
+// Flow sign is money-INTO-the-portfolio positive (deposit +, withdrawal −) — the
+// opposite of the XIRR cashflow convention, but the standard Modified-Dietz one.
+// `daysRemaining` = days from the flow to endDate, so an early deposit (invested
+// longer) earns more weight (→1 at the start, →0 at the end). Returns a decimal
+// (0.1 = +10%) or null when it can't be computed honestly — see the guards.
+export function modifiedDietzReturn({ startValue, endValue, startDate, endDate, flows = [] } = {}) {
+  const sv = Number(startValue);
+  const ev = Number(endValue);
+  if (!Number.isFinite(sv) || !Number.isFinite(ev)) return null;      // missing start/end value
+  if (startDate == null || endDate == null) return null;              // missing period bounds
+  const t0 = toTime(startDate);
+  const t1 = toTime(endDate);
+  if (!Number.isFinite(t0) || !Number.isFinite(t1)) return null;      // unparseable dates
+  const periodDays = (t1 - t0) / DAY_MS;
+  if (!(periodDays > 0)) return null;                                 // empty / single-day period
+
+  let netFlows = 0;        // Σ flowᵢ           (subtracted from the numerator)
+  let weightedFlows = 0;   // Σ flowᵢ × weightᵢ (added to the denominator)
+  for (const f of flows || []) {
+    const amt = Number(f?.amount);
+    if (!Number.isFinite(amt) || amt === 0) continue;
+    if (f?.date == null) continue;
+    const ft = toTime(f.date);
+    if (!Number.isFinite(ft) || ft < t0 || ft > t1) continue;        // outside the period → skip
+    const daysRemaining = (t1 - ft) / DAY_MS;
+    netFlows += amt;
+    weightedFlows += amt * (daysRemaining / periodDays);
+  }
+
+  const avgCapital = sv + weightedFlows;                             // day-weighted denominator
+  if (!(avgCapital > 0)) return null;                               // zero / negative denominator guard
+  return (ev - sv - netFlows) / avgCapital;                         // gain ÷ average capital
+}
+
+// Whole-period average-capital (Modified-Dietz) return from activity flows + the
+// daily net-worth curve. Anchors the period start to the earliest net-worth
+// snapshot (its value + date) and the end to `currentValue` as of `asOf`.
+// Reuses buildCashflows (the same parser XIRR feeds on) and flips the sign to the
+// Modified-Dietz convention. Mirrors moneyWeightedReturn's shape: { rate, hasFlows }.
+export function averageCapitalReturn(activities, netWorthHistory, currentValue, asOf = new Date()) {
+  const rows = [...(netWorthHistory || [])]
+    .filter((h) => h && h.date != null && Number.isFinite(Number(h.total)))
+    .sort((a, b) => toTime(a.date) - toTime(b.date));
+  if (rows.length < 1) return { rate: null, hasFlows: false };       // no start value → can't anchor
+  const startValue = Number(rows[0].total);
+  const startDate = rows[0].date;
+  // Passing 0 suppresses buildCashflows' terminal value; negate to flip deposits
+  // (−amt in the XIRR convention) to +amt here (money into the portfolio).
+  const flows = buildCashflows(activities, 0, asOf).map((c) => ({ date: c.date, amount: -c.amount }));
+  const t0 = toTime(startDate), t1 = toTime(asOf);
+  const hasFlows = flows.some((f) => { const t = toTime(f.date); return t >= t0 && t <= t1; });
+  const rate = modifiedDietzReturn({ startValue, endValue: currentValue, startDate, endDate: asOf, flows });
+  return { rate, hasFlows };
+}
+
 // ── Return decomposition (realized / unrealized / simple) ─────────────────────
 // Unrealized from current holdings: Σ shares×(price − avgCost). `holdings` is
 // the merged position shape { sh, px, ac } used app-wide.
