@@ -8359,8 +8359,17 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
             desc: local?.desc || b.description || b.display_name || "",
             url: b.url, logo: b.logo,
             disabled: b.enabled === false,
+            // SnapTrade's authoritative per-broker trade flag. `authorization_types`
+            // is unreliable (lists "trade" for Robinhood even though it can't trade),
+            // so gate on allows_trading. undefined = unknown (hardcoded fallback list).
+            allowsTrading: b.allows_trading,
           };
         }).sort((a,b)=>{
+          // In the TRADE flow, surface trade-capable brokers first.
+          if (isTrade) {
+            const ax = a.allowsTrading === false, bx = b.allowsTrading === false;
+            if (ax !== bx) return ax ? 1 : -1;
+          }
           // Enabled first, then alphabetical
           if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
           return a.nm.localeCompare(b.nm);
@@ -8370,7 +8379,7 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
     return q
       ? live.filter(b => (b.nm + " " + b.id).toLowerCase().includes(q))
       : live;
-  }, [allBrokerages, search]);
+  }, [allBrokerages, search, isTrade]);
 
   // SnapTrade window messages per their docs
   useEffect(()=>{
@@ -8624,18 +8633,34 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
               </div>}
               {mergedBrokers.map(b => {
                 const c = isConn(b.id);
+                // In the trade flow, brokers SnapTrade can't place orders on
+                // (allows_trading===false, e.g. Robinhood/Fidelity) are shown but
+                // not selectable — prevents the opaque "couldn't open login flow"
+                // error users hit when SnapTrade returns code 1012.
+                const tradeBlocked = isTrade && b.allowsTrading === false;
                 return (
                   <div key={b.id} style={{background:T.card,
                     border:`1px solid ${c ? T.blue+"40" : T.border}`,
-                    borderRadius:12,padding:"11px 13px"}}>
+                    borderRadius:12,padding:"11px 13px",opacity:tradeBlocked?0.72:1}}>
                     <div style={{display:"flex",justifyContent:"space-between",
-                      alignItems:"flex-start",marginBottom:4}}>
+                      alignItems:"flex-start",marginBottom:4,gap:6}}>
                       <span style={{fontFamily:FM,fontSize:12,fontWeight:500,
                         color:c ? T.blue : T.textHi}}>{b.nm}</span>
-                      {b.mine && <Tag label="Mine" color={T.blue}/>}
+                      {tradeBlocked ? <Tag label="Read-only" color={T.slate}/> : b.mine && <Tag label="Mine" color={T.blue}/>}
                     </div>
-                    <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:9}}>{b.desc}</div>
+                    <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:9}}>
+                      {tradeBlocked ? "SnapTrade can't place trades on this broker — connect it read-only from Settings." : b.desc}
+                    </div>
                     <div style={{display:"flex",gap:5}}>
+                      {tradeBlocked ? (
+                        <div title="This broker does not support trading through SnapTrade — only read-only data access."
+                          style={{flex:1,padding:"5px",borderRadius:6,fontFamily:FM,fontSize:9,
+                            fontWeight:500,letterSpacing:"0.06em",textAlign:"center",
+                            border:`1px solid ${T.border}`,textTransform:"uppercase",
+                            background:"transparent",color:T.muted}}>
+                          Can't trade
+                        </div>
+                      ) : (
                       <button onClick={()=>!c&&connect(b)}
                         style={{flex:1,padding:"5px",borderRadius:6,fontFamily:FM,fontSize:9,
                           fontWeight:500,letterSpacing:"0.06em",
@@ -8644,6 +8669,7 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
                           color:c ? T.gain : T.blue}}>
                         {c ? "Connected" : "Connect"}
                       </button>
+                      )}
                       {c && (
                         <button onClick={()=>drop(b.id)}
                           style={{padding:"5px 8px",borderRadius:6,background:"transparent",

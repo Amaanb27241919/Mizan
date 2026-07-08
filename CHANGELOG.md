@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Fixed
 - **security:** Scope brute-force IP block to auth surface, shorten to 30m (`207a336`)
 
+### Docs
+- **audit:** Record IP-block self-lockout fix (207a336) in 2026-07-08 session block (`74b61b4`)
+
 ## 2026-07-07
 
 ### Added
