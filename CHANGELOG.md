@@ -25,6 +25,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - Switch Mizan to maintenance mode (feedback/bug-driven only) (`0826dc2`)
 - Add verified backlog (68 items, code-checked) (`4749ec0`)
 
+### Maintenance
+- Add crash-focused eslint gate (no-undef) to the build (`840f742`)
+
 ## 2026-07-06
 
 ### Added
