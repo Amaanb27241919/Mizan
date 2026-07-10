@@ -28,7 +28,10 @@ const T = {
 };
 const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
 const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
-const FU = FP;
+// Display face — Fraunces, matching MizanApp's FU. Goal names, big balances, and
+// section headings are supposed to be editorial serif; this file previously
+// aliased FU to FP (Plex Sans), so the whole Goals tab lost the brand display type.
+const FU = "'Fraunces','Georgia','Times New Roman',serif";
 
 const fmtUSD = (v) => `$${(+v || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const fmtDate = (s) => {
