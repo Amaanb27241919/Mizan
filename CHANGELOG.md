@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-07-10
 
+### Changed
+- **cleanup:** Stabilize netWorthHistory + mfaListFactors references (`d151126`)
+
 ### Fixed
 - **sharia:** Restore ratio screening — Finnhub free tier dropped balance-sheet dollars (`b0fd7e9`)
 - **overview:** Stop net-worth snapshot spamming localStorage + Supabase every render (`e5f3b09`)

@@ -8970,7 +8970,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   // a tuned schedule; the trailing refresh() exists only to pull the
   // updated read into the UI, not to re-trigger sync.
   const refresh=useCallback(async(opts={})=>{
-    const{skipAutoSync=false}=opts;
+    const{skipAutoSync=false,live=false}=opts;
     // Demo mode is a pure local fixture — never hit the Plaid API.
     if(demoMode){setAccounts(DEMO_BANK_ACCOUNTS);setTxns(DEMO_TRANSACTIONS);setItemsNeedingReauth([]);return;}
     setLoading(true);
@@ -8987,7 +8987,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       });
     };
     try{
-      const ar=await apiFetch("/api/plaid/accounts");
+      // live=true forces a real-time balance pull from the bank (accountsBalanceGet);
+      // the frequent background poll omits it and gets Plaid's cached balance.
+      const ar=await apiFetch(`/api/plaid/accounts${live?"?live=1":""}`);
       let acctCount=0;
       if(ar.ok){
         const ad=await ar.json();
@@ -9085,12 +9087,11 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         return;
       }
       const{added=0,modified=0,removed=0,failed=0}=sd;
-      // Re-read the table after sync so the new rows render.
-      const tr=await apiFetch("/api/plaid/transactions");
-      if(tr.ok){
-        const td=await tr.json();
-        setTxns(Array.isArray(td.transactions)?td.transactions:[]);
-      }
+      // Re-read transactions AND force a live balance pull from the bank
+      // (accountsBalanceGet) so "Sync" refreshes both — balances otherwise lag
+      // on Plaid's cached accountsGet value. refresh() shares the sync throttle
+      // ref (bumped above) so it won't double-fire the transaction backfill.
+      await refresh({live:true});
       const totalChanges=added+modified+removed;
       setSyncMsg({
         ok:failed===0,
@@ -9106,7 +9107,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       setSyncBusy(false);
       setTimeout(()=>setSyncMsg(null),6000);
     }
-  },[demoMode,syncBusy]);
+  },[demoMode,syncBusy,refresh]);
 
   // Server-side CSV download — fetches the endpoint as text/csv, builds a
   // blob-URL, clicks a synthetic anchor, then cleans up. Used by the Finances
