@@ -21,7 +21,7 @@ const T = {
   bg: "var(--mz-bg)", card: "var(--mz-card)", surface: "var(--mz-surface)",
   border: "var(--mz-border)", borderHi: "var(--mz-borderHi)",
   text: "var(--mz-text)", textHi: "var(--mz-textHi)", muted: "var(--mz-muted)",
-  blue: "#1e4e8c", gain: "#117a52", gold: "#b8842a", loss: "#b23a3d",
+  blue: "#1e4e8c", blueDim: "#15396b", gain: "#117a52", gold: "#b8842a", loss: "#b23a3d",
   s1: "var(--s-1)", s2: "var(--s-2)", s3: "var(--s-3)", s4: "var(--s-4)",
   s5: "var(--s-5)", s6: "var(--s-6)", s8: "var(--s-8)",
   rSm: "var(--r-sm)", rMd: "var(--r-md)", rLg: "var(--r-lg)",
@@ -175,6 +175,7 @@ function buildNetWorthSeries(netWorthHistory) {
   const lastDate = new Date(last.date);
   const cutoff = new Date(lastDate); cutoff.setDate(cutoff.getDate() - 30);
   const recent = hist.filter((h) => new Date(h.date) >= cutoff);
+  if (!recent.length) return []; // guards against an unparseable latest date → NaN cutoff
   const t0 = new Date(recent[0].date).getTime();
   return recent.map((h) => ({
     x: (new Date(h.date).getTime() - t0) / 86_400_000,
@@ -421,7 +422,7 @@ const inputStyle = {
 };
 const primaryBtnStyle = {
   fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
-  color: "#fff", background: `linear-gradient(135deg, ${T.blue}, #5A3FE0)`,
+  color: "#fff", background: `linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
   border: "none", borderRadius: 999, padding: "9px 18px",
   cursor: "pointer",
 };
@@ -569,7 +570,15 @@ export default function Goals({
     ];
   }, [demoMode, snapAccounts]);
 
-  const load = useCallback(async () => {
+  // Fetch goals once on mount, and whenever demo mode toggles — NOT on every
+  // parent re-render. Earlier this lived in a `useCallback` keyed off `demoGoals`
+  // (which recomputes each parent render because upstream passes `snapAccounts` as
+  // an inline `.filter(...)` array); the effect then re-fired on every parent
+  // render, flipping `loading` back to true forever — a connection-less user was
+  // stuck on "Loading goals…". `cancelled` also stops a late GET from clobbering
+  // an optimistic create/edit/delete, or setting state after unmount.
+  useEffect(() => {
+    let cancelled = false;
     if (demoMode) {
       setGoals(demoGoals);
       setLoading(false);
@@ -577,36 +586,42 @@ export default function Goals({
     }
     setLoading(true);
     setErr(null);
-    try {
-      const r = await apiFetch("/api/goals");
-      if (!r.ok) {
-        if (r.status === 401) {
-          setGoals([]);
-          return;
-        }
-        // Server returns 503 + hint:"MIGRATION_PENDING" when the goals
-        // table hasn't been provisioned yet. Surface a clear pending-setup
-        // state instead of a scary HTTP error.
-        if (r.status === 503) {
-          const body = await r.json().catch(() => ({}));
-          if (body?.hint === "MIGRATION_PENDING") {
+    (async () => {
+      try {
+        const r = await apiFetch("/api/goals");
+        if (cancelled) return;
+        if (!r.ok) {
+          if (r.status === 401) {
             setGoals([]);
-            setErr({ pending: true, migration: body.migration || "014_goals.sql" });
             return;
           }
+          // Server returns 503 + hint:"MIGRATION_PENDING" when the goals
+          // table hasn't been provisioned yet. Surface a clear pending-setup
+          // state instead of a scary HTTP error.
+          if (r.status === 503) {
+            const body = await r.json().catch(() => ({}));
+            if (cancelled) return;
+            if (body?.hint === "MIGRATION_PENDING") {
+              setGoals([]);
+              setErr({ pending: true, migration: body.migration || "014_goals.sql" });
+              return;
+            }
+          }
+          throw new Error(`HTTP ${r.status}`);
         }
-        throw new Error(`HTTP ${r.status}`);
+        const json = await r.json();
+        if (cancelled) return;
+        setGoals(Array.isArray(json?.goals) ? json.goals : []);
+      } catch (e) {
+        if (!cancelled) setErr(e?.message || "Failed to load goals");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      const json = await r.json();
-      setGoals(Array.isArray(json?.goals) ? json.goals : []);
-    } catch (e) {
-      setErr(e?.message || "Failed to load goals");
-    } finally {
-      setLoading(false);
-    }
-  }, [demoMode, demoGoals]);
-
-  useEffect(() => { load(); }, [load]);
+    })();
+    return () => { cancelled = true; };
+    // Intentionally keyed on demoMode only: demoGoals takes a fresh reference every
+    // parent render, so listing it would restore the stuck-loading re-fire loop.
+  }, [demoMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Combined account choices for the picker. Stable id so the form can
   // track selections regardless of provider.
@@ -616,7 +631,10 @@ export default function Goals({
       label: `${a.brokerage || "Broker"} — ${a.accountName || ""}`,
       balance: Number(a.balance) || 0,
     })).filter((a) => a.id);
-    const fromPlaid = (plaidAccounts || []).map((a) => ({
+    // Exclude credit/loan accounts — their `current_bal` is money OWED, not an
+    // asset, so summing it as savings progress is nonsense (paying the card down
+    // would lower the goal). Mirrors DebtSection's isDebtAcct filter.
+    const fromPlaid = (plaidAccounts || []).filter((a) => !isDebtAcct(a)).map((a) => ({
       id: String(a.account_id || ""),
       label: `${a.institution_name || "Bank"} — ${a.name || a.subtype || a.type || ""}`,
       balance: Number(a.current_bal) || 0,
