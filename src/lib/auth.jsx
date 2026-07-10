@@ -6,7 +6,7 @@
 // - When not configured: single-user pass-through mode with a fake user
 //   so the rest of the app keeps working without credentials.
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
 import { clearTrackedLocalState } from './userState';
 import { recordAudit } from './apiFetch';
@@ -179,10 +179,13 @@ export function AuthProvider({ children }) {
   // ── 2FA / TOTP ────────────────────────────────────────────
   // Thin wrappers around Supabase Auth MFA. Enabling MFA in the Supabase
   // dashboard (Authentication → Multi-Factor) is a one-time prerequisite.
-  const mfaListFactors = async () => {
+  // Stable identity (closes over the module-level `supabase` only) so consumers
+  // that key an effect on it (e.g. the Settings security panel's MFA refresh)
+  // don't re-fire on every AuthProvider re-render.
+  const mfaListFactors = useCallback(async () => {
     if (!supabase) return { data: { totp: [], all: [] }, error: null };
     return supabase.auth.mfa.listFactors();
-  };
+  }, []);
   const mfaEnroll = async (friendlyName = 'Authenticator') => {
     if (!supabase) return { data: null, error: new Error('Supabase not configured') };
     // Clean up stale unverified factors before enrolling. Supabase rejects

@@ -10279,6 +10279,12 @@ export default function Mizan(){
   const visibleAccounts=useMemo(()=>snapAccounts.filter(a=>!disabledAccts.has(a.accountId)),[snapAccounts,disabledAccts]);
   const visibleAccountIds=useMemo(()=>new Set(visibleAccounts.map(a=>a.accountId)),[visibleAccounts]);
 
+  // Net-worth history lives in state (seeded from localStorage) instead of being
+  // JSON.parsed inline on every render at each consumer — the snapshot effect
+  // below keeps it fresh. A stable reference means the Overview chart / perf memos
+  // stop recomputing over 10y of history on every live-price tick.
+  const [netWorthHistory,setNetWorthHistory]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}});
+
   // Daily net-worth snapshots. Each successful sync writes one entry per day
   // (overwrites same-day so live ticks don't bloat history).
   useEffect(()=>{
@@ -10295,6 +10301,7 @@ export default function Mizan(){
       const trimmed=updated.slice(-3650);
       localStorage.setItem("mizan_networth_history",JSON.stringify(trimmed)); // 10 years cap
       persistUserState("mizan_networth_history",trimmed);
+      setNetWorthHistory(trimmed);
     }catch{}
   },[visibleAccounts]);
 
@@ -11376,14 +11383,14 @@ export default function Mizan(){
 
     <main style={{position:"relative",zIndex:1,maxWidth:1320,margin:"0 auto",padding:`24px 24px calc(110px + env(safe-area-inset-bottom, 0px))`}}>
       <div className="page">
-        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode} pendingSignals={pendingSignals}/>}
+        {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={netWorthHistory} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode} pendingSignals={pendingSignals}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
         {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} botFills={botFills} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} onConnect={()=>{setConnMode("read");setConn(true);}} bankBalance={bankBalance}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} live={live} mapPosition={mapPosition} activities={snapActivities} onNav={setNav} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={botIsRoot} consented={botConsented} demoMode={demoMode}/>}
         {nav==="goals"     &&<GoalsHub
           snapAccounts={visibleAccounts}
           plaidAccounts={plaidAccounts}
-          netWorthHistory={(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})()}
+          netWorthHistory={netWorthHistory}
           demoMode={demoMode}
           currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)}
           ytdContrib={performanceMetrics.ytdContrib||0}

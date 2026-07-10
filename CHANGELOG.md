@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-10
 
 ### Fixed
+- **sharia:** Restore ratio screening — Finnhub free tier dropped balance-sheet dollars (`b0fd7e9`)
 - **overview:** Stop net-worth snapshot spamming localStorage + Supabase every render (`e5f3b09`)
 - **goals:** Restore Fraunces display type across the Goals sub-tab (`f0f12d5`)
 - **goals:** Stop connection-less users being stuck on "Loading goals…" (`625bc90`)
