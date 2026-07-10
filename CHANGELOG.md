@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-10
 
 ### Fixed
+- **goals:** Restore Fraunces display type across the Goals sub-tab (`f0f12d5`)
 - **goals:** Stop connection-less users being stuck on "Loading goals…" (`625bc90`)
 
 ## 2026-07-08

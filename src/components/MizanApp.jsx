@@ -10272,8 +10272,12 @@ export default function Mizan(){
   };
 
   // Accounts the rest of the app sees — disabled ones are filtered out completely.
-  const visibleAccounts=snapAccounts.filter(a=>!disabledAccts.has(a.accountId));
-  const visibleAccountIds=new Set(visibleAccounts.map(a=>a.accountId));
+  // Memoized so the reference is stable across the frequent live-price re-renders.
+  // Unmemoized, these were a NEW array/Set every render, which made the net-worth
+  // snapshot effect below (and children keyed on snapAccounts, e.g. Goals) re-fire
+  // every render — spamming localStorage + Supabase writes and, in Goals, a fetch loop.
+  const visibleAccounts=useMemo(()=>snapAccounts.filter(a=>!disabledAccts.has(a.accountId)),[snapAccounts,disabledAccts]);
+  const visibleAccountIds=useMemo(()=>new Set(visibleAccounts.map(a=>a.accountId)),[visibleAccounts]);
 
   // Daily net-worth snapshots. Each successful sync writes one entry per day
   // (overwrites same-day so live ticks don't bloat history).
