@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-07-10
 
+### Added
+- **plaid:** Force a live bank balance pull on manual Sync (`e02dfee`)
+
 ### Changed
 - **cleanup:** Stabilize netWorthHistory + mfaListFactors references (`d151126`)
 

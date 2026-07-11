@@ -2277,7 +2277,7 @@ function ETFOverlapPanel(){
     </button>;
   };
 
-  return <CollapsibleTile title="ETF OVERLAP ANALYZER" subtitle="Compare 2–4 halal funds — shared holdings mean you own the same companies twice" accent={T.blue} storageKey="etf_overlap" defaultOpen={false} style={{marginTop:T.s5}}>
+  return <CollapsibleTile title="ETF OVERLAP ANALYZER" subtitle="Compare 2–4 halal funds — shared holdings mean you own the same companies twice" accent={T.blue} storageKey="etf_overlap" defaultOpen={true}>
     {/* fund pickers */}
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:T.s4}}>
       {(universe.length?universe:sel.map(s=>({symbol:s,vehicle:"etf",assetClass:"equity"}))).map(chip)}
@@ -4602,10 +4602,10 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
       // under a single "Tools" group so the top row stays ~5 tabs instead of 7 and
       // stops scrolling off-screen on narrow viewports. `sub` keeps its original
       // per-tool values; the top row derives its active state from them.
-      const TOOLS=["rebalance","tax","dividends","backtest"];
+      const TOOLS=["rebalance","tax","dividends","backtest","overlap"];
       const topActive=TOOLS.includes(sub)?"tools":sub;
       const topTabs=[["holdings","Holdings"],["screener","Screener"],["activity","Activity"],["assets","Assets"],["tools","Tools"]];
-      const toolTabs=[["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["dividends","Dividends"],["backtest","Backtest"]];
+      const toolTabs=[["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["dividends","Dividends"],["backtest","Backtest"],["overlap","ETF Overlap"]];
       return<>
         <TabBar tabs={topTabs} active={topActive} onChange={v=>{if(v==="tools"){if(!TOOLS.includes(sub))setSub("rebalance");}else setSub(v);}}/>
         {topActive==="tools"&&<TabBar tabs={toolTabs} active={sub} onChange={setSub} accent={T.slate}/>}
@@ -4764,8 +4764,9 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
         research tool by nature, not a trading one. Uses Polygon for OHLC. */}
     {sub==="dividends"&&<DividendPlanner holdings={merged} portfolioValue={tot}/>}
     {sub==="backtest"&&<HistoricalBacktest/>}
+    {sub==="overlap"&&<ETFOverlapPanel/>}
 
-    {sub==="screener"&&<><AAOIFIScreener holdings={merged}/><ETFOverlapPanel/></>}
+    {sub==="screener"&&<AAOIFIScreener holdings={merged}/>}
     {sub==="assets"&&<ManualAssets demoMode={demoMode}/>}
   </div>;
 }
