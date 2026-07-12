@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **admin:** Branded in-app user invites (BACKLOG F8) (`faf556c`)
 
 ### Fixed
+- **email:** Add UTF-8 charset meta so → and Ī don't garble (`be4de90`)
 - **email:** Correct invite footer + add Learn-more button (`3b6e15f`)
 
 ### Docs
