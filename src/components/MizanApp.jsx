@@ -8133,6 +8133,10 @@ function AdminPanel(){
   const[dbStatus,setDbStatus]=useState(null);
   // Per-job run state for the Maintenance panel: {job:{status,code,msg}}.
   const[cronRun,setCronRun]=useState({});
+  // Branded-invite form state.
+  const[inviteEmail,setInviteEmail]=useState("");
+  const[inviteMsg,setInviteMsg]=useState(null);
+  const[inviteBusy,setInviteBusy]=useState(false);
 
   const PAGE=50;
 
@@ -8162,6 +8166,21 @@ function AdminPanel(){
     }catch(e){
       setCronRun(p=>({...p,[job]:{status:"error",msg:e?.message||"Network error"}}));
     }
+  };
+
+  const invite=async()=>{
+    const email=inviteEmail.trim().toLowerCase();
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){setInviteMsg({ok:false,msg:"Enter a valid email."});return;}
+    setInviteBusy(true);setInviteMsg(null);
+    try{
+      const r=await apiFetch("/api/admin/invite",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d?.ok){setInviteMsg({ok:false,msg:d?.error||`HTTP ${r.status}`});return;}
+      setInviteMsg({ok:true,msg:`Branded invite sent to ${d.email}.`});
+      setInviteEmail("");
+      load();
+    }catch(e){setInviteMsg({ok:false,msg:e?.message||"Network error"});}
+    finally{setInviteBusy(false);}
   };
 
   const load=useCallback(async()=>{
@@ -8282,6 +8301,15 @@ function AdminPanel(){
       <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>USERS · {users.length}</span>
         <button onClick={load} disabled={busy} className="btn-ghost" style={{fontSize:10}}>{busy?"Loading…":"Refresh"}</button>
+      </div>
+      <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>INVITE A USER</span>
+        <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+          <input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invite();}} placeholder="name@example.com" type="email" className="field" style={{flex:1,minWidth:200,fontSize:13}}/>
+          <button onClick={invite} disabled={inviteBusy} className="btn-primary" style={{fontSize:11,whiteSpace:"nowrap"}}>{inviteBusy?"Sending…":"Send branded invite"}</button>
+        </div>
+        {inviteMsg&&<div style={{fontFamily:FM,fontSize:11,color:inviteMsg.ok?T.gain:T.loss}}>{inviteMsg.ok?<Icon name="check" size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>:ICON_NO}{inviteMsg.msg}</div>}
+        <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5}}>Sends a Mīzan-branded invite from alerts@mizan.exchange — not Supabase's default. (Deliverability needs the DMARC DNS record; see setup notes.)</div>
       </div>
       {users.length===0
         ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No users yet.</div>

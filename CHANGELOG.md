@@ -13,6 +13,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **backlog:** F8 — invite email rebrand + spam deliverability (user-reported) (`3368c27`)
 - Correct false 'secrets encrypted at rest' claims (verified plaintext in prod) (`9be8736`)
 
+### Maintenance
+- Add project-scoped Supabase MCP server config (`011d4a6`)
+
 ## 2026-07-10
 
 ### Added
