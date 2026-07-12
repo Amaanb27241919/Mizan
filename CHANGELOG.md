@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-12
 
 ### Docs
+- **backlog:** F8 — invite email rebrand + spam deliverability (user-reported) (`3368c27`)
 - Correct false 'secrets encrypted at rest' claims (verified plaintext in prod) (`9be8736`)
 
 ## 2026-07-10
