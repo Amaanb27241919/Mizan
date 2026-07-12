@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **plaid:** Force a live bank balance pull on manual Sync (`e02dfee`)
 
 ### Changed
+- **portfolio:** Move ETF Overlap Analyzer to Portfolio > Tools (`da75537`)
 - **cleanup:** Stabilize netWorthHistory + mfaListFactors references (`d151126`)
 
 ### Fixed

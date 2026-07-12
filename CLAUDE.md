@@ -72,7 +72,7 @@ src/lib/useKeyboard.js         — Global keyboard shortcuts
 api/[...path].mjs              — Vercel catch-all. Routes to lib/handlers.mjs.
 lib/handlers.mjs               — 6,100+ lines. Every API route in one file.
 lib/sharia.mjs                 — Sharia screening service (provider seam: Finnhub now, Zoya when ZOYA_API_KEY set). screenSymbol/screenBatch power /api/screen → governs h.sh_ app-wide
-lib/crypto.mjs                 — AES-256-GCM encrypt/decrypt (APP_ENCRYPTION_KEY)
+lib/crypto.mjs                 — AES-256-GCM encrypt/decrypt. Env var is `ENCRYPTION_KEY` (NOT APP_ENCRYPTION_KEY). ⚠️ 2026-07-12: verified against prod DB — this is BUILT but DORMANT. `ENCRYPTION_KEY` is not set, so `ENC_ENABLED` is false and every write falls back to plaintext. Result: user_snaptrade.snaptrade_user_secret is PLAINTEXT (8/8 rows), secret_ciphertext empty; plaid_tokens.access_token has NO encryption at all; user_state is plaintext. The landing page's "admin-blind"/"secrets encrypted at rest" claims were FALSE and were corrected (mizan-landing 6ae5b88). To activate: set ENCRYPTION_KEY, backfill existing rows, then finish 017.
 lib/anomaly.mjs                — 4 anomaly detectors (brute force, 5xx spike, cron staleness, new device)
 lib/alerts.mjs                 — Resend email: owner anomaly alerts + user emails (digest, re-auth, bug reports, invites) via a branded HTML shell (renderBrandedEmail, logo header). From = ALERT_FROM on the verified mizan.exchange domain
 lib/rateLimit.mjs              — DB-backed rate limiting (increment_rate_limit RPC)
@@ -99,8 +99,8 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 013_rls_hardening.sql          — RLS gap patch
 014_rls_hardening2.sql         — RLS gap patch 2
 015_rls_audit_and_select_policies.sql — Pre-launch RLS audit confirming full coverage
-016_encrypt_secrets.sql        — Added _enc/_nonce columns to user_snaptrade + user_keys
-017_drop_plaintext_secrets.sql — Dropped plaintext secret columns (AES-256-GCM only now)
+016_encrypt_secrets.sql        — Added ciphertext/iv/auth_tag columns to user_snaptrade + user_keys (columns exist, but NEVER POPULATED — see crypto.mjs note above; ENCRYPTION_KEY unset so encryption never ran)
+017_drop_plaintext_secrets.sql — INTENDED to drop plaintext secret cols, but the plaintext `snaptrade_user_secret` still exists AND is the only populated one. Effectively NOT in force. Do not trust "AES-256-GCM only now".
 018_security_events.sql        — security_events table (DB-backed IP blocks)
 019_purification.sql           — purification_ratios table (AAOIFI impurity %)
 020_trading_bot.sql            — bot_strategies + pending_signals (owner/beta trading bot)
@@ -411,7 +411,7 @@ These are documented constraints, not undiscovered issues:
 
 | Integration | What It Does | Key Env Vars | Notes |
 |-------------|-------------|--------------|-------|
-| SnapTrade | Brokerage aggregation | `VITE_SNAPTRADE_CLIENT_ID`, `VITE_SNAPTRADE_CONSUMER_KEY` | userSecret AES-256-GCM encrypted in DB. **Trading varies by broker** (gate on the `/brokerages` object's `allows_trading` flag, NOT `authorization_types` which is unreliable): Fidelity = read-only (no orders); **Robinhood = READ-ONLY via SnapTrade — `allows_trading:false`, a `connectionType:"trade"` login returns 400 code 1012 "does not support trade authorizations" (corrected 2026-07-08; it does NOT trade)**; E\*Trade = trade-enabled but whole-shares only. See memory `snaptrade-broker-capabilities`. Trading needs `connectionType:"trade"`; the connect modal now badges non-trading brokers "Read-only" and blocks trade selection. |
+| SnapTrade | Brokerage aggregation | `VITE_SNAPTRADE_CLIENT_ID`, `VITE_SNAPTRADE_CONSUMER_KEY` | ⚠️ userSecret is PLAINTEXT in DB today (encryption built but dormant — see crypto.mjs note; ENCRYPTION_KEY unset). Was documented as encrypted; corrected 2026-07-12. **Trading varies by broker** (gate on the `/brokerages` object's `allows_trading` flag, NOT `authorization_types` which is unreliable): Fidelity = read-only (no orders); **Robinhood = READ-ONLY via SnapTrade — `allows_trading:false`, a `connectionType:"trade"` login returns 400 code 1012 "does not support trade authorizations" (corrected 2026-07-08; it does NOT trade)**; E\*Trade = trade-enabled but whole-shares only. See memory `snaptrade-broker-capabilities`. Trading needs `connectionType:"trade"`; the connect modal now badges non-trading brokers "Read-only" and blocks trade selection. |
 | Plaid | Bank accounts + transactions | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | access_token server-only, never reaches browser |
 | Anthropic | AI Advisor chat | `ANTHROPIC_KEY` | claude-sonnet-4-6, 60/hr rate limit, streaming |
 | Stooq | Gold/silver spot prices | None (free) | CSV proxy — no API key needed |
