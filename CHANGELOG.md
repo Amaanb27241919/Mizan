@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-12
 
 ### Added
+- **auth-email:** Branded Supabase Auth email templates (confirm/invite/magic-link/recovery) (`91b1e28`)
 - **admin:** Branded in-app user invites (BACKLOG F8) (`faf556c`)
 
 ### Fixed

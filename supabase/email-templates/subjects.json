@@ -2,5 +2,7 @@
   "confirmation": "Confirm your MĪZAN email",
   "invite": "You're invited to MĪZAN",
   "magic_link": "Your MĪZAN sign-in link",
-  "recovery": "Reset your MĪZAN password"
+  "recovery": "Reset your MĪZAN password",
+  "email_change": "Confirm your new MĪZAN email",
+  "reauthentication": "Your MĪZAN verification code"
 }

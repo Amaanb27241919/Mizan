@@ -68,6 +68,31 @@ const TEMPLATES = {
       footNote: "You received this because a password reset was requested for this email.",
     }),
   },
+  email_change: {
+    subject: "Confirm your new MĪZAN email",
+    html: renderBrandedEmail({
+      eyebrow: "Email change",
+      title: "Confirm your new email",
+      bodyText:
+        "You requested to change the email on your MĪZAN account to {{ .NewEmail }}.\n\n" +
+        "Confirm below to complete the change. If you didn't request this, ignore this email and your address stays the same.",
+      ctaUrl: LINK, ctaLabel: "Confirm email change →",
+      footNote: "You received this because an email change was requested for your Mizan account.",
+    }),
+  },
+  // Reauthentication sends a 6-digit OTP ({{ .Token }}), not a link — so no button.
+  reauthentication: {
+    subject: "Your MĪZAN verification code",
+    html: renderBrandedEmail({
+      eyebrow: "Verification code",
+      title: "Confirm it's you",
+      bodyText:
+        "Enter this code to confirm your recent action on MĪZAN:\n\n" +
+        "{{ .Token }}\n\n" +
+        "This code expires shortly. If you didn't request it, you can safely ignore this email.",
+      footNote: "You received this because a sensitive action was attempted on your Mizan account.",
+    }),
+  },
 };
 
 const subjects = {};
@@ -77,4 +102,4 @@ for (const [key, t] of Object.entries(TEMPLATES)) {
   console.log(`wrote ${key}.html  ·  subject: ${t.subject}`);
 }
 writeFileSync(join(OUT, "subjects.json"), JSON.stringify(subjects, null, 2));
-console.log("\nAll 4 templates written to supabase/email-templates/");
+console.log(`\nAll ${Object.keys(TEMPLATES).length} templates written to supabase/email-templates/`);

@@ -35,6 +35,10 @@ const body = {
   mailer_subjects_magic_link:            subjects.magic_link,
   mailer_templates_recovery_content:     read("recovery"),
   mailer_subjects_recovery:              subjects.recovery,
+  mailer_templates_email_change_content: read("email_change"),
+  mailer_subjects_email_change:          subjects.email_change,
+  mailer_templates_reauthentication_content: read("reauthentication"),
+  mailer_subjects_reauthentication:      subjects.reauthentication,
 };
 
 const res = await fetch(`https://api.supabase.com/v1/projects/${REF}/config/auth`, {
