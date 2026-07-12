@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-12
+
+### Docs
+- Correct false 'secrets encrypted at rest' claims (verified plaintext in prod) (`9be8736`)
+
 ## 2026-07-10
 
 ### Added
