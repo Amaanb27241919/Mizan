@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **admin:** Branded in-app user invites (BACKLOG F8) (`faf556c`)
 
+### Fixed
+- **email:** Correct invite footer + add Learn-more button (`3b6e15f`)
+
 ### Docs
 - **backlog:** F8 — invite email rebrand + spam deliverability (user-reported) (`3368c27`)
 - Correct false 'secrets encrypted at rest' claims (verified plaintext in prod) (`9be8736`)
