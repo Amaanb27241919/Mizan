@@ -19,6 +19,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **email:** Correct invite footer + add Learn-more button (`3b6e15f`)
 
 ### Docs
+- DMARC added + close BACKLOG F8 + record 2026-07-12 session (`de26a48`)
 - **backlog:** F8 — invite email rebrand + spam deliverability (user-reported) (`3368c27`)
 - Correct false 'secrets encrypted at rest' claims (verified plaintext in prod) (`9be8736`)
 
