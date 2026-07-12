@@ -17,6 +17,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - Correct false 'secrets encrypted at rest' claims (verified plaintext in prod) (`9be8736`)
 
 ### Maintenance
+- Vendor Supabase agent skills (supabase + postgres-best-practices) (`d802a31`)
 - Add project-scoped Supabase MCP server config (`011d4a6`)
 
 ## 2026-07-10
