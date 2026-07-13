@@ -487,21 +487,46 @@ const isBrokeragePlaid = a => a?.type === "investment" || a?.type === "brokerage
 const isRetirementPlaid = a =>
   isBrokeragePlaid(a) && /(401|403|457|\bira\b|roth|pension|retire|thrift|tsp|keogh)/i.test(`${a?.subtype || ""} ${a?.name || ""}`);
 
-// Connected investment-class wealth for the Zakat worksheet, split into its
-// display rows. Used by BOTH the Zakat tab AND the Overview tile so their
-// zakat figures can't diverge. SnapTrade brokerage balances + Plaid retirement
-// (401k/IRA, always counted — usually distinct from a taxable SnapTrade
-// account) + Plaid non-retirement investments (only when SnapTrade is absent,
-// to avoid double-counting a broker linked via both providers).
-function connectedInvestmentBreakdown(snapAccounts = [], plaidAccounts = []) {
-  const snap = Array.isArray(snapAccounts) ? snapAccounts : [];
-  const plaid = Array.isArray(plaidAccounts) ? plaidAccounts : [];
-  const brokerage = snap.reduce((s, a) => s + (a.balance || 0), 0);
-  const retirement = plaid.filter(isRetirementPlaid).reduce((s, a) => s + (+a.current_bal || 0), 0);
-  const investOther = snap.length === 0
-    ? plaid.filter(a => isBrokeragePlaid(a) && !isRetirementPlaid(a)).reduce((s, a) => s + (+a.current_bal || 0), 0)
-    : 0;
-  return { brokerage, retirement, investOther, total: brokerage + retirement + investOther };
+// Individual connected accounts eligible for the Zakat asset picker — the
+// checklist the user ticks (like the Goals account picker). SnapTrade brokerage
+// accounts + Plaid investment/retirement + Plaid depository (cash). Credit/loan
+// accounts are liabilities and are intentionally left out — the user enters
+// those in the worksheet's debt rows. Stable ids let the Zakat tab AND the
+// Overview tile share one selection so their figures can't diverge.
+function zakatConnectedAccounts(snapAccounts = [], plaidAccounts = []) {
+  const list = [];
+  for (const a of (Array.isArray(snapAccounts) ? snapAccounts : [])) {
+    if (!a.accountId) continue;
+    list.push({ id: `snap:${a.accountId}`, label: `${a.brokerage || "Broker"} — ${a.accountName || ""}`, balance: Number(a.balance) || 0, kind: "brokerage" });
+  }
+  for (const a of (Array.isArray(plaidAccounts) ? plaidAccounts : [])) {
+    if (!a.account_id) continue;
+    const id = `plaid:${a.account_id}`;
+    const balance = Number(a.current_bal) || 0;
+    const label = `${a.institution_name || "Bank"} — ${a.name || a.subtype || a.type || ""}`;
+    if (isRetirementPlaid(a)) list.push({ id, label, balance, kind: "retirement" });
+    else if (isBrokeragePlaid(a)) list.push({ id, label, balance, kind: "investment" });
+    else if (a.type === "depository") list.push({ id, label, balance, kind: "cash" });
+    // credit / loan intentionally skipped (liabilities, not zakatable assets)
+  }
+  return list.filter((a) => a.balance > 0);
+}
+
+// Category totals from the picker selection. `excludedIds` = the ids the user
+// unticked. Investment-class (brokerage + retirement + investments) is summed
+// separately from cash because the investment factor only scales the former.
+function zakatSelectedTotals(accountList = [], excludedIds) {
+  const ex = excludedIds instanceof Set ? excludedIds : new Set(excludedIds || []);
+  const t = { brokerage: 0, retirement: 0, investOther: 0, cash: 0 };
+  for (const a of accountList) {
+    if (ex.has(a.id)) continue;
+    if (a.kind === "brokerage") t.brokerage += a.balance;
+    else if (a.kind === "retirement") t.retirement += a.balance;
+    else if (a.kind === "investment") t.investOther += a.balance;
+    else if (a.kind === "cash") t.cash += a.balance;
+  }
+  t.invest = t.brokerage + t.retirement + t.investOther;
+  return t;
 }
 
 /* ─── DEMO BANK FIXTURES (Plaid stand-in) ────────────── */
@@ -1524,16 +1549,20 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     demoMode ? DEMO_MANUAL_ASSETS : manualAssetsRaw,
     demoMode,
   );
+  // Same connected-account picker selection the Zakat tab uses (the unticked
+  // account ids live in the worksheet), so the tile and the tab never disagree.
+  const overviewConnectedTotals = zakatSelectedTotals(
+    zakatConnectedAccounts(snapAccounts, plaidAccounts),
+    new Set(Array.isArray(overviewWorksheet.excludedAccounts) ? overviewWorksheet.excludedAccounts : []),
+  );
   const {
     aboveNisab: overviewAboveNisab,
     zakatDue: zakatDueOverview,
   } = computeZakatWorksheet({
     worksheet: overviewWorksheet,
     settings: zakatSettings,
-    // Same connected-investment total as the Zakat tab (brokerage + Plaid
-    // retirement + Plaid investments) so the two surfaces never disagree.
-    brokerageTotal: connectedInvestmentBreakdown(snapAccounts, plaidAccounts).total,
-    bankBalance,
+    brokerageTotal: overviewConnectedTotals.invest,
+    bankBalance: overviewConnectedTotals.cash,
     nisab: nisabOverview,
     gateDue: true,
   });
@@ -3175,10 +3204,12 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
 // editable asset + liability rows, and a live subtotal. Math lives in the pure
 // computeZakatWorksheet() (src/lib/zakat.js).
 function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings, demoMode=false,
-  connectedBrokerage=0, connectedRetirement=0, connectedInvestOther=0, onConnect }){
+  connectedAccounts=[], excludedAccounts=new Set(), onToggleAccount, connectedTotals={}, onConnect }){
   const fmtUSD=v=>`$${(+v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const factorPct = settings.investmentMethod==="longterm_30" ? "× 30%" : null;
-  const hasConnected = connectedBrokerage>0||connectedRetirement>0||connectedInvestOther>0||result.bankCash>0;
+  const countedN = connectedAccounts.filter(a=>!excludedAccounts.has(a.id)).length;
+  const KIND_LABEL = { brokerage:"Brokerage", retirement:"Retirement", investment:"Investment", cash:"Cash" };
+  const KIND_COLOR = { brokerage:T.blue, retirement:T.violet, investment:T.blue, cash:T.gain };
 
   const inputRow=f=>(
     <div key={f.key} style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:T.s3,alignItems:"center",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
@@ -3226,19 +3257,41 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings,
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     <div>
       <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ASSETS</div>
-      {connectedBrokerage>0&&autoRow("Connected brokerages", connectedBrokerage, factorPct?`Resale value of your holdings · ${factorPct} applied`:"Resale value of your connected holdings")}
-      {connectedRetirement>0&&autoRow("Connected retirement", connectedRetirement, factorPct?`Vested 401(k)/IRA balances · ${factorPct} applied`:"Vested 401(k)/IRA balances")}
-      {connectedInvestOther>0&&autoRow("Connected investments", connectedInvestOther, factorPct?`Linked investment accounts · ${factorPct} applied`:"Linked investment accounts")}
-      {result.bankCash>0&&autoRow("Connected bank cash", result.bankCash, "Checking + savings balances")}
-      {onConnect&&!demoMode&&<button onClick={onConnect} style={{
+
+      {/* Connected-account picker — tick the accounts to count toward Zakat,
+          untick any you don't (a joint account, one you handle separately). */}
+      {connectedAccounts.length>0?<div style={{marginBottom:T.s3}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:T.s2,gap:T.s2,flexWrap:"wrap"}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600}}>CONNECTED ACCOUNTS · {countedN} of {connectedAccounts.length} counted</span>
+          {factorPct&&<span style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.04em"}}>investments {factorPct}</span>}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:220,overflowY:"auto",padding:T.s2,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
+          {connectedAccounts.map(a=>{
+            const on=!excludedAccounts.has(a.id);
+            return<label key={a.id} style={{display:"flex",alignItems:"center",gap:T.s2,padding:`6px ${T.s2}`,borderRadius:T.rSm,cursor:demoMode?"default":"pointer",background:on?`${T.blue}14`:"transparent",border:`1px solid ${on?T.blue+"55":T.border}`,opacity:demoMode?0.6:1}}>
+              <input type="checkbox" checked={on} disabled={demoMode} onChange={()=>onToggleAccount&&onToggleAccount(a.id)} style={{cursor:demoMode?"default":"pointer",accentColor:T.blue}}/>
+              <span style={{fontFamily:FM,fontSize:9,color:KIND_COLOR[a.kind]||T.muted,letterSpacing:"0.04em",fontWeight:600,padding:"1px 5px",borderRadius:T.rSm,background:`${KIND_COLOR[a.kind]||T.muted}14`,whiteSpace:"nowrap"}}>{KIND_LABEL[a.kind]||"Asset"}</span>
+              <span style={{fontFamily:FP,fontSize:12,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.label}</span>
+              <span style={{fontFamily:FM,fontSize:11,color:on?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(a.balance)}</span>
+            </label>;
+          })}
+        </div>
+        <div style={{marginTop:T.s2,fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
+          Counted: Investments <span style={{color:T.text,fontWeight:600}}>{fmtUSD(connectedTotals.invest||0)}</span>{factorPct?` (${factorPct})`:""} · Cash <span style={{color:T.text,fontWeight:600}}>{fmtUSD(connectedTotals.cash||0)}</span>
+        </div>
+      </div>:(onConnect&&!demoMode&&<button onClick={onConnect} style={{
         width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:T.s2,
-        padding:`${T.s2} ${T.s3}`,marginTop:hasConnected?T.s2:0,
+        padding:`${T.s2} ${T.s3}`,marginBottom:T.s3,
         fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",
         color:T.blue,background:`${T.blue}0D`,border:`1px dashed ${T.blue}55`,borderRadius:T.rSm,cursor:"pointer",
       }}>
         <span aria-hidden="true" style={{fontSize:13,lineHeight:1}}>+</span>
-        {hasConnected?"Connect another account to auto-fill":"Connect a bank or brokerage to auto-fill these rows"}
-      </button>}
+        Connect a bank or brokerage to pick accounts here
+      </button>)}
+
+      {/* Manual rows — for anything NOT connected above (cash at home, gold,
+          a 401k or brokerage you haven't linked, business assets, receivables) */}
+      {connectedAccounts.length>0&&<div style={{fontFamily:FP,fontSize:11,color:T.muted,margin:`${T.s2} 0`,lineHeight:1.4}}>Add below only what your connected accounts don't already cover — cash at home, gold, unlinked accounts, business assets, money owed to you.</div>}
       {ZAKAT_ASSET_FIELDS.map(inputRow)}
     </div>
     <div>
@@ -3749,14 +3802,10 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
   const manualAssets=demoMode
     ?DEMO_MANUAL_ASSETS
     :(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
-  // Connected investment-class wealth auto-fills the worksheet: SnapTrade
-  // brokerage balances + Plaid retirement (401k/IRA) + Plaid non-retirement
-  // investments. Plaid *non-retirement* investments count only when SnapTrade
-  // is absent, to avoid double-counting a broker linked via both providers
-  // (mirrors the Overview tile). All three are investment-class (the factor
-  // applies); the worksheet shows each as its own read-only auto row.
-  const { brokerage: connectedBrokerage, retirement: connectedRetirement, investOther: connectedInvestOther, total: brokerageTotal } =
-    connectedInvestmentBreakdown(accounts, plaidAccounts);
+  // The connected-account checklist (like the Goals account picker): every
+  // brokerage / retirement / bank account the user can tick to include in — or
+  // untick to exclude from — their zakatable assets.
+  const connectedAccounts = zakatConnectedAccounts(accounts, plaidAccounts);
 
   // ── Comprehensive Zakat worksheet ──────────────────────────────────────
   // The editable worksheet is the source of truth for the manual side of the
@@ -3785,8 +3834,24 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
     setWsDraft(blank);
     saveZakatWorksheet(blank);
   };
+  // Picker selection: unticked connected-account ids (stored in the worksheet
+  // so the Overview tile reads the same choice). Default: every account counted.
+  const excludedAccounts = new Set(Array.isArray(wsDraft.excludedAccounts)?wsDraft.excludedAccounts:[]);
+  const toggleAccount=(id)=>{
+    if(demoMode)return;
+    setWsDraft(d=>{
+      const cur=new Set(Array.isArray(d.excludedAccounts)?d.excludedAccounts:[]);
+      if(cur.has(id))cur.delete(id); else cur.add(id);
+      const next={...d,excludedAccounts:[...cur]};
+      saveZakatWorksheet(next);
+      return next;
+    });
+  };
+  const connectedTotals = zakatSelectedTotals(connectedAccounts, excludedAccounts);
+  // Connected investment wealth (brokerage + retirement + investments) feeds the
+  // factor-scaled bucket; selected bank/depository accounts feed cash.
   const wsResult = computeZakatWorksheet({
-    worksheet: wsDraft, settings, brokerageTotal, bankBalance, nisab: nisabUsd,
+    worksheet: wsDraft, settings, brokerageTotal: connectedTotals.invest, bankBalance: connectedTotals.cash, nisab: nisabUsd,
   });
   const { assetsTotal, liabilitiesTotal, netZakatable, zakatDue, aboveNisab } = wsResult;
   const given           = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
@@ -3989,7 +4054,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
         </div>
       </div>
       <ZakatWorksheet draft={wsDraft} onField={onWsField} onPersist={persistWs} result={wsResult} nisabUsd={nisabUsd} settings={settings} demoMode={demoMode}
-        connectedBrokerage={connectedBrokerage} connectedRetirement={connectedRetirement} connectedInvestOther={connectedInvestOther} onConnect={onConnect}/>
+        connectedAccounts={connectedAccounts} excludedAccounts={excludedAccounts} onToggleAccount={toggleAccount} connectedTotals={connectedTotals} onConnect={onConnect}/>
     </CollapsibleTile>
 
     {/* ─── ROW 1.5: Methodology selector ────────────── */}
