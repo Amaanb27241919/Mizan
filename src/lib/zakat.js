@@ -40,10 +40,14 @@ export const INVESTMENT_FACTOR_LONGTERM = 0.3;
 // Zakat rate — 2.5% of net zakatable wealth.
 export const ZAKAT_RATE = 0.025;
 
-// Default per-user Zakat settings (silver nisab + long-term investment method).
+// Default per-user Zakat settings (silver nisab + full-value investments).
+// Full value is the default because the authoritative scholar-designed
+// worksheets Mizan mirrors (DarusSalam Seminary, Sacred Learning) count stocks
+// AND vested retirement at full resale value, with no 30% haircut. Long-term
+// buy-and-hold users can still opt into AAOIFI's 30% rule via the toggle.
 export const DEFAULT_ZAKAT_SETTINGS = {
   nisabStandard: "silver", // "gold" | "silver"
-  investmentMethod: "longterm_30", // "full" | "longterm_30"
+  investmentMethod: "full", // "full" | "longterm_30"
 };
 
 // ── Unit conversion / spot → nisab ────────────────────────────────────────────
@@ -176,4 +180,114 @@ export function computeZakat({
   const aboveNisab = isAboveNisab(zakatable, nisab);
   const zakatDue = gateDue && !aboveNisab ? 0 : zakatDueOn(zakatable);
   return { invFactor, acctZakatable, negativeBank, bankCash, zakatable, zakatDue, aboveNisab };
+}
+
+// ── Comprehensive Zakat worksheet ─────────────────────────────────────────────
+// A full asset-by-asset worksheet, mirroring authoritative scholar-designed
+// calculators (DarusSalam Seminary, Sacred Learning): the user enters every
+// zakatable asset class, deducts short-term liabilities, and pays 2.5% once
+// above nisab. Mizan auto-fills the connected-brokerage + bank rows; every
+// other row is user-entered.
+//
+// `inv: true` marks investment-class rows (equities / funds / retirement) that
+// the full-vs-30% investment factor scales. Everything else — cash, metals,
+// business assets, receivables — always counts at full value.
+export const ZAKAT_ASSET_FIELDS = [
+  { key: "cashOnHand",         label: "Cash on hand",             help: "Cash at home or in a safe deposit box" },
+  { key: "otherStocks",        label: "Stocks & funds elsewhere", help: "Resale value of shares/funds not in your connected brokerages", inv: true },
+  { key: "retirement",         label: "Retirement (vested)",      help: "Vested amount in 401(k), IRA, or pension", inv: true },
+  { key: "goldSilver",         label: "Gold & silver",            help: "Current market value of the metal — jewelry + bullion" },
+  { key: "businessInventory",  label: "Business assets",          help: "Business cash + inventory / goods bought for resale" },
+  { key: "resaleProperty",     label: "Resale property",          help: "Real estate bought to resell (not your home)" },
+  { key: "accountsReceivable", label: "Accounts receivable",      help: "Money customers owe you" },
+  { key: "loansReceivable",    label: "Loans receivable",         help: "Money you lent that you expect back" },
+  { key: "otherAssets",        label: "Other zakatable assets",   help: "Any other assets subject to Zakat" },
+];
+
+export const ZAKAT_LIABILITY_FIELDS = [
+  { key: "shortTermDebt",   label: "Short-term debts",   help: "Rent, utilities, credit-card bills due now" },
+  { key: "longTermDebtDue", label: "Long-term debt due", help: "The portion of long-term debt due this year" },
+  { key: "salariesOwed",    label: "Salaries owed",      help: "Wages owed to employees or workers" },
+];
+
+// Every worksheet key defaulted to 0 — the empty worksheet.
+export const DEFAULT_ZAKAT_WORKSHEET = Object.freeze(
+  [...ZAKAT_ASSET_FIELDS, ...ZAKAT_LIABILITY_FIELDS].reduce((o, f) => {
+    o[f.key] = 0;
+    return o;
+  }, {})
+);
+
+// Coerce an arbitrary worksheet-shaped object to a clean numeric worksheet:
+// every known key present, negatives and non-finite values clamped to 0,
+// unknown keys dropped. Fail-safe for user input and cross-device sync.
+export function normalizeWorksheet(ws = {}) {
+  const out = {};
+  for (const f of [...ZAKAT_ASSET_FIELDS, ...ZAKAT_LIABILITY_FIELDS]) {
+    const n = Number(ws && ws[f.key]);
+    out[f.key] = Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  return out;
+}
+
+// Full comprehensive-worksheet Zakat computation, shared by the Portfolio →
+// Zakat tab AND the Overview tile so both report an identical figure.
+//
+// Connected brokerage value (`brokerageTotal`, investment-class) and positive
+// bank cash auto-fill their rows; the `worksheet` supplies every manual
+// asset/liability. Investment-class wealth (brokerage + otherStocks +
+// retirement) is scaled by the chosen factor (1.0 full / 0.3 long-term); all
+// other assets count at full value. Short-term liabilities + any bank overdraft
+// are deducted. `gateDue: true` zeroes the due figure below nisab (Overview
+// behavior); the tab passes false and styles the raw 2.5% by `aboveNisab`.
+export function computeZakatWorksheet({
+  worksheet,
+  settings,
+  brokerageTotal = 0,
+  bankBalance = 0,
+  nisab = 0,
+  gateDue = false,
+} = {}) {
+  const ws = normalizeWorksheet(worksheet);
+  const factor = investmentFactor(settings);
+
+  const autoStocks = Math.max(0, Number(brokerageTotal) || 0);
+  const bankCash = Math.max(0, Number(bankBalance) || 0);
+
+  const invManual = ZAKAT_ASSET_FIELDS
+    .filter((f) => f.inv)
+    .reduce((s, f) => s + ws[f.key], 0);
+  const fullManual = ZAKAT_ASSET_FIELDS
+    .filter((f) => !f.inv)
+    .reduce((s, f) => s + ws[f.key], 0);
+
+  // Investment-class wealth (connected brokerage + user-entered stocks +
+  // retirement) is the only bucket the factor scales.
+  const investmentZakatable = (autoStocks + invManual) * factor;
+  const assetsTotal = investmentZakatable + bankCash + fullManual;
+
+  const manualLiabilities = ZAKAT_LIABILITY_FIELDS.reduce((s, f) => s + ws[f.key], 0);
+  const overdraft = negativeBankAmount(bankBalance);
+  const liabilitiesTotal = manualLiabilities + overdraft;
+
+  const netZakatable = Math.max(0, assetsTotal - liabilitiesTotal);
+  const aboveNisab = isAboveNisab(netZakatable, nisab);
+  const zakatDue = gateDue && !aboveNisab ? 0 : zakatDueOn(netZakatable);
+
+  return {
+    factor,
+    autoStocks,
+    bankCash,
+    invManual,
+    fullManual,
+    investmentZakatable,
+    assetsTotal,
+    manualLiabilities,
+    overdraft,
+    liabilitiesTotal,
+    netZakatable,
+    aboveNisab,
+    zakatDue,
+    worksheet: ws,
+  };
 }

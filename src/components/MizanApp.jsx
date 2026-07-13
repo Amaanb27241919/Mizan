@@ -5,8 +5,9 @@ import { apiFetch, recordAudit } from "../lib/apiFetch.js";
 import { persistUserState } from "../lib/userState.js";
 import { downloadCSV } from "../lib/exportCSV.js";
 import {
-  computeZakat, nisabValueFor,
+  computeZakatWorksheet, nisabValueFor,
   NISAB_GOLD_USD, NISAB_SILVER_USD, DEFAULT_ZAKAT_SETTINGS,
+  DEFAULT_ZAKAT_WORKSHEET, ZAKAT_ASSET_FIELDS, ZAKAT_LIABILITY_FIELDS,
 } from "../lib/zakat.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
@@ -1465,19 +1466,6 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   const balanceSum=snapAccounts.reduce((s,a)=>s+(a.balance||0),0);
   const manualAssetsRaw=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
   const manualAssetTotal=manualAssetsRaw.reduce((s,a)=>s+(+a.value||0),0);
-  // Zakatable manual assets only — primary residence, daily-driver car,
-  // and other personal-use items have `zakatable:false` and must NOT
-  // appear in the Overview ZAKAT DUE tile. Mirrors the filter in the
-  // ZakatSadaqah Portfolio tab so both surfaces report the same figure.
-  const manualAssetZakatable=manualAssetsRaw
-    .filter(a=>!a.liability && a.zakatable)
-    .reduce((s,a)=>s+(+a.value||0),0);
-  // Manual liabilities (entries flagged `liability:true`) — used to deduct from
-  // zakatable wealth on the Overview tile so it stays consistent with the
-  // Portfolio → Zakat & Sadaqah tab's calculation.
-  const manualLiabilities=manualAssetsRaw
-    .filter(a=>a.liability && a.zakatable !== false)
-    .reduce((s,a)=>s+(+a.value||0),0);
   const brokerageTot=snapAccounts.length>0?balanceSum:equityValue;
   // Plaid investment-type balances ONLY contribute to Net Worth as a
   // fallback when SnapTrade isn't connected at all. When SnapTrade IS
@@ -1497,26 +1485,29 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   // methodology (silver vs gold nisab, full vs 30% long-term investment
   // valuation). Investment-class wealth (brokerage holdings, Plaid
   // investment-type accounts) is scaled by investmentFactor: 1.0 for
-  // active traders, 0.30 for long-term holders per AAOIFI / contemporary
+  // full value (default), 0.30 for long-term holders per AAOIFI / contemporary
   // fatwa guidance. Cash (bank, brokerage cash) is always full value.
-  // manualAssetZakatable already filters out personal-use exempt items
-  // (primary residence, daily-driver car).
   const zakatSettings = useZakatSettings();
   const liveNisab     = useLiveNisab();
   const nisabOverview = nisabValueFor(zakatSettings, liveNisab);
-  // Same pure pipeline as the Portfolio → Zakat tab (src/lib/zakat.js) so both
-  // surfaces report an identical, Islamically-correct figure: investment-class
-  // wealth scaled by the chosen factor, positive bank cash added, overdraft +
-  // manual liabilities deducted. gateDue:true zeroes the headline below nisab
+  // Read the SAME comprehensive worksheet the Portfolio → Zakat tab edits so
+  // both surfaces report an identical figure. In demo, seed from the demo
+  // manual assets; otherwise use the saved worksheet (or a first-run seed from
+  // the user's manual assets). gateDue:true zeroes the headline below nisab
   // (the Overview shows nothing due; the tab exposes the raw 2.5%).
+  const savedWorksheet = useZakatWorksheet();
+  const overviewWorksheet = effectiveZakatWorksheet(
+    savedWorksheet,
+    demoMode ? DEMO_MANUAL_ASSETS : manualAssetsRaw,
+    demoMode,
+  );
   const {
     aboveNisab: overviewAboveNisab,
     zakatDue: zakatDueOverview,
-  } = computeZakat({
-    acctTotal: Math.max(0, brokerageTot) + plaidInvestmentTot,
+  } = computeZakatWorksheet({
+    worksheet: overviewWorksheet,
     settings: zakatSettings,
-    zakatableManual: manualAssetZakatable,
-    liabilityTotal: manualLiabilities,
+    brokerageTotal: Math.max(0, brokerageTot) + plaidInvestmentTot,
     bankBalance,
     nisab: nisabOverview,
     gateDue: true,
@@ -3150,6 +3141,82 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
   </div>;
 }
 
+/* ─── ZAKAT WORKSHEET (comprehensive) ─────────────────── */
+// Presentational editor for the full Zakat worksheet — mirrors the category
+// list of the authoritative scholar calculators Mizan follows (DarusSalam
+// Seminary + Sacred Learning): every zakatable asset class, minus deductible
+// short-term liabilities, at 2.5%. State + persistence are lifted to
+// ZakatSadaqah; this renders the connected-account rows (auto, read-only), the
+// editable asset + liability rows, and a live subtotal. Math lives in the pure
+// computeZakatWorksheet() (src/lib/zakat.js).
+function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings, demoMode=false }){
+  const fmtUSD=v=>`$${(+v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const factorPct = settings.investmentMethod==="longterm_30" ? "× 30%" : null;
+
+  const inputRow=f=>(
+    <div key={f.key} style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:T.s3,alignItems:"center",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
+      <div style={{minWidth:0}}>
+        <div style={{fontFamily:FP,fontSize:13,fontWeight:500,color:T.text,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+          {f.label}
+          {f.inv&&factorPct&&<span style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.06em",fontWeight:600,padding:`1px 5px`,borderRadius:T.rSm,background:`${T.gold}14`}}>{factorPct}</span>}
+        </div>
+        <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:1,lineHeight:1.35}}>{f.help}</div>
+      </div>
+      <div style={{position:"relative"}}>
+        <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:12,color:T.muted,pointerEvents:"none"}}>$</span>
+        <input type="number" inputMode="decimal" min="0" step="0.01"
+          value={draft[f.key]||""}
+          onChange={e=>onField(f.key,e.target.value)}
+          onBlur={onPersist}
+          disabled={demoMode}
+          placeholder="0"
+          className="field"
+          style={{width:"100%",textAlign:"right",paddingLeft:22,fontVariantNumeric:"tabular-nums",fontFamily:FP,fontSize:14,opacity:demoMode?0.55:1}}/>
+      </div>
+    </div>
+  );
+
+  const autoRow=(label,value,note)=>(
+    <div key={label} style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:T.s3,alignItems:"center",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
+      <div style={{minWidth:0}}>
+        <div style={{fontFamily:FP,fontSize:13,fontWeight:500,color:T.text,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+          {label}
+          <span style={{fontFamily:FM,fontSize:9,color:T.blue,letterSpacing:"0.06em",fontWeight:600,padding:`1px 5px`,borderRadius:T.rSm,background:`${T.blue}14`}}>AUTO</span>
+        </div>
+        <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:1,lineHeight:1.35}}>{note}</div>
+      </div>
+      <div style={{textAlign:"right",fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",paddingRight:2}}>{fmtUSD(value)}</div>
+    </div>
+  );
+
+  const subtotal=(label,value,strong,color)=>(
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:`${T.s2} 0`}}>
+      <span style={{fontFamily:FM,fontSize:strong?12:11,color:strong?T.textHi:T.muted,letterSpacing:"0.05em",fontWeight:strong?600:500}}>{label}</span>
+      <span style={{fontFamily:strong?FU:FP,fontSize:strong?18:14,fontWeight:strong?700:600,color:color||(strong?T.textHi:T.text),fontVariantNumeric:"tabular-nums",letterSpacing:strong?"-0.02em":"-0.005em"}}>{value}</span>
+    </div>
+  );
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    <div>
+      <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ASSETS</div>
+      {result.autoStocks>0&&autoRow("Connected brokerages", result.autoStocks, factorPct?`Resale value of your holdings · ${factorPct} long-term rule applied`:"Resale value of your connected holdings")}
+      {result.bankCash>0&&autoRow("Connected bank cash", result.bankCash, "Checking + savings balances")}
+      {ZAKAT_ASSET_FIELDS.map(inputRow)}
+    </div>
+    <div>
+      <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>WHAT YOU OWE — deducted</div>
+      {result.overdraft>0&&autoRow("Bank overdraft", result.overdraft, "Negative connected-account balance")}
+      {ZAKAT_LIABILITY_FIELDS.map(inputRow)}
+    </div>
+    <div style={{borderTop:`2px solid ${T.dim}`,paddingTop:T.s1}}>
+      {subtotal("Total zakatable assets", fmtUSD(result.assetsTotal))}
+      {subtotal("Less liabilities", `− ${fmtUSD(result.liabilitiesTotal)}`, false, T.loss)}
+      {subtotal("Net zakatable worth", fmtUSD(result.netZakatable), true)}
+      {subtotal(`Nisab threshold (${settings.nisabStandard})`, fmtUSD(nisabUsd))}
+    </div>
+  </div>;
+}
+
 /* ─── ZAKAT + SADAQAH ────────────────────────────────── */
 // Real per-user Zakat calc. Replaces the hardcoded panel that previously
 // rendered the owner's figures to every user. Sums real brokerage balances
@@ -3207,6 +3274,68 @@ function useZakatSettings(){
   },[]);
   return settings;
 }
+
+// ── Zakat worksheet store ──────────────────────────────────────────────────
+// The comprehensive worksheet (cash, metals, retirement, business, receivables,
+// debts) lives in localStorage + user_state under mizan_zakat_worksheet. Pure
+// math is in src/lib/zakat.js (computeZakatWorksheet); these are just the
+// load/save/subscribe glue, mirroring the settings hooks above.
+function loadZakatWorksheet(){
+  try{
+    const raw=localStorage.getItem("mizan_zakat_worksheet");
+    if(!raw)return null; // never saved → caller seeds from manual assets
+    const parsed=JSON.parse(raw);
+    return parsed&&typeof parsed==="object"?parsed:null;
+  }catch{ return null; }
+}
+function saveZakatWorksheet(ws){
+  try{ localStorage.setItem("mizan_zakat_worksheet", JSON.stringify(ws)); }catch{}
+  persistUserState("mizan_zakat_worksheet", ws);
+  // Broadcast so the Overview ZAKAT DUE tile re-renders in lockstep with the tab.
+  try{ window.dispatchEvent(new CustomEvent("mizan-zakat-worksheet")); }catch{}
+}
+// Returns the SAVED worksheet, or null if the user has never saved one.
+function useZakatWorksheet(){
+  const[ws,setWs]=useState(loadZakatWorksheet);
+  useEffect(()=>{
+    const re=()=>setWs(loadZakatWorksheet());
+    window.addEventListener("storage", re);
+    window.addEventListener("mizan-zakat-worksheet", re);
+    return()=>{
+      window.removeEventListener("storage", re);
+      window.removeEventListener("mizan-zakat-worksheet", re);
+    };
+  },[]);
+  return ws;
+}
+// First-run convenience: map the user's existing manual assets into worksheet
+// categories so nobody's zakatable total silently drops when the worksheet
+// ships. Used until the user saves a worksheet of their own (then it's truth).
+// Personal-use items (zakatable:false — primary home, daily driver) are skipped.
+function seedWorksheetFromManualAssets(manualAssets=[]){
+  const ws={...DEFAULT_ZAKAT_WORKSHEET};
+  for(const a of (Array.isArray(manualAssets)?manualAssets:[])){
+    const v=+a.value||0;
+    if(!v)continue;
+    if(a.liability){ if(a.zakatable!==false) ws.shortTermDebt+=v; continue; }
+    if(!a.zakatable)continue;
+    switch(a.type){
+      case"Gold":case"Silver": ws.goldSilver+=v; break;
+      case"Investment Property":case"Real Estate":case"Real Estate (REIT)": ws.resaleProperty+=v; break;
+      case"Business Equity":case"Business": ws.businessInventory+=v; break;
+      default: ws.otherAssets+=v;
+    }
+  }
+  return ws;
+}
+// The worksheet a surface should actually compute against: the demo seed in
+// demo mode, else the user's saved worksheet, else a first-run seed from their
+// manual assets. Keeps the Zakat tab and the Overview tile perfectly in sync.
+function effectiveZakatWorksheet(savedWs, manualAssets, demoMode){
+  if(demoMode)return seedWorksheetFromManualAssets(manualAssets);
+  return savedWs || seedWorksheetFromManualAssets(manualAssets);
+}
+
 // Fetch live gold + silver spot prices from /api/metals/spot once per mount.
 // Server caches 12 h; client just needs it for the lifetime of the page.
 // Falls back to the static NISAB_*_USD constants when the endpoint is
@@ -3582,24 +3711,39 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   const manualAssets=demoMode
     ?DEMO_MANUAL_ASSETS
     :(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
-  const acctTotal       = accounts.reduce((s,a)=>s+(a.balance||0),0);
-  // Zakatable manual assets add at full value; personal-use items
-  // (zakatable:false) and liabilities are excluded from this sum.
-  const zakatableManual = manualAssets.filter(a=>a.zakatable && !a.liability).reduce((s,a)=>s+(a.value||0),0);
-  // Deduct short-term debt from zakatable wealth per AAOIFI guidance.
-  // Bank credit/loan balances flow in via bankBalance (negative component).
-  // Manual assets with a `liability:true` flag are user-flagged short-term debts.
-  const liabilityTotal = manualAssets
-    .filter(a=>a.liability && a.zakatable !== false)
-    .reduce((s,a)=>s+(+a.value||0),0);
-  // Net Zakat via the pure, unit-tested pipeline (src/lib/zakat.js): brokerage
-  // (acctTotal) scaled by the chosen investment method — "full" (2.5% of full
-  // value, trader) or "longterm_30" (2.5% of 30%, AAOIFI long-term
-  // approximation of a public company's zakatable asset share) — plus manual
-  // zakatable assets, minus short-term debt and any negative bank balance, at 2.5%.
-  const { acctZakatable, negativeBank, zakatable, zakatDue, aboveNisab } = computeZakat({
-    acctTotal, settings, zakatableManual, liabilityTotal, bankBalance, nisab: nisabUsd,
+  const brokerageTotal  = accounts.reduce((s,a)=>s+(a.balance||0),0);
+
+  // ── Comprehensive Zakat worksheet ──────────────────────────────────────
+  // The editable worksheet is the source of truth for the manual side of the
+  // calc. Connected brokerage + bank auto-fill their rows; the user enters
+  // cash, metals, retirement, business assets, receivables and debts. On first
+  // use the worksheet is seeded from any existing manual assets so nobody's
+  // zakatable total drops silently. Math is the pure computeZakatWorksheet().
+  const savedWs = useZakatWorksheet();
+  const [wsDraft, setWsDraft] = useState(()=>effectiveZakatWorksheet(savedWs, manualAssets, demoMode));
+  // Re-seed only when the demo toggle flips (read fresh state inside — never
+  // key this on the manualAssets array identity, which changes every render).
+  useEffect(()=>{
+    const ma=demoMode?DEMO_MANUAL_ASSETS:(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
+    setWsDraft(effectiveZakatWorksheet(loadZakatWorksheet(), ma, demoMode));
+  },[demoMode]);
+  const onWsField=(key,val)=>{
+    if(demoMode)return;
+    const num=val===""?0:Math.max(0,+val||0);
+    setWsDraft(d=>({...d,[key]:num}));
+  };
+  const persistWs=()=>{ if(!demoMode) saveZakatWorksheet(wsDraft); };
+  const resetWs=()=>{
+    if(demoMode)return;
+    if(!window.confirm("Clear every worksheet figure back to zero?"))return;
+    const blank={...DEFAULT_ZAKAT_WORKSHEET};
+    setWsDraft(blank);
+    saveZakatWorksheet(blank);
+  };
+  const wsResult = computeZakatWorksheet({
+    worksheet: wsDraft, settings, brokerageTotal, bankBalance, nisab: nisabUsd,
   });
+  const { assetsTotal, liabilitiesTotal, netZakatable, zakatDue, aboveNisab } = wsResult;
   const given           = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
   const pledged         = sadaqah.filter(s=>!s.done).reduce((a,b)=>a+(+b.amt||0),0);
   const fmtUSD          = v=>`$${(+v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -3757,17 +3901,16 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and live nisab. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
         <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
           {[
-            [settings.investmentMethod==="longterm_30"?"Brokerage × 30%":"Brokerage",fmtUSD(acctZakatable)],
-            ["Manual zakatable",fmtUSD(zakatableManual)],
-            ["Short-term debt", `− ${fmtUSD(liabilityTotal+negativeBank)}`],
-            ["Net zakatable wealth (assets minus short-term debt)",fmtUSD(zakatable),true],
+            ["Total zakatable assets",fmtUSD(assetsTotal)],
+            ["Less liabilities", `− ${fmtUSD(liabilitiesTotal)}`],
+            ["Net zakatable worth",fmtUSD(netZakatable),true],
             [`Nisab (${settings.nisabStandard})`,fmtUSD(nisabUsd)],
           ].map(([l,v,b])=><div key={l}>
             <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
             <div style={{fontFamily:FP,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
           </div>)}
         </div>
-        {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55}}>Connect a brokerage or add manual assets to populate these figures.</div>}
+        {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55}}>Connect a brokerage or fill in the worksheet below to populate these figures.</div>}
       </BentoTile>
 
       <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -3783,6 +3926,24 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         </BentoTile>}
       </div>
     </div>
+
+    {/* ─── ROW 1.25: Comprehensive worksheet ────────── */}
+    {/* Every zakatable asset class, mirroring the scholar-designed calculators
+        Mizan follows. Connected brokerage + bank auto-fill; the rest is
+        user-entered. Persisted to mizan_zakat_worksheet (synced) and broadcast
+        so the Overview ZAKAT DUE tile stays in lockstep. */}
+    <CollapsibleTile title="ZAKAT WORKSHEET" subtitle="Every zakatable asset, minus what you owe" storageKey="zakat_worksheet" defaultOpen>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
+        <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.5,maxWidth:520}}>
+          Fill in what you own across the year. Amounts are stored privately and sync across your devices.
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
+          {demoMode&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
+          {!demoMode&&<button onClick={resetWs} className="btn-ghost" style={{fontSize:11,padding:`4px ${T.s3}`}}>Reset</button>}
+        </div>
+      </div>
+      <ZakatWorksheet draft={wsDraft} onField={onWsField} onPersist={persistWs} result={wsResult} nisabUsd={nisabUsd} settings={settings} demoMode={demoMode}/>
+    </CollapsibleTile>
 
     {/* ─── ROW 1.5: Methodology selector ────────────── */}
     {/* Lets the user pick the scholarly basis for the calc:
@@ -3822,8 +3983,8 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>INVESTMENT ZAKAT METHOD</div>
           <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
             {[
+              {k:"full",       label:"Full market value",    note:"Default · scholar consensus"},
               {k:"longterm_30",label:"Long-term (30% rule)",note:"AAOIFI · buy & hold"},
-              {k:"full",       label:"Full market value",    note:"Active trader"},
             ].map(o=>(
               <button key={o.k}
                 onClick={()=>!demoMode&&saveZakatSettings({...settings,investmentMethod:o.k})}
@@ -3847,7 +4008,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         </div>
       </div>
       <div style={{marginTop:T.s3,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
-        Silver nisab is more inclusive (lower threshold); gold is the majority view. The 30% rule treats public-equity holdings as ~30% zakatable to approximate the share of company assets that are cash/receivables/inventory (vs. exempt fixed assets) — appropriate for long-term holders. Active traders should pick full value.
+        Silver nisab is more inclusive (lower threshold); gold is the majority view. <strong style={{color:T.text}}>Full market value</strong> is the default — it matches the scholar-designed calculators Mizan follows, which count shares and retirement at full resale/vested value. The optional <strong style={{color:T.text}}>30% rule</strong> treats public-equity holdings as ~30% zakatable (approximating the cash/receivables/inventory share of company assets vs. exempt fixed assets) — a lighter basis some fatwa councils allow for long-term buy-and-hold investors.
       </div>
       <div style={{marginTop:T.s2,fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.05em"}}>
         {liveNisab.source==="static"

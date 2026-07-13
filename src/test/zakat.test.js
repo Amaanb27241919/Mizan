@@ -20,6 +20,11 @@ import {
   zakatDueOn,
   isAboveNisab,
   computeZakat,
+  computeZakatWorksheet,
+  normalizeWorksheet,
+  DEFAULT_ZAKAT_WORKSHEET,
+  ZAKAT_ASSET_FIELDS,
+  ZAKAT_LIABILITY_FIELDS,
 } from '../lib/zakat.js'
 
 // ── Constants sanity ──────────────────────────────────────────────────────────
@@ -34,10 +39,10 @@ describe('constants', () => {
     expect(INVESTMENT_FACTOR_LONGTERM).toBe(0.3)
   })
 
-  it('defaults to silver nisab + long-term investment method', () => {
+  it('defaults to silver nisab + full-value investment method', () => {
     expect(DEFAULT_ZAKAT_SETTINGS).toEqual({
       nisabStandard: 'silver',
-      investmentMethod: 'longterm_30',
+      investmentMethod: 'full',
     })
   })
 })
@@ -315,5 +320,127 @@ describe('computeZakat', () => {
     expect(neg.zakatable).toBe(8000)
     // the swing between +X cash and −X overdraft is exactly 2X
     expect(pos.zakatable - neg.zakatable).toBe(4000)
+  })
+})
+
+// ── Worksheet model + normalizer ──────────────────────────────────────────────
+describe('worksheet fields', () => {
+  it('exposes every authoritative category the scholar calculators use', () => {
+    const assetKeys = ZAKAT_ASSET_FIELDS.map((f) => f.key)
+    const liabKeys = ZAKAT_LIABILITY_FIELDS.map((f) => f.key)
+    // The comprehensive category set (DarusSalam / Sacred Learning).
+    expect(assetKeys).toEqual(expect.arrayContaining([
+      'cashOnHand', 'otherStocks', 'retirement', 'goldSilver',
+      'businessInventory', 'resaleProperty', 'accountsReceivable', 'loansReceivable',
+    ]))
+    expect(liabKeys).toEqual(expect.arrayContaining([
+      'shortTermDebt', 'longTermDebtDue', 'salariesOwed',
+    ]))
+    // Only investment-class rows carry the factor flag.
+    expect(ZAKAT_ASSET_FIELDS.filter((f) => f.inv).map((f) => f.key))
+      .toEqual(['otherStocks', 'retirement'])
+  })
+
+  it('defaults every key to 0', () => {
+    for (const f of [...ZAKAT_ASSET_FIELDS, ...ZAKAT_LIABILITY_FIELDS]) {
+      expect(DEFAULT_ZAKAT_WORKSHEET[f.key]).toBe(0)
+    }
+  })
+})
+
+describe('normalizeWorksheet', () => {
+  it('coerces strings, clamps negatives/NaN to 0, and drops unknown keys', () => {
+    const out = normalizeWorksheet({
+      cashOnHand: '1000', goldSilver: -5, retirement: NaN, junk: 999,
+    })
+    expect(out.cashOnHand).toBe(1000)
+    expect(out.goldSilver).toBe(0)
+    expect(out.retirement).toBe(0)
+    expect(out).not.toHaveProperty('junk')
+    // every known key is present
+    expect(Object.keys(out).sort()).toEqual(
+      [...ZAKAT_ASSET_FIELDS, ...ZAKAT_LIABILITY_FIELDS].map((f) => f.key).sort()
+    )
+  })
+
+  it('returns an all-zero worksheet for empty/undefined input', () => {
+    expect(normalizeWorksheet()).toEqual(DEFAULT_ZAKAT_WORKSHEET)
+    expect(normalizeWorksheet(null)).toEqual(DEFAULT_ZAKAT_WORKSHEET)
+  })
+})
+
+// ── computeZakatWorksheet: comprehensive worksheet pipeline ────────────────────
+describe('computeZakatWorksheet', () => {
+  const silver = { investmentMethod: 'full', nisabStandard: 'silver' }
+
+  it('sums every asset class at full value, deducts liabilities, applies 2.5%', () => {
+    // Assets: brokerage 100,000 + bank 5,000 + cash 2,000 + retirement 50,000
+    //         + gold 48,500 + business 60,000 + receivable 1,500 = 267,000
+    // Liabilities: short 2,000 + salaries 500 + overdraft 0 = 2,500
+    // Net = 264,500 ; due = 264,500 × 2.5% = 6,612.50
+    const r = computeZakatWorksheet({
+      worksheet: {
+        cashOnHand: 2000, retirement: 50000, goldSilver: 48500,
+        businessInventory: 60000, accountsReceivable: 1500,
+        shortTermDebt: 2000, salariesOwed: 500,
+      },
+      settings: silver,
+      brokerageTotal: 100000,
+      bankBalance: 5000,
+      nisab: 670,
+    })
+    expect(r.autoStocks).toBe(100000)
+    expect(r.bankCash).toBe(5000)
+    expect(r.assetsTotal).toBe(267000)
+    expect(r.liabilitiesTotal).toBe(2500)
+    expect(r.netZakatable).toBe(264500)
+    expect(r.zakatDue).toBeCloseTo(6612.5, 6)
+    expect(r.aboveNisab).toBe(true)
+  })
+
+  it('scales ONLY investment-class rows (brokerage + otherStocks + retirement) under the 30% rule', () => {
+    // (brokerage 100,000 + otherStocks 20,000 + retirement 30,000) × 0.30 = 45,000
+    // + gold 10,000 (full) = 55,000
+    const r = computeZakatWorksheet({
+      worksheet: { otherStocks: 20000, retirement: 30000, goldSilver: 10000 },
+      settings: { investmentMethod: 'longterm_30', nisabStandard: 'silver' },
+      brokerageTotal: 100000,
+      nisab: 670,
+    })
+    expect(r.factor).toBe(0.3)
+    expect(r.investmentZakatable).toBe(45000)
+    expect(r.assetsTotal).toBe(55000)
+    expect(r.zakatDue).toBeCloseTo(1375, 6) // 55,000 × 2.5%
+  })
+
+  it('deducts a bank overdraft as a liability', () => {
+    const r = computeZakatWorksheet({
+      worksheet: { cashOnHand: 10000 },
+      settings: silver,
+      bankBalance: -2000,
+      nisab: 670,
+    })
+    expect(r.bankCash).toBe(0)
+    expect(r.overdraft).toBe(2000)
+    expect(r.netZakatable).toBe(8000)
+  })
+
+  it('never goes negative and gates the due below nisab (Overview behavior)', () => {
+    const r = computeZakatWorksheet({
+      worksheet: { cashOnHand: 100, shortTermDebt: 5000 },
+      settings: silver,
+      nisab: 670,
+      gateDue: true,
+    })
+    expect(r.netZakatable).toBe(0)
+    expect(r.aboveNisab).toBe(false)
+    expect(r.zakatDue).toBe(0)
+  })
+
+  it('handles empty input without NaN', () => {
+    const r = computeZakatWorksheet({})
+    expect(r.assetsTotal).toBe(0)
+    expect(r.netZakatable).toBe(0)
+    expect(r.zakatDue).toBe(0)
   })
 })

@@ -164,7 +164,8 @@ Understanding these concepts is required to work on Mizan correctly. Financial e
 - **Hawl**: One lunar year must pass before Zakat is due on accumulated savings (not yet implemented — tracked in gap list).
 - **2.5% rate** applies to most zakatable assets.
 - Live gold/silver prices from Stooq via `/api/metals/spot`.
-- Zakat is calculated on: cash, equity holdings (market value), gold/silver manual assets. Business inventory rules apply differently — not currently implemented.
+- **Comprehensive worksheet (2026-07-13)**: the Zakat tab is a full asset-by-asset worksheet mirroring the authoritative scholar calculators (DarusSalam Seminary, Sacred Learning). Categories: cash on hand, connected brokerage (auto), connected bank cash (auto), stocks/funds elsewhere, retirement (vested 401k/IRA), gold & silver, business assets/inventory, resale property, accounts receivable, loans receivable — minus short-term debts, long-term debt due, salaries owed, and bank overdraft. `Net zakatable = assets − liabilities`, ×2.5% once above nisab. Stored in `mizan_zakat_worksheet` (synced TRACKED_KEY); seeded once from existing manual assets so nobody's total drops. The **Overview ZAKAT DUE tile and the tab read the same worksheet** via `computeZakatWorksheet` (`src/lib/zakat.js`) so they never diverge.
+- **Default investment method is now `full` value** (was `longterm_30`), matching those scholar calculators which count shares AND vested retirement at full value. The 30% long-term rule is still available via the methodology toggle (opt-in, applies only to investment-class rows: brokerage + stocks + retirement). Cash, metals, receivables, business assets always count at full value.
 
 ### Dividend Purification
 - When a halal company earns a small portion of revenue from haram sources, the dividend is "impure" by that percentage.

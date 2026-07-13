@@ -31,6 +31,7 @@ export const TRACKED_KEYS = [
   'mizan_rebalance_targets',          // target allocation % per asset class
   'mizan_purification_log',           // { [fingerprint]: { purified_at, amount, ticker, dividend_amount, purification_owed } }
   'mizan_purification_overrides',     // { [ticker]: impurityPct } — user-set ratio overrides
+  'mizan_zakat_worksheet',            // comprehensive Zakat worksheet (cash, metals, retirement, business, receivables, debts)
 ];
 
 // User-scoped *local caches* — not synced (regenerated on next sync), but
