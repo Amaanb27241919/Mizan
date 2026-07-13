@@ -480,6 +480,29 @@ const DEMO_SHARIA = {
 const isBankAsset    = a => a?.type === "depository";
 const isBankDebt     = a => a?.type === "credit" || a?.type === "loan";
 const isBrokeragePlaid = a => a?.type === "investment" || a?.type === "brokerage";
+// Retirement accounts among Plaid investment accounts — 401(k)/403(b)/457,
+// IRA/Roth, pension, TSP, Keogh. Used to auto-fill the Zakat worksheet's
+// retirement row (vested value is zakatable). Subtype strings come from Plaid
+// (e.g. "401k", "roth", "ira", "403b", "pension").
+const isRetirementPlaid = a =>
+  isBrokeragePlaid(a) && /(401|403|457|\bira\b|roth|pension|retire|thrift|tsp|keogh)/i.test(`${a?.subtype || ""} ${a?.name || ""}`);
+
+// Connected investment-class wealth for the Zakat worksheet, split into its
+// display rows. Used by BOTH the Zakat tab AND the Overview tile so their
+// zakat figures can't diverge. SnapTrade brokerage balances + Plaid retirement
+// (401k/IRA, always counted — usually distinct from a taxable SnapTrade
+// account) + Plaid non-retirement investments (only when SnapTrade is absent,
+// to avoid double-counting a broker linked via both providers).
+function connectedInvestmentBreakdown(snapAccounts = [], plaidAccounts = []) {
+  const snap = Array.isArray(snapAccounts) ? snapAccounts : [];
+  const plaid = Array.isArray(plaidAccounts) ? plaidAccounts : [];
+  const brokerage = snap.reduce((s, a) => s + (a.balance || 0), 0);
+  const retirement = plaid.filter(isRetirementPlaid).reduce((s, a) => s + (+a.current_bal || 0), 0);
+  const investOther = snap.length === 0
+    ? plaid.filter(a => isBrokeragePlaid(a) && !isRetirementPlaid(a)).reduce((s, a) => s + (+a.current_bal || 0), 0)
+    : 0;
+  return { brokerage, retirement, investOther, total: brokerage + retirement + investOther };
+}
 
 /* ─── DEMO BANK FIXTURES (Plaid stand-in) ────────────── */
 // Mirrors DEMO_ACCOUNTS pattern — used to populate the Finances tab when
@@ -1507,7 +1530,9 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   } = computeZakatWorksheet({
     worksheet: overviewWorksheet,
     settings: zakatSettings,
-    brokerageTotal: Math.max(0, brokerageTot) + plaidInvestmentTot,
+    // Same connected-investment total as the Zakat tab (brokerage + Plaid
+    // retirement + Plaid investments) so the two surfaces never disagree.
+    brokerageTotal: connectedInvestmentBreakdown(snapAccounts, plaidAccounts).total,
     bankBalance,
     nisab: nisabOverview,
     gateDue: true,
@@ -3149,9 +3174,11 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
 // ZakatSadaqah; this renders the connected-account rows (auto, read-only), the
 // editable asset + liability rows, and a live subtotal. Math lives in the pure
 // computeZakatWorksheet() (src/lib/zakat.js).
-function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings, demoMode=false }){
+function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings, demoMode=false,
+  connectedBrokerage=0, connectedRetirement=0, connectedInvestOther=0, onConnect }){
   const fmtUSD=v=>`$${(+v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const factorPct = settings.investmentMethod==="longterm_30" ? "× 30%" : null;
+  const hasConnected = connectedBrokerage>0||connectedRetirement>0||connectedInvestOther>0||result.bankCash>0;
 
   const inputRow=f=>(
     <div key={f.key} style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:T.s3,alignItems:"center",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
@@ -3199,8 +3226,19 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings,
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     <div>
       <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ASSETS</div>
-      {result.autoStocks>0&&autoRow("Connected brokerages", result.autoStocks, factorPct?`Resale value of your holdings · ${factorPct} long-term rule applied`:"Resale value of your connected holdings")}
+      {connectedBrokerage>0&&autoRow("Connected brokerages", connectedBrokerage, factorPct?`Resale value of your holdings · ${factorPct} applied`:"Resale value of your connected holdings")}
+      {connectedRetirement>0&&autoRow("Connected retirement", connectedRetirement, factorPct?`Vested 401(k)/IRA balances · ${factorPct} applied`:"Vested 401(k)/IRA balances")}
+      {connectedInvestOther>0&&autoRow("Connected investments", connectedInvestOther, factorPct?`Linked investment accounts · ${factorPct} applied`:"Linked investment accounts")}
       {result.bankCash>0&&autoRow("Connected bank cash", result.bankCash, "Checking + savings balances")}
+      {onConnect&&!demoMode&&<button onClick={onConnect} style={{
+        width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:T.s2,
+        padding:`${T.s2} ${T.s3}`,marginTop:hasConnected?T.s2:0,
+        fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",
+        color:T.blue,background:`${T.blue}0D`,border:`1px dashed ${T.blue}55`,borderRadius:T.rSm,cursor:"pointer",
+      }}>
+        <span aria-hidden="true" style={{fontSize:13,lineHeight:1}}>+</span>
+        {hasConnected?"Connect another account to auto-fill":"Connect a bank or brokerage to auto-fill these rows"}
+      </button>}
       {ZAKAT_ASSET_FIELDS.map(inputRow)}
     </div>
     <div>
@@ -3671,7 +3709,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
   );
 }
 
-function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
+function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0,onConnect,view="zakat"}){
   // The previous owner-only seed has been removed — it leaked the owner's
   // actual donation list into the JS bundle. Owner's existing donations are
   // already in Supabase user_state.mizan_sadaqah and hydrate on sign-in.
@@ -3711,7 +3749,14 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   const manualAssets=demoMode
     ?DEMO_MANUAL_ASSETS
     :(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
-  const brokerageTotal  = accounts.reduce((s,a)=>s+(a.balance||0),0);
+  // Connected investment-class wealth auto-fills the worksheet: SnapTrade
+  // brokerage balances + Plaid retirement (401k/IRA) + Plaid non-retirement
+  // investments. Plaid *non-retirement* investments count only when SnapTrade
+  // is absent, to avoid double-counting a broker linked via both providers
+  // (mirrors the Overview tile). All three are investment-class (the factor
+  // applies); the worksheet shows each as its own read-only auto row.
+  const { brokerage: connectedBrokerage, retirement: connectedRetirement, investOther: connectedInvestOther, total: brokerageTotal } =
+    connectedInvestmentBreakdown(accounts, plaidAccounts);
 
   // ── Comprehensive Zakat worksheet ──────────────────────────────────────
   // The editable worksheet is the source of truth for the manual side of the
@@ -3889,44 +3934,45 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
   const isEmpty=accounts.length===0&&manualAssets.length===0;
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    {/* ─── ROW 1: Zakat Hero + Donation totals ─────── */}
-    <div className="bento-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:T.s4}}>
-      <BentoTile accent={T.gold} style={{
-        background:`radial-gradient(circle at 100% 0%, ${T.gold}1F, transparent 55%), ${T.card}`,
-        padding:`${T.s6} ${T.s6}`,
-      }}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ZAKAT — {new Date().getFullYear()}</div>
-        <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(zakatDue)}</div>
-        <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"}</div>
-        <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and live nisab. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
-        <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
-          {[
-            ["Total zakatable assets",fmtUSD(assetsTotal)],
-            ["Less liabilities", `− ${fmtUSD(liabilitiesTotal)}`],
-            ["Net zakatable worth",fmtUSD(netZakatable),true],
-            [`Nisab (${settings.nisabStandard})`,fmtUSD(nisabUsd)],
-          ].map(([l,v,b])=><div key={l}>
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
-            <div style={{fontFamily:FP,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
-          </div>)}
-        </div>
-        {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55}}>Connect a brokerage or fill in the worksheet below to populate these figures.</div>}
-      </BentoTile>
-
-      <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
-        <BentoTile accent={T.gain}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>GIVEN TOTAL</div>
-          <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(given)}</div>
-          <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>{sadaqah.filter(s=>s.done).length} donation{sadaqah.filter(s=>s.done).length===1?"":"s"}</div>
-        </BentoTile>
-        {pledged>0&&<BentoTile accent={T.gold}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PLEDGED</div>
-          <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(pledged)}</div>
-          <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1}}>{sadaqah.filter(s=>!s.done).length} outstanding</div>
-        </BentoTile>}
+    {/* ─── ROW 1 (Zakat view): Zakat hero, full width ─────── */}
+    {view==="zakat"&&<BentoTile accent={T.gold} style={{
+      background:`radial-gradient(circle at 100% 0%, ${T.gold}1F, transparent 55%), ${T.card}`,
+      padding:`${T.s6} ${T.s6}`,
+    }}>
+      <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ZAKAT — {new Date().getFullYear()}</div>
+      <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(zakatDue)}</div>
+      <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"}</div>
+      <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and live nisab. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
+      <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
+        {[
+          ["Total zakatable assets",fmtUSD(assetsTotal)],
+          ["Less liabilities", `− ${fmtUSD(liabilitiesTotal)}`],
+          ["Net zakatable worth",fmtUSD(netZakatable),true],
+          [`Nisab (${settings.nisabStandard})`,fmtUSD(nisabUsd)],
+        ].map(([l,v,b])=><div key={l}>
+          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
+          <div style={{fontFamily:FP,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
+        </div>)}
       </div>
-    </div>
+      {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55}}>Connect a brokerage or fill in the worksheet below to populate these figures.</div>}
+    </BentoTile>}
 
+    {/* ─── ROW 1 (Sadaqah view): donation summary ─────── */}
+    {view==="sadaqah"&&<div className="bento-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s4}}>
+      <BentoTile accent={T.gain}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>GIVEN TOTAL</div>
+        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(given)}</div>
+        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>{sadaqah.filter(s=>s.done).length} donation{sadaqah.filter(s=>s.done).length===1?"":"s"}</div>
+      </BentoTile>
+      <BentoTile accent={T.gold}>
+        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PLEDGED</div>
+        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:pledged>0?T.textHi:T.muted,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(pledged)}</div>
+        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1}}>{sadaqah.filter(s=>!s.done).length} outstanding</div>
+      </BentoTile>
+    </div>}
+
+    {/* ─── ROW 1.25 (Zakat view): Comprehensive worksheet ────────── */}
+    {view==="zakat"&&<>
     {/* ─── ROW 1.25: Comprehensive worksheet ────────── */}
     {/* Every zakatable asset class, mirroring the scholar-designed calculators
         Mizan follows. Connected brokerage + bank auto-fill; the rest is
@@ -3942,7 +3988,8 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
           {!demoMode&&<button onClick={resetWs} className="btn-ghost" style={{fontSize:11,padding:`4px ${T.s3}`}}>Reset</button>}
         </div>
       </div>
-      <ZakatWorksheet draft={wsDraft} onField={onWsField} onPersist={persistWs} result={wsResult} nisabUsd={nisabUsd} settings={settings} demoMode={demoMode}/>
+      <ZakatWorksheet draft={wsDraft} onField={onWsField} onPersist={persistWs} result={wsResult} nisabUsd={nisabUsd} settings={settings} demoMode={demoMode}
+        connectedBrokerage={connectedBrokerage} connectedRetirement={connectedRetirement} connectedInvestOther={connectedInvestOther} onConnect={onConnect}/>
     </CollapsibleTile>
 
     {/* ─── ROW 1.5: Methodology selector ────────────── */}
@@ -4037,8 +4084,10 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
         try{setSadaqah(JSON.parse(localStorage.getItem("mizan_sadaqah")||"[]"))}catch{}
       }}/>
     </BentoTile>}
+    </>}
 
-    {/* ─── SADAQAH — collapsible charity log (log entry + filter + history) ─── */}
+    {/* ─── Sadaqah view: charity log (log entry + filter + history) ─── */}
+    {view==="sadaqah"&&<>
     <CollapsibleTile flat title="SADAQAH — CHARITY LOG" subtitle="Log donations, track pledges & view history" storageKey="zakat_sadaqah">
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
@@ -4160,6 +4209,7 @@ function ZakatSadaqah({accounts=[],demoMode=false,bankBalance=0}){
           ]} rows={filtered}/>}
     </BentoTile>
     </CollapsibleTile>
+    </>}
   </div>;
 }
 
@@ -8927,12 +8977,13 @@ function PlaidLinker({ usePlaidLinkHook, linkToken, onSuccess, onExit, shouldOpe
 //
 // Each sub-tab is a self-contained component; this wrapper just owns the
 // active-tab state and the TabBar. No new schema, no new endpoints.
-function GoalsHub({snapAccounts=[],plaidAccounts=[],netWorthHistory=[],demoMode=false,currentNW=0,ytdContrib=0,bankBalance=0}){
+function GoalsHub({snapAccounts=[],plaidAccounts=[],netWorthHistory=[],demoMode=false,currentNW=0,ytdContrib=0,bankBalance=0,onConnect}){
   const[sub,setSub]=useState("goals");
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["goals","Goals"],["zakat","Zakat & Sadaqah"],["fire","Retirement / FIRE"]]} active={sub} onChange={setSub}/>
+    <TabBar tabs={[["goals","Goals"],["zakat","Zakat"],["sadaqah","Sadaqah"],["fire","Retirement / FIRE"]]} active={sub} onChange={setSub}/>
     {sub==="goals"&&<Goals snapAccounts={snapAccounts} plaidAccounts={plaidAccounts} netWorthHistory={netWorthHistory} demoMode={demoMode}/>}
-    {sub==="zakat"&&<ZakatSadaqah accounts={snapAccounts} demoMode={demoMode} bankBalance={bankBalance}/>}
+    {sub==="zakat"&&<ZakatSadaqah view="zakat" accounts={snapAccounts} plaidAccounts={plaidAccounts} demoMode={demoMode} bankBalance={bankBalance} onConnect={onConnect}/>}
+    {sub==="sadaqah"&&<ZakatSadaqah view="sadaqah" accounts={snapAccounts} plaidAccounts={plaidAccounts} demoMode={demoMode} bankBalance={bankBalance} onConnect={onConnect}/>}
     {sub==="fire"&&<FireCalculator currentNW={currentNW} ytdContrib={ytdContrib}/>}
   </div>;
 }
@@ -11586,6 +11637,7 @@ export default function Mizan(){
           currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)}
           ytdContrib={performanceMetrics.ytdContrib||0}
           bankBalance={bankBalance}
+          onConnect={()=>{setConnMode("read");setConn(true);}}
         />}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
         {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>{setConnMode("read");setConn(true);}} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} plaidAccounts={plaidAccounts} bankBalance={bankBalance} onNav={setNav}/>}

@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-13
+
+### Added
+- **zakat:** Comprehensive Zakat worksheet modeled on scholar calculators (`0d34a3d`)
+
 ## 2026-07-12
 
 ### Added
