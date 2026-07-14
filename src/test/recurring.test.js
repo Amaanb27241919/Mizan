@@ -10,6 +10,7 @@ import {
   isSubscriptionCandidate,
   isRecurringActive,
   detectFixedPriceSubscriptions,
+  detectUsageBasedSpend,
 } from '../lib/recurring.js'
 
 describe('normalizeMerchant', () => {
@@ -215,5 +216,48 @@ describe('detectFixedPriceSubscriptions', () => {
     const subs = detectFixedPriceSubscriptions(txns, { asOfMs: asOf })
     expect(subs).toHaveLength(1)
     expect(subs[0].active).toBe(false)
+  })
+})
+
+describe('detectUsageBasedSpend', () => {
+  const asOf = new Date('2026-07-13T00:00:00Z').getTime()
+  const charge = (merchant, amount, date, primary) => ({
+    merchant_name: merchant, amount, date, personal_finance_category: { primary },
+  })
+  // Anthropic-style metered billing: many variable charges across ≥3 months.
+  const anthropic = [
+    charge('Anthropic', 10, '2026-04-05', 'GENERAL_SERVICES'),
+    charge('Anthropic', 22, '2026-04-20', 'GENERAL_SERVICES'),
+    charge('Anthropic', 8,  '2026-05-03', 'GENERAL_SERVICES'),
+    charge('Anthropic', 30, '2026-05-19', 'GENERAL_SERVICES'),
+    charge('Anthropic', 14, '2026-06-02', 'GENERAL_SERVICES'),
+    charge('Anthropic', 16, '2026-06-15', 'GENERAL_SERVICES'),
+  ]
+
+  it('surfaces high-frequency variable service spend as a monthly run-rate', () => {
+    const [a] = detectUsageBasedSpend(anthropic, { asOfMs: asOf })
+    expect(a.merchant).toBe('Anthropic')
+    expect(a.usage).toBe(true)
+    expect(a.cadence).toBe('usage')
+    expect(a.estMonthly).toBeCloseTo(100 / 3, 4) // total ÷ 3 distinct months
+  })
+
+  it('ignores fixed-price vendors (those belong to the fixed-price detector)', () => {
+    const fixed = ['2026-04-05', '2026-04-20', '2026-05-03', '2026-05-19', '2026-06-02', '2026-06-15']
+      .map((d) => charge('OpenAI', 20, d, 'GENERAL_SERVICES'))
+    expect(detectUsageBasedSpend(fixed, { asOfMs: asOf })).toHaveLength(0)
+  })
+
+  it('ignores a few one-off service purchases (below the charge floor)', () => {
+    const oneOffs = [
+      charge('Vistaprint', 126, '2026-06-22', 'GENERAL_SERVICES'),
+      charge('Vistaprint', 90, '2026-07-05', 'GENERAL_SERVICES'),
+    ]
+    expect(detectUsageBasedSpend(oneOffs, { asOfMs: asOf })).toHaveLength(0)
+  })
+
+  it('is scoped to GENERAL_SERVICES — not variable retail/food spend', () => {
+    const amazon = anthropic.map((t) => ({ ...t, merchant_name: 'Amazon', personal_finance_category: { primary: 'GENERAL_MERCHANDISE' } }))
+    expect(detectUsageBasedSpend(amazon, { asOfMs: asOf })).toHaveLength(0)
   })
 })

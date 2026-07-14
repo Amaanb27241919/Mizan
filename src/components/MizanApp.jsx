@@ -9,7 +9,7 @@ import {
   NISAB_GOLD_USD, NISAB_SILVER_USD, DEFAULT_ZAKAT_SETTINGS,
   DEFAULT_ZAKAT_WORKSHEET, ZAKAT_ASSET_FIELDS, ZAKAT_LIABILITY_FIELDS,
 } from "../lib/zakat.js";
-import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptions, normalizeMerchant } from "../lib/recurring.js";
+import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptions, detectUsageBasedSpend, normalizeMerchant } from "../lib/recurring.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Icon, ICONS } from "./Icon.jsx";
@@ -9896,15 +9896,29 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const FREQ_LABEL={WEEKLY:"weekly",BIWEEKLY:"biweekly",SEMI_MONTHLY:"biweekly",MONTHLY:"monthly",ANNUALLY:"annual",UNKNOWN:"irregular"};
       const plaidRows=plaidRecurring?.outflow_streams;
       const nowMs=Date.now();
-      // High-precision fixed-price detector over raw transactions. SUPPLEMENTS
-      // Plaid (whose ML misses subs with only 2–4 observed charges) and is the
-      // primary source when Plaid returns nothing.
+      // Two client-side detectors over raw transactions, both SUPPLEMENTING Plaid
+      // (whose ML misses subs with few charges): fixed-price subscriptions, and
+      // usage-based metered spend (e.g. Anthropic API) shown as a monthly run-rate.
       const clientSubs=detectFixedPriceSubscriptions(bankTxns,{asOfMs:nowMs});
+      const usageSpend=detectUsageBasedSpend(bankTxns,{asOfMs:nowMs});
       let rows;
       let usingPlaid=false;
       const bySort=(a,b)=>{
         if(a.active!==b.active)return a.active?-1:1;
         return b.estMonthly-a.estMonthly;
+      };
+      // Merge client-detected rows into a base, skipping any merchant already
+      // present (fixed-price wins over usage for the same vendor).
+      const mergeExtra=(base)=>{
+        const seen=new Set(base.map(r=>normalizeMerchant(r.merchant)));
+        const extra=[];
+        for(const s of [...clientSubs,...usageSpend]){
+          const k=normalizeMerchant(s.merchant);
+          if(seen.has(k))continue;
+          seen.add(k);
+          extra.push(s);
+        }
+        return [...base,...extra];
       };
       if(Array.isArray(plaidRows)&&plaidRows.length>0){
         usingPlaid=true;
@@ -9930,14 +9944,12 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               status:s.status||null,
             };
           });
-        // Add fixed-price subs Plaid didn't detect (dedup by normalized merchant).
-        const seen=new Set(mapped.map(r=>normalizeMerchant(r.merchant)));
-        const extra=clientSubs.filter(s=>!seen.has(normalizeMerchant(s.merchant)));
-        rows=[...mapped,...extra].sort(bySort);
+        rows=mergeExtra(mapped).sort(bySort);
       } else {
-        // No Plaid data — prefer the precise fixed-price detector; fall back to
-        // the broader (noisier) month-based heuristic only if it finds nothing.
-        rows=clientSubs.length?[...clientSubs].sort(bySort):recurring;
+        // No Plaid data — precise fixed-price + usage detectors; fall back to the
+        // broader (noisier) month-based heuristic only if both find nothing.
+        const base=mergeExtra([]);
+        rows=base.length?base.sort(bySort):recurring;
       }
       if(rows.length===0)return null;
       const active=rows.filter(r=>r.active);
@@ -9948,11 +9960,12 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
           <Tbl cols={[
             {l:"Merchant",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
               <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{r.merchant}</span>
+              {r.usage&&<span title="Usage-based / metered billing — the monthly figure is a run-rate, not a fixed price" style={{fontFamily:FM,fontSize:9,color:T.violet,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.violet}55`,borderRadius:T.rSm,background:`${T.violet}14`}}>USAGE</span>}
               {!r.active&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.border}`,borderRadius:T.rSm}}>INACTIVE</span>}
             </div>},
             {l:"Cadence",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,textTransform:"capitalize"}}>{r.cadence}</span>},
-            {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgPerCharge)}</span>},
-            {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.estMonthly)}</span>},
+            {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"avg ":""}{fmtUSD(r.avgPerCharge)}</span>},
+            {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"~":""}{fmtUSD(r.estMonthly)}</span>},
             {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
           ]} rows={[...active,...inactive].slice(0,50)}/>
         </div>

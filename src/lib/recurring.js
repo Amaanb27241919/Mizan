@@ -236,6 +236,56 @@ export function detectFixedPriceSubscriptions(transactions, { asOfMs, maxCv = 0.
   return out.sort((a, b) => b.estMonthly - a.estMonthly);
 }
 
+// Usage-based / metered SaaS spend (e.g. Anthropic API, cloud bills, ad spend) —
+// a vendor charged MANY times across several months with VARIABLE amounts, so it
+// never looks like a fixed subscription and detectFixedPriceSubscriptions skips
+// it. Surfaced as a monthly run-rate (total ÷ active months) rather than a
+// per-charge price. Scoped to GENERAL_SERVICES to stay precise — metered software
+// billing lands there, not food/retail/transport — and gated on ≥minCharges over
+// ≥minMonths so a couple of one-off service purchases (a print order, a domain
+// registration) don't qualify. Returns the tile's row shape plus `usage:true`.
+export function detectUsageBasedSpend(transactions, { asOfMs, minMonths = 3, minCharges = 6, maxCv = 0.15 } = {}) {
+  const groups = new Map();
+  for (const t of transactions || []) {
+    const amt = Number(t?.amount) || 0;
+    if (amt <= 0) continue; // outflows only
+    const cat = txCategory(t);
+    if (cat !== "GENERAL_SERVICES") continue; // metered software billing only
+    const merchant = t?.merchant_name || t?.name || "";
+    if (!isSubscriptionCandidate(merchant, cat)) continue;
+    const key = normalizeMerchant(merchant);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, { merchant, amounts: [], dates: [], months: new Set() });
+    const g = groups.get(key);
+    g.amounts.push(amt);
+    const d = (t?.date || t?.authorized_date || "").slice(0, 10);
+    if (d) { g.dates.push(d); g.months.add(d.slice(0, 7)); }
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    if (g.months.size < minMonths) continue;
+    if (g.amounts.length < minCharges) continue;
+    const total = g.amounts.reduce((s, n) => s + n, 0);
+    const mean = total / g.amounts.length;
+    if (!(mean > 0)) continue;
+    const variance = g.amounts.reduce((s, n) => s + (n - mean) ** 2, 0) / g.amounts.length;
+    if (Math.sqrt(variance) / mean <= maxCv) continue; // fixed-price → the other detector owns it
+    const dates = [...g.dates].sort();
+    const lastDate = dates[dates.length - 1] || "";
+    out.push({
+      merchant: g.merchant,
+      cadence: "usage",
+      avgPerCharge: mean,
+      estMonthly: total / g.months.size, // monthly run-rate, not a per-charge price
+      lastDate,
+      active: isRecurringActive(lastDate, "monthly", asOfMs),
+      count: g.amounts.length,
+      usage: true,
+    });
+  }
+  return out.sort((a, b) => b.estMonthly - a.estMonthly);
+}
+
 // Words worth ignoring when comparing a debt's creditor/name to a stream label.
 const STOPWORDS = new Set(["THE", "LLC", "INC", "CO", "BANK", "CARD", "CREDIT", "LOAN", "AUTO", "FINANCING", "MY", "FROM", "A", "AND", "OF"]);
 
