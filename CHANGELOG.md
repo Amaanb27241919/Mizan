@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-13
 
 ### Added
+- **finances:** Surface usage-based metered spend (e.g. Anthropic) in the tile (`e27a530`)
 - **zakat:** Connected-account checklist picker (like Goals) instead of auto-rows (`0d1fe85`)
 - **zakat:** Split Sadaqah into its own tab + auto-fill worksheet from connections (`bafa16c`)
 - **zakat:** Comprehensive Zakat worksheet modeled on scholar calculators (`0d34a3d`)
