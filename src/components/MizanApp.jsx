@@ -1909,25 +1909,38 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     return f?`Fails ${f.rule}${f.detail?` (${f.detail})`:""}`:"";
   };
 
-  // Allocation slices: equity vs cash vs (future: real estate, gold, etc.).
-  // Built from positions grouped by Sharia-compliance status, plus cash.
-  const allocSlices=(()=>{
-    const halal=merged.filter(h=>h.sh_==="halal").reduce((s,h)=>s+mv(h),0);
-    const review=merged.filter(h=>h.sh_==="review").reduce((s,h)=>s+mv(h),0);
-    const haramTot=merged.filter(h=>h.sh_==="haram").reduce((s,h)=>s+mv(h),0);
-    return[
-      {label:"Halal",        value:halal,    color:T.gain},
-      {label:"Review",       value:review,   color:T.gold},
-      {label:"Non-compliant",value:haramTot, color:T.loss},
-      {label:"Cash",         value:totalCash,color:T.blue},
-    ].filter(s=>s.value>0);
-  })();
+  // Sharia-compliance breakdown of the SCREENED EQUITY holdings (live-priced).
+  // These drive BOTH the allocation donut and the Compliance tile from one set
+  // of numbers so the two can never disagree. The denominator is equity — cash,
+  // bank deposits and manual assets (gold, real estate) are not "stocks to
+  // screen", so they must never inflate the compliance %.
+  const equityTotal = merged.reduce((s,h)=>s+mv(h),0);
+  const halalV  = merged.filter(h=>h.sh_==="halal").reduce((s,h)=>s+mv(h),0);
+  const reviewV = merged.filter(h=>h.sh_==="review").reduce((s,h)=>s+mv(h),0);
+  const halalCount  = merged.filter(h=>h.sh_==="halal").length;
+  const reviewCount = merged.filter(h=>h.sh_==="review").length;
+  // Allocation slices: equity grouped by compliance status, plus cash.
+  const allocSlices=[
+    {label:"Halal",        value:halalV,   color:T.gain},
+    {label:"Review",       value:reviewV,  color:T.gold},
+    {label:"Non-compliant",value:haramV,   color:T.loss},
+    {label:"Cash",         value:totalCash,color:T.blue},
+  ].filter(s=>s.value>0);
 
   // Today's spark — last 20 chart points if available, otherwise synthetic.
   const heroSpark=chart.length>0
     ? chart.slice(-20).map(p=>p.value)
     : Array.from({length:20},(_,i)=>tot*(0.95+i*0.0025));
-  const halalPct=tot>0?((tot-haramV)/tot)*100:100;
+  // Compliance headline = confirmed-halal share of SCREENED EQUITY (not net
+  // worth). The old ((tot−haramV)/tot) inflated the figure with cash/manual
+  // assets and blessed every "review"/unscreened holding as compliant, so the
+  // headline % contradicted the "X of Y halal" count AND the allocation donut
+  // (e.g. all-unscreened read "100.0%" over "0 of 8 halal"). Now they reconcile:
+  // % and count share the same halal-over-equity basis. null → no holdings yet.
+  const halalPct = equityTotal>0 ? (halalV/equityTotal)*100 : null;
+  // Red only when you actually hold something non-compliant; green when ≥95%
+  // confirmed halal; gold when the rest is merely pending review (not haram).
+  const complianceColor = haramV>0 ? T.loss : halalPct==null ? T.muted : halalPct>=95 ? T.gain : T.gold;
   const fmtUSD=v=>`$${(+v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
   return<div className="bento" style={{display:"flex",flexDirection:"column",gap:T.s5}}>
@@ -2051,8 +2064,8 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         </BentoTile>
         <BentoTile>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANCE</div>
-          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:halalPct>=95?T.gain:halalPct>=70?T.gold:T.loss,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{halalPct.toFixed(1)}%</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{merged.filter(h=>h.sh_==="halal").length} of {merged.length} halal</div>
+          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:complianceColor,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{halalPct==null?"—":`${halalPct.toFixed(1)}%`}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{merged.length===0?"No holdings to screen":<>{halalCount} of {merged.length} halal{reviewCount>0?` · ${reviewCount} review`:""}{haram.length>0?` · ${haram.length} non-compliant`:""}</>}</div>
         </BentoTile>
         {(totalCash>0||snapAccounts.length>0)&&<BentoTile>
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CASH ON HAND</div>
