@@ -9,7 +9,7 @@ import {
   NISAB_GOLD_USD, NISAB_SILVER_USD, DEFAULT_ZAKAT_SETTINGS,
   DEFAULT_ZAKAT_WORKSHEET, ZAKAT_ASSET_FIELDS, ZAKAT_LIABILITY_FIELDS,
 } from "../lib/zakat.js";
-import { isSubscriptionCandidate, isRecurringActive } from "../lib/recurring.js";
+import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptions, normalizeMerchant } from "../lib/recurring.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Icon, ICONS } from "./Icon.jsx";
@@ -9895,12 +9895,20 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       // or when in demo mode.
       const FREQ_LABEL={WEEKLY:"weekly",BIWEEKLY:"biweekly",SEMI_MONTHLY:"biweekly",MONTHLY:"monthly",ANNUALLY:"annual",UNKNOWN:"irregular"};
       const plaidRows=plaidRecurring?.outflow_streams;
+      const nowMs=Date.now();
+      // High-precision fixed-price detector over raw transactions. SUPPLEMENTS
+      // Plaid (whose ML misses subs with only 2–4 observed charges) and is the
+      // primary source when Plaid returns nothing.
+      const clientSubs=detectFixedPriceSubscriptions(bankTxns,{asOfMs:nowMs});
       let rows;
       let usingPlaid=false;
+      const bySort=(a,b)=>{
+        if(a.active!==b.active)return a.active?-1:1;
+        return b.estMonthly-a.estMonthly;
+      };
       if(Array.isArray(plaidRows)&&plaidRows.length>0){
         usingPlaid=true;
-        const nowMs=Date.now();
-        rows=plaidRows
+        const mapped=plaidRows
           // Keep subscriptions Plaid mis-tags as transfers; drop true money
           // movement + card/loan payments (see isSubscriptionCandidate).
           .filter(s=>isSubscriptionCandidate(s.merchant_name||s.description||"", s.personal_finance_category?.primary||""))
@@ -9921,13 +9929,15 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               institution:s._institution||null,
               status:s.status||null,
             };
-          })
-          .sort((a,b)=>{
-            if(a.active!==b.active)return a.active?-1:1;
-            return b.estMonthly-a.estMonthly;
           });
+        // Add fixed-price subs Plaid didn't detect (dedup by normalized merchant).
+        const seen=new Set(mapped.map(r=>normalizeMerchant(r.merchant)));
+        const extra=clientSubs.filter(s=>!seen.has(normalizeMerchant(s.merchant)));
+        rows=[...mapped,...extra].sort(bySort);
       } else {
-        rows=recurring;
+        // No Plaid data — prefer the precise fixed-price detector; fall back to
+        // the broader (noisier) month-based heuristic only if it finds nothing.
+        rows=clientSubs.length?[...clientSubs].sort(bySort):recurring;
       }
       if(rows.length===0)return null;
       const active=rows.filter(r=>r.active);

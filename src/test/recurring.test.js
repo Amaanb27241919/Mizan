@@ -9,6 +9,7 @@ import {
   streamPaymentsSince,
   isSubscriptionCandidate,
   isRecurringActive,
+  detectFixedPriceSubscriptions,
 } from '../lib/recurring.js'
 
 describe('normalizeMerchant', () => {
@@ -153,5 +154,66 @@ describe('isRecurringActive', () => {
   it('returns false on missing/garbage dates', () => {
     expect(isRecurringActive('', 'monthly', asOf)).toBe(false)
     expect(isRecurringActive('not-a-date', 'monthly', asOf)).toBe(false)
+  })
+})
+
+describe('detectFixedPriceSubscriptions', () => {
+  const asOf = new Date('2026-07-13T00:00:00Z').getTime()
+  const pfc = (primary) => ({ personal_finance_category: { primary } })
+  const charge = (merchant, amount, date, primary) => ({ merchant_name: merchant, amount, date, ...pfc(primary) })
+
+  it('detects a fixed-price monthly sub across ≥2 months', () => {
+    const txns = [
+      charge('Grok Xai', 30, '2026-05-29', 'TRANSFER_OUT'), // Plaid mis-tag kept
+      charge('Grok Xai', 30, '2026-06-29', 'TRANSFER_OUT'),
+    ]
+    const subs = detectFixedPriceSubscriptions(txns, { asOfMs: asOf })
+    expect(subs.map((s) => s.merchant)).toContain('Grok Xai')
+    const grok = subs.find((s) => s.merchant === 'Grok Xai')
+    expect(grok.avgPerCharge).toBe(30)
+    expect(grok.cadence).toBe('monthly')
+  })
+
+  it('excludes variable-amount spend (high coefficient of variation)', () => {
+    const txns = [
+      charge('Amazon', 12.40, '2026-04-06', 'GENERAL_MERCHANDISE'),
+      charge('Amazon', 58.10, '2026-05-06', 'GENERAL_MERCHANDISE'),
+      charge('Amazon', 31.00, '2026-06-06', 'GENERAL_MERCHANDISE'),
+    ]
+    expect(detectFixedPriceSubscriptions(txns, { asOfMs: asOf })).toHaveLength(0)
+  })
+
+  it('excludes fixed-amount coincidences in discretionary categories (food)', () => {
+    const txns = [
+      charge('Corner Coffee', 5, '2026-05-01', 'FOOD_AND_DRINK'),
+      charge('Corner Coffee', 5, '2026-06-01', 'FOOD_AND_DRINK'),
+    ]
+    expect(detectFixedPriceSubscriptions(txns, { asOfMs: asOf })).toHaveLength(0)
+  })
+
+  it('excludes true transfers even at a fixed amount', () => {
+    const txns = [
+      charge('Fidelity', 1000, '2026-05-04', 'TRANSFER_OUT'),
+      charge('Fidelity', 1000, '2026-06-04', 'TRANSFER_OUT'),
+    ]
+    expect(detectFixedPriceSubscriptions(txns, { asOfMs: asOf })).toHaveLength(0)
+  })
+
+  it('requires the merchant to span ≥2 distinct months', () => {
+    const txns = [
+      charge('Netlify', 11.20, '2026-06-05', 'GENERAL_SERVICES'),
+      charge('Netlify', 11.20, '2026-06-19', 'GENERAL_SERVICES'), // same month
+    ]
+    expect(detectFixedPriceSubscriptions(txns, { asOfMs: asOf })).toHaveLength(0)
+  })
+
+  it('marks a stopped fixed-price sub inactive by cadence', () => {
+    const txns = [
+      charge('Shopify', 64, '2026-04-22', 'GENERAL_SERVICES'),
+      charge('Shopify', 64, '2026-05-22', 'GENERAL_SERVICES'), // last 52 days before asOf
+    ]
+    const subs = detectFixedPriceSubscriptions(txns, { asOfMs: asOf })
+    expect(subs).toHaveLength(1)
+    expect(subs[0].active).toBe(false)
   })
 })

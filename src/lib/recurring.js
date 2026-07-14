@@ -163,6 +163,79 @@ export function isRecurringActive(lastDate, cadence, asOfMs) {
   return now - last <= graceMs;
 }
 
+// Discretionary categories where a low-variance coincidence (e.g. two identical
+// coffee runs) would be a false positive — never the home of real subscriptions.
+const SUB_DISCRETIONARY_CATS = new Set(["FOOD_AND_DRINK", "TRANSPORTATION"]);
+
+// Read a Plaid transaction's primary category across the shapes we see (raw API
+// `personal_finance_category.primary`, our stored `category_primary`, or the
+// legacy `category[]` array).
+function txCategory(t) {
+  return (
+    t?.personal_finance_category?.primary ||
+    t?.category_primary ||
+    (Array.isArray(t?.category) ? t.category[0] : null) ||
+    ""
+  );
+}
+
+// High-precision fixed-price subscription detector. Groups outflows by
+// normalized merchant and keeps only those that recur across ≥ `minMonths`
+// distinct months with a near-constant amount (coefficient of variation ≤
+// `maxCv`). Fixed price is the signal that separates a real subscription
+// (Spotify, Grok, IONOS — same charge every cycle) from variable discretionary
+// spend (groceries, gas, Amazon), which the flat "seen ≥2 months" heuristic
+// wrongly swept in. Purpose: SUPPLEMENT Plaid's native recurring feed — Plaid's
+// ML misses subs with only 2–4 observed charges, so those never reach the
+// tile's category filter. Same row shape the tile's Plaid path produces.
+export function detectFixedPriceSubscriptions(transactions, { asOfMs, maxCv = 0.15, minMonths = 2 } = {}) {
+  const groups = new Map();
+  for (const t of transactions || []) {
+    const amt = Number(t?.amount) || 0;
+    if (amt <= 0) continue; // outflows only
+    const merchant = t?.merchant_name || t?.name || "";
+    const cat = txCategory(t);
+    if (!isSubscriptionCandidate(merchant, cat)) continue;
+    if (SUB_DISCRETIONARY_CATS.has(cat)) continue;
+    const key = normalizeMerchant(merchant);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, { merchant, amounts: [], dates: [], months: new Set() });
+    const g = groups.get(key);
+    g.amounts.push(amt);
+    const d = (t?.date || t?.authorized_date || "").slice(0, 10);
+    if (d) { g.dates.push(d); g.months.add(d.slice(0, 7)); }
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    if (g.months.size < minMonths) continue;
+    const mean = g.amounts.reduce((s, n) => s + n, 0) / g.amounts.length;
+    if (!(mean > 0)) continue;
+    const variance = g.amounts.reduce((s, n) => s + (n - mean) ** 2, 0) / g.amounts.length;
+    const cv = Math.sqrt(variance) / mean;
+    if (cv > maxCv) continue; // amount not fixed → not a clean subscription
+    const dates = [...g.dates].sort();
+    const rawCadence = cadenceFromDates(dates).cadence;
+    const cadence = rawCadence === "unknown" || rawCadence === "irregular" ? "monthly" : rawCadence;
+    const lastDate = dates[dates.length - 1] || "";
+    const per = median(g.amounts);
+    const estMonthly =
+      cadence === "weekly" ? per * 4.33 :
+      cadence === "biweekly" ? per * 2 :
+      cadence === "quarterly" ? per / 3 :
+      cadence === "annual" ? per / 12 : per;
+    out.push({
+      merchant: g.merchant,
+      cadence,
+      avgPerCharge: per,
+      estMonthly,
+      lastDate,
+      active: isRecurringActive(lastDate, rawCadence, asOfMs),
+      count: g.amounts.length,
+    });
+  }
+  return out.sort((a, b) => b.estMonthly - a.estMonthly);
+}
+
 // Words worth ignoring when comparing a debt's creditor/name to a stream label.
 const STOPWORDS = new Set(["THE", "LLC", "INC", "CO", "BANK", "CARD", "CREDIT", "LOAN", "AUTO", "FINANCING", "MY", "FROM", "A", "AND", "OF"]);
 
