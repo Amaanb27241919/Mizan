@@ -238,13 +238,16 @@ export function normalizeWorksheet(ws = {}) {
 // asset/liability. Investment-class wealth (brokerage + otherStocks +
 // retirement) is scaled by the chosen factor (1.0 full / 0.3 long-term); all
 // other assets count at full value. Short-term liabilities + any bank overdraft
-// are deducted. `gateDue: true` zeroes the due figure below nisab (Overview
-// behavior); the tab passes false and styles the raw 2.5% by `aboveNisab`.
+// + `connectedLiabilities` (connected credit-card balances the user ticked as
+// deductible short-term debt) are deducted. `gateDue: true` zeroes the due
+// figure below nisab (Overview behavior); the tab passes false and styles the
+// raw 2.5% by `aboveNisab`.
 export function computeZakatWorksheet({
   worksheet,
   settings,
   brokerageTotal = 0,
   bankBalance = 0,
+  connectedLiabilities = 0,
   nisab = 0,
   gateDue = false,
 } = {}) {
@@ -268,7 +271,8 @@ export function computeZakatWorksheet({
 
   const manualLiabilities = ZAKAT_LIABILITY_FIELDS.reduce((s, f) => s + ws[f.key], 0);
   const overdraft = negativeBankAmount(bankBalance);
-  const liabilitiesTotal = manualLiabilities + overdraft;
+  const connLiabilities = Math.max(0, Number(connectedLiabilities) || 0);
+  const liabilitiesTotal = manualLiabilities + overdraft + connLiabilities;
 
   const netZakatable = Math.max(0, assetsTotal - liabilitiesTotal);
   const aboveNisab = isAboveNisab(netZakatable, nisab);
@@ -284,6 +288,7 @@ export function computeZakatWorksheet({
     assetsTotal,
     manualLiabilities,
     overdraft,
+    connLiabilities,
     liabilitiesTotal,
     netZakatable,
     aboveNisab,

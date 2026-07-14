@@ -529,6 +529,39 @@ function zakatSelectedTotals(accountList = [], excludedIds) {
   return t;
 }
 
+// Connected credit-card accounts eligible for the Zakat LIABILITY picker — the
+// user ticks the card balances that count as deductible short-term debt (rent,
+// utilities and card bills due now reduce zakatable wealth per the scholar
+// calculators Mizan mirrors), untick any they don't. Only revolving credit is
+// auto-suggested; long-term loans (auto / mortgage) stay manual in the
+// "Long-term debt due" row because only the portion due this year is zakat-
+// deductible. Balance is the absolute owed amount. Ids share the same
+// `excludedAccounts` namespace as the asset picker (no collision — asset ids
+// are depository/investment accounts, these are credit accounts).
+function zakatCreditAccounts(plaidAccounts = []) {
+  const list = [];
+  for (const a of (Array.isArray(plaidAccounts) ? plaidAccounts : [])) {
+    if (!a.account_id) continue;
+    if (a.type !== "credit") continue;
+    const balance = Math.abs(Number(a.current_bal) || 0);
+    if (balance <= 0) continue;
+    list.push({
+      id: `plaid:${a.account_id}`,
+      label: `${a.institution_name || "Card"} — ${a.name || a.subtype || "Credit card"}`,
+      balance,
+      kind: "credit",
+    });
+  }
+  return list;
+}
+
+// Sum of ticked (non-excluded) connected credit-card balances — the auto
+// short-term-debt deduction fed to computeZakatWorksheet.connectedLiabilities.
+function zakatSelectedLiabilities(creditList = [], excludedIds) {
+  const ex = excludedIds instanceof Set ? excludedIds : new Set(excludedIds || []);
+  return creditList.reduce((s, a) => (ex.has(a.id) ? s : s + a.balance), 0);
+}
+
 /* ─── DEMO BANK FIXTURES (Plaid stand-in) ────────────── */
 // Mirrors DEMO_ACCOUNTS pattern — used to populate the Finances tab when
 // demoMode is on. No real API calls needed; everything is local fixture.
@@ -1551,9 +1584,14 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   );
   // Same connected-account picker selection the Zakat tab uses (the unticked
   // account ids live in the worksheet), so the tile and the tab never disagree.
+  const overviewExcluded = new Set(Array.isArray(overviewWorksheet.excludedAccounts) ? overviewWorksheet.excludedAccounts : []);
   const overviewConnectedTotals = zakatSelectedTotals(
     zakatConnectedAccounts(snapAccounts, plaidAccounts),
-    new Set(Array.isArray(overviewWorksheet.excludedAccounts) ? overviewWorksheet.excludedAccounts : []),
+    overviewExcluded,
+  );
+  const overviewConnectedLiab = zakatSelectedLiabilities(
+    zakatCreditAccounts(plaidAccounts),
+    overviewExcluded,
   );
   const {
     aboveNisab: overviewAboveNisab,
@@ -1563,6 +1601,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     settings: zakatSettings,
     brokerageTotal: overviewConnectedTotals.invest,
     bankBalance: overviewConnectedTotals.cash,
+    connectedLiabilities: overviewConnectedLiab,
     nisab: nisabOverview,
     gateDue: true,
   });
@@ -3204,10 +3243,11 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
 // editable asset + liability rows, and a live subtotal. Math lives in the pure
 // computeZakatWorksheet() (src/lib/zakat.js).
 function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings, demoMode=false,
-  connectedAccounts=[], excludedAccounts=new Set(), onToggleAccount, connectedTotals={}, onConnect }){
+  connectedAccounts=[], excludedAccounts=new Set(), onToggleAccount, connectedTotals={}, creditAccounts=[], connectedLiabilities=0, onConnect }){
   const fmtUSD=v=>`$${(+v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const factorPct = settings.investmentMethod==="longterm_30" ? "× 30%" : null;
   const countedN = connectedAccounts.filter(a=>!excludedAccounts.has(a.id)).length;
+  const creditCountedN = creditAccounts.filter(a=>!excludedAccounts.has(a.id)).length;
   const KIND_LABEL = { brokerage:"Brokerage", retirement:"Retirement", investment:"Investment", cash:"Cash" };
   const KIND_COLOR = { brokerage:T.blue, retirement:T.violet, investment:T.blue, cash:T.gain };
 
@@ -3297,6 +3337,29 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings,
     <div>
       <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>WHAT YOU OWE — deducted</div>
       {result.overdraft>0&&autoRow("Bank overdraft", result.overdraft, "Negative connected-account balance")}
+
+      {/* Connected credit cards — tick the balances that count as deductible
+          short-term debt (bills due now), untick any you don't. Mirrors the
+          asset picker; shares the same excludedAccounts selection. */}
+      {creditAccounts.length>0&&<div style={{marginBottom:T.s3}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:T.s2,gap:T.s2,flexWrap:"wrap"}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600}}>CONNECTED CARDS · {creditCountedN} of {creditAccounts.length} counted</span>
+          <span style={{fontFamily:FM,fontSize:11,color:T.loss,fontVariantNumeric:"tabular-nums"}}>− {fmtUSD(connectedLiabilities)}</span>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:180,overflowY:"auto",padding:T.s2,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
+          {creditAccounts.map(a=>{
+            const on=!excludedAccounts.has(a.id);
+            return<label key={a.id} style={{display:"flex",alignItems:"center",gap:T.s2,padding:`6px ${T.s2}`,borderRadius:T.rSm,cursor:demoMode?"default":"pointer",background:on?`${T.loss}14`:"transparent",border:`1px solid ${on?T.loss+"55":T.border}`,opacity:demoMode?0.6:1}}>
+              <input type="checkbox" checked={on} disabled={demoMode} onChange={()=>onToggleAccount&&onToggleAccount(a.id)} style={{cursor:demoMode?"default":"pointer",accentColor:T.loss}}/>
+              <span style={{fontFamily:FM,fontSize:9,color:T.loss,letterSpacing:"0.04em",fontWeight:600,padding:"1px 5px",borderRadius:T.rSm,background:`${T.loss}14`,whiteSpace:"nowrap"}}>Card</span>
+              <span style={{fontFamily:FP,fontSize:12,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.label}</span>
+              <span style={{fontFamily:FM,fontSize:11,color:on?T.loss:T.muted,fontVariantNumeric:"tabular-nums"}}>− {fmtUSD(a.balance)}</span>
+            </label>;
+          })}
+        </div>
+        <div style={{marginTop:T.s2,fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.4}}>Ticked card balances count as short-term debt. Add anything else you owe below.</div>
+      </div>}
+
       {ZAKAT_LIABILITY_FIELDS.map(inputRow)}
     </div>
     <div style={{borderTop:`2px solid ${T.dim}`,paddingTop:T.s1}}>
@@ -3848,10 +3911,14 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
     });
   };
   const connectedTotals = zakatSelectedTotals(connectedAccounts, excludedAccounts);
+  // Connected credit cards the user ticked → deductible short-term debt.
+  const creditAccounts = zakatCreditAccounts(plaidAccounts);
+  const connectedLiabilities = zakatSelectedLiabilities(creditAccounts, excludedAccounts);
   // Connected investment wealth (brokerage + retirement + investments) feeds the
-  // factor-scaled bucket; selected bank/depository accounts feed cash.
+  // factor-scaled bucket; selected bank/depository accounts feed cash; ticked
+  // credit-card balances feed short-term liabilities.
   const wsResult = computeZakatWorksheet({
-    worksheet: wsDraft, settings, brokerageTotal: connectedTotals.invest, bankBalance: connectedTotals.cash, nisab: nisabUsd,
+    worksheet: wsDraft, settings, brokerageTotal: connectedTotals.invest, bankBalance: connectedTotals.cash, connectedLiabilities, nisab: nisabUsd,
   });
   const { assetsTotal, liabilitiesTotal, netZakatable, zakatDue, aboveNisab } = wsResult;
   const given           = sadaqah.filter(s=>s.done).reduce((a,b)=>a+(+b.amt||0),0);
@@ -4054,7 +4121,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
         </div>
       </div>
       <ZakatWorksheet draft={wsDraft} onField={onWsField} onPersist={persistWs} result={wsResult} nisabUsd={nisabUsd} settings={settings} demoMode={demoMode}
-        connectedAccounts={connectedAccounts} excludedAccounts={excludedAccounts} onToggleAccount={toggleAccount} connectedTotals={connectedTotals} onConnect={onConnect}/>
+        connectedAccounts={connectedAccounts} excludedAccounts={excludedAccounts} onToggleAccount={toggleAccount} connectedTotals={connectedTotals} creditAccounts={creditAccounts} connectedLiabilities={connectedLiabilities} onConnect={onConnect}/>
     </CollapsibleTile>
 
     {/* ─── ROW 1.5: Methodology selector ────────────── */}

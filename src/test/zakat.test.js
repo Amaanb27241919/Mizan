@@ -437,10 +437,51 @@ describe('computeZakatWorksheet', () => {
     expect(r.zakatDue).toBe(0)
   })
 
+  it('deducts connected credit-card balances (connectedLiabilities) as short-term debt', () => {
+    // Assets: cash 10,000. Liabilities: manual short 500 + cards 3,000 = 3,500.
+    // Net = 6,500.
+    const r = computeZakatWorksheet({
+      worksheet: { cashOnHand: 10000, shortTermDebt: 500 },
+      settings: silver,
+      connectedLiabilities: 3000,
+      nisab: 670,
+    })
+    expect(r.connLiabilities).toBe(3000)
+    expect(r.liabilitiesTotal).toBe(3500)
+    expect(r.netZakatable).toBe(6500)
+    expect(r.zakatDue).toBeCloseTo(162.5, 6)
+  })
+
+  it('stacks connected liabilities on top of manual debt + overdraft', () => {
+    // short 1,000 + overdraft 500 (bank −500) + cards 2,000 = 3,500
+    const r = computeZakatWorksheet({
+      worksheet: { cashOnHand: 20000, shortTermDebt: 1000 },
+      settings: silver,
+      bankBalance: -500,
+      connectedLiabilities: 2000,
+      nisab: 670,
+    })
+    expect(r.liabilitiesTotal).toBe(3500)
+    expect(r.netZakatable).toBe(16500) // 20,000 − 3,500
+  })
+
+  it('clamps a negative/invalid connectedLiabilities to 0', () => {
+    const r = computeZakatWorksheet({
+      worksheet: { cashOnHand: 10000 },
+      settings: silver,
+      connectedLiabilities: -50,
+      nisab: 670,
+    })
+    expect(r.connLiabilities).toBe(0)
+    expect(r.liabilitiesTotal).toBe(0)
+    expect(r.netZakatable).toBe(10000)
+  })
+
   it('handles empty input without NaN', () => {
     const r = computeZakatWorksheet({})
     expect(r.assetsTotal).toBe(0)
     expect(r.netZakatable).toBe(0)
     expect(r.zakatDue).toBe(0)
+    expect(r.connLiabilities).toBe(0)
   })
 })
