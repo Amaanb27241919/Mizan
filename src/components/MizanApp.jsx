@@ -9,6 +9,7 @@ import {
   NISAB_GOLD_USD, NISAB_SILVER_USD, DEFAULT_ZAKAT_SETTINGS,
   DEFAULT_ZAKAT_WORKSHEET, ZAKAT_ASSET_FIELDS, ZAKAT_LIABILITY_FIELDS,
 } from "../lib/zakat.js";
+import { isSubscriptionCandidate, isRecurringActive } from "../lib/recurring.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Icon, ICONS } from "./Icon.jsx";
@@ -9230,10 +9231,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   },[bankTxns,txnSearchDebounced,txnType,txnRange,txnAccount]);
   const visibleTxns=useMemo(()=>filteredTxns.slice(0,txnLimit),[filteredTxns,txnLimit]);
 
-  // Categories that are transfers / payments, not real spending or subscriptions.
+  // Categories that are transfers / payments, not real spending (payment-flows tile).
+  // Recurring-subscription classification moved to isSubscriptionCandidate /
+  // isRecurringActive in lib/recurring.js (shared by both the Plaid + fallback paths).
   const EXCLUDE_CATS=new Set(["LOAN_PAYMENTS","TRANSFER_OUT","TRANSFER_IN","BANK_FEES","INCOME"]);
-  // ACH description patterns that identify credit-card or loan payments.
-  const PAYMENT_RE=/credit\s*card\s*pay|crcardpmt|autopay|card\s*pmnt|loan\s*pay|mortgage\s*pay|bill\s*pay|heloc|student\s*loan/i;
 
   // Payment flows tile — current month breakdown of excluded categories
   // (debt repayments, transfers, bank fees) plus income/inflow summary.
@@ -9287,20 +9288,17 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     bankTxns.forEach(t=>{
       const m=(t.merchant_name||t.name||"").trim();
       if(!m||t.amount<=0)return;
-      // Skip transfers, loan repayments, and credit-card payments — these
-      // are balance movements, not subscription charges.
+      // Skip transfers, brokerage funding, and card/loan payments — but keep
+      // subscriptions Plaid mis-tags as transfers (see isSubscriptionCandidate).
       const cat=t.personal_finance_category?.primary||t.category?.[0]||"";
-      if(EXCLUDE_CATS.has(cat))return;
-      if(PAYMENT_RE.test(m))return;
+      if(!isSubscriptionCandidate(m,cat))return;
       const month=(t.date||"").slice(0,7);
       if(!byMerchant[m])byMerchant[m]={merchant:m,months:new Set(),amounts:[],dates:[]};
       byMerchant[m].months.add(month);
       byMerchant[m].amounts.push(t.amount);
       byMerchant[m].dates.push(t.date);
     });
-    const today=new Date();
-    const cutoff=new Date(today);cutoff.setDate(today.getDate()-45);
-    const cutoffStr=cutoff.toISOString().slice(0,10);
+    const nowMs=Date.now();
     const medianOf=arr=>{if(!arr.length)return NaN;const s=[...arr].sort((a,b)=>a-b);const m=Math.floor(s.length/2);return s.length%2===0?(s[m-1]+s[m])/2:s[m];};
     const cadenceLabel=g=>!isFinite(g)?"irregular":g<=10?"weekly":g<=18?"biweekly":g<=45?"monthly":g<=100?"quarterly":"irregular";
     return Object.values(byMerchant)
@@ -9326,7 +9324,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
           avgPerCharge:avg,
           estMonthly,
           lastDate,
-          active:lastDate>=cutoffStr,
+          active:isRecurringActive(lastDate,cadence,nowMs),
         };
       })
       .sort((a,b)=>{
@@ -9901,16 +9899,11 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       let usingPlaid=false;
       if(Array.isArray(plaidRows)&&plaidRows.length>0){
         usingPlaid=true;
+        const nowMs=Date.now();
         rows=plaidRows
-          .filter(s=>{
-            // Drop credit-card payments, transfers, and loan repayments
-            // that Plaid may surface as recurring outflows.
-            const cat=s.personal_finance_category?.primary||"";
-            if(EXCLUDE_CATS.has(cat))return false;
-            const name=s.merchant_name||s.description||"";
-            if(PAYMENT_RE.test(name))return false;
-            return true;
-          })
+          // Keep subscriptions Plaid mis-tags as transfers; drop true money
+          // movement + card/loan payments (see isSubscriptionCandidate).
+          .filter(s=>isSubscriptionCandidate(s.merchant_name||s.description||"", s.personal_finance_category?.primary||""))
           .map(s=>{
             const avg=Math.abs(Number(s.average_amount?.amount)||0);
             const freq=FREQ_LABEL[s.frequency]||"irregular";
@@ -9921,7 +9914,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               avgPerCharge:avg,
               estMonthly,
               lastDate:s.last_date||"",
-              active:s.is_active!==false,
+              // Trust Plaid's is_active/status, but also flip to inactive when the
+              // last charge is stale for the cadence — Plaid lags ~a cycle before
+              // tombstoning a cancelled stream.
+              active:s.is_active!==false && s.status!=="TOMBSTONED" && isRecurringActive(s.last_date,freq,nowMs),
               institution:s._institution||null,
               status:s.status||null,
             };
@@ -9948,7 +9944,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.avgPerCharge)}</span>},
             {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.estMonthly)}</span>},
             {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
-          ]} rows={[...active,...inactive].slice(0,25)}/>
+          ]} rows={[...active,...inactive].slice(0,50)}/>
         </div>
       </CollapsibleTile>;
     })()}

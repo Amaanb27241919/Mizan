@@ -119,6 +119,50 @@ export function normalizePlaidStreams(plaidRecurring) {
   });
 }
 
+// ── Subscription classification (shared by the Finances "Recurring Subscriptions"
+// tile's Plaid-native path AND its client-side fallback so the two can't diverge) ─
+
+// Card / loan / mortgage / bill *payments* — balance movements, not subscriptions.
+const SUB_PAYMENT_RE = /credit\s*card\s*pay|crcardpmt|autopay|card\s*pmnt|loan\s*pay|mortgage\s*pay|bill\s*pay|heloc|student\s*loan/i;
+// Money-movement merchants (brokerage funding, P2P, remittance, wires): recurring
+// but NOT subscriptions. Kept out even when Plaid mis-categorizes them.
+const SUB_TRANSFER_MERCHANT_RE = /\b(fidelity|robinhood|schwab|vanguard|morgan\s*stanley|merrill|e-?trade|webull|sofi|betterment|wealthfront|remitly|wise|western\s*union|moneygram|zelle|venmo|cash\s*app|paypal|wire|ach)\b/i;
+// Categories that are never a subscription regardless of merchant.
+const SUB_NEVER_CATS = new Set(["BANK_FEES", "INCOME", "TRANSFER_IN"]);
+
+// Is a recurring outflow a real subscription (vs a transfer / payment)?
+// The old rule dropped EVERY `TRANSFER_OUT` / `LOAN_PAYMENTS` category, which hid
+// subscriptions Plaid mis-categorizes (verified in prod: Grok/xAI $30/mo and
+// Coinbase-One-style charges come back tagged TRANSFER_OUT). Now those two
+// categories are only dropped when the MERCHANT looks like actual money movement —
+// so mislabeled subs survive while true transfers (brokerage funding, Zelle/Venmo,
+// remittances) and card/loan payments stay out.
+export function isSubscriptionCandidate(merchant, categoryPrimary) {
+  if (SUB_NEVER_CATS.has(categoryPrimary || "")) return false;
+  const name = String(merchant || "");
+  if (!name.trim()) return false;
+  if (SUB_PAYMENT_RE.test(name)) return false;
+  if (SUB_TRANSFER_MERCHANT_RE.test(name)) return false;
+  return true;
+}
+
+// A recurring stream is "active" if its last charge is within ~1.35 cadence
+// intervals (+ a few settle-days) of `asOfMs`. Cadence-aware instead of a flat
+// 45-day window for everything: a weekly sub reads stopped within ~2 weeks, an
+// annual one isn't wrongly killed a month after its charge. Unknown/irregular
+// cadence falls back to the monthly window.
+const SUB_ACTIVE_CADENCE_DAYS = { weekly: 7, biweekly: 14, monthly: 30.44, quarterly: 91.3, annual: 365 };
+export function isRecurringActive(lastDate, cadence, asOfMs) {
+  const s = String(lastDate || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const last = new Date(s + "T00:00:00Z").getTime();
+  if (!Number.isFinite(last)) return false;
+  const now = Number.isFinite(asOfMs) ? asOfMs : Date.now();
+  const base = SUB_ACTIVE_CADENCE_DAYS[cadence] || SUB_ACTIVE_CADENCE_DAYS.monthly;
+  const graceMs = (base * 1.35 + 4) * DAY;
+  return now - last <= graceMs;
+}
+
 // Words worth ignoring when comparing a debt's creditor/name to a stream label.
 const STOPWORDS = new Set(["THE", "LLC", "INC", "CO", "BANK", "CARD", "CREDIT", "LOAN", "AUTO", "FINANCING", "MY", "FROM", "A", "AND", "OF"]);
 

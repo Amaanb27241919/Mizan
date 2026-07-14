@@ -14,6 +14,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **zakat:** Split Sadaqah into its own tab + auto-fill worksheet from connections (`bafa16c`)
 - **zakat:** Comprehensive Zakat worksheet modeled on scholar calculators (`0d34a3d`)
 
+### Fixed
+- **zakat:** Derive SnapTrade balance from positions + auto-suggest card debt (`87cad13`)
+
 ## 2026-07-12
 
 ### Added

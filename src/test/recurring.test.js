@@ -7,6 +7,8 @@ import {
   scoreDebtStream,
   matchDebtToStream,
   streamPaymentsSince,
+  isSubscriptionCandidate,
+  isRecurringActive,
 } from '../lib/recurring.js'
 
 describe('normalizeMerchant', () => {
@@ -103,5 +105,53 @@ describe('streamPaymentsSince', () => {
     const pays = streamPaymentsSince(stream, '2026-01-01')
     expect(pays).toHaveLength(2)
     expect(pays.every((p) => p.amount === 1800)).toBe(true)
+  })
+})
+
+describe('isSubscriptionCandidate', () => {
+  it('keeps ordinary subscriptions', () => {
+    expect(isSubscriptionCandidate('Spotify', 'ENTERTAINMENT')).toBe(true)
+    expect(isSubscriptionCandidate('Google Workspace', 'GENERAL_SERVICES')).toBe(true)
+  })
+  it('keeps subscriptions Plaid mis-tags as TRANSFER_OUT (the reported bug)', () => {
+    // Grok/xAI and Coinbase One came back tagged TRANSFER_OUT in prod and were
+    // being dropped by the old blanket category filter.
+    expect(isSubscriptionCandidate('Grok Xai', 'TRANSFER_OUT')).toBe(true)
+    expect(isSubscriptionCandidate('OpenAI', 'GENERAL_SERVICES')).toBe(true)
+  })
+  it('drops true money movement even when it recurs', () => {
+    expect(isSubscriptionCandidate('Fidelity', 'TRANSFER_OUT')).toBe(false)
+    expect(isSubscriptionCandidate('Robinhood', 'TRANSFER_OUT')).toBe(false)
+    expect(isSubscriptionCandidate('Zelle to Yusuf', 'TRANSFER_OUT')).toBe(false)
+    expect(isSubscriptionCandidate('Remitly', 'TRANSFER_OUT')).toBe(false)
+  })
+  it('drops card/loan payments and never-sub categories', () => {
+    expect(isSubscriptionCandidate('CHASE CREDIT CARD PAYMENT', 'LOAN_PAYMENTS')).toBe(false)
+    expect(isSubscriptionCandidate('Monthly Service Fee', 'BANK_FEES')).toBe(false)
+    expect(isSubscriptionCandidate('Payroll', 'INCOME')).toBe(false)
+    expect(isSubscriptionCandidate('', 'GENERAL_SERVICES')).toBe(false)
+  })
+})
+
+describe('isRecurringActive', () => {
+  const asOf = new Date('2026-07-13T00:00:00Z').getTime()
+  it('monthly: active within a cycle, stopped once ~1.35 cycles elapse', () => {
+    expect(isRecurringActive('2026-06-15', 'monthly', asOf)).toBe(true)  // 28 days
+    expect(isRecurringActive('2026-05-01', 'monthly', asOf)).toBe(false) // 73 days
+  })
+  it('weekly reads stopped much sooner than monthly', () => {
+    expect(isRecurringActive('2026-07-06', 'weekly', asOf)).toBe(true)   // 7 days
+    expect(isRecurringActive('2026-06-20', 'weekly', asOf)).toBe(false)  // 23 days
+  })
+  it('annual is not killed a month after its charge', () => {
+    expect(isRecurringActive('2025-09-01', 'annual', asOf)).toBe(true)   // ~315 days
+  })
+  it('irregular/unknown cadence falls back to the monthly window', () => {
+    expect(isRecurringActive('2026-06-30', 'irregular', asOf)).toBe(true)
+    expect(isRecurringActive('2026-04-01', 'irregular', asOf)).toBe(false)
+  })
+  it('returns false on missing/garbage dates', () => {
+    expect(isRecurringActive('', 'monthly', asOf)).toBe(false)
+    expect(isRecurringActive('not-a-date', 'monthly', asOf)).toBe(false)
   })
 })
