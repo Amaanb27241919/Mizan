@@ -16,6 +16,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **zakat:** Comprehensive Zakat worksheet modeled on scholar calculators (`0d34a3d`)
 
 ### Fixed
+- **finances:** Nightly net-worth snapshot derives balance:0 accounts + adds Plaid bank (`c62a7df`)
 - **finances:** Compliance box % over screened equity, not net worth (`7051047`)
 - **finances:** Supplement Plaid recurring with a fixed-price sub detector (`15700d7`)
 - **finances:** Stop hiding mis-tagged subscriptions + cadence-aware "stopped" (`152e8f7`)
