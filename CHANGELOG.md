@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-07-14
 
+### Changed
+- **overview:** Remove TradingView S&P 500 market-sector heatmap (`5af2163`)
+
 ### Fixed
 - **activity:** Dedupe single-account CSV imports (Robinhood) + recover dropped cash txns (`4a67109`)
 - **activity:** Dedupe CSV imports against SnapTrade by account number, not renameable label (`8cdb193`)
