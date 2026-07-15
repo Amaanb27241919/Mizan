@@ -1177,7 +1177,9 @@ function parseCSV(text,broker){
     const a=(action||"").toUpperCase().trim();
     if(!a)return["",null];
     // Robinhood-specific Trans Codes
-    if(a==="ACH"||a==="ACATC"||a==="JNLC")return["DEPOSIT","auto"];
+    if(a==="ACH"||a==="ACATC"||a==="JNLC"||a==="RTP")return["DEPOSIT","auto"]; // RTP = instant bank transfer (in/out by sign)
+    if(a==="GOLD")return["FEE",null];                    // Robinhood Gold subscription fee
+    if(/ELECTRONIC FUNDS TRANSFER/.test(a))return["DEPOSIT","auto"]; // Fidelity EFT (in/out by sign)
     if(a==="CDIV"||a==="GDIV"||a==="QDIV"||a==="DIV"||a==="DFEE")return["DIVIDEND",null];
     if(a==="INT")return["DIVIDEND",null];
     if(a==="OEXP"||a==="OASGN")return["SELL",null];
@@ -10913,7 +10915,11 @@ export default function Mizan(){
         }));
         // SnapTrade real first so any CSV import row that fingerprint-matches
         // a real transaction is dropped (the broker is the source of truth).
-        persistActivities(dedupeActivities([...enrichedReal,...imported]).sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
+        // Then a second, account-blind pass collapses single-account CSV imports
+        // (Robinhood/Coinbase — no account number) onto their real twin.
+        const looseIdx=realLooseIndex(enrichedReal);
+        const mergedActs=dedupeActivities([...enrichedReal,...imported]).filter(r=>!(r._imported&&importMatchesReal(r,looseIdx)));
+        persistActivities(mergedActs.sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")));
       }else{
         persistActivities(dedupeActivities(imported));
       }
@@ -11006,6 +11012,33 @@ export default function Mizan(){
     return out;
   };
 
+  // ── Cross-source (CSV import ⇄ SnapTrade real) loose dedupe ───────────────
+  // The strict fingerprint keys on the account (broker#last4, else label).
+  // Single-account broker exports (Robinhood, Coinbase) carry NO account number,
+  // so their rows can never number-match the live feed and the strict pass leaves
+  // them duplicated. These helpers match a CSV import to a real transaction by
+  // the transaction itself (broker+date+symbol+units+amount) — account-BLIND but
+  // number-COMPATIBLE: only collapse when one side has no number or the last-4
+  // agree, so two distinct numbered accounts at one broker are never merged, and
+  // ONLY _imported rows are ever removed (a real row is never dropped).
+  const looseKey=r=>{
+    const n=v=>{const f=parseFloat(v);return Number.isFinite(f)?f.toFixed(2):"";};
+    const sym=r.symbol?.symbol||r.symbol||"";
+    const brokerTok=(r.institution_name||"").trim().toUpperCase().split("—")[0].trim().split(/\s+/)[0];
+    return[brokerTok,(r.trade_date||r.settlement_date||"").slice(0,10),(typeof sym==="string"?sym:"").trim().toUpperCase(),n(r.units),n(r.amount)].join("|");
+  };
+  const acctLast4=r=>String(r.account?.number||"").replace(/[^a-z0-9]/gi,"").toUpperCase().slice(-4);
+  const realLooseIndex=reals=>{
+    const m=new Map();
+    for(const r of reals||[]){const k=looseKey(r);const arr=m.get(k);if(arr)arr.push(acctLast4(r));else m.set(k,[acctLast4(r)]);}
+    return m;
+  };
+  const importMatchesReal=(imp,idx)=>{
+    const reals=idx.get(looseKey(imp));if(!reals)return false;
+    const mine=acctLast4(imp);
+    return reals.some(rn=>!rn||!mine||rn===mine);
+  };
+
   // Dedupe button — runs two passes:
   //   1) Remove duplicate rows within mizan_imports (same fingerprint).
   //   2) Remove imported rows that already exist as real SnapTrade activities
@@ -11022,13 +11055,18 @@ export default function Mizan(){
     const internalDedup=dedupeActivities(existing);
     const internalRemoved=existing.length-internalDedup.length;
 
-    // Pass 2: drop imports that match SnapTrade real activities.
+    // Pass 2: drop imports that match SnapTrade real activities — by strict
+    // fingerprint AND by the account-blind, number-compatible loose match, so
+    // single-account CSVs (Robinhood/Coinbase, no account number) still collapse
+    // onto the renamed live feed.
     const realFingerprints=new Set();
+    let realRows=[];
     try{
-      const cached=JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]");
-      cached.filter(a=>!a._imported).forEach(a=>realFingerprints.add(fingerprintRow(a)));
+      realRows=JSON.parse(localStorage.getItem("mizan_activities_cache")||"[]").filter(a=>!a._imported);
+      realRows.forEach(a=>realFingerprints.add(fingerprintRow(a)));
     }catch{}
-    const final=internalDedup.filter(r=>!realFingerprints.has(fingerprintRow(r)));
+    const looseIdx=realLooseIndex(realRows);
+    const final=internalDedup.filter(r=>!realFingerprints.has(fingerprintRow(r))&&!importMatchesReal(r,looseIdx));
     const crossRemoved=internalDedup.length-final.length;
     const removed=internalRemoved+crossRemoved;
 

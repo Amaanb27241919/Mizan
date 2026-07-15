@@ -15,6 +15,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Docs
 - Record 2026-07-14 — activity dedupe fix + DCA-plan enactment (`fad50a8`)
 
+### Maintenance
+- **docs:** Stabilize audit last-audited stamp (2026-07-15 rollover) (`ee83395`)
+
 ## 2026-07-13
 
 ### Added
