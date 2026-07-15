@@ -1271,66 +1271,6 @@ function parseCSV(text,broker){
   return rows;
 }
 
-/* ─── MARKET HEATMAP (TradingView embed) ─────────────── */
-function MarketHeatmap(){
-  const ref=useRef(null);
-  // Collapsible + lazy: the TradingView widget only builds when open (see the
-  // effect's `open` guard/dep), so a collapsed heatmap costs nothing until opened.
-  const[open,setOpen]=useState(()=>{try{return localStorage.getItem("mizan_ct_ov_heatmap")==="1";}catch{return false;}});
-  const toggleOpen=()=>setOpen(o=>{const n=!o;try{localStorage.setItem("mizan_ct_ov_heatmap",n?"1":"0");}catch{}return n;});
-  const[colorTheme,setColorTheme]=useState(()=>
-    document.documentElement.getAttribute("data-theme")==="light"?"light":"dark"
-  );
-  useEffect(()=>{
-    const obs=new MutationObserver(()=>{
-      setColorTheme(document.documentElement.getAttribute("data-theme")==="light"?"light":"dark");
-    });
-    obs.observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
-    return()=>obs.disconnect();
-  },[]);
-  useEffect(()=>{
-    if(!open)return;                 // don't build the widget until the section is expanded
-    const el=ref.current;
-    if(!el)return;
-    while(el.firstChild)el.removeChild(el.firstChild);
-    // TradingView requires this sibling div as the render target
-    const widgetDiv=document.createElement("div");
-    widgetDiv.className="tradingview-widget-container__widget";
-    el.appendChild(widgetDiv);
-    const s=document.createElement("script");
-    s.type="text/javascript";
-    s.src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js";
-    // Do NOT set async — TradingView reads config via document.currentScript.textContent
-    // which is null when the script executes asynchronously
-    s.textContent=JSON.stringify({
-      exchanges:[],dataSource:"SPX500",grouping:"sector",
-      blockSize:"market_cap_basic",blockColor:"change",
-      locale:"en",symbolUrl:"",colorTheme,
-      hasTopBar:false,isDataSetEnabled:false,
-      isZoomEnabled:true,hasSymbolTooltip:true,isMonoSize:false,
-      width:"100%",height:"480",
-    });
-    el.appendChild(s);
-    return()=>{ while(el.firstChild)el.removeChild(el.firstChild); };
-  },[colorTheme,open]);
-  return(
-    <BentoTile accent={T.slate} style={{padding:0,overflow:"hidden"}}>
-      <button onClick={toggleOpen} aria-expanded={open} style={{
-        width:"100%",display:"flex",alignItems:"center",gap:T.s3,padding:`${T.s4} ${T.s5}`,
-        background:"transparent",border:"none",cursor:"pointer",textAlign:"left",
-      }}>
-        <span aria-hidden="true" style={{color:open?T.blue:T.muted,fontSize:11,lineHeight:1,flexShrink:0,
-          display:"inline-block",transform:open?"rotate(90deg)":"none",transition:"transform 0.18s"}}>▸</span>
-        <span style={{flex:1,minWidth:0}}>
-          <span style={{display:"block",fontFamily:FM,fontSize:11,letterSpacing:"0.14em",fontWeight:600,color:T.textHi}}>MARKET SECTORS — S&P 500</span>
-          <span style={{display:"block",fontFamily:FP,fontSize:11,color:T.muted,marginTop:2}}>Live sector heatmap via TradingView</span>
-        </span>
-      </button>
-      {open&&<div ref={ref} className="tradingview-widget-container" style={{width:"100%",padding:`0 ${T.s3} ${T.s3}`}}/>}
-    </BentoTile>
-  );
-}
-
 /* ─── SECTOR BREAKDOWN ───────────────────────────────── */
 // Buckets positions by sector. Pulls Finnhub /stock/profile2 per unique ticker
 // and caches results in localStorage so we don't burn the 60-calls/min free tier.
@@ -2232,8 +2172,6 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       onNav={onNav}
     />
 
-    {/* Market sector heat map — S&P 500 by sector, colored by day change */}
-    <MarketHeatmap/>
   </div>;
 }
 
