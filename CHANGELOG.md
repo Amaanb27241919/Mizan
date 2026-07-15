@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-14
+
+### Fixed
+- **activity:** Dedupe CSV imports against SnapTrade by account number, not renameable label (`8cdb193`)
+
 ## 2026-07-13
 
 ### Added
