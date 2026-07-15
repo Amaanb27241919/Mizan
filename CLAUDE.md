@@ -15,7 +15,7 @@
 2. Zakat calculation with live nisab (gold/silver via Stooq)
 3. Dividend purification tracking (impurity ratios per ETF, per-dividend log)
 4. Unified brokerage + bank view (SnapTrade + Plaid)
-5. AI with Islamic finance guardrails (Claude Sonnet via `/api/advisor` — **auth-gated**, per-user 60/hr): the chat advisor + **grounded-AI features** (fed only real data, explain-don't-judge, never invent a number). Shipped: plain-English Sharia-screening explanations. Roadmap: see memory `ai-roadmap` (Zakat guidance, portfolio insights, AI digest, per-token crypto). Reuse `/api/advisor` — don't build new AI plumbing.
+5. AI with Islamic finance guardrails (Claude Sonnet via `/api/advisor` — **auth-gated**, per-user 60/hr): the chat advisor + **grounded-AI features** (fed only real data, explain-don't-judge, never invent a number). Shipped: plain-English Sharia-screening explanations. Roadmap: see memory `ai-roadmap` (Zakat guidance, portfolio insights, AI digest, per-token crypto). Reuse `/api/advisor` — don't build new AI plumbing. **Compliance boundary (2026-07-15):** the advisor is now governed by an in-code boundary drawing the read-only line at *personalization of advice* — it explains impersonal facts + the user's own data but must never generate a buy/sell/hold recommendation or suitability judgment. Enforced by `lib/compliance/advisor-prompt.mjs` (hardened prompt) + `advisor-filter.mjs` (output backstop). Any new AI feature MUST stay inside the three tiers — see `docs/COMPLIANCE.md` + memory `compliance-boundary-and-price-chart`.
 6. Goal templates rooted in Muslim financial life (Hajj, Mahr, Waqf, Emergency)
 
 **Tone**: Professional, trustworthy, elegant. This is a tool for financially literate Muslims who care about both returns and deen. The design reflects that — light-first paper canvas with navy accents (green/red reserved for compliant/loss semantics), editorial typography, no noise.
@@ -53,6 +53,16 @@ src/components/BillsCalendar.jsx — Bills calendar
 src/components/ConnectionHealth.jsx — Account connection status
 src/components/ComingSoon.jsx  — Coming soon placeholder
 src/components/BugReportButton.jsx — Bug report widget
+src/components/charts/PriceChart.jsx — Per-holding candlestick + volume price chart
+                                 (lightweight-charts v5, dynamic-imported → own async chunk).
+                                 Fed by the IMPERSONAL /api/market/candles. Timeframes 1D–5Y,
+                                 optional live-quote line, neutral SMA/EMA/volume toggles labeled
+                                 "DATA, NOT SIGNALS". HARD RULE: no buy/sell markers, no
+                                 target/entry/exit price lines, no signal annotations.
+src/components/charts/holdingsOverlay.js — Pure (no I/O). The user's executed BUY/SELL trades
+                                 for a symbol → neutral chart markers. Powers the ACCOUNT_SERVICING
+                                 overlay (+ a "Your average cost" line) on PriceChart. Display-only,
+                                 privacy-gated, no judgments. See docs/COMPLIANCE.md.
 src/components/CommandPalette.jsx — Cmd+K command palette
 src/components/Login.jsx       — Auth page
 src/components/LegalLayout.jsx — Legal pages
@@ -72,6 +82,19 @@ src/lib/useKeyboard.js         — Global keyboard shortcuts
 api/[...path].mjs              — Vercel catch-all. Routes to lib/handlers.mjs.
 lib/handlers.mjs               — 6,100+ lines. Every API route in one file.
 lib/sharia.mjs                 — Sharia screening service (provider seam: Finnhub now, Zoya when ZOYA_API_KEY set). screenSymbol/screenBatch power /api/screen → governs h.sh_ app-wide
+lib/market/candles.mjs         — Pure (no I/O): validation (symbol regex, resolution whitelist,
+                                 bounded window) + Polygon→chart normalization for the price chart.
+                                 Powers /api/market/candles. Unit-tested (market-endpoints.test.js).
+                                 NB: the chart uses POLYGON for OHLC — Finnhub free tier has no /stock/candle.
+lib/compliance/policy.mjs      — The compliance boundary, in code. Three data tiers
+                                 (IMPERSONAL / ACCOUNT_SERVICING / PROHIBITED), the prohibited-pattern
+                                 list, and assertImpersonal(). Single source of truth for docs/COMPLIANCE.md.
+lib/compliance/advisor-prompt.mjs — Hardened, server-owned /api/advisor system prefix
+                                 (explain-don't-recommend; refuses personalized advice). Imported by
+                                 /api/advisor AND /api/advisor/count. Replaced the old inline prefix.
+lib/compliance/advisor-filter.mjs — Deterministic post-generation backstop: scans advisor output for
+                                 personalized-advice patterns and rewrites to the compliant redirect;
+                                 wired into /api/advisor; every flag audited as compliance_filtered.
 lib/crypto.mjs                 — AES-256-GCM encrypt/decrypt. Env var is `ENCRYPTION_KEY` (NOT APP_ENCRYPTION_KEY). ⚠️ 2026-07-12: verified against prod DB — this is BUILT but DORMANT. `ENCRYPTION_KEY` is not set, so `ENC_ENABLED` is false and every write falls back to plaintext. Result: user_snaptrade.snaptrade_user_secret is PLAINTEXT (8/8 rows), secret_ciphertext empty; plaid_tokens.access_token has NO encryption at all; user_state is plaintext. The landing page's "admin-blind"/"secrets encrypted at rest" claims were FALSE and were corrected (mizan-landing 6ae5b88). To activate: set ENCRYPTION_KEY, backfill existing rows, then finish 017.
 lib/anomaly.mjs                — 4 anomaly detectors (brute force, 5xx spike, cron staleness, new device)
 lib/alerts.mjs                 — Resend email: owner anomaly alerts + user emails (digest, re-auth, bug reports, invites) via a branded HTML shell (renderBrandedEmail, logo header). From = ALERT_FROM on the verified mizan.exchange domain
@@ -337,7 +360,7 @@ These are architectural commitments. Undoing them would break the app or violate
 - **Change the font stack** — Fraunces + IBM Plex Sans + IBM Plex Mono is intentional and final.
 - **Add new color tokens** — use existing `T.*` palette. The paper-canvas + ink + navy (accent) + green/red (semantics) palette is the brand, with amber/gold reserved for Zakat & warnings only.
 - **Use Tailwind or CSS Modules** — all styling is inline with `T.*` tokens + the THEME_CSS string injected at mount.
-- **Add external npm packages** — ask first. Bundle is already 360KB gzipped. Every dependency must justify itself.
+- **Add external npm packages** — ask first. Bundle is already 360KB gzipped. Every dependency must justify itself. (Approved additions to date: `lightweight-charts` v5, 2026-07-15, for the holdings price chart — dynamic-imported so it stays out of the initial bundle.)
 - **Add new Supabase migrations** — schema changes require explicit ask. Always discuss before adding columns/tables.
 - **Rename CSS classes** — `.bento`, `.glass`, `.glass-strong`, `.btn-primary`, `.btn-ghost` etc. are used throughout. Renaming breaks unrelated components.
 - **Introduce TypeScript** — this is intentional JavaScript. Type safety comes from JSDoc and runtime validation.
@@ -407,6 +430,8 @@ These are documented constraints, not undiscovered issues:
 
 9. **Order Ticket is double-gated** — `{false && ...}` in JSX AND `<ComingSoon>` wrapper. Alpaca paper trading backend is deployed and functional. Both gates must be removed simultaneously to activate.
 
+10. **Price chart granularity/history are Polygon-bound** — the holdings price chart (`PriceChart.jsx`) uses Polygon for OHLC because Finnhub's free tier has no `/stock/candle`. Polygon free tier = 5 req/min + ~2yr history, so the **5Y** timeframe is capped to what Polygon returns and intraday (**1D/1W**) depends on Polygon minute/hour bars. Bars cache 24h in `polygon_cache`. A symbol with no Polygon coverage (some crypto/OTC) renders the chart's **"No chart data"** empty state — intentional, not a bug.
+
 ---
 
 ## 11. EXTERNAL INTEGRATIONS — QUICK REFERENCE
@@ -417,9 +442,9 @@ These are documented constraints, not undiscovered issues:
 | Plaid | Bank accounts + transactions | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | access_token server-only, never reaches browser |
 | Anthropic | AI Advisor chat | `ANTHROPIC_KEY` | claude-sonnet-4-6, 60/hr rate limit, streaming |
 | Stooq | Gold/silver spot prices | None (free) | CSV proxy — no API key needed |
-| Finnhub | News, earnings, profile, dividends, quote, **Sharia screening fundamentals** | `FINNHUB_KEY` / `VITE_FINNHUB_KEY` | 60 req/min free tier |
+| Finnhub | News, earnings, profile, dividends, quote (incl. `/api/market/quote` chart live-line), **Sharia screening fundamentals** | `FINNHUB_KEY` / `VITE_FINNHUB_KEY` | 60 req/min free tier. **No `/stock/candle`** on free tier → the price chart uses Polygon for OHLC |
 | Zoya | Sharia screening (optional provider — overrides Finnhub when keyed) | `ZOYA_API_KEY`, `ZOYA_API_BASE` (opt) | NOT yet provisioned. When set, `lib/sharia.mjs` routes screening to Zoya (adds non-permissible-income test + direct verdict); falls back to Finnhub on any error. Adapter response-mapping must be verified against the live API. |
-| Polygon | OHLC bars (backtester only) | `POLYGON_KEY` | 5 req/min free, 2yr history |
+| Polygon | OHLC bars — backtester (`/api/polygon/bars`) **+ holdings price chart** (`/api/market/candles`, auth-gated + IMPERSONAL); both share `getPolygonBars()` (24h `polygon_cache` + backoff + stale-on-failure) | `POLYGON_KEY` | 5 req/min free, 2yr history |
 | Alpha Vantage | ETF constituent holdings (ETF Overlap Analyzer) | `ALPHAVANTAGE_KEY` | **LIVE (set in Vercel 2026-07-05, verified — HLAL returned 210 holdings).** Free tier **25 req/day** → fetch server-side ONLY + cache ~24h in `etf_holdings_cache` (7 halal ETFs = 7 calls/day). The overlap route fetches symbols **sequentially** (concurrent bursts get throttled → curated fallback). `ETF_PROFILE` returns full holdings + weights + sectors. **ETF-only** (Amana mutual funds use curated snapshots in `lib/etfHoldings.mjs`; all 7 ETFs also curated-seeded as fallback). Stored **Sensitive**, so `vercel env pull` shows it empty — verify via `etf_holdings_cache.source`. |
 | Alpaca | Paper trading | `ALPACA_KEY_ID`, `ALPACA_SECRET` | Paper only — no production keys |
 | Supabase | DB + Auth | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Paid plan |

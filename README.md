@@ -11,10 +11,10 @@ The Shariah-compliant financial super-app. Brokerages, banking, trading, and AI 
 | Section | Replaces | Highlights |
 |---|---|---|
 | 💳 **Finances** | Origin, Mint | Live net worth across every connected brokerage + manual assets (gold, real estate, business equity). Daily snapshots. Zakat calculation with per-asset eligibility. |
-| 📈 **Investments** | Zoya, Personal Capital | Unified portfolio via SnapTrade. Real-time Sharia screening across **7 frameworks** (AAOIFI, Dow Jones Islamic, S&P Shariah, FTSE Shariah, MSCI Islamic, SC Malaysia, IFSB). Tax-loss harvesting with halal replacement suggestions. |
+| 📈 **Investments** | Zoya, Personal Capital | Unified portfolio via SnapTrade. Real-time Sharia screening across **7 frameworks** (AAOIFI, Dow Jones Islamic, S&P Shariah, FTSE Shariah, MSCI Islamic, SC Malaysia, IFSB). Interactive candlestick + volume **price charts** per holding (1D–5Y) with your own cost basis marked. Tax-loss harvesting with halal replacement suggestions. |
 | ⚡ **Trading** | Robinhood, Schwab | Order ticket with preview/confirm flow. Pre/post-market quotes, browser-native price alerts, watchlist. Sharia pre-check on every order — spot equity only, no margin, no derivatives, no shorts. |
 | 🤖 **Backtest / FIRE** | Backtrader | Polygon historical bars + SMA-50/200 crossover engine. FIRE retirement projector with nominal vs. inflation-adjusted curves. |
-| 🧠 **Intelligence** | Yahoo Finance, Bloomberg | Sentiment-tagged news (Finnhub). Sharia-aware **AI advisor** (Anthropic Claude) with full portfolio context. Auto-notifications for non-compliance changes + dividend payments. |
+| 🧠 **Intelligence** | Yahoo Finance, Bloomberg | Sentiment-tagged news (Finnhub). Sharia-aware **AI advisor** (Anthropic Claude) with full portfolio context — bounded by an in-code compliance line: it explains the halal status and your data, but never gives personalized buy/sell advice ([`docs/COMPLIANCE.md`](./docs/COMPLIANCE.md)). Auto-notifications for non-compliance changes + dividend payments. |
 
 ---
 
@@ -28,7 +28,8 @@ The Shariah-compliant financial super-app. Brokerages, banking, trading, and AI 
 | Auth | Supabase email + password (sign-in / sign-up / reset, all same-tab) |
 | Per-user state | Postgres via Supabase (RLS-enforced) |
 | Brokerages | SnapTrade (60+ brokers) |
-| Market data | Finnhub (real-time quotes + news), Polygon (historical OHLC) |
+| Market data | Finnhub (real-time quotes + news), Polygon (historical OHLC — backtester + holdings price chart) |
+| Charting | lightweight-charts (TradingView, MIT) — candlestick + volume, dynamic-imported |
 | AI | Anthropic Claude Sonnet 4 |
 | Email | Resend SMTP (transactional) |
 | Hosting | Vercel (frontend + serverless), Supabase (auth + DB) |
@@ -203,7 +204,7 @@ A fictional ~$42M halal portfolio built into the bundle. Defaults **on** for new
 | Supabase | 500 MB DB, 50k MAU | Plenty for personal + a few friends |
 | SnapTrade | 5 users per developer | Upgrade if scaling |
 | Finnhub | 60 calls / min | Sector results cache in localStorage |
-| Polygon | 5 calls / min, 2yr history | Backtester respects |
+| Polygon | 5 calls / min, 2yr history | Backtester + holdings price chart respect; bars cached 24h in `polygon_cache` |
 | Anthropic | Pay-as-you-go | ~$0.01 / advisor message |
 | Resend | 3,000 emails / mo | Way more than magic-link demand |
 
@@ -217,6 +218,8 @@ A fictional ~$42M halal portfolio built into the bundle. Defaults **on** for new
 │   └── [...path].mjs        # Vercel catch-all serverless function
 ├── lib/
 │   ├── handlers.mjs         # Shared route logic (used by api + server.js)
+│   ├── market/candles.mjs   # Pure: candle validation + Polygon→chart normalization
+│   ├── compliance/          # policy.mjs (data tiers) + advisor-prompt.mjs + advisor-filter.mjs
 │   ├── auth.jsx             # React auth context + useAuth hook
 │   ├── supabase.js          # Supabase browser client (graceful when env absent)
 │   └── apiFetch.js          # Wrapper that attaches Supabase JWT to /api calls
@@ -229,9 +232,11 @@ A fictional ~$42M halal portfolio built into the bundle. Defaults **on** for new
 ├── src/
 │   ├── App.jsx              # AuthProvider + Gate
 │   ├── main.jsx
+│   ├── test/                # Vitest suites (market-endpoints, compliance, zakat, …)
 │   └── components/
-│       ├── MizanApp.jsx     # The whole UI (~3500 lines)
-│       └── Login.jsx        # Magic-link sign-in card
+│       ├── MizanApp.jsx     # The main UI (~11,400 lines — intentionally monolithic)
+│       ├── charts/          # PriceChart.jsx (candlestick+volume) + holdingsOverlay.js
+│       └── Login.jsx        # Sign-in card
 ├── supabase/
 │   ├── migrations/          # Numbered SQL migrations (source of truth)
 │   │   ├── 001_audit_log.sql

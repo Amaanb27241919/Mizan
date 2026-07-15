@@ -39,6 +39,7 @@ Notable, not exhaustive (65 files total — `grep -ril mizan`):
 - UI/strings across: `Login.jsx`, `Contact.jsx`, `Privacy.jsx`, `LegalLayout.jsx`, `BugReportButton.jsx`, `CommandPalette.jsx`, `ConnectionHealth.jsx`, `Goals.jsx`, `Budgeting.jsx`, `BillsCalendar.jsx`, `Icon.jsx`, `Skeleton.jsx`, `PerformancePanel.jsx`.
 - **Backend:** `lib/handlers.mjs` (email copy, `APP_BASE_URL` default `https://app.mizan.exchange`, invite/notification text), `lib/alerts.mjs` (email shell + senders + tagline + logo URL), `lib/notify.mjs` (push titles), `lib/crypto.mjs`/`lib/rateLimit.mjs` (comments/labels), `middleware.ts`.
 - `src/lib/*` — `apiFetch.js`, `auth.jsx`, `userState.js`, `formatters.js`, `performance.js`, `zakat.js`, `useKeyboard.js` (mostly the `mizan_*` storage keys, see §G).
+- **New 2026-07-15** (price chart + compliance): `src/components/charts/PriceChart.jsx` + `holdingsOverlay.js`, `lib/market/candles.mjs`, `lib/compliance/{policy,advisor-prompt,advisor-filter}.mjs`, `src/test/{market-endpoints,compliance}.test.js`, `docs/COMPLIANCE.md` — all carry `MĪZAN` header comments and/or `MizanApp`/`mizan_*` references. (Counts above are approximate — recompute with `grep -ril mizan` before a rebrand.)
 - `package.json` / `package-lock.json` (`"name"`), `README.md`, `SECURITY.md`, `CHANGELOG.md`, `render.yaml`, `.env.example`, `.github/workflows/*.yml` (cron URLs → `app.mizan.exchange`).
 - Docs (internal, lower priority): `CLAUDE.md`, `MIZAN-STATE-AUDIT.md`, `MIZAN-BENCHMARK-ROADMAP.md`, `BACKLOG.md`, `docs/*`, `scripts/*`.
 

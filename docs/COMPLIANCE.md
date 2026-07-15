@@ -7,6 +7,11 @@
 > registration.** Nothing here is a legal opinion, and the tiers below are a
 > best-effort engineering model — not a determination of regulatory status.
 
+**Status:** the engineering guardrail described here is **live in production**
+(`app.mizan.exchange`) as of **2026-07-15**. Legal review and any required RIA
+registration remain **pending** — the guardrail is shipped, its legal sufficiency is not
+established.
+
 The read-only line is drawn at the **personalization of advice**, *not* at trade
 execution and *not* at any single feature. MIZAN may **display** the user's own
 data and may **state impersonal facts**, but it must **never generate a tailored
