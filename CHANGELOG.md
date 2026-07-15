@@ -23,6 +23,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **activity:** Dedupe CSV imports against SnapTrade by account number, not renameable label (`8cdb193`)
 
 ### Docs
+- Sync all docs to the shipped price-chart + compliance boundary (`38a792b`)
 - Record 2026-07-15 price-chart + compliance-boundary feature (`84e1710`)
 - Record 2026-07-15 Robinhood/single-account CSV dedupe fix (`143b18b`)
 - Record 2026-07-14 — activity dedupe fix + DCA-plan enactment (`fad50a8`)
