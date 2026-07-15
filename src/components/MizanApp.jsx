@@ -20,6 +20,7 @@ import ComingSoon from "./ComingSoon.jsx";
 import ConnectionHealth from "./ConnectionHealth.jsx";
 import BugReportButton from "./BugReportButton.jsx";
 import PriceChart from "./charts/PriceChart.jsx";
+import { tradesForSymbol } from "./charts/holdingsOverlay.js";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
 // Editorial-finance palette: dark forest base, gold primary, warm paper text.
@@ -4628,7 +4629,7 @@ function _buildEarningsMap(arr) {
 const _SENT_CLR = { positive: T.gain, negative: T.loss, neutral: T.muted };
 
 // Expanded content rendered below the row when a holding is open.
-function HoldingExpanded({ tk, state }) {
+function HoldingExpanded({ tk, state, costBasis = null, trades = null }) {
   if (!state || state.loading) {
     return (
       <div style={{ padding: `${T.s4} ${T.s5}`, display: "flex", flexDirection: "column", gap: T.s2, background: `${T.blue}06`, borderTop: `1px solid ${T.border}` }}>
@@ -4650,7 +4651,7 @@ function HoldingExpanded({ tk, state }) {
       {/* Price chart — IMPERSONAL market data (see docs/COMPLIANCE.md) */}
       <div>
         <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PRICE</div>
-        <PriceChart symbol={tk} />
+        <PriceChart symbol={tk} costBasis={costBasis} trades={trades} />
       </div>
 
       {/* Earnings row */}
@@ -4715,7 +4716,7 @@ function HoldingExpanded({ tk, state }) {
 
 // Accordion holdings table — replaces the generic Tbl in the holdings section.
 // Clicking a row expands it to show earnings + news; clicking again collapses.
-function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp }) {
+function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp, activities = [] }) {
   const [openTk, setOpenTk] = useState(null);
   const [rowData, setRowData] = useState({});       // { [tk]: { news, earnings, loading } }
   const [earningsMap, setEarningsMap] = useState({}); // { [symbol]: nearest future entry }
@@ -4844,7 +4845,12 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp })
                 {isOpen && (
                   <tr style={{ borderBottom: `1px solid ${T.border}` }}>
                     <td colSpan={COL_COUNT} style={{ padding: 0, borderBottom: `1px solid ${T.border}` }}>
-                      <HoldingExpanded tk={r.tk} state={rowData[r.tk]} />
+                      <HoldingExpanded
+                        tk={r.tk}
+                        state={rowData[r.tk]}
+                        costBasis={valuesHidden ? null : (r.ac > 0 ? r.ac : null)}
+                        trades={valuesHidden ? null : tradesForSymbol(activities, r.tk)}
+                      />
                     </td>
                   </tr>
                 )}
@@ -5033,7 +5039,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
 
       {/* ─── Holdings table ───────────────────────────── */}
       <BentoTile style={{padding:0,overflow:"hidden"}}>
-        <HoldingsTable filtered={filtered} valuesHidden={valuesHidden} mask={mask} f$={f$} fp={fp} fc={fc} mv={mv} gv={gv} gp={gp}/>
+        <HoldingsTable filtered={filtered} valuesHidden={valuesHidden} mask={mask} f$={f$} fp={fp} fc={fc} mv={mv} gv={gv} gp={gp} activities={activities}/>
         {snapAccounts.length===0
           // No brokerage connected → teaching connect-to-unlock state. (We no
           // longer show perpetual skeleton rows here — that read as a stuck

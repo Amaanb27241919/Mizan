@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-14
 
 ### Added
+- **chart:** Candlestick + volume price chart on holdings (`b663d1b`)
 - **market:** Impersonal server-side candle + quote data layer (`17a52fc`)
 
 ### Changed
