@@ -23,6 +23,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **zakat:** Derive SnapTrade balance from positions + auto-suggest card debt (`87cad13`)
 
 ### Docs
+- Record 2026-07-13 accuracy pass (Compliance box + net-worth history) (`a75a929`)
 - Record 2026-07-13 session (Zakat 401k/credit-cards + recurring subs rebuild) (`7640430`)
 
 ## 2026-07-12

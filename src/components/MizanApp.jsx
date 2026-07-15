@@ -1251,7 +1251,7 @@ function parseCSV(text,broker){
       // When we have account info, fake a SnapTrade-shaped account object
       // so ActivityPanel's acctNameById lookup can match if the same
       // account is also connected via SnapTrade.
-      account:acctLabel?{id:acctNumber||acctLabel,name:acctLabel}:null,
+      account:acctLabel?{id:acctNumber||acctLabel,name:acctLabel,number:acctNumber||null}:null,
       institution_name:institutionLabel,
       _imported:true,
     });
@@ -10894,15 +10894,21 @@ export default function Mizan(){
         // after the retag tool ran). Builds an accountId → label map from
         // the just-fetched snapAccounts cache; falls back to brokerage or
         // whatever institution_name SnapTrade returned.
-        let acctLabelById={};
+        let acctLabelById={},acctNumById={};
         try{
           const cachedAccts=JSON.parse(localStorage.getItem("mizan_accounts_cache")||"[]");
           cachedAccts.forEach(a=>{
             acctLabelById[a.accountId]=`${a.brokerage} — ${a.accountName}`;
+            if(a.number)acctNumById[a.accountId]=a.number;
           });
         }catch{}
+        // institution_name stays the (renameable) display label; the STABLE
+        // broker account number rides along on .account.number so fingerprint
+        // dedup can collapse a CSV import onto the same SnapTrade transaction
+        // even when the account was renamed in Mizan (see fingerprintRow).
         const enrichedReal=real.map(r=>({
           ...r,
+          account:{...(r.account||{}),number:acctNumById[r.account?.id]??r.account?.number??null},
           institution_name:acctLabelById[r.account?.id]||r.institution_name||r.account?.institution_name||"Unknown",
         }));
         // SnapTrade real first so any CSV import row that fingerprint-matches
@@ -10966,8 +10972,18 @@ export default function Mizan(){
     };
     const sym=r.symbol?.symbol||r.symbol||"";
     const inst=(r.institution_name||"").trim().toUpperCase();
+    // Account key: prefer the STABLE broker account NUMBER (last 4) over the
+    // display label. The label carries the user's Mizan nickname, so a CSV
+    // export (broker's own account name) and the SnapTrade feed (renamed) never
+    // matched → the same transaction survived twice. `broker#last4` is
+    // rename-immune yet still keeps two sub-accounts at one broker distinct.
+    // Falls back to the full label when no number is present (e.g. single-
+    // account Robinhood/Coinbase exports) — unchanged from prior behavior.
+    const last4=String(r.account?.number||"").replace(/[^a-z0-9]/gi,"").toUpperCase().slice(-4);
+    const brokerTok=inst.split("—")[0].trim().split(/\s+/)[0];
+    const acctKey=last4?`${brokerTok}#${last4}`:inst;
     return[
-      inst,
+      acctKey,
       (r.trade_date||r.settlement_date||"").slice(0,10),
       (typeof sym==="string"?sym:"").trim().toUpperCase(),
       n(r.units),
