@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-07-14
 
+### Added
+- **market:** Impersonal server-side candle + quote data layer (`17a52fc`)
+
 ### Changed
 - **overview:** Remove TradingView S&P 500 market-sector heatmap (`5af2163`)
 

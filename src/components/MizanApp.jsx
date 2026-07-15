@@ -19,6 +19,7 @@ import PerformancePanel from "./PerformancePanel.jsx";
 import ComingSoon from "./ComingSoon.jsx";
 import ConnectionHealth from "./ConnectionHealth.jsx";
 import BugReportButton from "./BugReportButton.jsx";
+import PriceChart from "./charts/PriceChart.jsx";
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
 // Editorial-finance palette: dark forest base, gold primary, warm paper text.
@@ -4646,6 +4647,12 @@ function HoldingExpanded({ tk, state }) {
 
   return (
     <div style={{ padding: `${T.s4} ${T.s5}`, background: `${T.blue}06`, borderTop: `1px solid ${T.border}`, display: "flex", flexDirection: "column", gap: T.s4 }}>
+      {/* Price chart — IMPERSONAL market data (see docs/COMPLIANCE.md) */}
+      <div>
+        <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PRICE</div>
+        <PriceChart symbol={tk} />
+      </div>
+
       {/* Earnings row */}
       <div style={{ display: "flex", alignItems: "center", gap: T.s3, flexWrap: "wrap" }}>
         <span style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>NEXT EARNINGS</span>
