@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-14
 
 ### Fixed
+- **activity:** Dedupe single-account CSV imports (Robinhood) + recover dropped cash txns (`4a67109`)
 - **activity:** Dedupe CSV imports against SnapTrade by account number, not renameable label (`8cdb193`)
 
 ### Docs
