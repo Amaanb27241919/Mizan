@@ -29,6 +29,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Maintenance
 - **docs:** Stabilize audit last-audited stamp (2026-07-15 rollover) (`ee83395`)
 
+### Other
+- Test+docs: market-data + compliance coverage, COMPLIANCE.md (`4e15971`)
+
 ## 2026-07-13
 
 ### Added
