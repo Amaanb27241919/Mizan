@@ -13,6 +13,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **sharia:** Fail closed to review when debt can't be verified + first engine tests (`1f8f0a7`)
 - Guard net-worth snapshot + bank-balance persistence against demo-mode leak (`570d18f`)
 
+### Maintenance
+- **demo:** Rescale demo persona from ~$55M to a believable ~$435k net worth (`107763e`)
+
 ## 2026-07-14
 
 ### Added
