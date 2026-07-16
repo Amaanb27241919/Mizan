@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   TROY_OZ_TO_G,
   NISAB_GOLD_G,
@@ -483,5 +486,39 @@ describe('computeZakatWorksheet', () => {
     expect(r.netZakatable).toBe(0)
     expect(r.zakatDue).toBe(0)
     expect(r.connLiabilities).toBe(0)
+  })
+})
+
+// ── Server ↔ lib nisab-formula parity (drift guard) ───────────────────────────
+// The /api/metals/spot route in lib/handlers.mjs HAND-WRITES the oz→g→nisab formula
+// (it can't import src/lib/zakat.js across the backend↔frontend module boundary), so
+// nothing structurally stops the server's nisab constants from drifting away from the
+// tested lib constants — which would make the /api/metals/spot response disagree with
+// the client Zakat worksheet. This guard reads the server source and fails on any such
+// drift. (If the server is ever refactored to import lib/zakat.js, this test becomes
+// redundant and can be deleted.)
+describe('server /api/metals/spot ↔ lib/zakat.js nisab constant parity', () => {
+  const handlersSrc = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), '../../lib/handlers.mjs'),
+    'utf8',
+  )
+  const i = handlersSrc.indexOf('/api/metals/spot" && method === "GET"')
+  const metalsRegion = i === -1 ? handlersSrc : handlersSrc.slice(i, i + 4000)
+  const esc = (n) => String(n).replace(/\./g, '\\.')
+
+  it('locates the metals endpoint handler', () => {
+    expect(i, 'GET /api/metals/spot handler not found in lib/handlers.mjs').toBeGreaterThan(-1)
+  })
+
+  it('uses the same TROY_OZ_TO_G as lib/zakat.js', () => {
+    const m = metalsRegion.match(/TROY_OZ_TO_G\s*=\s*([\d.]+)/)
+    expect(m, 'TROY_OZ_TO_G not found in the metals endpoint').not.toBeNull()
+    expect(Number(m[1])).toBe(TROY_OZ_TO_G)
+  })
+
+  it('uses the same gold + silver nisab gram weights as lib/zakat.js', () => {
+    // Server computes `<gramWeight> * <usdPerOz> / TROY_OZ_TO_G` per metal.
+    expect(metalsRegion).toMatch(new RegExp(`${esc(NISAB_GOLD_G)}\\s*\\*`))
+    expect(metalsRegion).toMatch(new RegExp(`${esc(NISAB_SILVER_G)}\\s*\\*`))
   })
 })
