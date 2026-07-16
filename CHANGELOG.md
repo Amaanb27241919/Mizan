@@ -21,6 +21,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - Record 2026-07-15 audit — demo leak + Sharia fail-closed fixes + demo rescale (`049cba9`)
 
 ### Maintenance
+- **docs:** Stabilize audit last-audited stamp (2026-07-16 UTC rollover) (`3026ad4`)
 - **demo:** Rescale demo persona from ~$55M to a believable ~$435k net worth (`107763e`)
 
 ## 2026-07-14
