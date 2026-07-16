@@ -263,90 +263,51 @@ const _pos = (tk,nm,sh,ac,px,ty="Stock") => ({
   units: sh, price: px, average_purchase_price: ac,
 });
 const DEMO_ACCOUNTS = [
-  { accountId:"d-fid-conc", accountName:"Concentrated Equity", brokerage:"Fidelity", brokerageSlug:"FIDELITY",
-    balance:4_182_640.55, cash:62_400.00, positions:[
-      _pos("AAPL", "Apple Inc.",                   8_200.0, 142.00, 289.48),
-      _pos("MSFT", "Microsoft Corp.",              5_140.0, 275.00, 424.00),
-      _pos("NVDA", "Nvidia Corp.",                 3_620.0,  88.00, 213.00),
-      _pos("GOOGL","Alphabet Inc. Class A",        4_180.0, 138.00, 198.40),
-      _pos("META", "Meta Platforms Inc.",          1_520.0, 360.00, 620.30),
-    ] },
-  { accountId:"d-jpm-pwm", accountName:"Wealth Management", brokerage:"J.P. Morgan Private Bank", brokerageSlug:"JPMORGAN",
-    balance:11_842_500.20, cash:485_200.00, positions:[
-      _pos("BRK.B","Berkshire Hathaway Class B",   12_400.0, 320.00, 462.50),
-      _pos("COST", "Costco Wholesale Corp.",        2_640.0, 420.00, 882.10),
-      _pos("HD",   "Home Depot Inc.",               3_180.0, 295.00, 410.20),
-      _pos("ASML", "ASML Holding NV ADR",           1_240.0, 540.00,1_042.30),
-      _pos("TSM",  "Taiwan Semiconductor ADR",      4_820.0, 185.00, 411.86),
-      _pos("V",    "Visa Inc. Class A",             4_200.0, 220.00, 308.40),
-    ] },
-  { accountId:"d-schwab-trust", accountName:"Family Trust", brokerage:"Charles Schwab", brokerageSlug:"SCHWAB",
-    balance:8_204_318.91, cash:120_400.00, positions:[
-      _pos("VOO",  "Vanguard S&P 500 ETF",         12_400.0, 340.00, 522.40,"ETF"),
-      _pos("QQQ",  "Invesco QQQ Trust",             6_200.0, 320.00, 482.10,"ETF"),
-      _pos("SPUS", "SP Funds S&P 500 Sharia",      18_400.0,  44.20,  55.57,"ETF"),
-      _pos("HLAL", "Wahed FTSE USA Shariah",       14_600.0,  58.00,  68.93,"ETF"),
+  // A believable mid-career Muslim professional (~$264k invested across
+  // retirement + taxable + crypto). Share counts are realistic for this net-worth
+  // band; the mix intentionally spans halal / review / haram so the screener,
+  // purification, and rebalancer all have something to show.
+  { accountId:"d-empower-401k", accountName:"401(k) Plan", brokerage:"Empower Retirement", brokerageSlug:"EMPOWER",
+    balance:113_506.40, cash:1_400.00, positions:[
+      _pos("VLXVX","Vanguard Target 2065",         1_320.0,  28.00,  43.82,"Fund"),
+      _pos("VTSAX","Vanguard Total Stock Mkt Adm",   380.0,  92.00, 142.80,"Fund"),
     ] },
   { accountId:"d-vg-roth", accountName:"Roth IRA", brokerage:"Vanguard", brokerageSlug:"VANGUARD",
-    balance:1_624_708.66, cash:14_200.00, positions:[
-      _pos("VTI",  "Vanguard Total Stock Mkt ETF",  3_840.0, 180.00, 295.40,"ETF"),
-      _pos("VXUS", "Vanguard Total Intl Stock",     8_200.0,  48.00,  62.18,"ETF"),
-      _pos("AMAGX","Amana Growth Fund",             3_420.0,  88.00, 105.60,"Fund"),
+    balance:44_150.10, cash:900.00, positions:[
+      _pos("VTI",  "Vanguard Total Stock Mkt ETF",     42.0, 180.00, 295.40,"ETF"),
+      _pos("HLAL", "Wahed FTSE USA Shariah",          210.0,  58.00,  68.93,"ETF"),
+      _pos("AMAGX","Amana Growth Fund",               155.0,  88.00, 105.60,"Fund"),
+    ] },
+  { accountId:"d-fid-taxable", accountName:"Individual Brokerage", brokerage:"Fidelity", brokerageSlug:"FIDELITY",
+    balance:58_011.12, cash:1_100.00, positions:[
+      _pos("VOO",  "Vanguard S&P 500 ETF",             38.0, 340.00, 522.40,"ETF"),
+      _pos("SPUS", "SP Funds S&P 500 Sharia",         240.0,  44.20,  55.57,"ETF"),
+      _pos("AAPL", "Apple Inc.",                        34.0, 142.00, 289.48),
+      _pos("MSFT", "Microsoft Corp.",                   18.0, 275.00, 424.00),
+      _pos("NVDA", "Nvidia Corp.",                      14.0,  88.00, 213.00),
+      // Mixed compliance — non-halal positions surface in the screener
+      _pos("JPM",  "JPMorgan Chase & Co.",               8.0, 165.00, 248.30),
+      _pos("MO",   "Altria Group Inc.",                 22.0,  42.00,  58.20),
     ] },
   { accountId:"d-rh-active", accountName:"Active Brokerage", brokerage:"Robinhood", brokerageSlug:"ROBINHOOD",
-    balance:3_184_910.44, cash:42_600.00, positions:[
-      _pos("TSLA", "Tesla Inc.",                    2_240.0, 210.00, 406.01),
-      _pos("AMD",  "Advanced Micro Devices",        1_640.0, 140.00, 405.93),
-      _pos("AVGO", "Broadcom Inc.",                   720.0, 280.00, 419.02),
-      _pos("ARM",  "Arm Holdings",                    980.0, 108.00, 212.69),
-      _pos("PLTR", "Palantir Technologies",         5_400.0,  38.00, 138.23),
-      // Mixed compliance — non-halal positions surface in screener
-      _pos("JPM",  "JPMorgan Chase & Co.",          1_240.0, 165.00, 248.30),
-      _pos("WYNN", "Wynn Resorts Ltd.",               420.0, 110.00, 142.50),
-      _pos("MO",   "Altria Group Inc.",             2_180.0,  42.00,  58.20),
-      _pos("LCID", "Lucid Motors",                  4_240.0,  24.00,   6.06),
-    ] },
-  { accountId:"d-empower-401k", accountName:"401(k) Plan", brokerage:"Empower Retirement", brokerageSlug:"EMPOWER",
-    balance:3_018_440.20, cash:18_400.00, positions:[
-      _pos("VLXVX","Vanguard Target 2065",         30_400.0,  28.00,  43.82,"Fund"),
-      _pos("VTSAX","Vanguard Total Stock Mkt Adm", 12_800.0,  92.00, 142.80,"Fund"),
+    balance:15_686.54, cash:700.00, positions:[
+      _pos("TSLA", "Tesla Inc.",                        12.0, 210.00, 406.01),
+      _pos("AMD",  "Advanced Micro Devices",             8.0, 140.00, 405.93),
+      _pos("PLTR", "Palantir Technologies",             26.0,  38.00, 138.23),
+      _pos("NVDA", "Nvidia Corp.",                       6.0,  88.00, 213.00),
+      _pos("WYNN", "Wynn Resorts Ltd.",                 14.0, 110.00, 142.50),
     ] },
   { accountId:"d-cb-prime", accountName:"Crypto", brokerage:"Coinbase", brokerageSlug:"COINBASE",
-    balance:1_842_580.00, cash:0, positions:[
-      _pos("BTC",  "Bitcoin",                          18.420, 32_400.00, 82_400.00,"Crypto"),
-      _pos("ETH",  "Ethereum",                        110.180,  1_640.00,  2_640.00,"Crypto"),
-      _pos("SOL",  "Solana",                        1_240.000,     62.00,    180.40,"Crypto"),
+    balance:11_939.40, cash:0, positions:[
+      _pos("BTC",  "Bitcoin",                          0.110, 32_400.00, 82_400.00,"Crypto"),
+      _pos("ETH",  "Ethereum",                         0.850,  1_640.00,  2_640.00,"Crypto"),
+      _pos("SOL",  "Solana",                           3.500,     62.00,    180.40,"Crypto"),
     ] },
-  { accountId:"d-ibkr-global", accountName:"Global Equity", brokerage:"Interactive Brokers", brokerageSlug:"IBKR",
-    balance:5_104_220.18, cash:240_600.00, positions:[
-      _pos("BABA", "Alibaba Group ADR",            22_400.0,  88.00, 142.30),
-      _pos("TM",   "Toyota Motor ADR",              8_400.0, 165.00, 241.80),
-      _pos("UL",   "Unilever PLC ADR",             14_600.0,  48.00,  62.40),
-      _pos("LMT",  "Lockheed Martin Corp.",         1_240.0, 380.00, 562.10),
-      _pos("NOW",  "ServiceNow Inc.",                 980.0, 420.00, 882.40),
-    ] },
-  { accountId:"d-schwab-ind", accountName:"Individual Brokerage", brokerage:"Charles Schwab", brokerageSlug:"SCHWAB",
-    balance:1_482_316.40, cash:38_200.00, positions:[
-      _pos("SCHD", "Schwab US Dividend ETF",        8_400.0,  72.00,  84.20,"ETF"),
-      _pos("SCHB", "Schwab US Broad Market ETF",    6_200.0,  48.00,  62.40,"ETF"),
-      _pos("UNH",  "UnitedHealth Group",              420.0, 480.00, 552.10),
-      _pos("LIN",  "Linde plc",                       640.0, 360.00, 442.80),
-      _pos("ABBV", "AbbVie Inc.",                     820.0, 138.00, 188.40),
-    ] },
-  { accountId:"d-vg-taxable", accountName:"Joint Taxable", brokerage:"Vanguard", brokerageSlug:"VANGUARD",
-    balance:982_440.12, cash:9_800.00, positions:[
-      _pos("VOO",  "Vanguard S&P 500 ETF",          1_240.0, 360.00, 522.40,"ETF"),
-      _pos("VYM",  "Vanguard High Dividend Yield",  2_180.0,  92.00, 128.40,"ETF"),
-      _pos("BND",  "Vanguard Total Bond Market",    4_240.0,  78.00,  72.10,"ETF"),
-      _pos("VUG",  "Vanguard Growth ETF",             840.0, 240.00, 388.20,"ETF"),
-    ] },
-  { accountId:"d-webull-active", accountName:"Active Trading", brokerage:"Webull", brokerageSlug:"WEBULL",
-    balance:284_910.66, cash:12_400.00, positions:[
-      _pos("AMZN", "Amazon.com Inc.",                 480.0, 142.00, 218.40),
-      _pos("CRM",  "Salesforce Inc.",                 320.0, 220.00, 308.20),
-      _pos("SHOP", "Shopify Inc.",                    640.0,  62.00, 108.40),
-      _pos("UBER", "Uber Technologies",               820.0,  48.00,  82.30),
-      _pos("NET",  "Cloudflare Inc.",                 480.0,  64.00, 112.40),
+  { accountId:"d-schwab-ind", accountName:"Dividend Portfolio", brokerage:"Charles Schwab", brokerageSlug:"SCHWAB",
+    balance:21_046.40, cash:600.00, positions:[
+      _pos("SCHD", "Schwab US Dividend ETF",           120.0,  72.00,  84.20,"ETF"),
+      _pos("VYM",  "Vanguard High Dividend Yield",      48.0,  92.00, 128.40,"ETF"),
+      _pos("VOO",  "Vanguard S&P 500 ETF",               8.0, 340.00, 522.40,"ETF"),
     ] },
 ];
 // Enforce the real-brokerage invariant `balance === cash + Σ(position market
@@ -360,9 +321,9 @@ DEMO_ACCOUNTS.forEach(a => {
   const posMV = (a.positions || []).reduce((s, p) => s + (p.price || 0) * (p.units || 0), 0);
   a.balance = Math.round(((a.cash || 0) + posMV) * 100) / 100;
 });
-// Net ~$55M across 11 expanded accounts (Fidelity, JPM, Schwab ×2, Vanguard ×2, Robinhood, Empower, Coinbase, IBKR, Webull).
-// Tag the demo's non-overlapping tickers so the screener doesn't show
-// every position as "Review".
+// Net ~$264k invested across 6 accounts (Empower 401k, Vanguard Roth, Fidelity
+// taxable, Robinhood, Coinbase, Schwab). Tag the demo's tickers so the screener
+// doesn't show every position as "Review".
 // Demo transaction history — multi-year buys, sells, quarterly dividends,
 // monthly contributions, occasional withdrawals + fees per account.
 const DEMO_ACTIVITIES = (() => {
@@ -568,21 +529,21 @@ function zakatSelectedLiabilities(creditList = [], excludedIds) {
 /* ─── DEMO BANK FIXTURES (Plaid stand-in) ────────────── */
 // Mirrors DEMO_ACCOUNTS pattern — used to populate the Finances tab when
 // demoMode is on. No real API calls needed; everything is local fixture.
-// Cash profile sized to match the ~$41M brokerage demo: ~$2.6M total cash
-// across private-banking, retail, HYSA, sweep, and business accounts.
+// Cash profile sized to match the ~$264k brokerage demo: ~$58k net cash across
+// everyday checking, HYSA, sweep, a small card balance, and a business account.
 const DEMO_BANK_ACCOUNTS = [
-  // JPMorgan Private Client — primary banking relationship
-  { item_id:"d-jpm",   institution_name:"JPMorgan Private Client", account_id:"d-jpm-1", name:"Private Client Checking", official_name:"JPM Private Client Checking", type:"depository", subtype:"checking", mask:"0142", current_bal:184_620.55, available_bal:184_620.55, iso_currency:"USD" },
-  { item_id:"d-jpm",   institution_name:"JPMorgan Private Client", account_id:"d-jpm-2", name:"Premier Savings",         official_name:"JPM Premier Plus Savings",    type:"depository", subtype:"savings",  mask:"5588", current_bal:1_240_820.00, available_bal:1_240_820.00, iso_currency:"USD" },
+  // Ally — primary everyday banking (income lands here, giving goes out from here)
+  { item_id:"d-jpm",   institution_name:"Ally Bank",         account_id:"d-jpm-1", name:"Interest Checking",     official_name:"Ally Interest Checking",       type:"depository", subtype:"checking", mask:"0142", current_bal:9_240.55,  available_bal:9_240.55,  iso_currency:"USD" },
+  { item_id:"d-jpm",   institution_name:"Ally Bank",         account_id:"d-jpm-2", name:"Online Savings",        official_name:"Ally Online Savings",          type:"depository", subtype:"savings",  mask:"5588", current_bal:18_520.00, available_bal:18_520.00, iso_currency:"USD" },
   // Chase — day-to-day spending
-  { item_id:"d-chase", institution_name:"Chase",                   account_id:"d-chase-1", name:"Total Checking",        official_name:"Chase Total Checking",         type:"depository", subtype:"checking", mask:"4421", current_bal:42_180.32, available_bal:42_180.32, iso_currency:"USD" },
-  { item_id:"d-chase", institution_name:"Chase",                   account_id:"d-chase-2", name:"Sapphire Reserve",      official_name:"Chase Sapphire Reserve",       type:"credit",     subtype:"credit card",mask:"3344", current_bal:4_287.45,  available_bal:45_712.55, iso_currency:"USD" },
+  { item_id:"d-chase", institution_name:"Chase",             account_id:"d-chase-1", name:"Total Checking",      official_name:"Chase Total Checking",         type:"depository", subtype:"checking", mask:"4421", current_bal:4_180.32,  available_bal:4_180.32,  iso_currency:"USD" },
+  { item_id:"d-chase", institution_name:"Chase",             account_id:"d-chase-2", name:"Sapphire Preferred",  official_name:"Chase Sapphire Preferred",     type:"credit",     subtype:"credit card",mask:"3344", current_bal:1_840.45,  available_bal:10_159.55, iso_currency:"USD" },
   // Marcus — high-yield reserve
-  { item_id:"d-marcus",institution_name:"Marcus by Goldman",       account_id:"d-marcus-1",name:"High-Yield Savings",    official_name:"Marcus HYSA",                  type:"depository", subtype:"savings",  mask:"7733", current_bal:842_500.20, available_bal:842_500.20, iso_currency:"USD" },
+  { item_id:"d-marcus",institution_name:"Marcus by Goldman", account_id:"d-marcus-1",name:"High-Yield Savings",   official_name:"Marcus HYSA",                  type:"depository", subtype:"savings",  mask:"7733", current_bal:14_500.20, available_bal:14_500.20, iso_currency:"USD" },
   // Fidelity Cash Management — sweep
-  { item_id:"d-fid",   institution_name:"Fidelity",                account_id:"d-fid-1",   name:"Cash Management",       official_name:"Fidelity CMA",                 type:"depository", subtype:"checking", mask:"9012", current_bal:312_440.10, available_bal:312_440.10, iso_currency:"USD" },
+  { item_id:"d-fid",   institution_name:"Fidelity",          account_id:"d-fid-1",   name:"Cash Management",      official_name:"Fidelity CMA",                 type:"depository", subtype:"checking", mask:"9012", current_bal:5_240.10,  available_bal:5_240.10,  iso_currency:"USD" },
   // Mercury — business banking for Halal Bites LLC
-  { item_id:"d-merc",  institution_name:"Mercury",                 account_id:"d-merc-1",  name:"Halal Bites LLC",       official_name:"Mercury Business Checking",    type:"depository", subtype:"checking", mask:"6720", current_bal:128_620.40, available_bal:128_620.40, iso_currency:"USD" },
+  { item_id:"d-merc",  institution_name:"Mercury",           account_id:"d-merc-1",  name:"Halal Bites LLC",      official_name:"Mercury Business Checking",    type:"depository", subtype:"checking", mask:"6720", current_bal:8_600.40,  available_bal:8_600.40,  iso_currency:"USD" },
 ];
 
 const DEMO_TRANSACTIONS = (() => {
@@ -590,8 +551,8 @@ const DEMO_TRANSACTIONS = (() => {
   const dt = (n) => { const d = new Date(today); d.setDate(today.getDate() - n); return d.toISOString().slice(0, 10); };
   // account_id → item_id + institution lookup so we don't string-sniff prefixes.
   const acctMeta = {
-    "d-jpm-1":   { item_id:"d-jpm",   inst:"JPMorgan Private Client" },
-    "d-jpm-2":   { item_id:"d-jpm",   inst:"JPMorgan Private Client" },
+    "d-jpm-1":   { item_id:"d-jpm",   inst:"Ally Bank" },
+    "d-jpm-2":   { item_id:"d-jpm",   inst:"Ally Bank" },
     "d-chase-1": { item_id:"d-chase", inst:"Chase" },
     "d-chase-2": { item_id:"d-chase", inst:"Chase" },
     "d-marcus-1":{ item_id:"d-marcus",inst:"Marcus by Goldman" },
@@ -610,42 +571,42 @@ const DEMO_TRANSACTIONS = (() => {
   };
   return [
     // ─── INFLOWS (Plaid convention: negative = inflow) ───────────────
-    // Consulting / advisory income — JPM Private Client checking
-    T_( 1, "d-jpm-1",    2, "WIRE IN — CONSULTING RETAINER",-42_000.00, "INCOME",      "Strategic Advisory"),
-    T_( 2, "d-jpm-1",   18, "WIRE IN — CONSULTING RETAINER",-42_000.00, "INCOME",      "Strategic Advisory"),
-    T_( 3, "d-jpm-1",   48, "WIRE IN — CONSULTING RETAINER",-42_000.00, "INCOME",      "Strategic Advisory"),
+    // Salary — biweekly-ish payroll direct deposit to the everyday checking
+    T_( 1, "d-jpm-1",    2, "DIRECT DEPOSIT — PAYROLL",     -8_900.00,  "INCOME",      "Acme Software Payroll"),
+    T_( 2, "d-jpm-1",   18, "DIRECT DEPOSIT — PAYROLL",     -8_900.00,  "INCOME",      "Acme Software Payroll"),
+    T_( 3, "d-jpm-1",   48, "DIRECT DEPOSIT — PAYROLL",     -8_900.00,  "INCOME",      "Acme Software Payroll"),
     // Rental income (from the demo's Investment Property)
-    T_( 4, "d-jpm-1",    5, "RENT — CONDO TENANT ACH",      -2_400.00,  "INCOME",      "Tenant"),
-    T_( 5, "d-jpm-1",   35, "RENT — CONDO TENANT ACH",      -2_400.00,  "INCOME",      "Tenant"),
-    T_( 6, "d-jpm-1",   65, "RENT — CONDO TENANT ACH",      -2_400.00,  "INCOME",      "Tenant"),
-    // Business distribution from Halal Bites LLC (Mercury → JPM)
-    T_( 7, "d-jpm-1",   12, "HALAL BITES DISTRIBUTION",     -18_500.00, "INCOME",      "Halal Bites LLC"),
-    T_( 8, "d-jpm-1",   72, "HALAL BITES DISTRIBUTION",     -22_400.00, "INCOME",      "Halal Bites LLC"),
+    T_( 4, "d-jpm-1",    5, "RENT — CONDO TENANT ACH",      -1_200.00,  "INCOME",      "Tenant"),
+    T_( 5, "d-jpm-1",   35, "RENT — CONDO TENANT ACH",      -1_200.00,  "INCOME",      "Tenant"),
+    T_( 6, "d-jpm-1",   65, "RENT — CONDO TENANT ACH",      -1_200.00,  "INCOME",      "Tenant"),
+    // Business distribution from Halal Bites LLC (Mercury → checking)
+    T_( 7, "d-jpm-1",   12, "HALAL BITES DISTRIBUTION",     -2_400.00,  "INCOME",      "Halal Bites LLC"),
+    T_( 8, "d-jpm-1",   72, "HALAL BITES DISTRIBUTION",     -1_900.00,  "INCOME",      "Halal Bites LLC"),
     // Brokerage dividend sweep (Fidelity CMA receives quarterly dividends)
-    T_( 9, "d-fid-1",    8, "FIDELITY DIVIDEND SWEEP",      -8_482.40,  "INCOME",      "Fidelity"),
-    T_(10, "d-fid-1",   98, "FIDELITY DIVIDEND SWEEP",      -7_640.20,  "INCOME",      "Fidelity"),
+    T_( 9, "d-fid-1",    8, "FIDELITY DIVIDEND SWEEP",      -620.00,    "INCOME",      "Fidelity"),
+    T_(10, "d-fid-1",   98, "FIDELITY DIVIDEND SWEEP",      -540.00,    "INCOME",      "Fidelity"),
     // Internal transfers
-    T_(11, "d-jpm-2",    1, "TRANSFER FROM CHECKING",       -25_000.00, "TRANSFER_IN", "Internal"),
-    T_(12, "d-marcus-1",10, "TRANSFER FROM JPM",            -50_000.00, "TRANSFER_IN", "Internal"),
+    T_(11, "d-jpm-2",    1, "TRANSFER FROM CHECKING",       -2_500.00,  "TRANSFER_IN", "Internal"),
+    T_(12, "d-marcus-1",10, "TRANSFER FROM ALLY",           -3_000.00,  "TRANSFER_IN", "Internal"),
 
     // ─── CHARITABLE GIVING (shows up in bank tx feed too) ───────────
-    T_(13, "d-jpm-1",    4, "ZAKAT — ISLAMIC RELIEF USA",   50_000.00,  "TRANSFER_OUT","Islamic Relief USA"),
-    T_(14, "d-jpm-1",    7, "ZELLE — HELPING HAND",         25_000.00,  "TRANSFER_OUT","Helping Hand"),
-    T_(15, "d-jpm-1",   22, "ZELLE — ZAYTUNA COLLEGE",      15_000.00,  "TRANSFER_OUT","Zaytuna College"),
-    T_(16, "d-jpm-1",   38, "WIRE — BAYYINAH INSTITUTE",    10_000.00,  "TRANSFER_OUT","Bayyinah"),
+    T_(13, "d-jpm-1",    4, "ZAKAT — ISLAMIC RELIEF USA",      600.00,  "TRANSFER_OUT","Islamic Relief USA"),
+    T_(14, "d-jpm-1",    7, "ZELLE — HELPING HAND",            300.00,  "TRANSFER_OUT","Helping Hand"),
+    T_(15, "d-jpm-1",   22, "ZELLE — ZAYTUNA COLLEGE",         200.00,  "TRANSFER_OUT","Zaytuna College"),
+    T_(16, "d-jpm-1",   38, "WIRE — BAYYINAH INSTITUTE",       150.00,  "TRANSFER_OUT","Bayyinah"),
 
-    // ─── HOUSING (paid off — only HOA + utilities + property tax) ───
-    T_(17, "d-jpm-1",    9, "HOA — RESIDENCE",                650.00,   "RENT_AND_UTILITIES","HOA"),
-    T_(18, "d-jpm-1",   14, "COOK COUNTY PROPERTY TAX",     8_420.00,   "RENT_AND_UTILITIES","Cook County"),
+    // ─── HOUSING (owns w/ mortgage — HOA + utilities + property tax) ─
+    T_(17, "d-jpm-1",    9, "HOA — RESIDENCE",                220.00,   "RENT_AND_UTILITIES","HOA"),
+    T_(18, "d-jpm-1",   14, "COOK COUNTY PROPERTY TAX",     2_100.00,   "RENT_AND_UTILITIES","Cook County"),
     T_(19, "d-chase-1", 12, "COMED ELECTRIC",                 312.50,   "RENT_AND_UTILITIES","ComEd"),
     T_(20, "d-chase-1", 12, "PEOPLES GAS",                    184.20,   "RENT_AND_UTILITIES","Peoples Gas"),
     T_(21, "d-chase-1", 15, "AT&T FIBER 5GB",                 165.00,   "RENT_AND_UTILITIES","AT&T"),
     T_(22, "d-chase-1", 15, "VERIZON WIRELESS — FAMILY PLAN", 285.00,   "RENT_AND_UTILITIES","Verizon"),
 
     // ─── KIDS / EDUCATION ───────────────────────────────────────────
-    T_(23, "d-jpm-1",    3, "IQRA INTERNATIONAL — TUITION", 2_850.00,   "GENERAL_SERVICES","Iqra School"),
-    T_(24, "d-jpm-1",   33, "IQRA INTERNATIONAL — TUITION", 2_850.00,   "GENERAL_SERVICES","Iqra School"),
-    T_(25, "d-jpm-1",   63, "IQRA INTERNATIONAL — TUITION", 2_850.00,   "GENERAL_SERVICES","Iqra School"),
+    T_(23, "d-jpm-1",    3, "IQRA INTERNATIONAL — TUITION",   850.00,   "GENERAL_SERVICES","Iqra School"),
+    T_(24, "d-jpm-1",   33, "IQRA INTERNATIONAL — TUITION",   850.00,   "GENERAL_SERVICES","Iqra School"),
+    T_(25, "d-jpm-1",   63, "IQRA INTERNATIONAL — TUITION",   850.00,   "GENERAL_SERVICES","Iqra School"),
     T_(26, "d-chase-1", 18, "QURAN ACADEMY ONLINE",           320.00,   "GENERAL_SERVICES","Quran Academy"),
 
     // ─── SUBSCRIPTIONS / SERVICES ──────────────────────────────────
@@ -673,82 +634,81 @@ const DEMO_TRANSACTIONS = (() => {
     T_(44, "d-chase-1", 26, "AUTO INSURANCE — STATE FARM",   312.40,    "GENERAL_SERVICES","State Farm"),
 
     // ─── TRAVEL ────────────────────────────────────────────────────
-    T_(45, "d-chase-2", 28, "EMIRATES — DXB BUSINESS",     5_840.00,    "TRAVEL","Emirates"),
-    T_(46, "d-chase-2", 30, "FOUR SEASONS DUBAI",          3_420.00,    "TRAVEL","Four Seasons"),
+    T_(45, "d-chase-2", 28, "EMIRATES — DXB (ECONOMY)",    1_480.00,    "TRAVEL","Emirates"),
+    T_(46, "d-chase-2", 30, "HYATT REGENCY DUBAI",           890.00,    "TRAVEL","Hyatt"),
 
     // ─── SHOPPING / MISC ───────────────────────────────────────────
     T_(47, "d-chase-2",  6, "AMAZON.COM",                    168.42,    "GENERAL_MERCHANDISE","Amazon"),
     T_(48, "d-chase-2", 11, "AMAZON.COM",                    334.50,    "GENERAL_MERCHANDISE","Amazon"),
     T_(49, "d-chase-2",  4, "TARGET",                        127.30,    "GENERAL_MERCHANDISE","Target"),
-    T_(50, "d-chase-2", 19, "APPLE STORE — IPAD PRO M4",   1_899.00,    "GENERAL_MERCHANDISE","Apple Store"),
+    T_(50, "d-chase-2", 19, "APPLE STORE — IPAD AIR M3",   1_199.00,    "GENERAL_MERCHANDISE","Apple Store"),
 
     // ─── BUSINESS (Mercury) ────────────────────────────────────────
-    T_(51, "d-merc-1",   3, "STRIPE PAYOUT",               -18_420.00,  "INCOME","Stripe"),
-    T_(52, "d-merc-1",  17, "STRIPE PAYOUT",               -22_180.00,  "INCOME","Stripe"),
-    T_(53, "d-merc-1",   5, "VENDOR — HALAL SUPPLY CO",     4_280.00,   "GENERAL_SERVICES","Halal Supply"),
-    T_(54, "d-merc-1",   8, "AWS — INFRASTRUCTURE",         1_420.00,   "GENERAL_SERVICES","AWS"),
-    T_(55, "d-merc-1",  15, "PAYROLL — 4 STAFF",           14_820.00,   "GENERAL_SERVICES","Gusto Payroll"),
+    T_(51, "d-merc-1",   3, "STRIPE PAYOUT",                -3_800.00,  "INCOME","Stripe"),
+    T_(52, "d-merc-1",  17, "STRIPE PAYOUT",                -4_200.00,  "INCOME","Stripe"),
+    T_(53, "d-merc-1",   5, "VENDOR — HALAL SUPPLY CO",     1_650.00,   "GENERAL_SERVICES","Halal Supply"),
+    T_(54, "d-merc-1",   8, "AWS — INFRASTRUCTURE",           340.00,   "GENERAL_SERVICES","AWS"),
+    T_(55, "d-merc-1",  15, "PAYROLL — 2 STAFF",            3_600.00,   "GENERAL_SERVICES","Gusto Payroll"),
   ];
 })();
 
 /* ─── DEMO MANUAL ASSETS + SADAQAH ──────────────────── */
 const DEMO_MANUAL_ASSETS = [
-  { id:"dm-1", type:"Gold",                 name:"Wedding gold + bullion",            value:48_500, zakatable:true,  added:"2024-09-12", notes:"22k jewelry + 5oz bars" },
-  { id:"dm-2", type:"Real Estate",          name:"Primary residence equity (paid)",   value:220_000,zakatable:false, added:"2023-05-04", notes:"Primary home excluded from Zakat" },
-  { id:"dm-3", type:"Investment Property",  name:"Rental — 2bd condo",                value:185_000,zakatable:true,  added:"2024-01-22", notes:"Net of mortgage; rents at $2,400/mo" },
-  { id:"dm-4", type:"Business Equity",      name:"Halal Bites LLC (40% stake)",       value:60_000, zakatable:true,  added:"2023-11-08", notes:"Founder equity" },
-  { id:"dm-5", type:"Vehicle",              name:"2022 Toyota Camry",                 value:18_200, zakatable:false, added:"2022-08-15", notes:"Daily driver, not zakatable" },
+  { id:"dm-1", type:"Gold",                 name:"Wedding gold + bullion",            value:16_500, zakatable:true,  added:"2024-09-12", notes:"22k jewelry + 2oz bars" },
+  { id:"dm-2", type:"Real Estate",          name:"Primary residence equity",          value:40_000, zakatable:false, added:"2023-05-04", notes:"Home equity (net of mortgage); excluded from Zakat" },
+  { id:"dm-3", type:"Investment Property",  name:"Rental — 2bd condo (equity)",       value:22_000, zakatable:true,  added:"2024-01-22", notes:"Equity net of mortgage; rents at $1,200/mo" },
+  { id:"dm-4", type:"Business Equity",      name:"Halal Bites LLC (40% stake)",       value:18_000, zakatable:true,  added:"2023-11-08", notes:"Founder equity" },
+  { id:"dm-5", type:"Vehicle",              name:"2022 Toyota Camry",                 value:16_200, zakatable:false, added:"2022-08-15", notes:"Daily driver, not zakatable" },
 ];
 
-// Donations sized to match a ~$41M demo persona. Annual Zakat alone runs
-// ~$750k on the zakatable share, so historical sadaqah is in the high 5-
-// to mid 6-figure range. Covers a representative roster of major Muslim
-// orgs (relief, education, dawah, masjid, advocacy).
+// Donations sized to the ~$435k demo persona — a practicing family giving a few
+// thousand a year in sadaqah plus their annual Zakat. Covers a representative
+// roster of major Muslim orgs (relief, education, dawah, masjid, advocacy).
 const DEMO_SADAQAH = [
   // ───── 2026 — Ramadan + post-Ramadan zakat distribution ────────────
-  { id:"ds-1",  dt:"2026-03-29", org:"Islamic Relief USA",                  method:"Wire",        account:"Private Client Checking", amt:150_000, done:true  },
-  { id:"ds-2",  dt:"2026-03-26", org:"Helping Hand for Relief & Development",method:"Wire",      account:"Private Client Checking", amt:100_000, done:true  },
-  { id:"ds-3",  dt:"2026-03-22", org:"Zaytuna College",                     method:"Wire",        account:"Private Client Checking", amt:75_000,  done:true  },
-  { id:"ds-4",  dt:"2026-03-19", org:"Bayyinah Institute",                  method:"Zelle",       account:"Private Client Checking", amt:25_000,  done:true  },
-  { id:"ds-5",  dt:"2026-03-16", org:"Yaqeen Institute",                    method:"Zelle",       account:"Private Client Checking", amt:25_000,  done:true  },
-  { id:"ds-6",  dt:"2026-03-14", org:"ICNA Relief USA",                     method:"Zelle",       account:"Private Client Checking", amt:20_000,  done:true  },
-  { id:"ds-7",  dt:"2026-03-12", org:"Penny Appeal USA",                    method:"Zelle",       account:"Premier Savings",         amt:15_000,  done:true  },
-  { id:"ds-8",  dt:"2026-03-08", org:"LaunchGood — Orphan Sponsorship",     method:"Credit Card", account:"Sapphire Reserve",        amt:12_000,  done:true  },
-  { id:"ds-9",  dt:"2026-03-05", org:"Masjid Al-Uthman",                    method:"Zelle",       account:"Premier Savings",         amt:25_000,  done:true  },
-  { id:"ds-10", dt:"2026-03-02", org:"ISNS (Islamic Society of North Suburbs)",method:"Zelle",    account:"Premier Savings",         amt:15_000,  done:true  },
-  { id:"ds-11", dt:"2026-02-28", org:"Hidaya Foundation",                   method:"Zelle",       account:"Premier Savings",         amt:10_000,  done:true  },
-  { id:"ds-12", dt:"2026-02-22", org:"LIFE for Relief & Development",       method:"Zelle",       account:"Premier Savings",         amt:10_000,  done:true  },
-  { id:"ds-13", dt:"2026-02-15", org:"Muslim Legal Fund of America",        method:"Zelle",       account:"Private Client Checking", amt:8_500,   done:true  },
-  { id:"ds-14", dt:"2026-02-10", org:"CAIR — Civil Rights Defense",         method:"Credit Card", account:"Sapphire Reserve",        amt:5_000,   done:true  },
-  { id:"ds-15", dt:"2026-01-22", org:"Iqra International School",           method:"Zelle",       account:"Private Client Checking", amt:20_000,  done:true  },
+  { id:"ds-1",  dt:"2026-03-29", org:"Islamic Relief USA",                  method:"Wire",        account:"Interest Checking", amt:1_500, done:true  },
+  { id:"ds-2",  dt:"2026-03-26", org:"Helping Hand for Relief & Development",method:"Wire",      account:"Interest Checking", amt:1_000, done:true  },
+  { id:"ds-3",  dt:"2026-03-22", org:"Zaytuna College",                     method:"Wire",        account:"Interest Checking", amt:750,   done:true  },
+  { id:"ds-4",  dt:"2026-03-19", org:"Bayyinah Institute",                  method:"Zelle",       account:"Interest Checking", amt:250,   done:true  },
+  { id:"ds-5",  dt:"2026-03-16", org:"Yaqeen Institute",                    method:"Zelle",       account:"Interest Checking", amt:250,   done:true  },
+  { id:"ds-6",  dt:"2026-03-14", org:"ICNA Relief USA",                     method:"Zelle",       account:"Interest Checking", amt:200,   done:true  },
+  { id:"ds-7",  dt:"2026-03-12", org:"Penny Appeal USA",                    method:"Zelle",       account:"Online Savings",    amt:150,   done:true  },
+  { id:"ds-8",  dt:"2026-03-08", org:"LaunchGood — Orphan Sponsorship",     method:"Credit Card", account:"Sapphire Preferred",amt:120,   done:true  },
+  { id:"ds-9",  dt:"2026-03-05", org:"Masjid Al-Uthman",                    method:"Zelle",       account:"Online Savings",    amt:250,   done:true  },
+  { id:"ds-10", dt:"2026-03-02", org:"ISNS (Islamic Society of North Suburbs)",method:"Zelle",    account:"Online Savings",    amt:150,   done:true  },
+  { id:"ds-11", dt:"2026-02-28", org:"Hidaya Foundation",                   method:"Zelle",       account:"Online Savings",    amt:100,   done:true  },
+  { id:"ds-12", dt:"2026-02-22", org:"LIFE for Relief & Development",       method:"Zelle",       account:"Online Savings",    amt:100,   done:true  },
+  { id:"ds-13", dt:"2026-02-15", org:"Muslim Legal Fund of America",        method:"Zelle",       account:"Interest Checking", amt:85,    done:true  },
+  { id:"ds-14", dt:"2026-02-10", org:"CAIR — Civil Rights Defense",         method:"Credit Card", account:"Sapphire Preferred",amt:50,    done:true  },
+  { id:"ds-15", dt:"2026-01-22", org:"Iqra International School",           method:"Zelle",       account:"Interest Checking", amt:200,   done:true  },
 
   // ───── 2025 — full year giving ──────────────────────────────────────
-  { id:"ds-16", dt:"2025-12-28", org:"Mercy Without Limits",                method:"Wire",        account:"Private Client Checking", amt:30_000,  done:true  },
-  { id:"ds-17", dt:"2025-12-20", org:"Islamic Relief USA — Gaza Appeal",    method:"Wire",        account:"Private Client Checking", amt:75_000,  done:true  },
-  { id:"ds-18", dt:"2025-11-15", org:"Zaytuna College",                     method:"Wire",        account:"Premier Savings",         amt:50_000,  done:true  },
-  { id:"ds-19", dt:"2025-09-08", org:"Bayyinah Institute",                  method:"Zelle",       account:"Premier Savings",         amt:15_000,  done:true  },
-  { id:"ds-20", dt:"2025-08-17", org:"Thakkat Charity",                     method:"Zelle",       account:"Private Client Checking", amt:5_000,   done:true  },
-  { id:"ds-21", dt:"2025-07-04", org:"Helping Hand — Eid Adha Qurbani",     method:"Credit Card", account:"Sapphire Reserve",        amt:8_400,   done:true  },
-  { id:"ds-22", dt:"2025-05-30", org:"Qalam Institute",                     method:"Zelle",       account:"Private Client Checking", amt:7_500,   done:true  },
-  { id:"ds-23", dt:"2025-04-02", org:"Masjid Al-Uthman — Ramadan Iftar",    method:"Zelle",       account:"Premier Savings",         amt:20_000,  done:true  },
-  { id:"ds-24", dt:"2025-03-25", org:"Yaqeen Institute",                    method:"Zelle",       account:"Premier Savings",         amt:20_000,  done:true  },
-  { id:"ds-25", dt:"2025-03-12", org:"Penny Appeal USA — Orphan Kind",      method:"Credit Card", account:"Sapphire Reserve",        amt:12_000,  done:true  },
+  { id:"ds-16", dt:"2025-12-28", org:"Mercy Without Limits",                method:"Wire",        account:"Interest Checking", amt:300,   done:true  },
+  { id:"ds-17", dt:"2025-12-20", org:"Islamic Relief USA — Gaza Appeal",    method:"Wire",        account:"Interest Checking", amt:750,   done:true  },
+  { id:"ds-18", dt:"2025-11-15", org:"Zaytuna College",                     method:"Wire",        account:"Online Savings",    amt:500,   done:true  },
+  { id:"ds-19", dt:"2025-09-08", org:"Bayyinah Institute",                  method:"Zelle",       account:"Online Savings",    amt:150,   done:true  },
+  { id:"ds-20", dt:"2025-08-17", org:"Thakkat Charity",                     method:"Zelle",       account:"Interest Checking", amt:50,    done:true  },
+  { id:"ds-21", dt:"2025-07-04", org:"Helping Hand — Eid Adha Qurbani",     method:"Credit Card", account:"Sapphire Preferred",amt:84,    done:true  },
+  { id:"ds-22", dt:"2025-05-30", org:"Qalam Institute",                     method:"Zelle",       account:"Interest Checking", amt:75,    done:true  },
+  { id:"ds-23", dt:"2025-04-02", org:"Masjid Al-Uthman — Ramadan Iftar",    method:"Zelle",       account:"Online Savings",    amt:200,   done:true  },
+  { id:"ds-24", dt:"2025-03-25", org:"Yaqeen Institute",                    method:"Zelle",       account:"Online Savings",    amt:200,   done:true  },
+  { id:"ds-25", dt:"2025-03-12", org:"Penny Appeal USA — Orphan Kind",      method:"Credit Card", account:"Sapphire Preferred",amt:120,   done:true  },
 
   // ───── 2024 ─────────────────────────────────────────────────────────
-  { id:"ds-26", dt:"2024-12-15", org:"ICNA Relief USA",                     method:"Wire",        account:"Premier Savings",         amt:25_000,  done:true  },
-  { id:"ds-27", dt:"2024-09-20", org:"Muslim Aid USA",                      method:"Zelle",       account:"Private Client Checking", amt:10_000,  done:true  },
-  { id:"ds-28", dt:"2024-04-09", org:"MUHSEN (Muslims w/ Disabilities)",    method:"Zelle",       account:"Private Client Checking", amt:5_000,   done:true  },
-  { id:"ds-29", dt:"2024-04-08", org:"Masjid An-Noor (ICN)",                method:"Zelle",       account:"Premier Savings",         amt:15_000,  done:true  },
-  { id:"ds-30", dt:"2024-03-22", org:"Islamic Relief USA — Ramadan Zakat",  method:"Wire",        account:"Private Client Checking", amt:120_000, done:true  },
+  { id:"ds-26", dt:"2024-12-15", org:"ICNA Relief USA",                     method:"Wire",        account:"Online Savings",    amt:250,   done:true  },
+  { id:"ds-27", dt:"2024-09-20", org:"Muslim Aid USA",                      method:"Zelle",       account:"Interest Checking", amt:100,   done:true  },
+  { id:"ds-28", dt:"2024-04-09", org:"MUHSEN (Muslims w/ Disabilities)",    method:"Zelle",       account:"Interest Checking", amt:50,    done:true  },
+  { id:"ds-29", dt:"2024-04-08", org:"Masjid An-Noor (ICN)",                method:"Zelle",       account:"Online Savings",    amt:150,   done:true  },
+  { id:"ds-30", dt:"2024-03-22", org:"Islamic Relief USA — Ramadan Zakat",  method:"Wire",        account:"Interest Checking", amt:1_200, done:true  },
 
   // ───── 2023 ─────────────────────────────────────────────────────────
-  { id:"ds-31", dt:"2023-12-11", org:"ISNS",                                method:"Zelle",       account:"Premier Savings",         amt:15_000,  done:true  },
-  { id:"ds-32", dt:"2023-04-12", org:"Islamic Relief USA — Ramadan Zakat",  method:"Wire",        account:"Private Client Checking", amt:95_000,  done:true  },
+  { id:"ds-31", dt:"2023-12-11", org:"ISNS",                                method:"Zelle",       account:"Online Savings",    amt:150,   done:true  },
+  { id:"ds-32", dt:"2023-04-12", org:"Islamic Relief USA — Ramadan Zakat",  method:"Wire",        account:"Interest Checking", amt:950,   done:true  },
 
   // ───── Outstanding pledges ──────────────────────────────────────────
-  { id:"ds-33", dt:"Pledge",     org:"Helping Hand — Earthquake Relief",    method:"TBD",         account:"Private Client Checking", amt:50_000,  done:false },
-  { id:"ds-34", dt:"Pledge",     org:"Masjid Al-Uthman — Building Fund",    method:"TBD",         account:"Premier Savings",         amt:100_000, done:false },
-  { id:"ds-35", dt:"Pledge",     org:"Zaytuna College — Endowed Chair",     method:"TBD",         account:"Private Client Checking", amt:25_000,  done:false },
+  { id:"ds-33", dt:"Pledge",     org:"Helping Hand — Earthquake Relief",    method:"TBD",         account:"Interest Checking", amt:500,   done:false },
+  { id:"ds-34", dt:"Pledge",     org:"Masjid Al-Uthman — Building Fund",    method:"TBD",         account:"Online Savings",    amt:1_000, done:false },
+  { id:"ds-35", dt:"Pledge",     org:"Zaytuna College — Endowed Chair",     method:"TBD",         account:"Interest Checking", amt:250,   done:false },
 ];
 
 /* ─── CALC HELPERS ───────────────────────────────────── */
@@ -7990,7 +7950,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
           <div>
             <div style={{fontFamily:FM,fontSize:10,color:demoMode?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DEMO MODE</div>
             <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
-              Replaces your live data with a fictional ~$42M halal portfolio across 8 brokers — useful for screenshots, sharing, or previewing MIZAN before connecting brokers.
+              Replaces your live data with a fictional ~$435k halal portfolio across 6 accounts — useful for screenshots, sharing, or previewing MIZAN before connecting brokers.
             </p>
           </div>
           <button onClick={onToggleDemo} style={{
