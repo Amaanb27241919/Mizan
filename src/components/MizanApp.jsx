@@ -4336,7 +4336,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         qty:Math.floor(h.sh),
         price:h.px,
         amount:Math.floor(h.sh)*h.px,
-        reason:`Sharia non-compliant — full liquidation`,
+        reason:`Flagged non-compliant by the screener`,
         cls:classifyTicker(h.tk),
       });
     });
@@ -4363,7 +4363,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
           qty:shares,
           price:h.px,
           amount:shares*h.px,
-          reason:`${r.cls.label} +${r.drift.toFixed(1)}% over target — trim`,
+          reason:`${r.cls.label} is +${r.drift.toFixed(1)}% vs your target`,
           cls:r.cls.key,
         });
       });
@@ -4387,7 +4387,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         qty:shares,
         price:estPx,
         amount:shares*estPx,
-        reason:`${r.cls.label} ${r.drift.toFixed(1)}% under target — add`,
+        reason:`${r.cls.label} is ${r.drift.toFixed(1)}% vs your target`,
         cls:r.cls.key,
       });
     }
@@ -4425,13 +4425,13 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         <div style={{fontFamily:FU,fontSize:34,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmt$(targetedTotal)}</div>
         <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>rebalanceable · total NAV {fmt$(total)} {byClass.other>0?<>· <span style={{color:T.dim}}>{fmt$(byClass.other)} held outside</span></>:null}</div>
         <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
-          Set target weights per asset class. Mizan compares to your live allocation, flags drift, and proposes trades — one click pre-fills the Order Ticket.
+          Set your own target weights per asset class. Mizan shows the difference between your live allocation and the targets you set — the figures below are that math, not recommendations. You decide what, if anything, to trade.
         </p>
       </BentoTile>
       <BentoTile accent={halalOnly?T.gold:undefined} style={halalOnly?{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}:undefined}>
         <div style={{fontFamily:FM,fontSize:10,color:halalOnly?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>HALAL-ONLY REBALANCE</div>
         <p style={{fontFamily:FP,fontSize:12,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.5}}>
-          Liquidates every non-compliant holding first, then buys only screened halal proxies (SPUS, HLAL, SPSK, SPRE).
+          When on, the math below covers selling your screener-flagged holdings and reaching your targets with halal proxies (SPUS, HLAL, SPSK, SPRE). You choose whether to act on it.
         </p>
         <button onClick={toggleHalal} style={{
           padding:`9px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",
@@ -4439,7 +4439,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
           color:halalOnly?"#000":T.text,cursor:"pointer",width:"100%",
         }}>{halalOnly?"Halal Mode: ON":"Halal Mode: OFF"}</button>
         {halalOnly&&haramHoldings.length>0&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rSm,background:`${T.loss}10`,border:`1px solid ${T.loss}30`,fontFamily:FM,fontSize:10,color:T.loss,lineHeight:1.5}}>
-          {haramHoldings.length} haram position{haramHoldings.length===1?"":"s"} queued for liquidation ({fmt$(haramSellTotal)})
+          {haramHoldings.length} holding{haramHoldings.length===1?"":"s"} flagged non-compliant by the screener ({fmt$(haramSellTotal)})
         </div>}
       </BentoTile>
     </div>
@@ -4493,7 +4493,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
     {/* ─── ROW 4: Trade suggestions ────────────────────────────── */}
     <BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SUGGESTED TRADES{suggestions.length>0&&<span style={{color:T.blue,marginLeft:T.s2}}>· {suggestions.length}</span>}</span>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TO REACH YOUR TARGETS{suggestions.length>0&&<span style={{color:T.blue,marginLeft:T.s2}}>· {suggestions.length}</span>}</span>
         <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
           Sell {fmt$(sellTotal)} · Buy {fmt$(buyTotal)} · Est. cost $0 (commission-free)
         </span>
@@ -4519,6 +4519,12 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
             title="Copy this trade to the clipboard — paste into your broker"
           >COPY</button>},
         ]} rows={suggestions}/>}
+      <div style={{padding:`${T.s3} ${T.s5}`,borderTop:`1px solid ${T.border}`,background:T.surface}}>
+        <div style={{fontFamily:FM,fontSize:9,color:T.blue,letterSpacing:"0.14em",fontWeight:600,marginBottom:4}}>SELF-DIRECTED · NOT ADVICE</div>
+        <p style={{fontFamily:FP,fontSize:11.5,color:T.muted,margin:0,lineHeight:1.55}}>
+          MĪZAN is a self-directed tool, not an investment adviser. These figures are the arithmetic between your holdings and the targets <em>you</em> set — not recommendations. “Copy” places the details on your clipboard; you decide on and place any trade yourself, in your own brokerage.
+        </p>
+      </div>
     </BentoTile>
   </div>;
 }
@@ -5723,6 +5729,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
   const[nlInput,setNlInput]=useState("");
   const[nlBusy,setNlBusy]=useState(false);
   const[nlResult,setNlResult]=useState(null); // parsed strategy from NL
+  const[nlDisclaimer,setNlDisclaimer]=useState(null); // self-directed compliance line
   const[nlErr,setNlErr]=useState(null);
   const[nlAccount,setNlAccount]=useState(""); // brokerage account the strategy runs on
   const[riskAck,setRiskAck]=useState(false);
@@ -5842,7 +5849,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
 
   const parseNl=async()=>{
     if(!nlInput.trim()||nlBusy)return;
-    setNlBusy(true);setNlErr(null);setNlResult(null);setRiskAck(false);
+    setNlBusy(true);setNlErr(null);setNlResult(null);setNlDisclaimer(null);setRiskAck(false);
     try{
       const accounts=snapAccounts.map(a=>({id:a.id||a.accountId,name:a.institution_name||a.brokerage?.name||a.name||"Unknown"}));
       const r=await apiFetch("/api/bot/strategy/nl",{
@@ -5854,8 +5861,13 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       // A refusal comes back as 200 { error } (no strategy). Surface it instead
       // of silently rendering nothing.
       if(d.error){setNlErr(d.error);return;}
-      if(!d.strategy){setNlErr("Couldn't build a strategy from that. Try naming a ticker or theme, an amount, and your entry/exit rule (e.g. “Buy SPUS dips ~7%, take profit ~10%, $50”).");return;}
+      // Self-directed guard: the user named a theme/goal but no ticker. Mizan
+      // doesn't pick securities — surface the message + open the model-preset
+      // picker so they choose (a ready-made basket or by naming their own tickers).
+      if(d.needs_symbols){setNlErr(d.message||"MĪZAN is self-directed — name the halal ticker(s) you want to trade, or pick a ready-made model portfolio below.");setBogleOpen(true);return;}
+      if(!d.strategy){setNlErr("Couldn't build a strategy from that. Try naming a ticker (e.g. SPUS), an amount, and your entry/exit rule (e.g. “Buy SPUS dips ~7%, take profit ~10%, $50”).");return;}
       setNlResult(d.strategy);
+      if(d.disclaimer)setNlDisclaimer(d.disclaimer);
       // Default the account selector to the model-resolved account, else the
       // first connected brokerage. The user can change it before activating.
       const resolved=snapAccounts.find(a=>acctId(a)===d.strategy.account_id);
@@ -5888,6 +5900,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       const d=await r.json().catch(()=>({}));
       if(!r.ok||!d.strategy){setNlErr(d.error==="invalid_selection"?"Pick a ticker for the three core sleeves (US · International · Sukuk).":(d.error||"Couldn't build the preset."));return;}
       setNlResult(d.strategy);setRiskAck(false);setBogleOpen(false);
+      if(d.disclaimer)setNlDisclaimer(d.disclaimer);
       const resolved=snapAccounts.find(a=>acctId(a)===d.strategy.account_id);
       setNlAccount(resolved?acctId(resolved):(snapAccounts[0]?acctId(snapAccounts[0]):""));
     }catch(e){setNlErr(e.message||"Network error");}finally{setBogleBusy(false);}
@@ -6173,6 +6186,10 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         ];
         return<div style={{marginTop:T.s4,padding:T.s4,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
         <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STRATEGY REVIEW · REALITY CHECK</div>
+        {nlDisclaimer&&<div style={{marginBottom:T.s3,padding:T.s3,background:`${T.blue}0E`,border:`1px solid ${T.blue}30`,borderRadius:T.rMd}}>
+          <div style={{fontFamily:FM,fontSize:9,color:T.blue,letterSpacing:"0.14em",fontWeight:600,marginBottom:4}}>SELF-DIRECTED · NOT ADVICE</div>
+          <p style={{fontFamily:FP,fontSize:11.5,color:T.text,margin:0,lineHeight:1.55}}>{nlDisclaimer}</p>
+        </div>}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:`${T.s1} ${T.s4}`,marginBottom:T.s3}}>
           {plain.map(([k,v])=><div key={k} style={{display:"flex",justifyContent:"space-between",gap:T.s2,padding:`5px 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
             <span style={{color:T.muted,letterSpacing:"0.02em"}}>{k}</span>
