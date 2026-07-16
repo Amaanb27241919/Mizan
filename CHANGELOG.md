@@ -29,6 +29,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - Record 2026-07-14 — activity dedupe fix + DCA-plan enactment (`fad50a8`)
 
 ### Maintenance
+- **security:** Drop dead TradingView origins from CSP + record AI compliance-tier gate (`c2a2ece`)
 - **docs:** Stabilize audit last-audited stamp (2026-07-15 rollover) (`ee83395`)
 
 ### Other

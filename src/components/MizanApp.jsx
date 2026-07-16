@@ -10452,7 +10452,10 @@ export default function Mizan(){
   // localStorage so the Overview hero can include it on first paint
   // without waiting for the Finances tab to mount.
   const[bankBalance,setBankBalance]=useState(()=>{try{const v=localStorage.getItem("mizan_bank_balance");return v?+v:0;}catch{return 0;}});
-  useEffect(()=>{try{localStorage.setItem("mizan_bank_balance",String(bankBalance||0));}catch{}},[bankBalance]);
+  // Guard on the raw demo flag (not the `demoMode` state var, which is declared
+  // just below — referencing it here would TDZ-crash). Prevents the demo bank
+  // total from persisting into a real session's cached balance.
+  useEffect(()=>{try{if(localStorage.getItem("mizan_demo")==="1")return;localStorage.setItem("mizan_bank_balance",String(bankBalance||0));}catch{}},[bankBalance]);
   // Demo mode — declared up here (before the Plaid + pending-signals effects)
   // because those effects list `demoMode` in their dependency arrays, which are
   // evaluated during render. Declaring it later caused a TDZ ("Cannot access
@@ -10647,6 +10650,7 @@ export default function Mizan(){
   // Daily net-worth snapshots. Each successful sync writes one entry per day
   // (overwrites same-day so live ticks don't bloat history).
   useEffect(()=>{
+    if(demoMode)return; // never persist the demo persona into a real user's net-worth history (local + Supabase)
     if(!visibleAccounts.length)return;
     const balanceSum=visibleAccounts.reduce((s,a)=>s+(a.balance||0),0);
     if(balanceSum<=0)return;
@@ -10662,7 +10666,7 @@ export default function Mizan(){
       persistUserState("mizan_networth_history",trimmed);
       setNetWorthHistory(trimmed);
     }catch{}
-  },[visibleAccounts]);
+  },[visibleAccounts,demoMode]);
 
   // Activity-derived metrics. All amounts respect the account on/off toggles.
   const performanceMetrics=useMemo(()=>{
