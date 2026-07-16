@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-15
+
+### Fixed
+- Guard net-worth snapshot + bank-balance persistence against demo-mode leak (`570d18f`)
+
 ## 2026-07-14
 
 ### Added
