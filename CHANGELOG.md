@@ -15,6 +15,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - Guard net-worth snapshot + bank-balance persistence against demo-mode leak (`570d18f`)
 
 ### Docs
+- **backlog:** O23 conforming code shipped (890d147) — bot NL + Rebalancer now self-directed (`6391468`)
 - **backlog:** Log RIA-exposure + prod-encryption items from the 2026-07-15 audit (`a5b9586`)
 - Record 2026-07-15 audit — demo leak + Sharia fail-closed fixes + demo rescale (`049cba9`)
 
