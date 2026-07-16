@@ -192,7 +192,7 @@ ON CONFLICT (user_id) DO UPDATE
 Auto-sync defaults OFF. Live prices fetch on the Sync All button or via the optional 10-minute auto-refresh. Prices cache to localStorage so reloads preserve last-known values without re-hitting Finnhub.
 
 ### Demo mode
-A fictional ~$42M halal portfolio built into the bundle. Defaults **on** for new users (so they don't land on an empty app) and auto-hides from the header once a user has real broker connections. Re-enable from Settings → Connect Accounts.
+A fictional ~$435k halal portfolio (a Muslim professional's diversified halal book — rescaled 2026-07-15 from the old mockup-scale figure) built into the bundle. **Opt-in — defaults OFF**: new/connection-less users see their real $0 + Welcome/Connect state, never the demo as their net worth. Toggle it on from the header (shown until you connect a broker) to preview the app; it auto-hides once you have real connections.
 
 ---
 
