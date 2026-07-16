@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-15
 
 ### Fixed
+- **compliance:** Conform bot NL generator + Rebalancer to the self-directed boundary (`890d147`)
 - **sharia:** Fail closed to review when debt can't be verified + first engine tests (`1f8f0a7`)
 - Guard net-worth snapshot + bank-balance persistence against demo-mode leak (`570d18f`)
 
