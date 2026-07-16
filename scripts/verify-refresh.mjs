@@ -2,7 +2,9 @@
 /**
  * One-shot verification for /api/snaptrade/refresh.
  *
- * Loads .env.local + .snaptrade-users.json (owner's mizan_primary secret),
+ * Loads .env.local for the owner's mizan_primary secret (SNAPTRADE_PRIMARY_SECRET;
+ * the legacy .snaptrade-users.json flat file is a DEPRECATED local fallback —
+ * production stores secrets in Supabase user_snaptrade, not on the filesystem),
  * lists active authorizations, and fires POST /authorizations/{id}/refresh
  * against the FIRST connection. Prints every step so we can confirm the
  * signing + endpoint shape match what SnapTrade expects.
@@ -29,12 +31,22 @@ for (const line of envFile.split("\n")) {
 
 const CLIENT_ID    = (process.env.VITE_SNAPTRADE_CLIENT_ID    || process.env.SNAPTRADE_CLIENT_ID    || "").trim();
 const CONSUMER_KEY = (process.env.VITE_SNAPTRADE_CONSUMER_KEY || process.env.SNAPTRADE_CONSUMER_KEY || "").trim();
-const users = JSON.parse(fs.readFileSync(path.join(ROOT, ".snaptrade-users.json"), "utf8"));
-const userSecret = users["mizan_primary"];
 const userId = "mizan_primary";
 
+// Preferred source: SNAPTRADE_PRIMARY_SECRET in .env.local. The .snaptrade-users.json
+// flat file is DEPRECATED (prod keeps secrets in Supabase user_snaptrade) — read only
+// as a local fallback, with a warning, so this script no longer depends on it.
+let userSecret = (process.env.SNAPTRADE_PRIMARY_SECRET || "").trim();
+if (!userSecret) {
+  try {
+    const users = JSON.parse(fs.readFileSync(path.join(ROOT, ".snaptrade-users.json"), "utf8"));
+    userSecret = (users["mizan_primary"] || "").trim();
+    if (userSecret) console.warn("⚠ Read mizan_primary from the DEPRECATED .snaptrade-users.json flat file. Prefer SNAPTRADE_PRIMARY_SECRET in .env.local.\n");
+  } catch { /* flat file absent — expected; it's deprecated */ }
+}
+
 if (!CLIENT_ID || !CONSUMER_KEY) { console.error("Missing SnapTrade keys in .env.local"); process.exit(1); }
-if (!userSecret)                 { console.error("Missing mizan_primary in .snaptrade-users.json"); process.exit(1); }
+if (!userSecret)                 { console.error("Missing mizan_primary secret — set SNAPTRADE_PRIMARY_SECRET in .env.local"); process.exit(1); }
 
 console.log(`CLIENT_ID:   ${CLIENT_ID.slice(0, 8)}…`);
 console.log(`USER:        ${userId}`);

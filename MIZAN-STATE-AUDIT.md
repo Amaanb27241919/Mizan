@@ -292,7 +292,7 @@ Migration `015_rls_audit_and_select_policies.sql` performed a pre-launch audit a
 Present and reasonably strict. Uses `'unsafe-inline'` for `script-src` (Plaid Link requires it) and `style-src` — not nonce-based. `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`. HSTS with preload (2-year max-age).
 
 ### Secrets Scan
-No hardcoded secrets found in any source file. All keys read from `process.env`. One legacy risk: `.snaptrade-users.json` flat file stores `mizan_primary: <userSecret>` in plaintext (server-filesystem-only, does not survive Vercel restarts, but present in local dev).
+No hardcoded secrets found in any source file. All keys read from `process.env`. **RESOLVED (2026-06-16, `f600d9d`; F6 closed 2026-07-15):** the legacy `.snaptrade-users.json` flat file is no longer read or written by any production code — `getSnapForRequest` (`lib/handlers.mjs`) is Supabase-only. The file is not part of the runtime path; the only remaining reference is the owner-only diagnostic `scripts/verify-refresh.mjs`, now env-var-first (`SNAPTRADE_PRIMARY_SECRET`) with the flat file as a deprecated local fallback.
 
 ---
 
@@ -488,7 +488,7 @@ Zero unit tests, zero integration tests, zero E2E tests. Every change is verifie
 
 1. **Order Ticket is double-gated.** The tab renders `<ComingSoon>` for all users. The real UI code is also wrapped in `{false && sub==="order" && ...}` (hardcoded dead code). To re-enable, both the `<ComingSoon>` render AND the `{false && ...}` wrappers must be removed. The backend (`/api/alpaca/order`, `/api/snaptrade/trade/*`) is fully deployed and ready.
 
-2. **Legacy `.snaptrade-users.json` flat file still active.** `lib/handlers.mjs` still reads/writes this file for `mizan_primary` single-user fallback. If it exists on the server, it stores the SnapTrade `userSecret` as unencrypted JSON. Fully deprecating this (Supabase-only path) is partially done but the file-read code path remains active.
+2. **~~Legacy `.snaptrade-users.json` flat file still active.~~ RESOLVED (F6, `f600d9d` 2026-06-16 removed the prod path; F6 closed 2026-07-15).** No production code reads or writes this file — `getSnapForRequest` (`lib/handlers.mjs`) is Supabase-only (`grep readFileSync\|writeFileSync\|snaptrade-users` over `lib/` + `api/` = 0 hits). The prior "file-read code path remains active" claim was stale. The only remaining reference is the owner-only diagnostic `scripts/verify-refresh.mjs`, now env-var-first with a deprecated flat-file fallback.
 
 3. **Purification `purification_ratios` table needs ongoing maintenance.** Seeded with 8 tickers at launch. New halal ETFs entering the portfolio won't have a ratio and will fall back to 0% (no purification shown). Needs either a data-provider feed or a manual admin UI to add ratios.
 
