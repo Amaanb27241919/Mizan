@@ -8408,6 +8408,195 @@ function PrivacyPanel(){
 }
 
 /* ─── ADMIN PANEL (root only) ────────────────────────── */
+// Pre-seeded compose defaults = the "connect your accounts" reminder. The
+// owner can one-click send it, or edit any field before broadcasting.
+const BROADCAST_DEFAULTS={
+  subject:"You're one connection away from your full Mizan",
+  eyebrow:"Finish your setup",
+  title:"Connect an account to unlock Mizan",
+  ctaLabel:"Connect your accounts",
+  ctaUrl:"https://app.mizan.exchange/",
+  ctaLabel2:"How it works",
+  ctaUrl2:"https://www.mizan.exchange/",
+  message:`Assalamu alaikum,
+
+You created a Mizan account — but haven't connected a brokerage or bank yet, so there's nothing for Mizan to work with. Connecting takes about a minute and turns the app on:
+
+• Sharia screening — see which holdings are halal, under review, or non-compliant, using AAOIFI methodology.
+• Zakat, calculated for you — live gold/silver nisab and an asset-by-asset worksheet, so you know exactly what's due.
+• Dividend purification — track the impure portion of each dividend and what to give.
+• One clear net worth — brokerage and bank, together in a single view.
+
+How to connect:
+
+  1) Brokerage — Fidelity, Robinhood, Schwab, E*Trade, Webull, Coinbase, etc.
+     Go to  Settings → Connections  and tap  "+ Connect Account".
+
+  2) Bank — for cash, spending, and credit-card balances.
+     Open the  Finances  tab and tap  "+ Connect Bank".
+
+Both connections are read-only and powered by SnapTrade and Plaid, the same aggregation infrastructure used across the industry. With Plaid, your bank credentials never touch our servers. You stay in control and can disconnect anytime.
+
+If a connection didn't go through, just reply to this email and we'll help you get set up.`,
+};
+
+// Admin → Broadcast: compose a branded email to a user segment. Reuses the
+// server's sendUserEmail path; segments come from /api/admin/broadcast-audience.
+function BroadcastPanel(){
+  const[aud,setAud]=useState(null);            // { users, counts }
+  const[audBusy,setAudBusy]=useState(false);
+  const[audErr,setAudErr]=useState(null);
+  const[segment,setSegment]=useState("notConnected"); // all | notConnected | connected | custom
+  const[customSel,setCustomSel]=useState(()=>new Set());
+  const[form,setForm]=useState(BROADCAST_DEFAULTS);
+  const[busy,setBusy]=useState(false);
+  const[result,setResult]=useState(null);
+  const[err,setErr]=useState(null);
+
+  const loadAud=useCallback(async()=>{
+    setAudBusy(true);setAudErr(null);
+    try{
+      const r=await apiFetch("/api/admin/broadcast-audience");
+      if(!r.ok){let m=`HTTP ${r.status}`;try{const e=await r.json();if(e?.error)m=typeof e.error==="string"?e.error:JSON.stringify(e.error);}catch{}throw new Error(m);}
+      setAud(await r.json());
+    }catch(e){setAudErr(e.message||"Failed to load audience");}
+    finally{setAudBusy(false);}
+  },[]);
+  useEffect(()=>{loadAud();},[loadAud]);
+
+  const activeUsers=(aud?.users||[]).filter(u=>!u.suspended);
+  const recipients=segment==="custom"?activeUsers.filter(u=>customSel.has(u.id))
+    :segment==="all"?activeUsers
+    :segment==="connected"?activeUsers.filter(u=>u.connected)
+    :activeUsers.filter(u=>!u.connected);
+  const recipientIds=recipients.map(u=>u.id);
+  const counts=aud?.counts||{all:0,connected:0,notConnected:0};
+
+  const upd=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const toggleSel=id=>setCustomSel(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n;});
+
+  const send=async(testToSelf)=>{
+    setErr(null);setResult(null);
+    if(!form.subject.trim()){setErr("A subject is required.");return;}
+    if(!form.message.trim()){setErr("A message is required.");return;}
+    if(!testToSelf){
+      if(!recipientIds.length){setErr("No recipients in this segment.");return;}
+      if(!confirm(`Send this email to ${recipientIds.length} user${recipientIds.length===1?"":"s"}?`))return;
+    }
+    setBusy(true);
+    try{
+      const body={testToSelf:!!testToSelf,userIds:testToSelf?[]:recipientIds,
+        subject:form.subject,eyebrow:form.eyebrow,title:form.title,message:form.message,
+        ctaUrl:form.ctaUrl,ctaLabel:form.ctaLabel,ctaUrl2:form.ctaUrl2,ctaLabel2:form.ctaLabel2};
+      const r=await apiFetch("/api/admin/broadcast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d?.ok){setErr(d?.error||`HTTP ${r.status}`);return;}
+      setResult(d);
+    }catch(e){setErr(e.message||"Network error");}
+    finally{setBusy(false);}
+  };
+
+  const SEGMENTS=[["all","All",counts.all],["notConnected","Not connected",counts.notConnected],["connected","Connected",counts.connected],["custom","Custom",segment==="custom"?customSel.size:null]];
+  const lbl=t=><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>{t}</div>;
+  const fieldStyle={fontFamily:FP,fontSize:13,width:"100%"};
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    {/* Compliance guardrail — one-way only */}
+    <BentoTile style={{background:`${T.gain}0d`,border:`1px solid ${T.gain}33`}}>
+      <div style={{fontFamily:FP,fontSize:12,color:T.text,lineHeight:1.55}}><b style={{color:T.gain}}>One-way announcement.</b> Product news &amp; reminders only. Don&rsquo;t include personalized buy/sell/hold or suitability guidance — that stays behind the advisor policy.</div>
+    </BentoTile>
+
+    {/* Recipients / segments */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        {lbl("RECIPIENTS")}
+        <button onClick={loadAud} disabled={audBusy} className="btn-ghost" style={{fontSize:10}}>{audBusy?"Loading…":"Refresh"}</button>
+      </div>
+      {audErr&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginBottom:T.s2}}>{ICON_NO}{audErr}</div>}
+      <div style={{display:"flex",gap:T.s2,flexWrap:"wrap",marginBottom:T.s3}}>
+        {SEGMENTS.map(([k,l,n])=><button key={k} onClick={()=>setSegment(k)} style={{
+          fontFamily:FM,fontSize:11,letterSpacing:"0.02em",borderRadius:T.rSm,padding:`8px ${T.s3}`,cursor:"pointer",
+          background:segment===k?T.blue:T.surface,color:segment===k?"#fff":T.text,
+          border:`1px solid ${segment===k?T.blue:T.border}`,
+        }}>{l}{n!=null&&<span style={{opacity:0.7,marginLeft:5,fontVariantNumeric:"tabular-nums"}}>{n}</span>}</button>)}
+      </div>
+      {segment==="custom"
+        ?<div style={{maxHeight:220,overflowY:"auto",border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
+          {activeUsers.length===0
+            ?<div style={{padding:T.s4,fontFamily:FP,fontSize:12,color:T.muted,textAlign:"center"}}>{audBusy?"Loading users…":"No users."}</div>
+            :activeUsers.map(u=><label key={u.id} style={{display:"flex",alignItems:"center",gap:T.s2,padding:`8px ${T.s3}`,borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
+              <input type="checkbox" checked={customSel.has(u.id)} onChange={()=>toggleSel(u.id)} style={{accentColor:T.blue}}/>
+              <span style={{fontFamily:FP,fontSize:12,color:T.text,flex:1}}>{u.email}</span>
+              <span style={{fontFamily:FM,fontSize:10,color:u.connected?T.gain:T.muted}}>{u.connected?"connected":"not connected"}</span>
+            </label>)}
+        </div>
+        :<div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {recipients.length===0
+            ?<span style={{fontFamily:FP,fontSize:12,color:T.muted}}>{audBusy?"Loading…":"No users in this segment."}</span>
+            :recipients.slice(0,40).map(u=><span key={u.id} style={{fontFamily:FM,fontSize:11,color:T.blue,background:`${T.blue}12`,border:`1px solid ${T.blue}30`,borderRadius:999,padding:`4px ${T.s2}`}}>{u.email}</span>)}
+          {recipients.length>40&&<span style={{fontFamily:FM,fontSize:11,color:T.muted,alignSelf:"center"}}>+{recipients.length-40} more</span>}
+        </div>}
+      <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s3,fontVariantNumeric:"tabular-nums"}}>{recipients.length} recipient{recipients.length===1?"":"s"} · suspended users are always skipped</div>
+    </BentoTile>
+
+    {/* Compose + preview */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))",gap:T.s4}}>
+      <BentoTile>
+        {lbl("COMPOSE")}
+        <div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+          <div><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Subject</div><input className="field" style={fieldStyle} value={form.subject} onChange={e=>upd("subject",e.target.value)}/></div>
+          <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:120}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Eyebrow</div><input className="field" style={fieldStyle} value={form.eyebrow} onChange={e=>upd("eyebrow",e.target.value)}/></div>
+            <div style={{flex:2,minWidth:160}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Title</div><input className="field" style={fieldStyle} value={form.title} onChange={e=>upd("title",e.target.value)}/></div>
+          </div>
+          <div><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Message</div>
+            <textarea value={form.message} onChange={e=>upd("message",e.target.value)} rows={12} style={{...fieldStyle,resize:"vertical",lineHeight:1.55,padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.text}}/></div>
+          <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:140}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Button label</div><input className="field" style={fieldStyle} value={form.ctaLabel} onChange={e=>upd("ctaLabel",e.target.value)}/></div>
+            <div style={{flex:1,minWidth:140}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Button link</div><input className="field" style={fieldStyle} value={form.ctaUrl} onChange={e=>upd("ctaUrl",e.target.value)}/></div>
+          </div>
+        </div>
+      </BentoTile>
+
+      <BentoTile style={{padding:0,overflow:"hidden"}}>
+        <div style={{padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`}}>{lbl("APPROXIMATE PREVIEW")}<div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:-4}}>Use “Send test to myself” for the exact branded email.</div></div>
+        <div style={{padding:T.s4,background:T.bg}}>
+          <div style={{maxWidth:440,margin:"0 auto",background:"#faf8f4",border:"1px solid #e7e2d8",borderRadius:12,overflow:"hidden"}}>
+            <div style={{height:3,background:"#1e4e8c"}}/>
+            <div style={{padding:"18px 22px 0"}}>
+              <div style={{fontFamily:FU,fontWeight:600,fontSize:22,color:"#1c1b19",letterSpacing:"0.02em"}}>MĪZAN</div>
+              <div style={{fontFamily:"Georgia,serif",fontStyle:"italic",fontSize:11,color:"#87827a",marginTop:4}}>Balance your wealth. Honor your deen.</div>
+            </div>
+            <div style={{padding:"16px 22px 0"}}>
+              {form.eyebrow&&<div style={{fontFamily:FM,fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#1e4e8c",fontWeight:600}}>{form.eyebrow}</div>}
+              {form.title&&<div style={{fontFamily:"Georgia,serif",fontWeight:600,fontSize:17,color:"#1c1b19",marginTop:6}}>{form.title}</div>}
+            </div>
+            <div style={{padding:"12px 22px 0",fontFamily:FP,fontSize:13,lineHeight:1.6,color:"#3a3733",whiteSpace:"pre-wrap"}}>{form.message}</div>
+            <div style={{padding:"18px 22px 24px"}}>
+              {form.ctaUrl&&<span style={{display:"inline-block",background:"#1e4e8c",color:"#fff",fontFamily:FP,fontWeight:600,fontSize:13,padding:"11px 18px",borderRadius:8}}>{form.ctaLabel||"Open Mizan"}</span>}
+            </div>
+          </div>
+        </div>
+      </BentoTile>
+    </div>
+
+    {/* Actions + result */}
+    <BentoTile>
+      {err&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginBottom:T.s3}}>{ICON_NO}{err}</div>}
+      {result&&<div style={{fontFamily:FM,fontSize:12,color:result.failed?T.gold:T.gain,marginBottom:T.s3,lineHeight:1.6}}>
+        <Icon name="check" size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>
+        {result.test?"Test sent to yourself. ":""}Sent {result.sent}{result.failed?` · ${result.failed} failed`:""}{result.skipped?` · ${result.skipped} skipped`:""}.
+        {result.failed>0&&<div style={{color:T.muted,marginTop:4}}>{(result.results||[]).filter(x=>!x.ok).slice(0,5).map(x=>`${x.email}: ${x.err}`).join(" · ")}</div>}
+      </div>}
+      <div style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center"}}>
+        <button onClick={()=>send(true)} disabled={busy} className="btn-ghost" style={{fontSize:12}}>{busy?"Working…":"Send test to myself"}</button>
+        <button onClick={()=>send(false)} disabled={busy||recipients.length===0} className="btn-primary" style={{fontSize:12}}>{busy?"Sending…":`Send to ${recipients.length} recipient${recipients.length===1?"":"s"}`}</button>
+        <button onClick={()=>{setForm(BROADCAST_DEFAULTS);setResult(null);setErr(null);}} disabled={busy} className="btn-ghost" style={{fontSize:11,color:T.muted}}>Reset to reminder template</button>
+      </div>
+    </BentoTile>
+  </div>;
+}
+
 function AdminPanel(){
   const[tab,setTab]=useState("users");
   const[stats,setStats]=useState(null);
@@ -8578,7 +8767,7 @@ function AdminPanel(){
     </BentoTile>
 
     {/* ─── Sub-tabs ──────────────────────────────── */}
-    <TabBar tabs={[["users","Users"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
+    <TabBar tabs={[["users","Users"],["broadcast","Broadcast"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
 
     {err&&<BentoTile style={{background:`${T.loss}10`,border:`1px solid ${T.loss}40`}}>
       <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>
@@ -8612,6 +8801,8 @@ function AdminPanel(){
           </div>},
         ]} rows={users}/>}
     </BentoTile>}
+
+    {tab==="broadcast"&&<BroadcastPanel/>}
 
     {tab==="audit"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
