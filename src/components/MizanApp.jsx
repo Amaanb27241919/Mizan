@@ -7800,6 +7800,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       tabs={[
         ...(isRoot?[["keys","API Keys"]]:[]),
         ["connections","Connections"],
+        ["messages","Messages"],
         ["account","Account"],
         ["methodology","Methodology"],
         ["docs","Documents"],
@@ -7808,6 +7809,9 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       active={sub}
       onChange={setSub}
     />
+
+    {/* ─── MESSAGES (two-way support thread) ───────── */}
+    {sub==="messages"&&<UserMessagesPanel/>}
 
     {/* ─── API KEYS (Root only) ───────────────────── */}
     {sub==="keys"&&isRoot&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -8597,6 +8601,156 @@ function BroadcastPanel(){
   </div>;
 }
 
+// Settings → Messages: the user's own two-way support thread (migration 025).
+// Async, not live chat — loads on open + after each send. The operator replies
+// from Admin → Messages; the user also gets an email when a reply lands.
+function UserMessagesPanel(){
+  const[msgs,setMsgs]=useState(null); // null = loading
+  const[err,setErr]=useState(null);
+  const[draft,setDraft]=useState("");
+  const[busy,setBusy]=useState(false);
+  const endRef=useRef(null);
+
+  const load=useCallback(async()=>{
+    setErr(null);
+    try{
+      const r=await apiFetch("/api/messages");
+      if(!r.ok){let m=`HTTP ${r.status}`;try{const e=await r.json();if(e?.error)m=e.error;}catch{}throw new Error(m);}
+      const d=await r.json();setMsgs(d.messages||[]);
+    }catch(e){setErr(e.message||"Failed to load messages");setMsgs([]);}
+  },[]);
+  useEffect(()=>{load();},[load]);
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"});},[msgs]);
+
+  const send=async()=>{
+    const body=draft.trim();if(!body)return;
+    setBusy(true);setErr(null);
+    try{
+      const r=await apiFetch("/api/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({body})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d?.ok){setErr(d?.error||`HTTP ${r.status}`);return;}
+      setDraft("");setMsgs(m=>[...(m||[]),d.message]);
+    }catch(e){setErr(e.message||"Network error");}
+    finally{setBusy(false);}
+  };
+  const fmtTime=s=>{try{return new Date(s).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});}catch{return "";}};
+
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>MESSAGES</div>
+      <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55}}>Questions, feedback, or an issue? Message the Mizan team directly — we'll reply right here, and email you when we do.</div>
+    </BentoTile>
+    <BentoTile style={{padding:0,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+      <div style={{padding:T.s4,minHeight:220,maxHeight:440,overflowY:"auto",display:"flex",flexDirection:"column",gap:T.s3}}>
+        {msgs===null
+          ?<div style={{margin:"auto",fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>
+          :msgs.length===0
+          ?<div style={{margin:"auto",textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,maxWidth:280}}>No messages yet. Say hello or ask a question — we're here to help.</div>
+          :msgs.map(m=>{const mine=m.sender==="user";return<div key={m.id} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
+            <div style={{maxWidth:"78%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:3}}>
+              <div style={{fontFamily:FP,fontSize:13.5,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",padding:`9px ${T.s3}`,borderRadius:12,background:mine?T.blue:T.surface,color:mine?"#fff":T.text,border:mine?"none":`1px solid ${T.border}`,borderBottomRightRadius:mine?3:12,borderBottomLeftRadius:mine?12:3}}>{m.body}</div>
+              <div style={{fontFamily:FM,fontSize:9.5,color:T.muted}}>{mine?"You":"Mizan"} · {fmtTime(m.created_at)}</div>
+            </div></div>;})}
+        <div ref={endRef}/>
+      </div>
+      {err&&<div style={{padding:`0 ${T.s4} ${T.s2}`,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
+      <div style={{borderTop:`1px solid ${T.border}`,padding:T.s3,display:"flex",gap:T.s2,alignItems:"flex-end"}}>
+        <textarea value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();send();}}} placeholder="Write a message…  (⌘/Ctrl + Enter to send)" rows={2} style={{flex:1,fontFamily:FP,fontSize:13,lineHeight:1.5,resize:"none",padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.text,outline:"none"}}/>
+        <button onClick={send} disabled={busy||!draft.trim()} className="btn-primary" style={{fontSize:12,whiteSpace:"nowrap",alignSelf:"stretch"}}>{busy?"Sending…":"Send"}</button>
+      </div>
+    </BentoTile>
+  </div>;
+}
+
+// Admin → Messages: operator side of the support thread. Left = thread list
+// (unread badge on new user messages), right = the selected conversation.
+function AdminMessagesPanel(){
+  const[threads,setThreads]=useState(null);
+  const[active,setActive]=useState(null);
+  const[msgs,setMsgs]=useState(null);
+  const[draft,setDraft]=useState("");
+  const[busy,setBusy]=useState(false);
+  const[err,setErr]=useState(null);
+  const endRef=useRef(null);
+
+  const loadThreads=useCallback(async()=>{
+    setErr(null);
+    try{
+      const r=await apiFetch("/api/admin/messages");
+      if(!r.ok)throw new Error(`HTTP ${r.status}`);
+      const d=await r.json();setThreads(d.threads||[]);
+    }catch(e){setErr(e.message||"Failed to load");setThreads([]);}
+  },[]);
+  useEffect(()=>{loadThreads();},[loadThreads]);
+  useEffect(()=>{endRef.current?.scrollIntoView();},[msgs]);
+
+  const openThread=async t=>{
+    setActive(t);setMsgs(null);setErr(null);
+    try{
+      const r=await apiFetch(`/api/admin/messages?userId=${encodeURIComponent(t.user_id)}`);
+      const d=await r.json();setMsgs(d.messages||[]);
+      loadThreads();
+    }catch(e){setErr(e.message||"Failed to load thread");setMsgs([]);}
+  };
+  const reply=async()=>{
+    const body=draft.trim();if(!body||!active)return;
+    setBusy(true);setErr(null);
+    try{
+      const r=await apiFetch("/api/admin/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:active.user_id,body})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d?.ok){setErr(d?.error||`HTTP ${r.status}`);return;}
+      setDraft("");setMsgs(m=>[...(m||[]),d.message]);
+    }catch(e){setErr(e.message||"Network error");}
+    finally{setBusy(false);}
+  };
+  const fmtTime=s=>{try{return new Date(s).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});}catch{return "";}};
+
+  return<BentoTile style={{padding:0,overflow:"hidden"}}>
+    <div style={{display:"grid",gridTemplateColumns:"minmax(180px,240px) 1fr",minHeight:420}}>
+      <div style={{borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column"}}>
+        <div style={{padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>THREADS</span>
+          <button onClick={loadThreads} className="btn-ghost" style={{fontSize:9}}>Refresh</button>
+        </div>
+        <div style={{overflowY:"auto",flex:1}}>
+          {threads===null?<div style={{padding:T.s4,fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>
+            :threads.length===0?<div style={{padding:T.s4,fontFamily:FP,fontSize:12,color:T.muted}}>No messages yet.</div>
+            :threads.map(t=><button key={t.user_id} onClick={()=>openThread(t)} style={{display:"block",width:"100%",textAlign:"left",padding:`${T.s3} ${T.s4}`,border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer",background:active?.user_id===t.user_id?`${T.blue}12`:"transparent"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2}}>
+                <span style={{fontFamily:FP,fontSize:12.5,color:T.text,fontWeight:t.unread?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.email||t.user_id.slice(0,8)}</span>
+                {t.unread>0&&<span style={{fontFamily:FM,fontSize:9,color:"#fff",background:T.loss,borderRadius:999,padding:"1px 6px",flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{t.unread}</span>}
+              </div>
+              <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.lastSender==="admin"?"You: ":""}{t.lastBody}</div>
+            </button>)}
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
+        {!active?<div style={{margin:"auto",fontFamily:FP,fontSize:13,color:T.muted}}>Select a thread to view.</div>
+          :<>
+            <div style={{padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`,fontFamily:FP,fontSize:13,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active.email||active.user_id}</div>
+            <div style={{flex:1,padding:T.s4,overflowY:"auto",maxHeight:340,display:"flex",flexDirection:"column",gap:T.s3}}>
+              {msgs===null?<div style={{margin:"auto",fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>
+                :msgs.map(m=>{const mine=m.sender==="admin";return<div key={m.id} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
+                  <div style={{maxWidth:"78%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:3}}>
+                    <div style={{fontFamily:FP,fontSize:13.5,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",padding:`9px ${T.s3}`,borderRadius:12,background:mine?T.blue:T.surface,color:mine?"#fff":T.text,border:mine?"none":`1px solid ${T.border}`}}>{m.body}</div>
+                    <div style={{fontFamily:FM,fontSize:9.5,color:T.muted}}>{mine?"You":"User"} · {fmtTime(m.created_at)}</div>
+                  </div></div>;})}
+              <div ref={endRef}/>
+            </div>
+            {err&&<div style={{padding:`0 ${T.s4} ${T.s2}`,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
+            <div style={{borderTop:`1px solid ${T.border}`,padding:T.s3,display:"flex",flexDirection:"column",gap:T.s2}}>
+              <div style={{display:"flex",gap:T.s2,alignItems:"flex-end"}}>
+                <textarea value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();reply();}}} placeholder="Reply…  (⌘/Ctrl + Enter)" rows={2} style={{flex:1,fontFamily:FP,fontSize:13,lineHeight:1.5,resize:"none",padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.text,outline:"none"}}/>
+                <button onClick={reply} disabled={busy||!draft.trim()} className="btn-primary" style={{fontSize:12,alignSelf:"stretch"}}>{busy?"…":"Reply"}</button>
+              </div>
+              <div style={{fontFamily:FM,fontSize:9.5,color:T.muted,letterSpacing:"0.02em"}}>Support &amp; feedback only — no personalized buy/sell/hold or suitability guidance here.</div>
+            </div>
+          </>}
+      </div>
+    </div>
+  </BentoTile>;
+}
+
 function AdminPanel(){
   const[tab,setTab]=useState("users");
   const[stats,setStats]=useState(null);
@@ -8767,7 +8921,7 @@ function AdminPanel(){
     </BentoTile>
 
     {/* ─── Sub-tabs ──────────────────────────────── */}
-    <TabBar tabs={[["users","Users"],["broadcast","Broadcast"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
+    <TabBar tabs={[["users","Users"],["broadcast","Broadcast"],["messages","Messages"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
 
     {err&&<BentoTile style={{background:`${T.loss}10`,border:`1px solid ${T.loss}40`}}>
       <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>
@@ -8803,6 +8957,8 @@ function AdminPanel(){
     </BentoTile>}
 
     {tab==="broadcast"&&<BroadcastPanel/>}
+
+    {tab==="messages"&&<AdminMessagesPanel/>}
 
     {tab==="audit"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>

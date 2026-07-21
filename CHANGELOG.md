@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-20
 
 ### Added
+- **perf:** Add Vercel Speed Insights (Vite/React entry) (`13bb94a`)
 - **admin:** One-way broadcast panel to email user segments (`79529f1`)
 
 ## 2026-07-17
