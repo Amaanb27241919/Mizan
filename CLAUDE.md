@@ -105,7 +105,7 @@ lib/sentry.mjs                 — Sentry backend init
 server.js                      — Dev server (Vite middleware + API on :3000)
 ```
 
-### Database (24 Migrations — all applied in prod)
+### Database (25 Migrations — all applied in prod)
 ```
 001_init.sql                   — Core tables: user_snaptrade, user_state, user_keys, profiles
 002_plaid.sql                  — plaid_tokens, plaid_accounts, plaid_transactions
@@ -132,6 +132,7 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 023_bot_strategy_type_dca.sql  — allow 'dca' (long-term accumulation) strategy_type in bot_strategies CHECK
 023_email_digest.sql           — (note: TWO files share the 023 prefix — dca + email_digest)
 024_etf_holdings_cache.sql     — service-role-only holdings cache for the ETF Overlap Analyzer
+025_messages.sql               — in-app two-way support thread (user↔operator); service-role writes, RLS select-own. Powers Settings → Messages + Admin → Messages
 ```
 
 ---
@@ -360,7 +361,7 @@ These are architectural commitments. Undoing them would break the app or violate
 - **Change the font stack** — Fraunces + IBM Plex Sans + IBM Plex Mono is intentional and final.
 - **Add new color tokens** — use existing `T.*` palette. The paper-canvas + ink + navy (accent) + green/red (semantics) palette is the brand, with amber/gold reserved for Zakat & warnings only.
 - **Use Tailwind or CSS Modules** — all styling is inline with `T.*` tokens + the THEME_CSS string injected at mount.
-- **Add external npm packages** — ask first. Bundle is already 360KB gzipped. Every dependency must justify itself. (Approved additions to date: `lightweight-charts` v5, 2026-07-15, for the holdings price chart — dynamic-imported so it stays out of the initial bundle.)
+- **Add external npm packages** — ask first. Bundle is already 360KB gzipped. Every dependency must justify itself. (Approved additions to date: `lightweight-charts` v5, 2026-07-15, for the holdings price chart — dynamic-imported so it stays out of the initial bundle; `@vercel/speed-insights` v2, 2026-07-20, mounted in `src/main.jsx` via the `/react` entry — same-origin beacon, no CSP change, ~0.8KB gz.)
 - **Add new Supabase migrations** — schema changes require explicit ask. Always discuss before adding columns/tables.
 - **Rename CSS classes** — `.bento`, `.glass`, `.glass-strong`, `.btn-primary`, `.btn-ghost` etc. are used throughout. Renaming breaks unrelated components.
 - **Introduce TypeScript** — this is intentional JavaScript. Type safety comes from JSDoc and runtime validation.
@@ -448,7 +449,7 @@ These are documented constraints, not undiscovered issues:
 | Alpha Vantage | ETF constituent holdings (ETF Overlap Analyzer) | `ALPHAVANTAGE_KEY` | **LIVE (set in Vercel 2026-07-05, verified — HLAL returned 210 holdings).** Free tier **25 req/day** → fetch server-side ONLY + cache ~24h in `etf_holdings_cache` (7 halal ETFs = 7 calls/day). The overlap route fetches symbols **sequentially** (concurrent bursts get throttled → curated fallback). `ETF_PROFILE` returns full holdings + weights + sectors. **ETF-only** (Amana mutual funds use curated snapshots in `lib/etfHoldings.mjs`; all 7 ETFs also curated-seeded as fallback). Stored **Sensitive**, so `vercel env pull` shows it empty — verify via `etf_holdings_cache.source`. |
 | Alpaca | Paper trading | `ALPACA_KEY_ID`, `ALPACA_SECRET` | Paper only — no production keys |
 | Supabase | DB + Auth | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Paid plan |
-| Resend | All Mizan email (owner alerts + user emails) | `RESEND_API_KEY`, `ALERT_FROM` | Sends owner anomaly alerts AND user emails (weekly digest, Plaid re-auth, bug-report receipts, trade invites) via `lib/alerts.mjs` (branded HTML shell w/ logo). **From = `ALERT_FROM`, which MUST be on the verified `mizan.exchange` domain** (set to `alerts@mizan.exchange` in Vercel; code default `MIZAN <no-reply@mizan.exchange>`). Was `mizan.app` — migrated 2026-07-02. Supabase **Auth** emails (signup/reset/magic-link) send separately via Supabase custom SMTP → Resend, sender `no-reply@mizan.exchange`. **2026-07-12:** user **invites** are now app-side + branded via `POST /api/admin/invite` (Admin → Users form) → `generateLink` + `renderBrandedEmail` (NOT Supabase's default). All 6 branded Supabase Auth templates live in `supabase/email-templates/` (apply via `scripts/push-auth-email-templates.mjs`). **DMARC** was missing (the spam cause) — added to Vercel DNS (`mizan.exchange` NS = `*.vercel-dns.com`; manage via `vercel dns`). See memory `email-sender-domain`. |
+| Resend | All Mizan email (owner alerts + user emails) | `RESEND_API_KEY`, `ALERT_FROM` | Sends owner anomaly alerts AND user emails (weekly digest, Plaid re-auth, bug-report receipts, trade invites) via `lib/alerts.mjs` (branded HTML shell w/ logo). **From = `ALERT_FROM`, which MUST be on the verified `mizan.exchange` domain** (set to `alerts@mizan.exchange` in Vercel; code default `MIZAN <no-reply@mizan.exchange>`). Was `mizan.app` — migrated 2026-07-02. Supabase **Auth** emails (signup/reset/magic-link) send separately via Supabase custom SMTP → Resend, sender `no-reply@mizan.exchange`. **2026-07-12:** user **invites** are now app-side + branded via `POST /api/admin/invite` (Admin → Users form) → `generateLink` + `renderBrandedEmail` (NOT Supabase's default). All 6 branded Supabase Auth templates live in `supabase/email-templates/` (apply via `scripts/push-auth-email-templates.mjs`). **DMARC** was missing (the spam cause) — added to Vercel DNS (`mizan.exchange` NS = `*.vercel-dns.com`; manage via `vercel dns`). **⚠️ 2026-07-20: `ALERT_FROM` had regressed to the unverified `alerts@omni-flow.net` → Resend `403` on EVERY email (invites/digest/re-auth/broadcasts) — corrected back to `MIZAN <alerts@mizan.exchange>`. If email "isn't arriving," check `ALERT_FROM`'s domain against `api.resend.com/domains` FIRST (single point of failure). Set it via the Vercel REST API as `type:encrypted` — the CLI `env add` now creates write-only `sensitive` vars that read back empty. Every `sendUserEmail` now sets `reply_to=OWNER_EMAIL`; the in-app Messages thread (migration 025) is the contact channel since there's no inbound mailbox.** See memory `email-sender-domain`. |
 | Vercel Cron | Scheduled jobs auth | `CRON_SECRET` | **Required.** `cronUnauthorized()` is fail-closed (`!CRON_SECRET` → all crons 401). Vercel auto-attaches `Authorization: Bearer $CRON_SECRET` to cron paths ONLY when this exact var is set. Set in Vercel Prod 2026-06-25 after it was missing (crons hadn't run). Note: a Vercel **Redeploy** reuses the old env snapshot — bind new env vars with a fresh git build. |
 | Sentry | Error tracking | `VITE_SENTRY_DSN`, `SENTRY_DSN` | Frontend + backend, v10.52 |
 | Web Push | Push notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | VAPID, per-device subscriptions |
