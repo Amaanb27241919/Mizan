@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import * as Sentry from '@sentry/react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import App from './App.jsx'
 
 // Initialize Sentry BEFORE rendering so any setup error gets captured.
@@ -49,6 +50,9 @@ if (SENTRY_DSN) {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
+    {/* Vercel Speed Insights — same-origin script (/_vercel/speed-insights/*),
+        no CSP change needed. React entry (not /next — this is a Vite SPA). */}
+    <SpeedInsights />
   </React.StrictMode>,
 )
 
