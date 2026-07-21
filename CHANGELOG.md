@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-20
 
 ### Added
+- **messages:** In-app two-way support thread + email reply_to fix (`1b732a5`)
 - **perf:** Add Vercel Speed Insights (Vite/React entry) (`13bb94a`)
 - **admin:** One-way broadcast panel to email user segments (`79529f1`)
 

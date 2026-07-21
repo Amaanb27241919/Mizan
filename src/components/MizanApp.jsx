@@ -8441,7 +8441,7 @@ How to connect:
 
 Both connections are read-only and powered by SnapTrade and Plaid, the same aggregation infrastructure used across the industry. With Plaid, your bank credentials never touch our servers. You stay in control and can disconnect anytime.
 
-If a connection didn't go through, just reply to this email and we'll help you get set up.`,
+If a connection didn't go through, message us right inside the app — open Settings → Messages — and we'll help you get set up.`,
 };
 
 // Admin → Broadcast: compose a branded email to a user segment. Reuses the
