@@ -14,6 +14,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **perf:** Add Vercel Speed Insights (Vite/React entry) (`13bb94a`)
 - **admin:** One-way broadcast panel to email user segments (`79529f1`)
 
+### Docs
+- **claude:** Sync to session — migration 025, speed-insights, ALERT_FROM warning (`1f8c6e2`)
+
 ### Maintenance
 - Point broadcast copy at in-app Messages + audit-doc session log (`ddb9ebe`)
 

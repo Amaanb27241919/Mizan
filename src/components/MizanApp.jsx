@@ -6956,9 +6956,18 @@ Activity rows on file: ${activities.length}.`;
         body:JSON.stringify({system:sys,messages:[{role:"user",content:q}]}),
       });
       const cd=await cr.json().catch(()=>({}));
-      if(cr.status===400){
-        // Server rejected the context as too large — show inline and abort.
-        setTokenNotice({kind:"err",text:cd.error||"Context too large to send."});
+      // A 400 from /api/advisor/count means one of TWO things: the server's own
+      // "context too large" rejection (cd.error is a human-readable STRING), or
+      // an upstream count-API failure passed through verbatim (cd.error is an
+      // Anthropic error OBJECT). Only the string rejection should block the turn.
+      // An object must NEVER reach setTokenNotice — rendering it as a React child
+      // threw "Objects are not valid as a React child" and crashed the whole page
+      // the instant the user hit Send. Anything that isn't a genuine string
+      // rejection falls through to the real call, since this pre-flight is
+      // best-effort and should never stop a chat that would otherwise work.
+      const rejection=cr.status===400&&typeof cd.error==="string"?cd.error:null;
+      if(rejection){
+        setTokenNotice({kind:"err",text:rejection});
         return;
       }
       if(cr.ok&&Number(cd.input_tokens)>6000){
