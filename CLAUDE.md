@@ -105,7 +105,7 @@ lib/sentry.mjs                 — Sentry backend init
 server.js                      — Dev server (Vite middleware + API on :3000)
 ```
 
-### Database (25 Migrations — all applied in prod)
+### Database (26 Migrations — all applied in prod)
 ```
 001_init.sql                   — Core tables: user_snaptrade, user_state, user_keys, profiles
 002_plaid.sql                  — plaid_tokens, plaid_accounts, plaid_transactions
@@ -133,6 +133,7 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 023_email_digest.sql           — (note: TWO files share the 023 prefix — dca + email_digest)
 024_etf_holdings_cache.sql     — service-role-only holdings cache for the ETF Overlap Analyzer
 025_messages.sql               — in-app two-way support thread (user↔operator); service-role writes, RLS select-own. Powers Settings → Messages + Admin → Messages
+026_user_names.sql             — profiles.first_name + last_name (nullable) + handle_new_user trigger now copies them from auth metadata. Signup collects the name; every pre-026 account gets the `NameNudge` — a GENTLE bottom-right toast on Overview only (owner call: never a blocking modal), skippable 3× then skip-less. Skip count = synced TRACKED_KEY `mizan_name_prompt_skips`, so it's per-user not per-device. Writes go through POST /api/user/profile (service role — profiles has no user UPDATE policy, and one would expose is_root/suspended on the same row)
 ```
 
 ---

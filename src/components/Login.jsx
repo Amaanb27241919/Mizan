@@ -168,6 +168,8 @@ export default function Login() {
   // 'mfa' shows after password sign-in when the account has a verified TOTP factor.
   const [mode, setMode] = useState(recoveryMode ? 'reset' : 'signin');
   const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
   const [mfaCode, setMfaCode] = useState('');
@@ -206,6 +208,8 @@ export default function Login() {
     setInfo(null);
     setPassword('');
     setPassword2('');
+    setFirstName('');
+    setLastName('');
   };
 
   const handleSubmit = async (e) => {
@@ -245,11 +249,17 @@ export default function Login() {
       if (err) return setError(err.message || 'Invalid code');
       // Success — session promotes to AAL2; AuthProvider unmounts this screen.
     } else if (mode === 'signup') {
+      const first = firstName.replace(/\s+/g, ' ').trim();
+      const last = lastName.replace(/\s+/g, ' ').trim();
+      if (!first || !last) return setError('First and last name required');
       if (!email || !password) return setError('Email and password required');
       if (password.length < 8) return setError('Password must be at least 8 characters');
       if (password !== password2) return setError('Passwords do not match');
       setSubmitting(true);
-      const { data, error: err } = await signUpWithPassword(email, password);
+      const { data, error: err } = await signUpWithPassword(email, password, {
+        first_name: first,
+        last_name: last,
+      });
       setSubmitting(false);
       if (err) return setError(err.message || 'Sign-up failed');
       // If Supabase requires email confirmation, data.session is null.
@@ -286,7 +296,7 @@ export default function Login() {
   let button = 'Sign in';
   if (mode === 'signup') {
     title = 'Create your account';
-    subtitle = 'Pick a password — at least 8 characters.';
+    subtitle = 'Tell us your name and pick a password — at least 8 characters.';
     button = 'Create account';
   } else if (mode === 'forgot') {
     title = 'Reset password';
@@ -343,6 +353,39 @@ export default function Login() {
           <form onSubmit={handleSubmit}>
             <h1 style={styles.heading}>{title}</h1>
             <p style={styles.sub}>{subtitle}</p>
+
+            {mode === 'signup' && (
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={styles.label} htmlFor="mizan-first-name">First name</label>
+                  <input
+                    id="mizan-first-name"
+                    type="text"
+                    required
+                    autoComplete="given-name"
+                    maxLength={60}
+                    placeholder="Yusuf"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    style={styles.input}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={styles.label} htmlFor="mizan-last-name">Last name</label>
+                  <input
+                    id="mizan-last-name"
+                    type="text"
+                    required
+                    autoComplete="family-name"
+                    maxLength={60}
+                    placeholder="Rahman"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    style={styles.input}
+                  />
+                </div>
+              </div>
+            )}
 
             {(mode === 'signin' || mode === 'signup' || mode === 'forgot') && (
               <>

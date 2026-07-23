@@ -7723,7 +7723,9 @@ function ShariaMethodology(){
   </div>;
 }
 
-function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[],plaidAccounts=[],bankBalance=0,onNav}){
+function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onImportCSV,onDedupeCSV,onRetagCSV,onReplayOnboarding,demoMode,onToggleDemo,documents=[],accounts=[],plaidAccounts=[],bankBalance=0,onNav,profileFirst="",profileLast="",onProfileName}){
+  // "First Last" when the profile has one; the hero/avatar fall back to email.
+  const profileName=[profileFirst,profileLast].filter(Boolean).join(" ").trim();
   const{user,signOut,isSupabaseConfigured,isRoot}=useAuth();
   // Live-trading opt-in preference. "" = undecided, "enabled" = bot may place
   // real orders, "declined" = user turned it off. Mirrored to localStorage +
@@ -7783,13 +7785,14 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
             display:"flex",alignItems:"center",justifyContent:"center",
             fontFamily:FU,fontSize:22,fontWeight:700,color:"#fff",letterSpacing:"-0.025em",
             boxShadow:`0 6px 18px ${T.blue}55`,
-          }}>{(user?.email||"?")[0].toUpperCase()}</div>
+          }}>{(profileFirst||user?.email||"?")[0].toUpperCase()}</div>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s1,flexWrap:"wrap"}}>
               <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>{isSupabaseConfigured?"SIGNED IN":"SINGLE-USER MODE"}</span>
               {isRoot&&<Tag label="ROOT" color={T.gold}/>}
             </div>
-            <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.015em"}}>{user?.email||"local"}</div>
+            <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.015em"}}>{profileName||user?.email||"local"}</div>
+            {profileName&&user?.email&&<div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:2}}>{user.email}</div>}
           </div>
         </div>
         {isSupabaseConfigured
@@ -7998,7 +8001,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
 
     {/* Account = profile + security + data controls. (Notifications deferred until demand.) */}
     {sub==="account"&&<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
-      <AccountPanel/>
+      <AccountPanel profileFirst={profileFirst} profileLast={profileLast} onProfileName={onProfileName}/>
       <CollapsibleTile flat title="SECURITY & SESSIONS" subtitle="Two-factor authentication + active sessions" storageKey="settings_security"><SecurityPanel/></CollapsibleTile>
       <CollapsibleTile flat title="DATA & PRIVACY" subtitle="Export your data or delete your account" storageKey="settings_privacy"><PrivacyPanel/></CollapsibleTile>
     </div>}
@@ -8203,13 +8206,43 @@ function NotificationsPanel(){
 }
 
 /* ─── ACCOUNT PANEL (email change) ─────────────────────── */
-function AccountPanel(){
+function AccountPanel({profileFirst="",profileLast="",onProfileName}){
   const{user}=useAuth();
   const[newEmail,setNewEmail]=useState("");
   const[currentPassword,setCurrentPassword]=useState("");
   const[busy,setBusy]=useState(false);
   const[ok,setOk]=useState(null);
   const[err,setErr]=useState(null);
+  // Name form. Seeded from the parent's copy and re-synced when it changes
+  // (deps are the two strings, not a prop object, so this doesn't re-fire on
+  // every parent render).
+  const[first,setFirst]=useState(profileFirst);
+  const[last,setLast]=useState(profileLast);
+  const[nameBusy,setNameBusy]=useState(false);
+  const[nameOk,setNameOk]=useState(false);
+  const[nameErr,setNameErr]=useState(null);
+  useEffect(()=>{setFirst(profileFirst);setLast(profileLast);},[profileFirst,profileLast]);
+  const cleanName=v=>v.replace(/\s+/g," ").trim();
+  const nameDirty=cleanName(first)!==profileFirst||cleanName(last)!==profileLast;
+  const nameValid=cleanName(first).length>0&&cleanName(last).length>0&&nameDirty;
+
+  const saveName=async(e)=>{
+    e.preventDefault();
+    if(!nameValid||nameBusy)return;
+    setNameBusy(true);setNameErr(null);setNameOk(false);
+    try{
+      const r=await apiFetch("/api/user/profile",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({first_name:cleanName(first),last_name:cleanName(last)}),
+      });
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok||!j?.ok)throw new Error(j?.error||`Failed (${r.status})`);
+      onProfileName?.({first_name:j.first_name,last_name:j.last_name});
+      setNameOk(true);setTimeout(()=>setNameOk(false),2500);
+    }catch(e2){setNameErr(e2.message||"Could not save your name");}
+    finally{setNameBusy(false);}
+  };
 
   const valid=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())
     && newEmail.trim().toLowerCase()!==(user?.email||"").toLowerCase()
@@ -8237,6 +8270,30 @@ function AccountPanel(){
     <BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CURRENT EMAIL</div>
       <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{user?.email||"—"}</div>
+    </BentoTile>
+
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YOUR NAME</div>
+      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:560}}>
+        How you&rsquo;re addressed in Mīzan emails and support replies. Takes effect immediately — no confirmation email.
+      </p>
+      <form onSubmit={saveName} style={{display:"flex",flexDirection:"column",gap:T.s3,maxWidth:480}}>
+        <div style={{display:"flex",gap:T.s3}}>
+          <label style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:T.s1}}>
+            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>FIRST NAME</span>
+            <input type="text" autoComplete="given-name" maxLength={60} value={first} onChange={e=>setFirst(e.target.value)} className="field" disabled={nameBusy}/>
+          </label>
+          <label style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:T.s1}}>
+            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>LAST NAME</span>
+            <input type="text" autoComplete="family-name" maxLength={60} value={last} onChange={e=>setLast(e.target.value)} className="field" disabled={nameBusy}/>
+          </label>
+        </div>
+        <button type="submit" disabled={!nameValid||nameBusy} className="btn-primary" style={{alignSelf:"flex-start"}}>
+          {nameBusy?"Saving…":"Save name"}
+        </button>
+      </form>
+      {nameOk&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain,lineHeight:1.5}}>{ICON_OK}Name saved.</div>}
+      {nameErr&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss,lineHeight:1.5}}>{ICON_NO}{nameErr}</div>}
     </BentoTile>
 
     <BentoTile>
@@ -8539,8 +8596,12 @@ function BroadcastPanel(){
             ?<div style={{padding:T.s4,fontFamily:FP,fontSize:12,color:T.muted,textAlign:"center"}}>{audBusy?"Loading users…":"No users."}</div>
             :activeUsers.map(u=><label key={u.id} style={{display:"flex",alignItems:"center",gap:T.s2,padding:`8px ${T.s3}`,borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
               <input type="checkbox" checked={customSel.has(u.id)} onChange={()=>toggleSel(u.id)} style={{accentColor:T.blue}}/>
-              <span style={{fontFamily:FP,fontSize:12,color:T.text,flex:1}}>{u.email}</span>
-              <span style={{fontFamily:FM,fontSize:10,color:u.connected?T.gain:T.muted}}>{u.connected?"connected":"not connected"}</span>
+              <span style={{fontFamily:FP,fontSize:12,color:T.text,flex:1,minWidth:0}}>
+                {u.name
+                  ?<>{u.name}<span style={{fontFamily:FM,fontSize:10,color:T.muted,marginLeft:6}}>{u.email}</span></>
+                  :u.email}
+              </span>
+              <span style={{fontFamily:FM,fontSize:10,color:u.connected?T.gain:T.muted,flexShrink:0}}>{u.connected?"connected":"not connected"}</span>
             </label>)}
         </div>
         :<div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -8726,9 +8787,10 @@ function AdminMessagesPanel(){
             :threads.length===0?<div style={{padding:T.s4,fontFamily:FP,fontSize:12,color:T.muted}}>No messages yet.</div>
             :threads.map(t=><button key={t.user_id} onClick={()=>openThread(t)} style={{display:"block",width:"100%",textAlign:"left",padding:`${T.s3} ${T.s4}`,border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer",background:active?.user_id===t.user_id?`${T.blue}12`:"transparent"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2}}>
-                <span style={{fontFamily:FP,fontSize:12.5,color:T.text,fontWeight:t.unread?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.email||t.user_id.slice(0,8)}</span>
+                <span style={{fontFamily:FP,fontSize:12.5,color:T.text,fontWeight:t.unread?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name||t.email||t.user_id.slice(0,8)}</span>
                 {t.unread>0&&<span style={{fontFamily:FM,fontSize:9,color:"#fff",background:T.loss,borderRadius:999,padding:"1px 6px",flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{t.unread}</span>}
               </div>
+              {t.name&&t.email&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.email}</div>}
               <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.lastSender==="admin"?"You: ":""}{t.lastBody}</div>
             </button>)}
         </div>
@@ -8736,7 +8798,10 @@ function AdminMessagesPanel(){
       <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
         {!active?<div style={{margin:"auto",fontFamily:FP,fontSize:13,color:T.muted}}>Select a thread to view.</div>
           :<>
-            <div style={{padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`,fontFamily:FP,fontSize:13,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active.email||active.user_id}</div>
+            <div style={{padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`,overflow:"hidden"}}>
+              <div style={{fontFamily:FP,fontSize:13,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active.name||active.email||active.user_id}</div>
+              {active.name&&active.email&&<div style={{fontFamily:FM,fontSize:10.5,color:T.muted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active.email}</div>}
+            </div>
             <div style={{flex:1,padding:T.s4,overflowY:"auto",maxHeight:340,display:"flex",flexDirection:"column",gap:T.s3}}>
               {msgs===null?<div style={{margin:"auto",fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>
                 :msgs.map(m=>{const mine=m.sender==="admin";return<div key={m.id} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
@@ -8953,6 +9018,9 @@ function AdminPanel(){
       {users.length===0
         ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No users yet.</div>
         :<Tbl cols={[
+          {l:"Name",r_:r=>r.name
+            ?<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,whiteSpace:"nowrap"}}>{r.name}</span>
+            :<span style={{fontFamily:FM,fontSize:10.5,color:T.gold,letterSpacing:"0.06em"}}>NOT SET</span>},
           {l:"Email",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text}}>{r.email}</span>},
           {l:"Joined",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.created_at)}</span>},
           {l:"Last sign-in",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.last_sign_in)}</span>},
@@ -8981,7 +9049,7 @@ function AdminPanel(){
         ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No audit entries.</div>
         :<Tbl cols={[
           {l:"When",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,whiteSpace:"nowrap"}}>{fmtDate(r.created_at)}</span>},
-          {l:"User",r_:r=><span style={{fontFamily:FP,fontSize:11,color:T.text}}>{r.email||(r.user_id?r.user_id.slice(0,8)+"…":"—")}</span>},
+          {l:"User",r_:r=><span style={{fontFamily:FP,fontSize:11,color:T.text}} title={r.email||""}>{r.name||r.email||(r.user_id?r.user_id.slice(0,8)+"…":"—")}</span>},
           {l:"Action",r_:r=><span style={{fontFamily:FP,fontSize:12,color:T.text,fontWeight:500}}>{r.action}</span>},
           {l:"Target",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.target||"—"}</span>},
           {l:"IP",r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.ip||"—"}</span>},
@@ -10387,6 +10455,84 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   </div>;
 }
 
+/* ─── NAME NUDGE ──────────────────────────────────── */
+// Gentle toast on the Overview tab for any signed-in account with no first/last
+// name — every user who signed up before migration 026. Sign-up collects the
+// name up front, so this only ever fires for pre-existing accounts.
+//
+// Deliberately NOT a blocking modal (owner call): it floats above the page,
+// never covers it, and the app stays fully usable behind it. It reappears once
+// per app load until answered. "Not now" is available for the first
+// NAME_SKIP_LIMIT dismissals — the count is persisted per-USER (synced
+// TRACKED_KEY, not device-local), so skipping on a laptop still counts on a
+// phone. After that the toast stays put with no skip, but still never blocks.
+const NAME_SKIP_LIMIT=3;
+function NameNudge({skips,onSaved,onSkip}){
+  const[first,setFirst]=useState("");
+  const[last,setLast]=useState("");
+  const[busy,setBusy]=useState(false);
+  const[err,setErr]=useState(null);
+  const clean=v=>v.replace(/\s+/g," ").trim();
+  const valid=clean(first).length>0&&clean(last).length>0;
+  const canSkip=skips<NAME_SKIP_LIMIT;
+  const left=NAME_SKIP_LIMIT-skips;
+
+  const submit=async e=>{
+    e.preventDefault();
+    if(!valid||busy)return;
+    setBusy(true);setErr(null);
+    try{
+      const r=await apiFetch("/api/user/profile",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({first_name:clean(first),last_name:clean(last)}),
+      });
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok||!j?.ok)throw new Error(j?.error||`Couldn't save (${r.status})`);
+      onSaved?.({first_name:j.first_name,last_name:j.last_name});
+    }catch(e2){setErr(e2.message||"Network error");}
+    finally{setBusy(false);}
+  };
+
+  return<form onSubmit={submit} role="dialog" aria-label="Add your name" style={{
+    // Sits ABOVE the floating dock (bottom 20px, z-index 90) so it never
+    // covers the nav on a narrow phone, and BELOW modals (z-index 1000+).
+    position:"fixed",right:T.s5,bottom:"calc(100px + env(safe-area-inset-bottom, 0px))",
+    zIndex:95,width:"min(360px, calc(100vw - 32px))",
+    background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",
+    border:"1px solid var(--mz-glass-border)",borderRadius:14,boxShadow:"var(--mz-glass-shadow-lg)",
+    padding:`${T.s5} ${T.s5} ${T.s4}`,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)",
+  }}>
+    <div style={{fontFamily:FM,fontSize:9.5,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>ONE QUICK THING</div>
+    <div style={{fontFamily:FU,fontSize:17,fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",marginBottom:T.s2}}>What should we call you?</div>
+    <p style={{fontFamily:FP,fontSize:12.5,color:T.muted,lineHeight:1.55,margin:`0 0 ${T.s4}`}}>
+      We only have your email on file. Add your name so support replies aren&rsquo;t addressed to an inbox.
+    </p>
+    <div style={{display:"flex",gap:T.s2,marginBottom:T.s3}}>
+      <label style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:T.s1}}>
+        <span style={{fontFamily:FM,fontSize:9.5,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>FIRST</span>
+        <input value={first} onChange={e=>setFirst(e.target.value)} className="field" style={{fontSize:13}} autoComplete="given-name" maxLength={60} disabled={busy}/>
+      </label>
+      <label style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:T.s1}}>
+        <span style={{fontFamily:FM,fontSize:9.5,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>LAST</span>
+        <input value={last} onChange={e=>setLast(e.target.value)} className="field" style={{fontSize:13}} autoComplete="family-name" maxLength={60} disabled={busy}/>
+      </label>
+    </div>
+    {err&&<div style={{marginBottom:T.s2,fontFamily:FM,fontSize:10.5,color:T.loss,lineHeight:1.45}}>{ICON_NO}{err}</div>}
+    <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
+      <button type="submit" disabled={!valid||busy} className="btn-primary" style={{flex:1,fontSize:12.5,padding:`9px ${T.s4}`}}>
+        {busy?"Saving…":"Save"}
+      </button>
+      {canSkip&&<button type="button" onClick={()=>onSkip?.()} disabled={busy} className="btn-ghost" style={{fontSize:11.5,padding:`9px ${T.s3}`,whiteSpace:"nowrap"}}>Not now</button>}
+    </div>
+    <div style={{fontFamily:FM,fontSize:10,color:T.muted,textAlign:"center",marginTop:T.s3,lineHeight:1.5,letterSpacing:"0.04em"}}>
+      {canSkip
+        ?`You can skip this ${left} more time${left===1?"":"s"}.`
+        :"Please add your name to continue using Mīzan fully."}
+    </div>
+  </form>;
+}
+
 /* ─── ONBOARDING FLOW ─────────────────────────────── */
 // Full-screen 5-step intro shown to first-time users (no broker connections,
 // no onboarding-complete flag). Progress persists to localStorage so a refresh
@@ -10700,6 +10846,35 @@ export default function Mizan(){
   const[onboardingForce,setOnboardingForce]=useState(false);
   const[isAdmin,setIsAdmin]=useState(false);
   const[featuresLoaded,setFeaturesLoaded]=useState(false);
+  // Profile name (migration 026). needsName is server-decided so the client
+  // never re-derives "filled in" — see /api/user/features.
+  const[needsName,setNeedsName]=useState(false);
+  // Dismissed for THIS app load only — the nudge comes back next time they
+  // open Mizan. The lifetime skip count is separate and persisted below.
+  const[nameSkipped,setNameSkipped]=useState(false);
+  const[nameSkips,setNameSkips]=useState(()=>{
+    try{
+      const n=parseInt(localStorage.getItem("mizan_name_prompt_skips")||"0",10);
+      return Number.isFinite(n)&&n>0?n:0;
+    }catch{return 0;}
+  });
+  const skipNameNudge=useCallback(()=>{
+    setNameSkipped(true);
+    setNameSkips(n=>{
+      const next=n+1;
+      try{localStorage.setItem("mizan_name_prompt_skips",String(next));}catch{}
+      // Synced so the 3 skips are per-user, not per-device.
+      persistUserState("mizan_name_prompt_skips",String(next));
+      return next;
+    });
+  },[]);
+  const[profileFirst,setProfileFirst]=useState("");
+  const[profileLast,setProfileLast]=useState("");
+  const setProfileName=useCallback(({first_name,last_name})=>{
+    setProfileFirst(first_name||"");
+    setProfileLast(last_name||"");
+    setNeedsName(!first_name||!last_name);
+  },[]);
   const[fullAutoEnabled,setFullAutoEnabled]=useState(false);
   const[botIsRoot,setBotIsRoot]=useState(false);       // owner — full-auto + no consent gate
   const[botConsented,setBotConsented]=useState(false); // beta user accepted the disclosure
@@ -11756,7 +11931,7 @@ export default function Mizan(){
   useEffect(()=>{fetchSnapHoldings();},[demoMode]);
   useEffect(()=>{
     apiFetch("/api/user/features").then(r=>r.ok?r.json():null).then(d=>{
-      if(d){setIsAdmin(!!d.trading_bot);setFullAutoEnabled(!!d.full_auto);setBotIsRoot(!!d.is_root);setBotConsented(!!d.trading_bot_consented);}
+      if(d){setIsAdmin(!!d.trading_bot);setFullAutoEnabled(!!d.full_auto);setBotIsRoot(!!d.is_root);setBotConsented(!!d.trading_bot_consented);setNeedsName(!!d.needs_name);setProfileFirst(d.first_name||"");setProfileLast(d.last_name||"");}
     }).catch(()=>{}).finally(()=>setFeaturesLoaded(true));
   },[]);
 
@@ -11913,6 +12088,13 @@ export default function Mizan(){
   // Coming Soon and reachable via CommandPalette only). Keeps the dock
   // un-crowded so first-time users aren't decision-fatigued.
   const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},...(isAdmin?[{id:"trade",l:"Trade"}]:[]),{id:"goals",l:"Goals"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"}];
+
+  // Declared here (after every state it reads) so the name nudge can defer to
+  // it without either one referencing a `const` declared further down.
+  const showOnboarding=!onboardingDismissed
+    &&!!authUser?.id&&authUser.id!=="single-user"
+    &&!demoMode
+    &&(onboardingForce||snapAccounts.length===0);
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     {/* Atmospheric Arabic wordmark (ميزان) — fixed, translucent, sits behind all content */}
@@ -12146,7 +12328,7 @@ export default function Mizan(){
           onConnect={()=>{setConnMode("read");setConn(true);}}
         />}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>{setConnMode("read");setConn(true);}} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} plaidAccounts={plaidAccounts} bankBalance={bankBalance} onNav={setNav}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>{setConnMode("read");setConn(true);}} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} plaidAccounts={plaidAccounts} bankBalance={bankBalance} onNav={setNav} profileFirst={profileFirst} profileLast={profileLast} onProfileName={setProfileName}/>}
       </div>
     </main>
 
@@ -12259,14 +12441,19 @@ export default function Mizan(){
       onSelect={()=>{/* command.action already fired in the palette */}}
     />
 
+    {/* Name nudge for accounts created before first/last name existed. A toast
+        on Overview only — never blocks the app. Held back while the onboarding
+        modal is up so a fresh user isn't hit with two prompts at once. */}
+    {featuresLoaded&&needsName&&!nameSkipped
+      &&nav==="overview"&&!showOnboarding
+      &&authUser?.id&&authUser.id!=="single-user"
+      &&<NameNudge skips={nameSkips} onSaved={setProfileName} onSkip={skipNameNudge}/>}
+
     {/* Onboarding. Auto-shows for fresh users (no brokers connected); the
         Settings "Replay tour" button sets onboardingForce so existing users
         can run the tour again. Always suppressed in single-user pass-through
         and demo mode. */}
-    {!onboardingDismissed
-      &&authUser?.id&&authUser.id!=="single-user"
-      &&!demoMode
-      &&(onboardingForce||snapAccounts.length===0)
+    {showOnboarding
       &&<OnboardingFlow
           snapAccountsLen={snapAccounts.length}
           onConnect={()=>setConn(true)}

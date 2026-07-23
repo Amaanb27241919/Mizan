@@ -146,14 +146,26 @@ export function AuthProvider({ children }) {
     return result;
   };
 
-  const signUpWithPassword = async (email, password) => {
+  /**
+   * Sign up with email + password. `meta` lands in auth.users.raw_user_meta_data,
+   * which the handle_new_user trigger (migration 026) copies into
+   * profiles.first_name / last_name — so a new account never starts nameless.
+   *
+   * @param {string} email
+   * @param {string} password
+   * @param {{ first_name?: string, last_name?: string }} [meta]
+   */
+  const signUpWithPassword = async (email, password, meta = {}) => {
     if (!isSupabaseConfigured || !supabase) {
       return { data: null, error: new Error('Supabase not configured') };
     }
+    const data = {};
+    if (meta.first_name) data.first_name = meta.first_name;
+    if (meta.last_name)  data.last_name  = meta.last_name;
     return supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: window.location.origin, data },
     });
   };
 

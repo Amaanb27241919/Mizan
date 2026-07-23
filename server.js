@@ -239,6 +239,10 @@ const server = http.createServer(async (req, res) => {
     url.pathname.startsWith("/api/finnhub")   ||
     url.pathname.startsWith("/api/polygon")   ||
     url.pathname.startsWith("/api/export")    ||
+    // /api/user/* (feature flags + profile name) — without this the dev SPA
+    // gets index.html back from a GET and a 404 from a POST, so anything
+    // gated on these routes silently no-ops locally.
+    url.pathname.startsWith("/api/user/")     ||
     url.pathname === "/api/advisor"
   ) {
     // handlers.mjs already emits structured request.start / request.end /
