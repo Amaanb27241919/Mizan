@@ -15,6 +15,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Fixed
 - **finnhub:** Shared news+earnings response cache with retry-aware backoff (F7) (`49eda4a`)
 
+### Maintenance
+- Remove dead code + unused imports (repo hygiene) (`5efa07b`)
+
 ## 2026-07-21
 
 ### Fixed
