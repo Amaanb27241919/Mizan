@@ -64,6 +64,18 @@ src/components/charts/holdingsOverlay.js — Pure (no I/O). The user's executed 
                                  overlay (+ a "Your average cost" line) on PriceChart. Display-only,
                                  privacy-gated, no judgments. See docs/COMPLIANCE.md.
 src/components/CommandPalette.jsx — Cmd+K command palette
+src/components/GuidedTour.jsx   — Interactive spotlight onboarding tour (replaced the old static
+                                 FeatureTour). Guided lap through all 6 tabs: spotlight the nav
+                                 button → navigate → spotlight a real on-tab element. Opens with a
+                                 "Tour with sample data" (flips demo ON for the tour then restores the
+                                 exact prior state; a module-load guard scrubs demo if a mid-tour
+                                 tab-close orphans it — never persists demo for a real user) vs
+                                 "Tour my account" choice. Gentle one-time TourNudge on Overview
+                                 (yields to onboarding + name nudge); also launchable from the "?"
+                                 dock / Cmd+K palette / Settings "Replay tour". Anchored via data-tour
+                                 attrs in MizanApp.jsx (nav buttons, net-worth tile, Screener/Zakat
+                                 tabs, advisor input, connect CTA) + a dataTour passthrough on
+                                 BentoTile; seen-state synced via TRACKED_KEY mizan_tour_seen.
 src/components/Login.jsx       — Auth page
 src/components/LegalLayout.jsx — Legal pages
 src/lib/auth.jsx               — Supabase Auth wrapper (TOTP MFA, session revocation)

@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-23
 
 ### Added
+- **onboarding:** Interactive spotlight tour across all tabs (sample-data or own-account); remove dead components (`77bed50`)
 - **profile:** First/last name on every user + gentle Overview nudge (`4b8d334`)
 
 ### Fixed

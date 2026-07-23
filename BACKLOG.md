@@ -21,6 +21,18 @@ Persistent backlog. Future sessions read this instead of re-deriving from scatte
 
 ---
 
+## 2026-07-23 — Session update (multi-agent: tour + loose ends + hygiene)
+
+Shipped this session (committed; deploy per owner): interactive spotlight onboarding tour (new `src/components/GuidedTour.jsx`, replaces `FeatureTour`); **F7** Finnhub news/earnings response cache + retry-aware backoff; security fixes (redact API tokens from `fetchWithRetry` logs; surface swallowed Supabase `error` in the 3 `anomaly.mjs` detectors); dead-code removal (`FeatureTour`/`EarningsWidget`/`BotDashboard`/`NotificationsPanel` + unused imports/exports, lint 40→37 warnings). Integrated build 0 errors, **242/242 tests**.
+
+**Stale entries corrected (verified against code, not docs):**
+- **F2** → **ALREADY SHIPPED** in prod (`0f12c1f`: atomic `bot_strategies.updated_at` CAS lease at the top of the cron loop closes races #3–#5; ambiguous SnapTrade failures resolve to a terminal state for #6; covered by `botLease.test.js`). Only F7's cache was genuinely missing. A *provably*-race-free version under any latency still needs a `UNIQUE` partial index / advisory lock — a **migration** (owner approval); the 5-min lease is the migration-free bound.
+- **F4** → **ALREADY SHIPPED** (`6f3db36`: `modifiedDietzReturn` day-weighted return in `src/lib/performance.js` + `PerformancePanel.jsx` + 121-line test). Mark DONE.
+
+**Owner-only follow-ups still open:** **O24** set `ENCRYPTION_KEY` in Vercel (encryption Step-0 verified safe — `extractUserSecret` falls back to plaintext during the mixed window, `scripts/encrypt-existing-secrets.mjs` exists, migration 017 self-guards; I backfill + apply 017 after the key lands) — **note Plaid tokens need a NEW migration** (016 added ciphertext cols only to `user_snaptrade`/`user_keys`, not `plaid_tokens`); **O18** rotate `CRON_SECRET` (Vercel env + Supabase Vault `cron_secret` must match, then a fresh git build binds it).
+
+---
+
 ## F — Fixes / correctness (autonomous)
 
 The "something is wrong" bucket. Aligned with maintenance mode.
