@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 
 /* ─── SKELETON LOADERS ───────────────────────────────────
  * Theme-agnostic shimmer placeholders. Uses semi-transparent

@@ -4,7 +4,7 @@
 // Decoupled from MizanApp like Goals.jsx: it re-derives theme tokens from CSS
 // custom properties and takes everything it needs as props. All math lives in
 // ../lib/performance.js (pure + unit-tested).
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   moneyWeightedReturn,
   averageCapitalReturn,

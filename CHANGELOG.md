@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **profile:** First/last name on every user + gentle Overview nudge (`4b8d334`)
 
+### Fixed
+- **finnhub:** Shared news+earnings response cache with retry-aware backoff (F7) (`49eda4a`)
+
 ## 2026-07-21
 
 ### Fixed

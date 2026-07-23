@@ -15,7 +15,6 @@
 // transactions OR Plaid's native recurring streams (via normalizePlaidStreams).
 
 const DAY = 86_400_000;
-const CADENCE_DAYS = { weekly: 7, biweekly: 14, monthly: 30.44, quarterly: 91.3, annual: 365 };
 
 // Strip noise from a bank/merchant descriptor so the same payee matches across
 // months despite trailing ref numbers, dates, store IDs, casing, etc.
