@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **profile:** First/last name on every user + gentle Overview nudge (`4b8d334`)
 
 ### Fixed
+- **security:** Redact API tokens from fetch retry logs + surface swallowed Supabase errors in anomaly detectors (`4c79c9a`)
 - **finnhub:** Shared news+earnings response cache with retry-aware backoff (F7) (`49eda4a`)
 
 ### Maintenance

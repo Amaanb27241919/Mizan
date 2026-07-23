@@ -21,6 +21,23 @@ import ConnectionHealth from "./ConnectionHealth.jsx";
 import BugReportButton from "./BugReportButton.jsx";
 import PriceChart from "./charts/PriceChart.jsx";
 import { tradesForSymbol } from "./charts/holdingsOverlay.js";
+import GuidedTour from "./GuidedTour.jsx";
+
+// One-time safety guard (runs at module load, before any component reads state):
+// a guided *sample-data* tour temporarily turns demo mode on. If such a tour was
+// interrupted by a hard tab-close, it can leave demo enabled — and demo must
+// NEVER persist into a real user's session (its ~$435k persona would show as
+// their net worth). `mizan_tour_active` is set only while a sample-data tour is
+// running and cleared on a normal close; finding it here means the tour didn't
+// close cleanly, so we scrub the demo flag + demo-populated caches now.
+try {
+  if (typeof localStorage !== "undefined" && localStorage.getItem("mizan_tour_active") === "1") {
+    localStorage.removeItem("mizan_tour_active");
+    localStorage.setItem("mizan_demo", "0");
+    ["mizan_accounts_cache", "mizan_activities_cache", "mizan_plaid_accounts", "mizan_bank_balance"]
+      .forEach((k) => { try { localStorage.removeItem(k); } catch { /* ignore */ } });
+  }
+} catch { /* ignore */ }
 
 /* ─── DESIGN TOKENS ──────────────────────────────────── */
 // Editorial-finance palette: dark forest base, gold primary, warm paper text.
@@ -936,7 +953,7 @@ function Donut({slices,size=180,thickness=22,centerLabel,centerValue}){
 // background, and flexible grid-area placement via `span`.
 // When `accent` is set: 2px colored top bar + tinted left border.
 // When `onClick` is set: pointer cursor + scale hint in CSS.
-function BentoTile({children,span="auto",accent,gradient,glass,style,onClick}){
+function BentoTile({children,span="auto",accent,gradient,glass,style,onClick,dataTour}){
   const baseStyle={
     background:gradient||(glass?T.glass:T.tileFill),
     border:`1px solid ${T.border}`,
@@ -955,7 +972,7 @@ function BentoTile({children,span="auto",accent,gradient,glass,style,onClick}){
     overflow:"hidden",
     ...(style||{}),
   };
-  return<div className={`bento-tile${onClick?" bento-tile--click":""}`} onClick={onClick} style={baseStyle}>{children}</div>;
+  return<div data-tour={dataTour} className={`bento-tile${onClick?" bento-tile--click":""}`} onClick={onClick} style={baseStyle}>{children}</div>;
 }
 
 // CollapsibleTile — a BentoTile whose header toggles its body. The header (title +
@@ -1041,7 +1058,7 @@ function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar-w
   overflowX:"auto",WebkitOverflowScrolling:"touch",
 }}>{tabs.map(([id,l])=>{
   const on=active===id;const acc=accent||T.blue;
-  return<button key={id} onClick={()=>onChange(id)} style={{
+  return<button key={id} data-tour={`tab-${id}`} onClick={()=>onChange(id)} style={{
     padding:`8px ${T.s4}`,
     background:on?"var(--mz-glass-strong, rgba(13,19,17,0.91))":"transparent",
     backdropFilter:on?"blur(20px) saturate(160%)":undefined,
@@ -1887,7 +1904,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     {/* ─── BENTO ROW 1: Hero + side stack ─────────────── */}
     <div className="bento-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:T.s4}}>
       {/* HERO — Portfolio value with gradient + sparkline */}
-      <BentoTile style={{
+      <BentoTile dataTour="net-worth" style={{
         background:`radial-gradient(circle at 0% 0%, ${T.blue}1F, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gold}14, transparent 50%), ${T.card}`,
         borderColor:T.blue+"30",
         padding:`${T.s6} ${T.s6}`,
@@ -5089,21 +5106,6 @@ function Watchlist({live=[],watchlist=[],onAdd,onRemove,onSetAlert,onAlertPermis
   </CollapsibleTile>;
 }
 
-/* ─── EARNINGS WIDGET ────────────────────────────────── */
-function EarningsWidget({earnings=[]}){
-  if(!earnings||earnings.length===0)return null;
-  return<div>
-    <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",marginBottom:8,marginTop:6}}>UPCOMING EARNINGS</div>
-    <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"4px 0",maxHeight:240,overflowY:"auto"}}>
-      {earnings.slice(0,12).map((e,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"7px 14px",borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:11}}>
-        <span style={{color:T.textHi,fontWeight:500}}>{e.symbol}</span>
-        <span style={{color:T.muted,fontSize:10}}>{e.date}{e.hour?` · ${e.hour}`:""}</span>
-        <span style={{color:e.epsEstimate?T.gold:T.muted,fontSize:10}}>{e.epsEstimate?`est $${(+e.epsEstimate).toFixed(2)}`:"—"}</span>
-      </div>)}
-    </div>
-  </div>;
-}
-
 /* ─── TRADE & BOT ────────────────────────────────────── */
 /* ─── FIRE / RETIREMENT CALCULATOR ───────────────────── */
 // Dividend Income Planner — forward-projects annual dividend income from a
@@ -5351,52 +5353,6 @@ function OrderPreviewModal({preview={},onConfirm,onCancel,busy,side,sym,qty}){
         <button onClick={onConfirm} disabled={busy} style={{padding:"8px 18px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",background:busy?T.dim:`linear-gradient(135deg, ${side==="buy"?T.gain:T.loss}, ${side==="buy"?T.gain:T.loss}DD)`,border:"none",color:busy?T.muted:"#fff",cursor:busy?"not-allowed":"pointer",boxShadow:busy?"none":`0 2px 8px ${(side==="buy"?T.gain:T.loss)}55`}}>{busy?"Placing…":`Confirm ${side==="buy"?"Buy":"Sell"}`}</button>
       </div>
     </div>
-  </div>;
-}
-
-/* ─── BOT DASHBOARD ──────────────────────────────────── */
-// Live execution state for the trading bot. Pulls from snapActivities since
-// orders flow through the same /activities endpoint after they fill.
-function BotDashboard({activities=[],accounts=[]}){
-  const sells=activities.filter(a=>(a.type||"").toUpperCase()==="SELL");
-  const buys=activities.filter(a=>(a.type||"").toUpperCase()==="BUY");
-  // Win rate: sells where amount > avg cost basis. We don't track exact lots,
-  // but proxy: positive trade amount = win.
-  const wins=sells.filter(a=>(+a.amount||0)>0).length;
-  const losses=sells.length-wins;
-  const winRate=sells.length>0?(wins/sells.length)*100:0;
-  const realizedYTD=sells.filter(a=>(a.trade_date||"")>=`${new Date().getFullYear()}-01-01`).reduce((s,a)=>s+(+a.amount||0),0);
-  // Streak: walk sells in reverse chrono, count consecutive wins or losses
-  let streak=0,streakKind="—";
-  const ordered=[...sells].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||""));
-  for(const s of ordered){
-    const win=(+s.amount||0)>0;
-    if(streak===0){streak=1;streakKind=win?"W":"L";continue;}
-    if((win&&streakKind==="W")||(!win&&streakKind==="L"))streak++;else break;
-  }
-  const recentTrades=[...buys,...sells].sort((a,b)=>(b.trade_date||"").localeCompare(a.trade_date||"")).slice(0,20);
-  return<div style={{display:"flex",flexDirection:"column",gap:14}}>
-    <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.7,maxWidth:680}}>
-      Live trading state. Once you place orders via the Order Ticket, fills flow into Activity and surface here as P&L, win rate, and current streak.
-    </p>
-    <div className="mz-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-      <KV label="Total trades"   value={`${buys.length+sells.length}`} sub={`${buys.length} buys · ${sells.length} sells`}/>
-      <KV label="Win rate"       value={sells.length?`${winRate.toFixed(0)}%`:"—"} sub={`${wins}W · ${losses}L`} subColor={winRate>=50?T.gain:T.loss}/>
-      <KV label="Realized YTD"   value={`${realizedYTD>=0?"+":""}${kf(Math.abs(realizedYTD))}`} subColor={fc(realizedYTD)}/>
-      <KV label="Current streak" value={`${streakKind} × ${streak}`} subColor={streakKind==="W"?T.gain:streakKind==="L"?T.loss:T.muted}/>
-    </div>
-    {recentTrades.length===0
-      ?<div style={{background:T.card,border:`1px dashed ${T.border}`,borderRadius:12,padding:"32px",textAlign:"center",fontFamily:FM,fontSize:11,color:T.muted}}>No trades yet. Place an order from the Order Ticket tab.</div>
-      :<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-        <Tbl cols={[
-          {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.trade_date||"—"}</span>},
-          {l:"Side",r_:r=><Tag label={(r.type||"").toUpperCase()} color={(r.type||"").toUpperCase()==="BUY"?T.blue:T.gold}/>},
-          {l:"Symbol",r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>{r.symbol?.symbol||r.symbol||"—"}</span>},
-          {l:"Qty",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text}}>{r.units?(+r.units).toLocaleString("en-US",{maximumFractionDigits:4}):"—"}</span>},
-          {l:"Price",r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.price?f$(r.price):"—"}</span>},
-          {l:"Amount",r:true,r_:r=>{const v=+r.amount||0;return<span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:v>0?T.gain:v<0?T.loss:T.text}}>{v>=0?"+":"−"}{f$(Math.abs(v))}</span>;}},
-        ]} rows={recentTrades}/>
-      </div>}
   </div>;
 }
 
@@ -7153,7 +7109,7 @@ Activity rows on file: ${activities.length}.`;
         <Icon name="warning" size={13} style={{display:"inline-block",verticalAlign:"-2px"}}/>
         <span>{tokenNotice.text}</span>
       </div>}
-      <form onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:"1px solid var(--mz-glass-border)",padding:T.s3,display:"flex",gap:T.s2,background:"var(--mz-glass)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)"}}>
+      <form data-tour="advisor" onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:"1px solid var(--mz-glass-border)",padding:T.s3,display:"flex",gap:T.s2,background:"var(--mz-glass)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)"}}>
         <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about your portfolio…" disabled={busy}
           className="field" style={{flex:1,fontFamily:FP,fontSize:14,padding:`10px ${T.s4}`}}/>
         <button type="submit" disabled={busy||!input.trim()} className="btn-primary" style={{padding:`10px ${T.s5}`}}>{busy?"…":"Send"}</button>
@@ -7797,7 +7753,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
         </div>
         {isSupabaseConfigured
           ?<div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
-            {onReplayOnboarding&&<button onClick={onReplayOnboarding} className="btn-ghost" title="Re-run the 5-step welcome tour">Replay tour</button>}
+            {onReplayOnboarding&&<button onClick={onReplayOnboarding} className="btn-ghost" title="Replay the guided spotlight tour">Replay tour</button>}
             {settingsInstallEvt&&!settingsInstalled&&<button onClick={doSettingsInstall} className="btn-ghost" title="Install MĪZAN as a standalone app on this device" style={{display:"inline-flex",alignItems:"center",gap:6}}><Icon name="download" size={13}/>Install App</button>}
             <button onClick={async()=>{if(confirm("Sign out of MIZAN?"))await signOut();}} className="btn-danger">Sign out</button>
           </div>
@@ -7894,7 +7850,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
               Connect via SnapTrade OAuth. Credentials go directly to your broker — MĪZAN never sees your password.
             </p>
           </div>
-          <button onClick={onConnect} className="btn-primary">+ Connect Account</button>
+          <button data-tour="connect" onClick={onConnect} className="btn-primary">+ Connect Account</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:T.s2,marginTop:T.s4}}>
           {BROKERS.map(b=>{
@@ -8013,195 +7969,6 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
     </div>}
     {sub==="methodology"&&<ShariaMethodology/>}
     {sub==="admin"&&isRoot&&<AdminPanel/>}
-  </div>;
-}
-
-/* ─── NOTIFICATIONS PANEL (push subscription) ─────────── */
-// Browser-only — service worker registered in main.jsx (already there).
-// VAPID public key fetched from /api/notifications/vapid-public-key
-// so we never have to commit it to the bundle.
-function NotificationsPanel(){
-  const[supported]=useState(()=>typeof window!=="undefined"&&"serviceWorker"in navigator&&"PushManager"in window);
-  const[permission,setPermission]=useState(()=>typeof Notification!=="undefined"?Notification.permission:"default");
-  const[busy,setBusy]=useState(false);
-  const[subscription,setSubscription]=useState(null);
-  const[vapidKey,setVapidKey]=useState(null);
-  const[err,setErr]=useState(null);
-  const[ok,setOk]=useState(null);
-  const[digest,setDigest]=useState(null); // null = loading
-  const[digestBusy,setDigestBusy]=useState(false);
-  const[digestMsg,setDigestMsg]=useState(null); // {ok:boolean,text:string}
-
-  // Load the weekly-digest opt-out preference.
-  useEffect(()=>{
-    let cancel=false;
-    apiFetch("/api/user/features")
-      .then(r=>r.ok?r.json():null)
-      .then(j=>{if(!cancel&&j&&typeof j.email_digest==="boolean")setDigest(j.email_digest);})
-      .catch(()=>{});
-    return()=>{cancel=true;};
-  },[]);
-
-  const toggleDigest=async()=>{
-    const next=!digest;
-    setDigestBusy(true);setDigestMsg(null);
-    try{
-      const r=await apiFetch("/api/user/email-digest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:next})});
-      if(!r.ok)throw new Error(`Server returned ${r.status}`);
-      setDigest(next);
-      setDigestMsg({ok:true,text:next?"Weekly digest enabled.":"Weekly digest disabled."});
-    }catch(e){setDigestMsg({ok:false,text:e.message||"Couldn't update digest preference"});}
-    finally{setDigestBusy(false);}
-  };
-
-  // Probe current subscription state on mount.
-  useEffect(()=>{
-    if(!supported)return;
-    let cancel=false;
-    (async()=>{
-      try{
-        const reg=await navigator.serviceWorker.ready;
-        const sub=await reg.pushManager.getSubscription();
-        if(!cancel)setSubscription(sub);
-      }catch(e){if(!cancel)setErr(e.message);}
-    })();
-    apiFetch("/api/notifications/vapid-public-key")
-      .then(r=>r.ok?r.json():null)
-      .then(j=>{if(!cancel&&j?.key)setVapidKey(j.key);})
-      .catch(()=>{});
-    return()=>{cancel=true;};
-  },[supported]);
-
-  const urlBase64ToUint8Array=base64=>{
-    const padding="=".repeat((4-base64.length%4)%4);
-    const b64=(base64+padding).replace(/-/g,"+").replace(/_/g,"/");
-    const raw=atob(b64);
-    const out=new Uint8Array(raw.length);
-    for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
-    return out;
-  };
-
-  const enable=async()=>{
-    setBusy(true);setErr(null);setOk(null);
-    try{
-      if(!vapidKey)throw new Error("Server hasn't generated a VAPID public key yet. Ask the admin to set VAPID_PUBLIC_KEY in Vercel.");
-      const perm=await Notification.requestPermission();
-      setPermission(perm);
-      if(perm!=="granted")throw new Error("Notification permission denied");
-      const reg=await navigator.serviceWorker.ready;
-      const sub=await reg.pushManager.subscribe({
-        userVisibleOnly:true,
-        applicationServerKey:urlBase64ToUint8Array(vapidKey),
-      });
-      const json=sub.toJSON();
-      const r=await apiFetch("/api/notifications/subscribe",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({subscription:json}),
-      });
-      if(!r.ok)throw new Error(`Server rejected subscription (${r.status})`);
-      setSubscription(sub);
-      setOk("Notifications enabled on this device.");
-    }catch(e){setErr(e.message||"Failed to enable notifications");}
-    finally{setBusy(false);}
-  };
-
-  const disable=async()=>{
-    setBusy(true);setErr(null);setOk(null);
-    try{
-      if(subscription){
-        const endpoint=subscription.endpoint;
-        await subscription.unsubscribe();
-        await apiFetch("/api/notifications/subscribe",{
-          method:"DELETE",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({endpoint}),
-        }).catch(()=>{});
-      }
-      setSubscription(null);
-      setOk("Notifications disabled on this device.");
-    }catch(e){setErr(e.message||"Failed to disable");}
-    finally{setBusy(false);}
-  };
-
-  const sendTest=async()=>{
-    setBusy(true);setErr(null);setOk(null);
-    try{
-      const r=await apiFetch("/api/notifications/test",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
-      if(!r.ok)throw new Error(`Server returned ${r.status}`);
-      setOk("Test notification sent. Check your device.");
-    }catch(e){setErr(e.message||"Test failed");}
-    finally{setBusy(false);}
-  };
-
-  if(!supported){
-    return<BentoTile>
-      <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.14em",marginBottom:T.s2}}>NOTIFICATIONS</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6}}>This browser doesn't support push notifications.</p>
-    </BentoTile>;
-  }
-
-  const enabled=!!subscription&&permission==="granted";
-
-  return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
-    <BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,marginBottom:T.s3,flexWrap:"wrap"}}>
-        <div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>PUSH NOTIFICATIONS</div>
-          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
-            Get a system notification when something needs attention — Sharia status changes, price alerts, dividends, and sync errors. Per-device opt-in.
-          </p>
-        </div>
-        <Tag label={enabled?"Enabled":permission==="denied"?"Blocked":"Off"} color={enabled?T.gain:permission==="denied"?T.loss:T.muted}/>
-      </div>
-
-      {permission==="denied"&&<div style={{padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}30`,fontFamily:FM,fontSize:11,color:T.loss,lineHeight:1.5,marginBottom:T.s3}}>
-        Your browser is blocking notifications for this site. Re-enable them in your browser's site-settings panel, then reload.
-      </div>}
-
-      <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
-        {enabled
-          ?<>
-            <button onClick={disable} disabled={busy} className="btn-ghost">Disable</button>
-            <button onClick={sendTest} disabled={busy} className="btn-primary">Send a test notification</button>
-          </>
-          :<button onClick={enable} disabled={busy||permission==="denied"||!vapidKey} className="btn-primary">{busy?"Working…":"Enable notifications"}</button>}
-      </div>
-
-      {!vapidKey&&permission!=="denied"&&<div style={{marginTop:T.s3,fontFamily:FM,fontSize:11,color:T.muted}}>
-        Waiting on server: VAPID_PUBLIC_KEY isn't configured yet. Once admin sets it, refresh this page.
-      </div>}
-      {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain}}>{ICON_OK}{ok}</div>}
-      {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
-    </BentoTile>
-
-    <BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,marginBottom:T.s3,flexWrap:"wrap"}}>
-        <div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>WEEKLY EMAIL DIGEST</div>
-          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
-            A Monday email summarizing your net-worth change over the past 7 days, sent to your account email.
-          </p>
-        </div>
-        <Tag label={digest===null?"…":digest?"On":"Off"} color={digest?T.gain:T.muted}/>
-      </div>
-      <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
-        <button onClick={toggleDigest} disabled={digest===null||digestBusy} className={digest?"btn-ghost":"btn-primary"}>
-          {digestBusy?"Working…":digest?"Turn off":"Turn on"}
-        </button>
-      </div>
-      {digestMsg&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:digestMsg.ok?T.gainBg:`${T.loss}10`,border:`1px solid ${digestMsg.ok?T.gain:T.loss}40`,fontFamily:FM,fontSize:11,color:digestMsg.ok?T.gain:T.loss}}>{digestMsg.ok?ICON_OK:ICON_NO}{digestMsg.text}</div>}
-    </BentoTile>
-
-    <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>WHAT YOU'LL RECEIVE</div>
-      <ul style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,padding:`0 0 0 ${T.s4}`,lineHeight:1.8}}>
-        <li><span style={{color:T.text,fontWeight:500}}>Price alerts</span> — when a watchlist target is crossed</li>
-        <li><span style={{color:T.text,fontWeight:500}}>Sharia status changes</span> — a holding flips halal→haram or vice-versa</li>
-        <li><span style={{color:T.text,fontWeight:500}}>Upcoming dividends</span> — ex-div date is tomorrow on a ticker you hold</li>
-        <li><span style={{color:T.text,fontWeight:500}}>Sync errors</span> — nightly SnapTrade sync failed and needs attention</li>
-      </ul>
-    </BentoTile>
   </div>;
 }
 
@@ -10079,7 +9846,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       />
     )}
     {/* ─── HERO: Total bank balance + Connect ─────────── */}
-    <BentoTile style={{
+    <BentoTile dataTour="finances" style={{
       background:`radial-gradient(circle at 0% 0%, ${T.blue}1A, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gain}10, transparent 50%), ${T.card}`,
       borderColor:T.blue+"30",
       padding:`${T.s6} ${T.s6}`,
@@ -10533,52 +10300,37 @@ function NameNudge({skips,onSaved,onSkip}){
   </form>;
 }
 
+/* ─── TOUR NUDGE ──────────────────────────────────── */
+// One-time, dismissible bottom-right toast offering the guided spotlight tour.
+// Same visual language + suppression rules as NameNudge (Overview only, never
+// while onboarding or the name nudge is up, real signed-in users only). "Offer
+// seen" persists via the synced TRACKED_KEY `mizan_tour_seen`, so it appears
+// once per user, not per device.
+function TourNudge({onStart,onDismiss}){
+  return<div role="dialog" aria-label="Take a quick tour" style={{
+    position:"fixed",right:T.s5,bottom:"calc(100px + env(safe-area-inset-bottom, 0px))",
+    zIndex:95,width:"min(340px, calc(100vw - 32px))",
+    background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",
+    border:"1px solid var(--mz-glass-border)",borderRadius:14,boxShadow:"var(--mz-glass-shadow-lg)",
+    padding:`${T.s5} ${T.s5} ${T.s4}`,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)",
+  }}>
+    <div style={{fontFamily:FM,fontSize:9.5,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>NEW HERE?</div>
+    <div style={{fontFamily:FU,fontSize:17,fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",marginBottom:T.s2}}>Take a 60-second tour</div>
+    <p style={{fontFamily:FP,fontSize:12.5,color:T.muted,lineHeight:1.55,margin:`0 0 ${T.s4}`}}>
+      A quick guided lap through every tab &mdash; with sample data or your own account.
+    </p>
+    <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
+      <button onClick={onStart} className="btn-primary" style={{flex:1,fontSize:12.5,padding:`9px ${T.s4}`}}>Take tour</button>
+      <button onClick={onDismiss} className="btn-ghost" style={{fontSize:11.5,padding:`9px ${T.s3}`,whiteSpace:"nowrap"}}>Not now</button>
+    </div>
+  </div>;
+}
+
 /* ─── ONBOARDING FLOW ─────────────────────────────── */
 // Full-screen 5-step intro shown to first-time users (no broker connections,
 // no onboarding-complete flag). Progress persists to localStorage so a refresh
 // or tab close doesn't restart from step 1. Final step writes mizan_onboarded=1
 // to Supabase user_state which marks the user as fully onboarded.
-/* ─── FEATURE TOUR ───────────────────────────────────────
-   Optional, user-triggered walkthrough (launched from the "?" in the dock).
-   Deliberately NOT a forced linear tour and NOT auto-opened — research is
-   decisive that forced tab-by-tab tours get skipped and cause guidance
-   fatigue. This is opt-in: a short, skippable carousel where each step can
-   jump straight to the relevant tab. Leads with the no-connection hero path
-   (screen a stock / calculate Zakat) so value comes before any account link. */
-function FeatureTour({open,onClose,onNav}){
-  const STEPS=[
-    {eyebrow:"START HERE", t:"Welcome to MĪZAN",            d:"A quick lay of the land. Everything here is explorable free — screen any stock for Sharia compliance or calculate your Zakat without connecting a single account.", to:null,        cta:null},
-    {eyebrow:"PORTFOLIO",  t:"Holdings & Sharia screening", d:"Live positions, activity, and rebalancing — plus the Screener, which checks any ticker against AAOIFI rules with zero connection required.",               to:"portfolio", cta:"Open Portfolio"},
-    {eyebrow:"GOALS & ZAKAT",t:"Zakat, Sadaqah & goals",    d:"Live nisab from real gold and silver prices, dividend purification, and goal templates for Hajj, Mahr, Waqf, and FIRE.",                                  to:"goals",     cta:"Open Goals"},
-    {eyebrow:"OVERVIEW",   t:"Your money at a glance",      d:"Once you connect a broker or bank, net worth, performance, allocation, and top holdings all land here in one dashboard.",                              to:"overview",  cta:"Open Overview"},
-    {eyebrow:"FINANCES",   t:"Banking & spending",          d:"Link a bank via Plaid to track balances, transactions, budgets, and bills right next to your portfolio.",                                            to:"finances",  cta:"Open Finances"},
-    {eyebrow:"AI ADVISOR", t:"Ask anything",                d:"A Sharia-aware advisor that sees your real portfolio context — answers are specific to you.",                                                         to:"advisor",   cta:"Open AI Advisor"},
-  ];
-  const[i,setI]=useState(0);
-  useEffect(()=>{if(open)setI(0);},[open]);
-  if(!open)return null;
-  const s=STEPS[i];
-  const last=i===STEPS.length-1;
-  const go=()=>{if(s.to)onNav?.(s.to);onClose?.();};
-  return<div onClick={onClose} style={{position:"fixed",inset:0,zIndex:1001,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-    <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:440,background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:16,boxShadow:"var(--mz-glass-shadow-lg)",padding:`${T.s7} ${T.s6} ${T.s5}`,textAlign:"center",animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s3}}>{s.eyebrow}</div>
-      <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s2}}>{s.t}</div>
-      <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:380,margin:`0 auto ${T.s5}`}}>{s.d}</div>
-      <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:T.s5}}>
-        {STEPS.map((_,k)=><span key={k} style={{width:k===i?18:6,height:6,borderRadius:999,background:k===i?T.blue:T.border,transition:"all 0.2s"}}/>)}
-      </div>
-      <div style={{display:"flex",gap:T.s2,justifyContent:"center",flexWrap:"wrap"}}>
-        {s.cta&&<button onClick={go} className="btn-primary" style={{fontSize:13,padding:`10px ${T.s5}`}}>{s.cta} →</button>}
-        {last
-          ?<button onClick={onClose} className="btn-ghost" style={{fontSize:13,padding:`9px ${T.s5}`}}>Done</button>
-          :<button onClick={()=>setI(i+1)} className="btn-ghost" style={{fontSize:13,padding:`9px ${T.s5}`}}>Next →</button>}
-      </div>
-      <button onClick={onClose} style={{marginTop:T.s4,background:"none",border:"none",color:T.muted,fontFamily:FM,fontSize:11,letterSpacing:"0.04em",cursor:"pointer"}}>Skip tour</button>
-    </div>
-  </div>;
-}
-
 function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,resolvedTheme}){
   const STORAGE_KEY="mizan_onboarding_step";
   const[step,setStepRaw]=useState(()=>{try{const v=+localStorage.getItem(STORAGE_KEY);return Number.isFinite(v)&&v>=0&&v<2?v:0;}catch{return 0;}});
@@ -10878,20 +10630,6 @@ export default function Mizan(){
   const[fullAutoEnabled,setFullAutoEnabled]=useState(false);
   const[botIsRoot,setBotIsRoot]=useState(false);       // owner — full-auto + no consent gate
   const[botConsented,setBotConsented]=useState(false); // beta user accepted the disclosure
-  const replayOnboarding=useCallback(()=>{
-    if(!window.confirm("Re-run the 5-step welcome tour?"))return;
-    try{
-      localStorage.removeItem("mizan_onboarded");
-      localStorage.removeItem("mizan_onboarding_step");
-    }catch{}
-    // Best effort: tell Supabase we're not onboarded. "0" is falsy
-    // against the `=== "1"` trigger check, so hydrating on another
-    // device will also re-show the modal.
-    persistUserState("mizan_onboarded","0");
-    setOnboardingDismissed(false);
-    setOnboardingForce(true);
-    setNav("overview");
-  },[]); // eslint-disable-line react-hooks/exhaustive-deps
   // Persist active tab per-device so a reload lands you where you left off.
   // Per-device, not per-user — different devices may want different defaults.
   const[nav,setNavState]=useState(()=>{
@@ -11403,6 +11141,45 @@ export default function Mizan(){
     setDemoMode(next);
     try{localStorage.setItem("mizan_demo",next?"1":"0");}catch{}
   };
+
+  // ── Guided spotlight tour ─────────────────────────────────────────────────
+  // Defined here (after demoMode/setDemoMode) so the sample-data path can flip
+  // demo mode without a TDZ in a dependency array. `mizan_tour_seen` is a synced
+  // TRACKED_KEY so the first-login offer shows once per USER, not per device.
+  const[tourSeen,setTourSeen]=useState(()=>{try{return localStorage.getItem("mizan_tour_seen")==="1";}catch{return false;}});
+  const markTourSeen=useCallback(()=>{
+    setTourSeen(true);
+    try{localStorage.setItem("mizan_tour_seen","1");}catch{}
+    persistUserState("mizan_tour_seen","1");
+  },[]);
+  // Prior demo state captured at launch so any temporary tour demo can be undone.
+  const tourPrevDemoRef=useRef(false);
+  const startTour=useCallback(()=>{
+    tourPrevDemoRef.current=demoMode;   // remember what to restore on close
+    markTourSeen();                     // launching from anywhere retires the offer
+    setNav("overview");
+    setTourOpen(true);
+  },[demoMode,markTourSeen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "Tour with sample data": enable demo exactly the way the DEMO toggle does
+  // (state + localStorage) so every demo-gated effect behaves identically, and
+  // drop a marker the module-load guard uses to scrub demo if the tour is
+  // interrupted by a hard tab-close.
+  const tourSample=useCallback(()=>{
+    try{localStorage.setItem("mizan_tour_active","1");localStorage.setItem("mizan_demo","1");}catch{}
+    setDemoMode(true);
+  },[]);
+  // "Tour my account": show real (or empty) data — demo OFF for the walk.
+  const tourOwn=useCallback(()=>{
+    try{localStorage.setItem("mizan_demo","0");}catch{}
+    setDemoMode(false);
+  },[]);
+  // Always restore the exact pre-tour demo state; never leave demo persisted.
+  const closeTour=useCallback(()=>{
+    const prev=tourPrevDemoRef.current;
+    try{localStorage.removeItem("mizan_tour_active");localStorage.setItem("mizan_demo",prev?"1":"0");}catch{}
+    setDemoMode(prev);
+    setTourOpen(false);
+  },[]);
 
   // CSV import for historical backfill (Fidelity / Robinhood / Coinbase
   // activity exports). Parsed rows merge into snapActivities so all the
@@ -12096,6 +11873,12 @@ export default function Mizan(){
     &&!demoMode
     &&(onboardingForce||snapAccounts.length===0);
 
+  // Is the name nudge currently on screen? The tour offer defers to it so a
+  // fresh user is never hit with two bottom-right toasts at once.
+  const nameNudgeShowing=featuresLoaded&&needsName&&!nameSkipped
+    &&nav==="overview"&&!showOnboarding
+    &&!!authUser?.id&&authUser.id!=="single-user";
+
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     {/* Atmospheric Arabic wordmark (ميزان) — fixed, translucent, sits behind all content */}
     <div aria-hidden="true" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(82vw,820px)",aspectRatio:"1058 / 380",background:resolvedTheme==="dark"?"#efe9dd":"#1e4e8c",opacity:0.08,WebkitMaskImage:"url(/wordmark-ar.png)",maskImage:"url(/wordmark-ar.png)",WebkitMaskRepeat:"no-repeat",maskRepeat:"no-repeat",WebkitMaskPosition:"center",maskPosition:"center",WebkitMaskSize:"contain",maskSize:"contain",userSelect:"none",pointerEvents:"none",zIndex:0}}></div>
@@ -12133,6 +11916,9 @@ export default function Mizan(){
       .btn-ghost:hover:not(:disabled){border-color:${T.borderHi};background:${T.surface};color:${T.textHi};}
       .btn-danger{background:transparent;color:${T.loss};border:1px solid ${T.loss}40;font-family:${FM};font-size:11px;font-weight:500;letter-spacing:0.04em;padding:7px 14px;border-radius:var(--r-md);cursor:pointer;transition:all 0.15s;}
       .btn-danger:hover:not(:disabled){background:${T.loss}10;border-color:${T.loss}80;}
+      /* Guided tour — visible keyboard focus, scoped so it never restyles the rest of the app */
+      .mz-tour-root :focus-visible{outline:2px solid ${T.blue};outline-offset:2px;border-radius:8px;}
+      .mz-tour-root [tabindex="-1"]:focus{outline:none;}
       .field{background:${T.surface};border:1px solid ${T.border};border-radius:var(--r-md);padding:9px 12px;font-family:${FM};font-size:12px;color:${T.text};outline:none;width:100%;box-sizing:border-box;transition:border-color 0.15s,box-shadow 0.15s;}
       .field:focus{border-color:${T.blue};box-shadow:0 0 0 3px ${T.blue}22;}
 
@@ -12328,7 +12114,7 @@ export default function Mizan(){
           onConnect={()=>{setConnMode("read");setConn(true);}}
         />}
         {nav==="advisor"   &&<AIAdvisor accounts={visibleAccounts} activities={snapActivities} metrics={performanceMetrics} hasKey={true}/>}
-        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>{setConnMode("read");setConn(true);}} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={replayOnboarding} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} plaidAccounts={plaidAccounts} bankBalance={bankBalance} onNav={setNav} profileFirst={profileFirst} profileLast={profileLast} onProfileName={setProfileName}/>}
+        {nav==="settings"  &&<Settings  apiKeys={apiKeys} setApiKeys={setApiKeys} onConnect={()=>{setConnMode("read");setConn(true);}} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} onImportCSV={importCSV} onDedupeCSV={dedupeImports} onRetagCSV={retagImports} onReplayOnboarding={startTour} demoMode={demoMode} onToggleDemo={toggleDemo} documents={snapDocuments} accounts={visibleAccounts} plaidAccounts={plaidAccounts} bankBalance={bankBalance} onNav={setNav} profileFirst={profileFirst} profileLast={profileLast} onProfileName={setProfileName}/>}
       </div>
     </main>
 
@@ -12367,7 +12153,7 @@ export default function Mizan(){
     }}>
       {NAV.map(n=>{
         const active=nav===n.id;
-        return<button key={n.id} onClick={()=>setNav(n.id)} className={active?"dock-on":"dock-off"} style={{
+        return<button key={n.id} data-tour={`nav-${n.id}`} onClick={()=>setNav(n.id)} className={active?"dock-on":"dock-off"} style={{
           padding:`10px ${T.s4}`,
           background:active?`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`:"transparent",
           border:"none",
@@ -12381,7 +12167,7 @@ export default function Mizan(){
         }}>{n.l}</button>;
       })}
       {/* Optional, user-triggered tour launcher (not a forced walkthrough). */}
-      <button onClick={()=>setTourOpen(true)} title="Take a tour" aria-label="Take a tour" className="dock-off" style={{
+      <button onClick={startTour} title="Take a tour" aria-label="Take a tour" className="dock-off" style={{
         width:36,height:36,padding:0,marginLeft:T.s1,flexShrink:0,
         display:"flex",alignItems:"center",justifyContent:"center",
         background:"transparent",border:"1px solid var(--mz-glass-border)",borderRadius:999,
@@ -12418,7 +12204,7 @@ export default function Mizan(){
       onClose={()=>setShortcutHelpOpen(false)}
       shortcuts={isAdmin?SHORTCUT_REFERENCE:Object.fromEntries(Object.entries(SHORTCUT_REFERENCE).filter(([k])=>k!=="g t"))}
     />
-    <FeatureTour open={tourOpen} onClose={()=>setTourOpen(false)} onNav={setNav}/>
+    <GuidedTour open={tourOpen} onNav={setNav} onClose={closeTour} onPickSample={tourSample} onPickOwn={tourOwn} T={T} FU={FU} FP={FP} FM={FM}/>
     <CommandPalette
       open={palette.open}
       onClose={palette.close}
@@ -12436,7 +12222,7 @@ export default function Mizan(){
         {id:"act-connect",  label:"Connect Account",     group:"Actions",  icon:"+",             action:()=>setConn(true)},
         {id:"act-demo",     label:demoMode?"Disable demo mode":"Enable demo mode", group:"Actions", icon:"◧", action:()=>toggleDemo()},
         {id:"act-help",     label:"Keyboard shortcuts",  group:"Actions",  hint:"?",   icon:<Icon name="keyboard" size={14}/>, action:()=>setShortcutHelpOpen(true)},
-        {id:"act-tour",     label:"Take a tour",         group:"Actions",  icon:"◎",             action:()=>setTourOpen(true)},
+        {id:"act-tour",     label:"Take a tour",         group:"Actions",  icon:"◎",             action:startTour},
       ]}
       onSelect={()=>{/* command.action already fired in the palette */}}
     />
@@ -12444,10 +12230,16 @@ export default function Mizan(){
     {/* Name nudge for accounts created before first/last name existed. A toast
         on Overview only — never blocks the app. Held back while the onboarding
         modal is up so a fresh user isn't hit with two prompts at once. */}
-    {featuresLoaded&&needsName&&!nameSkipped
-      &&nav==="overview"&&!showOnboarding
-      &&authUser?.id&&authUser.id!=="single-user"
+    {nameNudgeShowing
       &&<NameNudge skips={nameSkips} onSaved={setProfileName} onSkip={skipNameNudge}/>}
+
+    {/* First-login guided-tour offer. Same rules as the name nudge (Overview
+        only, real users) and yields to it + onboarding so at most one toast is
+        ever up. Persists "seen" via the synced mizan_tour_seen key. */}
+    {featuresLoaded&&!tourSeen&&!tourOpen
+      &&nav==="overview"&&!showOnboarding&&!nameNudgeShowing
+      &&authUser?.id&&authUser.id!=="single-user"
+      &&<TourNudge onStart={startTour} onDismiss={markTourSeen}/>}
 
     {/* Onboarding. Auto-shows for fresh users (no brokers connected); the
         Settings "Replay tour" button sets onboardingForce so existing users

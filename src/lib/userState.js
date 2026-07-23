@@ -33,6 +33,7 @@ export const TRACKED_KEYS = [
   'mizan_purification_overrides',     // { [ticker]: impurityPct } — user-set ratio overrides
   'mizan_zakat_worksheet',            // comprehensive Zakat worksheet (cash, metals, retirement, business, receivables, debts)
   'mizan_name_prompt_skips',          // times the "add your name" nudge was skipped — synced so the 3 skips are per-user, not per-device
+  'mizan_tour_seen',                  // "1" once the first-login guided-tour offer has been seen/dismissed — synced so the offer shows once per user, not per device
 ];
 
 // User-scoped *local caches* — not synced (regenerated on next sync), but
