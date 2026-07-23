@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-23
+
+### Added
+- **profile:** First/last name on every user + gentle Overview nudge (`4b8d334`)
+
 ## 2026-07-21
 
 ### Fixed
