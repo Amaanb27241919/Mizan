@@ -17,6 +17,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **security:** Redact API tokens from fetch retry logs + surface swallowed Supabase errors in anomaly detectors (`4c79c9a`)
 - **finnhub:** Shared news+earnings response cache with retry-aware backoff (F7) (`49eda4a`)
 
+### Docs
+- Record tour + F7 + hygiene/security; correct stale F2/F4 (already shipped); note encryption Step-0 + Plaid-migration finding (`3e3d7e1`)
+
 ### Maintenance
 - Remove dead code + unused imports (repo hygiene) (`5efa07b`)
 

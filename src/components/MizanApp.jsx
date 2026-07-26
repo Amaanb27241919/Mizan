@@ -8604,6 +8604,8 @@ function AdminPanel(){
   const[dbStatus,setDbStatus]=useState(null);
   // Per-job run state for the Maintenance panel: {job:{status,code,msg}}.
   const[cronRun,setCronRun]=useState({});
+  // Encryption-at-rest one-time backfill: {status,msg,result}.
+  const[encRun,setEncRun]=useState(null);
   // Branded-invite form state.
   const[inviteEmail,setInviteEmail]=useState("");
   const[inviteMsg,setInviteMsg]=useState(null);
@@ -8636,6 +8638,23 @@ function AdminPanel(){
       load();
     }catch(e){
       setCronRun(p=>({...p,[job]:{status:"error",msg:e?.message||"Network error"}}));
+    }
+  };
+
+  const runEncBackfill=async()=>{
+    setEncRun({status:"running"});
+    try{
+      const r=await apiFetch("/api/admin/encrypt-backfill",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
+      let d=null;try{d=await r.json();}catch{}
+      if(!r.ok||!d?.ok){
+        const msg=d?.error?(typeof d.error==="string"?d.error:JSON.stringify(d.error)):`HTTP ${r.status}`;
+        setEncRun({status:"error",msg});
+        return;
+      }
+      setEncRun({status:"ok",result:d});
+      load();
+    }catch(e){
+      setEncRun({status:"error",msg:e?.message||"Network error"});
     }
   };
 
@@ -8759,6 +8778,29 @@ function AdminPanel(){
           </div>;
         })}
       </div>
+    </BentoTile>
+
+    {/* ─── Security · Encryption at rest ─────────── */}
+    <BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SECURITY · ENCRYPTION AT REST</span>
+        <button onClick={runEncBackfill} disabled={encRun?.status==="running"} style={{
+          padding:`4px ${T.s3}`,borderRadius:T.rSm,
+          background:encRun?.status==="running"?"transparent":`${T.blue}14`,
+          border:`1px solid ${encRun?.status==="running"?T.border:T.blue+"40"}`,
+          color:encRun?.status==="running"?T.muted:T.blue,
+          cursor:encRun?.status==="running"?"default":"pointer",opacity:encRun?.status==="running"?0.6:1,
+          fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",flexShrink:0,
+        }}>{encRun?.status==="running"?"Encrypting…":"Encrypt stored secrets"}</button>
+      </div>
+      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5}}>
+        One-time backfill: encrypts existing brokerage secrets + stored API keys at rest (AES-256-GCM), leaving plaintext intact until verified. Idempotent — safe to re-run. Requires ENCRYPTION_KEY to be set.
+      </div>
+      {encRun?.status==="ok"&&<div style={{fontFamily:FM,fontSize:11,color:T.gain,marginTop:T.s2,fontVariantNumeric:"tabular-nums"}}>
+        <Icon name="check" size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>
+        Done — brokerage {encRun.result?.snaptrade?.migrated||0} encrypted / {encRun.result?.snaptrade?.skipped||0} skipped{encRun.result?.snaptrade?.errors?` / ${encRun.result.snaptrade.errors} errors`:""} · keys {encRun.result?.keys?.migrated||0} encrypted{encRun.result?.keys?.errors?` / ${encRun.result.keys.errors} errors`:""}
+      </div>}
+      {encRun?.status==="error"&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginTop:T.s2}}>{ICON_NO}{encRun.msg}</div>}
     </BentoTile>
 
     {/* ─── Sub-tabs ──────────────────────────────── */}
