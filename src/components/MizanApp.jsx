@@ -7701,7 +7701,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
   // Non-root accounts never see the API Keys page — those keys belong on
   // the server (env vars), not in user-entered fields. Default the sub-tab
   // to brokers for everyone else.
-  const[sub,setSub]=useState(isRoot?"keys":"connections");
+  const[sub,setSub]=useState(isRoot?"admin":"connections");
   // Local install prompt detection for the Settings card.
   const[settingsInstallEvt,setSettingsInstallEvt]=useState(null);
   const[settingsInstalled,setSettingsInstalled]=useState(()=>{try{return window.matchMedia('(display-mode: standalone)').matches||!!navigator.standalone;}catch{return false;}});
@@ -7773,14 +7773,20 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
     </BentoTile>
 
     <TabBar
-      tabs={[
-        ...(isRoot?[["keys","API Keys"]]:[]),
+      tabs={isRoot?[
+        ["admin","Admin"],
+        ["account","Account"],
+        ["keys","API Keys"],
+        ["connections","Connections"],
+        ["messages","Messages"],
+        ["methodology","Methodology"],
+        ["docs","Documents"],
+      ]:[
         ["connections","Connections"],
         ["messages","Messages"],
         ["account","Account"],
         ["methodology","Methodology"],
         ["docs","Documents"],
-        ...(isRoot?[["admin","Admin"]]:[]),
       ]}
       active={sub}
       onChange={setSub}

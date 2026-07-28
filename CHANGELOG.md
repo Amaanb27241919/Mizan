@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-07-27
 
+### Fixed
+- **networth:** Normalize SnapTrade activity types (CONTRIBUTION->DEPOSIT) so net-worth chart + XIRR see real deposits; flat-line no-deposit accounts instead of ramping from $0 (`3b136ac`)
+
 ### Docs
 - At-rest encryption ACTIVATED for SnapTrade (O24) — 10/10 encrypted, plaintext nulled; correct stale plaintext claims (`193fc19`)
 
