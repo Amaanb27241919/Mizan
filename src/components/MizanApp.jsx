@@ -1773,13 +1773,21 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     const totalContrib=series[series.length-1].contrib;
     const startContrib=series[0].contrib;
     const totalSpan=totalContrib-startContrib;
-    const valueSpan=tot-(startContrib||0);
+    // Baseline the first point. With real deposit/contribution data (SnapTrade
+    // CONTRIBUTION is normalized to DEPOSIT server-side), track cumulative
+    // contributions. With NONE (e.g. a read-only broker reporting no cash flow),
+    // don't fabricate a ramp from $0 — anchor at current net worth so the line is
+    // flat (refined by any real snapshots) instead of a fake climb with an inflated
+    // "gain".
+    const contribInRange=totalContrib-startContrib;
+    const startBaseline=totalContrib>0?(startContrib||0):Math.max(0,tot-contribInRange);
+    const valueSpan=tot-startBaseline;
     series.forEach((p,i)=>{
       const progress=series.length>1?i/(series.length-1):1;
       const trackedContrib=p.contrib;
       const baseProg=totalSpan>0?(trackedContrib-startContrib)/totalSpan:progress;
       const blended=0.6*baseProg+0.4*progress;
-      p.value=+(((startContrib||0)+valueSpan*blended)).toFixed(2);
+      p.value=+((startBaseline+valueSpan*blended)).toFixed(2);
     });
 
     // Real net-worth snapshots override the interpolation for exact dates.
