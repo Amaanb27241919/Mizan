@@ -10348,10 +10348,9 @@ function NameNudge({skips,onSaved,onSkip}){
   };
 
   return<form onSubmit={submit} role="dialog" aria-label="Add your name" style={{
-    // Sits ABOVE the floating dock (bottom 20px, z-index 90) so it never
-    // covers the nav on a narrow phone, and BELOW modals (z-index 1000+).
-    position:"fixed",right:T.s5,bottom:"calc(100px + env(safe-area-inset-bottom, 0px))",
-    zIndex:95,width:"min(360px, calc(100vw - 32px))",
+    // Positioning is owned by the shared NudgeStack wrapper, which sits ABOVE
+    // the floating dock and BELOW modals and stacks multiple toasts cleanly.
+    width:"min(360px, calc(100vw - 32px))",
     background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",
     border:"1px solid var(--mz-glass-border)",borderRadius:14,boxShadow:"var(--mz-glass-shadow-lg)",
     padding:`${T.s5} ${T.s5} ${T.s4}`,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)",
@@ -10394,8 +10393,7 @@ function NameNudge({skips,onSaved,onSkip}){
 // once per user, not per device.
 function TourNudge({onStart,onDismiss}){
   return<div role="dialog" aria-label="Take a quick tour" style={{
-    position:"fixed",right:T.s5,bottom:"calc(100px + env(safe-area-inset-bottom, 0px))",
-    zIndex:95,width:"min(340px, calc(100vw - 32px))",
+    width:"min(340px, calc(100vw - 32px))",
     background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",
     border:"1px solid var(--mz-glass-border)",borderRadius:14,boxShadow:"var(--mz-glass-shadow-lg)",
     padding:`${T.s5} ${T.s5} ${T.s4}`,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)",
@@ -11964,6 +11962,11 @@ export default function Mizan(){
   const nameNudgeShowing=featuresLoaded&&needsName&&!nameSkipped
     &&nav==="overview"&&!showOnboarding
     &&!!authUser?.id&&authUser.id!=="single-user";
+  // The tour offer no longer defers to the name nudge — they stack. Deferring
+  // meant a user who never set a name never got offered the tour at all.
+  const tourNudgeShowing=featuresLoaded&&!tourSeen&&!tourOpen
+    &&nav==="overview"&&!showOnboarding
+    &&!!authUser?.id&&authUser.id!=="single-user";
 
   return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     {/* Atmospheric Arabic wordmark (ميزان) — fixed, translucent, sits behind all content */}
@@ -12316,16 +12319,21 @@ export default function Mizan(){
     {/* Name nudge for accounts created before first/last name existed. A toast
         on Overview only — never blocks the app. Held back while the onboarding
         modal is up so a fresh user isn't hit with two prompts at once. */}
-    {nameNudgeShowing
-      &&<NameNudge skips={nameSkips} onSaved={setProfileName} onSkip={skipNameNudge}/>}
-
-    {/* First-login guided-tour offer. Same rules as the name nudge (Overview
-        only, real users) and yields to it + onboarding so at most one toast is
-        ever up. Persists "seen" via the synced mizan_tour_seen key. */}
-    {featuresLoaded&&!tourSeen&&!tourOpen
-      &&nav==="overview"&&!showOnboarding&&!nameNudgeShowing
-      &&authUser?.id&&authUser.id!=="single-user"
-      &&<TourNudge onStart={startTour} onDismiss={markTourSeen}/>}
+    {/* Bottom-right nudge stack. Both toasts can be up at once — the tour offer
+        used to be gated on !nameNudgeShowing, which permanently hid it from
+        anyone who never set a name: the name nudge drops its "Not now" button
+        after NAME_SKIP_LIMIT, so nameSkipped could never flip true again and the
+        tour was blocked forever. Verified in prod 2026-07-29: all 8 nameless
+        users had no mizan_tour_seen, while all 3 named users did. They stack in
+        a flex column (tour on top, height-agnostic) instead of competing. */}
+    {(nameNudgeShowing||tourNudgeShowing)&&<div style={{
+      position:"fixed",right:T.s5,bottom:"calc(100px + env(safe-area-inset-bottom, 0px))",
+      zIndex:95,display:"flex",flexDirection:"column",gap:T.s3,alignItems:"flex-end",
+      maxHeight:"calc(100vh - 140px)",overflowY:"auto",
+    }}>
+      {tourNudgeShowing&&<TourNudge onStart={startTour} onDismiss={markTourSeen}/>}
+      {nameNudgeShowing&&<NameNudge skips={nameSkips} onSaved={setProfileName} onSkip={skipNameNudge}/>}
+    </div>}
 
     {/* Onboarding. Auto-shows for fresh users (no brokers connected); the
         Settings "Replay tour" button sets onboardingForce so existing users
