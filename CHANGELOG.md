@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-29
+
+### Fixed
+- **zakat:** Show 'nisab unavailable' instead of silently using stale constants (`752e681`)
+
 ## 2026-07-28
 
 ### Added
