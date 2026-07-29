@@ -39,6 +39,7 @@ Persistent backlog. Future sessions read this instead of re-deriving from scatte
 - **At-rest encryption ACTIVATED (O24 — SnapTrade)** — `ENCRYPTION_KEY` set, 10/10 secrets encrypted, plaintext nulled (2026-07-27, `c756f79`)
 - **Net-worth parsing fix** — SnapTrade `CONTRIBUTION`→`DEPOSIT` + no-deposit backstop + telemetry (`3b136ac`, 2026-07-28)
 - **Settings root sub-tab reorder** (Admin · Account · API Keys · …) (`7ff8ab5`)
+- **Landing SEO optimization** (2026-07-28, `mizan-landing` `ece7610`/`3b62233`/`f06056a`) — keyword title+meta (155-char safe), linked `@graph` JSON-LD (Organization+WebSite+SoftwareApplication, brand-entity defense vs `joinmizan.com`), OG/Twitter completeness, logo 230KB→2KB, fresh sitemap `lastmod`, SVG a11y, two exact-match keyword headlines, `--muted` WCAG-AA contrast fix (3.6:1→5.2:1), visible **FAQ section + FAQPage schema** (6 Q&As, schema↔visible parity verified). **O6 GSC half DONE:** property verified (HTML-tag method), sitemap submitted, indexing requested — all green.
 - Also: migration 025 in-app messaging · migration 026 user names · compliance boundary + price chart · Zakat worksheet · debt payoff + XIRR · trading bot live + DCA full-auto
 
 ### 🔴 Open — owner-only (blocked on you)
@@ -399,8 +400,9 @@ Re-auths, live trades, API-key provisioning, decisions. **O18 (rotate CRON_SECRE
 
 ### O6 — Submit sitemap in Google Search Console + re-scrape social debuggers (landing SEO)
 
-- **Status:** blocked-on-owner · **Effort:** S · **User value:** medium · **Autonomous:** no
-- **Remaining:** Only two manual owner actions remain, both in third-party web dashboards (no code artifact): (1) In Google Search Console, add/verify the mizan.exchange property and submit https://www.mizan.exchange/sitemap.xml. (2) Re-scrape the social-card debuggers (Facebook Sharing Debugger, X/Twitter Card Validator, LinkedIn Post Inspector) against www.mizan.exchange to bust cached OG data now that og-image.png returns 200 with no redirect.
+- **Status:** ✅ GSC HALF DONE (2026-07-28) · social debuggers still pending · **Effort:** S · **User value:** medium · **Autonomous:** no
+- **✅ DONE 2026-07-28:** owner verified the `www.mizan.exchange` property via the **HTML-tag** method (meta tag `google-site-verification=5PjONA6F…` added to the landing `<head>`, commit `3b62233` — **must stay in place permanently or verification lapses**), submitted `sitemap.xml` (green), and ran URL Inspection → **Request Indexing** (green). NOTE: the owner first tried the "HTML file" method and it failed — the file was never created; the HTML-tag method is the one wired up. Prior finding that the site was absent from Google's index should now resolve over ~days–2 weeks; check GSC **Performance** for first impressions on "mizan halal investing" and watch whether `joinmizan.com` still outranks for the bare brand term.
+- **Remaining:** ONE owner action — re-scrape the social-card debuggers (Facebook Sharing Debugger, X/Twitter Card Validator, LinkedIn Post Inspector) against www.mizan.exchange to bust cached OG data now that og-image.png returns 200 with no redirect.
 - **Blockers:** Requires the owner's own Google account and domain-ownership verification to submit in Search Console, and manual use of Facebook/X/LinkedIn debugger dashboards to re-scrape. Neither is automatable by a coding agent nor produces a committable artifact. The code/deploy prerequisites are already live.
 - **Evidence:** MIZAN-STATE-AUDIT.md:8 states "All verified live. PENDING (owner clicks): submit sitemap in Search Console + re-scrape social debuggers." Code groundwork fully shipped in the separate mizan-landing repo (/Users/amaankhan/Desktop/AI Projects/mizan-landing): commits cae8b2c (title/meta+JSON-LD), bd01886 (canonical/og:url to www), a6742e5 (robots.txt+sitemap.xml, og:image to www); working tree clean. index.html:6-34 has rewritten title, canonical, og:url, og:image, and SoftwareApplication JSON-LD with alternateName "Mizan". Live checks: sitemap.xml=HTTP 200, robots.txt=HTTP 200, og-image.png=HTT…
 
@@ -610,7 +612,7 @@ Verification agent hit a session limit; status unconfirmed.
 - [ ] **O3** Decide fate of the tiny momentum sleeve (strategy 43c1b866)
 - [ ] **O4** Owner: provision Alpaca Market Data API keys
 - [ ] **O5** Verify Order Ticket live-quote chip under real market-hours load
-- [ ] **O6** Submit sitemap in Google Search Console + re-scrape social debuggers (landing SEO)
+- [~] **O6** GSC verify+sitemap+index-request ✅ DONE 2026-07-28; re-scrape social debuggers still pending
 - [ ] **O7** Verify the E*Trade money transfer landed in khanstyle02's account (ecfea3bb)
 - [ ] **O8** Repoint + re-enable DCA strategy 0fd266ae once funds land (~2026-07-08)
 - [ ] **O9** Revisit the full-auto allowlist boundary before any compensated/commercial arrangement
