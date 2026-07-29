@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **settings:** Reorder root sub-tabs to Admin, Account, API Keys, then the rest (non-root unchanged); default root landing to Admin (`7ff8ab5`)
 
 ### Docs
+- **backlog:** O6 GSC half done — property verified, sitemap submitted, indexing requested; record landing SEO shipment (`0420940`)
 - **backlog:** Consolidated task status as of 2026-07-28 — done/open/parked at a glance (`99ecc98`)
 
 ## 2026-07-27
