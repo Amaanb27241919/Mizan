@@ -34,6 +34,7 @@ export const TRACKED_KEYS = [
   'mizan_zakat_worksheet',            // comprehensive Zakat worksheet (cash, metals, retirement, business, receivables, debts)
   'mizan_name_prompt_skips',          // times the "add your name" nudge was skipped — synced so the 3 skips are per-user, not per-device
   'mizan_tour_seen',                  // "1" once the first-login guided-tour offer has been seen/dismissed — synced so the offer shows once per user, not per device
+  'mizan_subscription_overrides',     // { [normalizedMerchant]: { name?, estMonthly?, active? } } — user edits to DERIVED recurring subscriptions (detection is re-run every load, so edits live here, keyed by the ORIGINAL merchant)
 ];
 
 // User-scoped *local caches* — not synced (regenerated on next sync), but

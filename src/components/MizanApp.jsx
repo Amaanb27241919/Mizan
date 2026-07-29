@@ -9503,6 +9503,22 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   // Cadence is derived from the median gap between charge dates so we
   // can label weekly/biweekly/monthly/quarterly correctly and compute
   // an accurate per-month cost instead of a raw average.
+  // ── User edits to recurring subscriptions ────────────────────────────────
+  // Subscription rows are DERIVED (re-detected from transactions on every load,
+  // by Plaid's ML or the local detectors), so an edit can't be stored on the row
+  // itself — it would vanish on the next sync. Edits live in an overrides map
+  // keyed by the ORIGINAL normalized merchant, so a renamed row still matches
+  // its source transactions. Synced via user_state like every other TRACKED_KEY.
+  const[subOverrides,setSubOverrides]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem("mizan_subscription_overrides")||"{}")||{};}catch{return{};}
+  });
+  const[editSub,setEditSub]=useState(null);
+  const writeSubOverrides=useCallback(next=>{
+    setSubOverrides(next);
+    try{localStorage.setItem("mizan_subscription_overrides",JSON.stringify(next));}catch{}
+    persistUserState("mizan_subscription_overrides",next);
+  },[]);
+
   const recurring=useMemo(()=>{
     const byMerchant={};
     bankTxns.forEach(t=>{
@@ -10171,6 +10187,23 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         const base=mergeExtra([]);
         rows=base.length?base.sort(bySort):recurring;
       }
+      // Layer user edits over the derived rows. Keyed on the ORIGINAL merchant
+      // so a rename still resolves; applied BEFORE the active/inactive split and
+      // the monthly total so an edited amount or status flows everywhere.
+      rows=rows.map(r=>{
+        const key=normalizeMerchant(r.merchant);
+        const o=subOverrides[key];
+        if(!o)return{...r,_key:key};
+        return{
+          ...r,
+          _key:key,
+          _detected:{merchant:r.merchant,estMonthly:r.estMonthly,active:r.active},
+          merchant:o.name||r.merchant,
+          estMonthly:Number.isFinite(o.estMonthly)?o.estMonthly:r.estMonthly,
+          active:typeof o.active==="boolean"?o.active:r.active,
+          edited:true,
+        };
+      });
       if(rows.length===0)return null;
       const active=rows.filter(r=>r.active);
       const inactive=rows.filter(r=>!r.active);
@@ -10182,14 +10215,97 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{r.merchant}</span>
               {r.usage&&<span title="Usage-based / metered billing — the monthly figure is a run-rate, not a fixed price" style={{fontFamily:FM,fontSize:9,color:T.violet,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.violet}55`,borderRadius:T.rSm,background:`${T.violet}14`}}>USAGE</span>}
               {!r.active&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.border}`,borderRadius:T.rSm}}>INACTIVE</span>}
+              {r.edited&&<span title="You've edited this subscription — your values override what was detected" style={{fontFamily:FM,fontSize:9,color:T.blue,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.blue}55`,borderRadius:T.rSm,background:`${T.blue}12`}}>EDITED</span>}
             </div>},
             {l:"Cadence",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,textTransform:"capitalize"}}>{r.cadence}</span>},
             {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"avg ":""}{fmtUSD(r.avgPerCharge)}</span>},
             {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"~":""}{fmtUSD(r.estMonthly)}</span>},
             {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
+            // Never editable in demo mode — an edit there would persist a
+            // demo-merchant override into the user's real synced state.
+            {l:"",r:true,r_:r=>demoMode?null:<button
+              onClick={()=>setEditSub({key:r._key,name:r.merchant,estMonthly:r.estMonthly,active:r.active,detected:r._detected||{merchant:r.merchant,estMonthly:r.estMonthly,active:r.active}})}
+              title={`Edit ${r.merchant}`}
+              style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:9.5,fontWeight:600,letterSpacing:"0.08em",whiteSpace:"nowrap"}}
+            >EDIT</button>},
           ]} rows={[...active,...inactive].slice(0,50)}/>
         </div>
       </CollapsibleTile>;
+    })()}
+
+    {/* ─── EDIT SUBSCRIPTION ─────────────────────────
+        Detection is automatic but imperfect (Plaid mislabels merchants, usage-
+        based vendors have no fixed price, a cancelled sub lingers a cycle). This
+        lets the user correct the name, the monthly amount, and the active flag.
+        Saved to the synced overrides map — never to the derived row. */}
+    {editSub&&(()=>{
+      const detected=editSub.detected||{};
+      const amt=Number(editSub.estMonthly);
+      const valid=String(editSub.name||"").trim().length>0&&Number.isFinite(amt)&&amt>=0;
+      const close=()=>setEditSub(null);
+      const save=()=>{
+        if(!valid)return;
+        const next={...subOverrides};
+        const o={};
+        const name=String(editSub.name).trim();
+        if(name&&name!==detected.merchant)o.name=name;
+        if(Number.isFinite(amt)&&amt!==detected.estMonthly)o.estMonthly=amt;
+        if(typeof editSub.active==="boolean"&&editSub.active!==detected.active)o.active=editSub.active;
+        // An edit identical to what was detected stores nothing — keeps the map
+        // clean and lets future detection improvements flow through.
+        if(Object.keys(o).length===0)delete next[editSub.key];
+        else next[editSub.key]=o;
+        writeSubOverrides(next);
+        close();
+      };
+      const reset=()=>{
+        const next={...subOverrides};
+        delete next[editSub.key];
+        writeSubOverrides(next);
+        close();
+      };
+      const field={width:"100%",padding:`9px ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.textHi,fontFamily:FP,fontSize:14,outline:"none"};
+      const label={fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2,display:"block"};
+      return<div onClick={close} style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",display:"flex",alignItems:"center",justifyContent:"center",padding:T.s4}}>
+        <div onClick={e=>e.stopPropagation()} role="dialog" aria-label="Edit subscription" style={{width:"min(420px, 100%)",background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:16,boxShadow:"var(--mz-glass-shadow-lg)",padding:`${T.s6} ${T.s6} ${T.s5}`,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>
+          <div style={{fontFamily:FM,fontSize:9.5,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>EDIT SUBSCRIPTION</div>
+          <div style={{fontFamily:FU,fontSize:20,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s5}}>{detected.merchant||editSub.name}</div>
+
+          <label style={label} htmlFor="sub-name">NAME</label>
+          <input id="sub-name" style={{...field,marginBottom:T.s4}} value={editSub.name} maxLength={60}
+            onChange={e=>setEditSub(s=>({...s,name:e.target.value}))}
+            onKeyDown={e=>{if(e.key==="Enter"&&valid)save();}}/>
+
+          <label style={label} htmlFor="sub-amt">MONTHLY AMOUNT</label>
+          <input id="sub-amt" style={{...field,fontFamily:FM,fontVariantNumeric:"tabular-nums",marginBottom:T.s4}} type="number" min="0" step="0.01" inputMode="decimal"
+            value={Number.isFinite(amt)?editSub.estMonthly:""}
+            onChange={e=>setEditSub(s=>({...s,estMonthly:e.target.value===""?"":Number(e.target.value)}))}
+            onKeyDown={e=>{if(e.key==="Enter"&&valid)save();}}/>
+
+          <label style={label}>STATUS</label>
+          <div style={{display:"flex",gap:T.s2,marginBottom:T.s5}}>
+            {[[true,"ACTIVE"],[false,"INACTIVE"]].map(([v,l])=>{
+              const on=editSub.active===v;
+              return<button key={l} onClick={()=>setEditSub(s=>({...s,active:v}))} aria-pressed={on} style={{
+                flex:1,padding:`9px ${T.s3}`,borderRadius:T.rMd,cursor:"pointer",
+                fontFamily:FM,fontSize:10.5,fontWeight:600,letterSpacing:"0.1em",
+                background:on?(v?`${T.gain}18`:`${T.blue}14`):"transparent",
+                border:`1px solid ${on?(v?T.gain:T.blue)+"66":T.border}`,
+                color:on?(v?T.gain:T.blue):T.muted,
+              }}>{l}</button>;
+            })}
+          </div>
+          <div style={{fontFamily:FP,fontSize:11.5,color:T.muted,lineHeight:1.55,marginBottom:T.s5}}>
+            Inactive subscriptions stay listed but are excluded from your monthly total. Your edits override what Plaid detected and persist across syncs and devices.
+          </div>
+
+          <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
+            <button onClick={save} disabled={!valid} className="btn-primary" style={{flex:1,fontSize:13,padding:`10px ${T.s4}`,opacity:valid?1:0.5,cursor:valid?"pointer":"not-allowed"}}>Save</button>
+            {subOverrides[editSub.key]&&<button onClick={reset} className="btn-ghost" style={{fontSize:11.5,padding:`10px ${T.s3}`,whiteSpace:"nowrap"}}>Reset</button>}
+            <button onClick={close} className="btn-ghost" style={{fontSize:11.5,padding:`10px ${T.s3}`}}>Cancel</button>
+          </div>
+        </div>
+      </div>;
     })()}
 
     {/* Empty-state when a bank is connected but transactions haven't landed yet. */}

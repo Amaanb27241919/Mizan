@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-29
 
 ### Fixed
+- **onboarding:** Tour offer no longer blocked for users without a name (`524c10e`)
 - **zakat:** Show 'nisab unavailable' instead of silently using stale constants (`752e681`)
 
 ### Docs
