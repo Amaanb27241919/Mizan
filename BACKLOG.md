@@ -21,6 +21,45 @@ Persistent backlog. Future sessions read this instead of re-deriving from scatte
 
 ---
 
+## 2026-07-28 — CONSOLIDATED TASK STATUS (current source of truth)
+
+> This block supersedes the item-by-item statuses below (which are the 2026-07-07 snapshot + evidence archive) and the old "Owner action checklist" at the bottom. Read this first.
+
+### ✅ Done since the 2026-07-07 sweep
+- **F1** Zakat correctness verified (52 tests); only Hawl remains (parked → N1)
+- **F2** bot-cron duplicate-execution races — already fixed in prod (`0f12c1f`, re-verified 2026-07-28)
+- **F4** day-weighted Modified-Dietz return (`6f3db36`)
+- **F5** esbuild advisory cleared (vite@8 upgrade deferred — dev-only)
+- **F6** legacy plaintext flat-file deprecated
+- **F7** Finnhub news/earnings cache + retry backoff (`49eda4a`)
+- **F8** branded invites + DMARC (spam fixed)
+- **Guided spotlight tour** (`GuidedTour.jsx`) — sample-data-or-own-account, all 6 tabs, gentle nudge (`77bed50`)
+- **Dead-code sweep** — 4 dead components + 6 unused exports removed (`5efa07b`)
+- **Security** — API-token redaction in fetch logs + anomaly-detector error-surfacing (`4c79c9a`)
+- **At-rest encryption ACTIVATED (O24 — SnapTrade)** — `ENCRYPTION_KEY` set, 10/10 secrets encrypted, plaintext nulled (2026-07-27, `c756f79`)
+- **Net-worth parsing fix** — SnapTrade `CONTRIBUTION`→`DEPOSIT` + no-deposit backstop + telemetry (`3b136ac`, 2026-07-28)
+- **Settings root sub-tab reorder** (Admin · Account · API Keys · …) (`7ff8ab5`)
+- Also: migration 025 in-app messaging · migration 026 user names · compliance boundary + price chart · Zakat worksheet · debt payoff + XIRR · trading bot live + DCA full-auto
+
+### 🔴 Open — owner-only (blocked on you)
+- **Rotate `CRON_SECRET`** (O18) — Vercel env + Supabase Vault `cron_secret` must match, then a fresh git build
+- **Plaid-token encryption** — NEW migration (ciphertext cols on `plaid_tokens`) + encrypt/decrypt wiring; the one remaining plaintext surface
+- **Rebrand decision** — joinmizan.com / "Mizan Markets LLC" name collision (`REBRAND-INVENTORY.md`)
+- **Named Sharia scholar board** (O17) — the moat; recruit AAOIFI-certified scholars
+- **Monetization** model decision (O22)
+- **Verify the net-worth fix** on your live chart (reload/Sync → check)
+- Email finish-line (F8): re-invite the 4 pre-DMARC blind-invited users; push the 6 Supabase auth templates; tighten DMARC `p=none`→`quarantine`
+- Optional keys: `ZOYA_API_KEY` (O14), Alpaca (O4)
+
+### 🟢 Open — agent-buildable (parked; explicit-ask-only under MAINTENANCE MODE)
+- Drop the vestigial `snaptrade_user_secret` column (017) after a ciphertext-only code change — LOW priority (no plaintext values remain)
+- Backtester Phase A: walk-forward / out-of-sample + honest metrics (N8)
+- Grounded-AI: Zakat guidance (N3) · Overview insight card (N2) · debt answers (N5) · weekly digest (N9) · per-token crypto (N6) — each must pass the compliance-tier gate (N26)
+- Hawl/Hijri tracking (N1) · Islamic budget categories (N4) · Playwright E2E + broader tests (N17)
+- Materialized daily-balance table (M4, needs migration) — the proper long-term fix for net-worth history granularity
+
+---
+
 ## 2026-07-23 — Session update (multi-agent: tour + loose ends + hygiene)
 
 Shipped this session (committed; deploy per owner): interactive spotlight onboarding tour (new `src/components/GuidedTour.jsx`, replaces `FeatureTour`); **F7** Finnhub news/earnings response cache + retry-aware backoff; security fixes (redact API tokens from `fetchWithRetry` logs; surface swallowed Supabase `error` in the 3 `anomaly.mjs` detectors); dead-code removal (`FeatureTour`/`EarningsWidget`/`BotDashboard`/`NotificationsPanel` + unused imports/exports, lint 40→37 warnings). Integrated build 0 errors, **242/242 tests**.
