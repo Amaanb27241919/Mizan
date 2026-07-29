@@ -100,6 +100,29 @@ export function investmentFactor(settings) {
 // null. Prefer live spot values over the static fallback so price drift doesn't
 // silently mislead — but only when the live payload is present, non-"static",
 // and finite (the NaN guard: a bad live value falls back to the constant).
+// Whether a REAL nisab figure is available right now.
+//
+// The NISAB_*_USD constants are a last-resort shape, not a price. Gold and
+// silver drift far enough that quoting a stale constant as "your nisab" can
+// flip the due/not-due verdict outright — verified 2026-07-28, when the
+// constants sat 27% (gold) and 41% (silver) BELOW live spot after the upstream
+// price feed died silently. Users below the real threshold were being told
+// Zakat was owed.
+//
+// So surfaces must not render a stale figure: when this returns false they show
+// "unavailable" and withhold the verdict entirely. Same fail-closed rule the
+// Sharia screener applies to unverifiable debt — an honest "we don't know"
+// beats a confident wrong number, especially for a religious obligation.
+export function isNisabAvailable(live) {
+  return !!(
+    live &&
+    live.source !== "static" &&
+    live.source !== "unavailable" &&
+    Number.isFinite(live.nisab_gold_usd) && live.nisab_gold_usd > 0 &&
+    Number.isFinite(live.nisab_silver_usd) && live.nisab_silver_usd > 0
+  );
+}
+
 export function nisabValueFor(settings, live) {
   const useLive = live && live.source !== "static";
   const gold =

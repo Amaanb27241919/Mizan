@@ -18,6 +18,7 @@ import {
   nisabFromSpot,
   investmentFactor,
   nisabValueFor,
+  isNisabAvailable,
   negativeBankAmount,
   netZakatableWealth,
   zakatDueOn,
@@ -176,6 +177,38 @@ describe('nisabValueFor', () => {
 
   it('falls back to the constant when live is null', () => {
     expect(nisabValueFor({ nisabStandard: 'gold' }, null)).toBe(NISAB_GOLD_USD)
+  })
+})
+
+// ── isNisabAvailable: the fail-closed gate ───────────────────────────────────
+// Regression guard for 2026-07-28: the upstream metal feed 404'd, the client sat
+// silently on the static constants, and those were 27% (gold) / 41% (silver)
+// BELOW live spot — so users under the real threshold were told Zakat was due.
+// Surfaces must be able to tell "real nisab" from "stale placeholder".
+describe('isNisabAvailable', () => {
+  const live = { nisab_gold_usd: 11323.6, nisab_silver_usd: 1136.28, source: 'yahoo-futures' }
+
+  it('accepts a live payload with finite positive thresholds', () => {
+    expect(isNisabAvailable(live)).toBe(true)
+  })
+
+  it('rejects the static-fallback shape (the stale-constant trap)', () => {
+    expect(isNisabAvailable({ ...live, source: 'static' })).toBe(false)
+  })
+
+  it('rejects an explicitly unavailable payload', () => {
+    expect(isNisabAvailable({ ...live, source: 'unavailable' })).toBe(false)
+  })
+
+  it('rejects null / undefined', () => {
+    expect(isNisabAvailable(null)).toBe(false)
+    expect(isNisabAvailable(undefined)).toBe(false)
+  })
+
+  it('rejects NaN or non-positive thresholds even from a live source', () => {
+    expect(isNisabAvailable({ ...live, nisab_gold_usd: NaN })).toBe(false)
+    expect(isNisabAvailable({ ...live, nisab_silver_usd: 0 })).toBe(false)
+    expect(isNisabAvailable({ ...live, nisab_gold_usd: -1 })).toBe(false)
   })
 })
 

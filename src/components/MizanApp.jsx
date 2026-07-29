@@ -5,7 +5,7 @@ import { apiFetch, recordAudit } from "../lib/apiFetch.js";
 import { persistUserState } from "../lib/userState.js";
 import { downloadCSV } from "../lib/exportCSV.js";
 import {
-  computeZakatWorksheet, nisabValueFor,
+  computeZakatWorksheet, nisabValueFor, isNisabAvailable,
   NISAB_GOLD_USD, NISAB_SILVER_USD, DEFAULT_ZAKAT_SETTINGS,
   DEFAULT_ZAKAT_WORKSHEET, ZAKAT_ASSET_FIELDS, ZAKAT_LIABILITY_FIELDS,
 } from "../lib/zakat.js";
@@ -1493,6 +1493,8 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   const zakatSettings = useZakatSettings();
   const liveNisab     = useLiveNisab();
   const nisabOverview = nisabValueFor(zakatSettings, liveNisab);
+  // Never present a stale nisab as today's — withhold the verdict instead.
+  const nisabReady    = isNisabAvailable(liveNisab);
   // Read the SAME comprehensive worksheet the Portfolio → Zakat tab edits so
   // both surfaces report an identical figure. In demo, seed from the demo
   // manual assets; otherwise use the saved worksheet (or a first-run seed from
@@ -1982,8 +1984,12 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKAT DUE</div>
-          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(zakatDueOverview))}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{overviewAboveNisab?`2.5% of net zakatable wealth${zakatSettings.investmentMethod==="longterm_30"?" (30% rule on investments)":""}`:`Below nisab (${zakatSettings.nisabStandard} standard, ${fmtUSD(nisabOverview)})`}</div>
+          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:nisabReady?T.textHi:T.muted,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{nisabReady?mask(fmtUSD(zakatDueOverview)):"—"}</div>
+          <div style={{fontFamily:FM,fontSize:11,color:nisabReady?T.muted:T.gold,marginTop:T.s1}}>{
+            !nisabReady
+              ? (liveNisab.status==="loading"?"Checking live gold & silver prices…":"Nisab unavailable — live metal prices couldn't be fetched")
+              : overviewAboveNisab?`2.5% of net zakatable wealth${zakatSettings.investmentMethod==="longterm_30"?" (30% rule on investments)":""}`:`Below nisab (${zakatSettings.nisabStandard} standard, ${fmtUSD(nisabOverview)})`
+          }</div>
           {purificationOwedTotal != null && purificationOwedTotal > 0 && (
             <button onClick={() => onNav?.("goals")} style={{display:"flex",alignItems:"center",gap:4,marginTop:T.s2,background:`${T.gold}10`,border:`1px solid ${T.gold}30`,borderRadius:T.rSm,padding:`3px ${T.s2}`,cursor:"pointer",fontFamily:FM,fontSize:10,color:T.gold,fontWeight:600,letterSpacing:"0.06em",textDecoration:"none",width:"100%",justifyContent:"flex-start"}}>
               <Icon name="leaf" size={12} color={T.gold}/>
@@ -3183,7 +3189,7 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
 // ZakatSadaqah; this renders the connected-account rows (auto, read-only), the
 // editable asset + liability rows, and a live subtotal. Math lives in the pure
 // computeZakatWorksheet() (src/lib/zakat.js).
-function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings, demoMode=false,
+function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, nisabReady=true, settings, demoMode=false,
   connectedAccounts=[], excludedAccounts=new Set(), onToggleAccount, connectedTotals={}, creditAccounts=[], connectedLiabilities=0, onConnect }){
   const fmtUSD=v=>`$${(+v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const factorPct = settings.investmentMethod==="longterm_30" ? "× 30%" : null;
@@ -3307,7 +3313,7 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, settings,
       {subtotal("Total zakatable assets", fmtUSD(result.assetsTotal))}
       {subtotal("Less liabilities", `− ${fmtUSD(result.liabilitiesTotal)}`, false, T.loss)}
       {subtotal("Net zakatable worth", fmtUSD(result.netZakatable), true)}
-      {subtotal(`Nisab threshold (${settings.nisabStandard})`, fmtUSD(nisabUsd))}
+      {subtotal(`Nisab threshold (${settings.nisabStandard})`, nisabReady?fmtUSD(nisabUsd):"Unavailable")}
     </div>
   </div>;
 }
@@ -3436,24 +3442,38 @@ function effectiveZakatWorksheet(savedWs, manualAssets, demoMode){
 // Falls back to the static NISAB_*_USD constants when the endpoint is
 // unconfigured (no FINNHUB_KEY) or the upstream fetch fails — same shape,
 // source: "static", null refreshed_at.
+// Live nisab, with an explicit availability state.
+//
+// `status` is "loading" → "live" | "unavailable". It exists because the old
+// behaviour was to sit silently on the static constants when the price feed
+// failed, which presented a stale threshold as if it were today's — see
+// isNisabAvailable() in src/lib/zakat.js for why that's unsafe. Surfaces gate
+// on isNisabAvailable(liveNisab) and show "unavailable" rather than a number.
 function useLiveNisab(){
   const[data,setData]=useState({
     nisab_gold_usd:   NISAB_GOLD_USD,
     nisab_silver_usd: NISAB_SILVER_USD,
     refreshed_at:     null,
     source:           "static",
+    status:           "loading",
   });
   useEffect(()=>{
     let cancelled=false;
+    const markUnavailable=()=>{if(!cancelled)setData(p=>({...p,source:"unavailable",status:"unavailable"}));};
     apiFetch("/api/metals/spot").then(r=>r.ok?r.json():null).then(d=>{
-      if(cancelled || !d?.ok)return;
+      if(cancelled)return;
+      const gold=Number(d?.nisab_gold_usd), silver=Number(d?.nisab_silver_usd);
+      if(!d?.ok||!Number.isFinite(gold)||gold<=0||!Number.isFinite(silver)||silver<=0){
+        markUnavailable();return;
+      }
       setData({
-        nisab_gold_usd:   Number(d.nisab_gold_usd),
-        nisab_silver_usd: Number(d.nisab_silver_usd),
+        nisab_gold_usd:   gold,
+        nisab_silver_usd: silver,
         refreshed_at:     d.refreshed_at,
         source:           d.source,
+        status:           "live",
       });
-    }).catch(()=>{});
+    }).catch(markUnavailable);
     return()=>{cancelled=true;};
   },[]);
   return data;
@@ -3797,6 +3817,8 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
   const settings  = useZakatSettings();
   const liveNisab = useLiveNisab();
   const nisabUsd  = nisabValueFor(settings, liveNisab);
+  // Gate every nisab-derived figure: a stale threshold can flip the verdict.
+  const nisabReady = isNisabAvailable(liveNisab);
   // Surface live nisab values in the methodology buttons so the user can
   // see the current threshold without leaving the page. Fall back to the
   // static constants when /api/metals/spot isn't reachable.
@@ -4013,15 +4035,19 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
       padding:`${T.s6} ${T.s6}`,
     }}>
       <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ZAKAT — {new Date().getFullYear()}</div>
-      <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(zakatDue)}</div>
-      <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"}</div>
+      <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:!nisabReady?T.muted:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{nisabReady?fmtUSD(zakatDue):"—"}</div>
+      <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:!nisabReady?T.gold:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{
+        !nisabReady
+          ? (liveNisab.status==="loading"?"Checking live gold & silver prices…":"Nisab unavailable — can't determine whether Zakat is due")
+          : aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"
+      }</div>
       <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and live nisab. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
       <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
         {[
           ["Total zakatable assets",fmtUSD(assetsTotal)],
           ["Less liabilities", `− ${fmtUSD(liabilitiesTotal)}`],
           ["Net zakatable worth",fmtUSD(netZakatable),true],
-          [`Nisab (${settings.nisabStandard})`,fmtUSD(nisabUsd)],
+          [`Nisab (${settings.nisabStandard})`,nisabReady?fmtUSD(nisabUsd):"Unavailable"],
         ].map(([l,v,b])=><div key={l}>
           <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
           <div style={{fontFamily:FP,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
@@ -4061,7 +4087,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
           {!demoMode&&<button onClick={resetWs} className="btn-ghost" style={{fontSize:11,padding:`4px ${T.s3}`}}>Reset</button>}
         </div>
       </div>
-      <ZakatWorksheet draft={wsDraft} onField={onWsField} onPersist={persistWs} result={wsResult} nisabUsd={nisabUsd} settings={settings} demoMode={demoMode}
+      <ZakatWorksheet draft={wsDraft} onField={onWsField} onPersist={persistWs} result={wsResult} nisabUsd={nisabUsd} nisabReady={nisabReady} settings={settings} demoMode={demoMode}
         connectedAccounts={connectedAccounts} excludedAccounts={excludedAccounts} onToggleAccount={toggleAccount} connectedTotals={connectedTotals} creditAccounts={creditAccounts} connectedLiabilities={connectedLiabilities} onConnect={onConnect}/>
     </CollapsibleTile>
 
@@ -4131,7 +4157,11 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
         Silver nisab is more inclusive (lower threshold); gold is the majority view. <strong style={{color:T.text}}>Full market value</strong> is the default — it matches the scholar-designed calculators Mizan follows, which count shares and retirement at full resale/vested value. The optional <strong style={{color:T.text}}>30% rule</strong> treats public-equity holdings as ~30% zakatable (approximating the cash/receivables/inventory share of company assets vs. exempt fixed assets) — a lighter basis some fatwa councils allow for long-term buy-and-hold investors.
       </div>
       <div style={{marginTop:T.s2,fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.05em"}}>
-        {liveNisab.source==="static"
+        {liveNisab.status==="unavailable"
+          ? "Live gold & silver prices unavailable — nisab can't be computed right now. Figures below exclude the nisab verdict."
+          : liveNisab.status==="loading"
+          ? "Fetching live gold & silver spot prices…"
+          : liveNisab.source==="static"
           ? "Spot prices unavailable — using static fallback values."
           : `Live spot via ${liveNisab.source} · refreshed ${liveNisab.refreshed_at?new Date(liveNisab.refreshed_at).toLocaleString():"recently"}`}
       </div>

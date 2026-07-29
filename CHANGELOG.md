@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **settings:** Reorder root sub-tabs to Admin, Account, API Keys, then the rest (non-root unchanged); default root landing to Admin (`7ff8ab5`)
 
+### Fixed
+- **zakat:** Restore live nisab — Stooq 404'd, add provider chain (stooq -> yahoo spot -> yahoo futures) (`06f8ac7`)
+
 ### Docs
 - **backlog:** O6 GSC half done — property verified, sitemap submitted, indexing requested; record landing SEO shipment (`0420940`)
 - **backlog:** Consolidated task status as of 2026-07-28 — done/open/parked at a glance (`99ecc98`)
