@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-29
 
 ### Added
+- **growth:** Widen activation window to 45 days, skip recently-active users (`8ac1447`)
 - **growth:** Activation nudge email + funnel metric; fix brokerage-connection detection (`294d063`)
 - **monitoring:** Alert when an upstream data feed goes stale (`73d0dee`)
 - **finances:** Edit recurring subscriptions — name, monthly amount, active status (`acfcb33`)

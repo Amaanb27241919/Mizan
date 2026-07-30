@@ -8656,6 +8656,8 @@ function AdminPanel(){
   const[cronRun,setCronRun]=useState({});
   // Encryption-at-rest one-time backfill: {status,msg,result}.
   const[encRun,setEncRun]=useState(null);
+  // Per-user manual activation nudge: {userId:{status,msg}}.
+  const[nudgeRun,setNudgeRun]=useState({});
   // Branded-invite form state.
   const[inviteEmail,setInviteEmail]=useState("");
   const[inviteMsg,setInviteMsg]=useState(null);
@@ -8741,7 +8743,7 @@ function AdminPanel(){
     try{
       const[s,u,a,d]=await Promise.all([
         j("/api/admin/stats"),
-        j("/api/admin/users?limit=200"),
+        j("/api/admin/users?limit=200&activation=1"),
         j(`/api/admin/audit-log?limit=${PAGE}&offset=${auditOffset}`),
         j("/api/admin/db-status"),
       ]);
@@ -8750,6 +8752,25 @@ function AdminPanel(){
     finally{setBusy(false);}
   },[auditOffset]);
   useEffect(()=>{load();},[load]);
+
+  // Manual override for the activation cron: send one user the same email the
+  // automation sends. For the people it deliberately skips — someone active but
+  // still unconnected is usually blocked, not uninterested.
+  const nudge=async r=>{
+    const again=r.nudged_at?`\n\nThey were already nudged on ${fmtDate(r.nudged_at)} — this sends it a second time.`:"";
+    if(!confirm(`Send the activation email to ${r.email}?${again}`))return;
+    setNudgeRun(p=>({...p,[r.id]:{status:"running"}}));
+    try{
+      const res=await apiFetch(`/api/admin/users/${r.id}/nudge`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
+      let d=null;try{d=await res.json();}catch{}
+      if(!res.ok||!d?.ok){
+        setNudgeRun(p=>({...p,[r.id]:{status:"error",msg:d?.error||`HTTP ${res.status}`}}));
+        return;
+      }
+      setNudgeRun(p=>({...p,[r.id]:{status:"ok"}}));
+      load();
+    }catch(e){setNudgeRun(p=>({...p,[r.id]:{status:"error",msg:e?.message||"Network error"}}));}
+  };
 
   const suspend=async(id,op)=>{
     if(!confirm(`${op==="suspend"?"Suspend":"Unsuspend"} this user?`))return;
@@ -8812,6 +8833,26 @@ function AdminPanel(){
       </div>
       <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
         Connecting an account is what predicts retention — every user who linked one came back, and every user who didn't, didn't. The daily activation cron emails anyone 1–45 days old who still hasn't connected, once each — skipping anyone who signed in within the last 7 days, since they're engaged rather than lapsed.
+      </div>
+    </BentoTile>}
+
+    {/* ─── Config + credentials ──────────────────── */}
+    {dbStatus?.config&&Object.keys(dbStatus.config).length>0&&<BentoTile accent={Object.values(dbStatus.config).every(c=>c.healthy)?undefined:T.loss}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>CONFIG &amp; CREDENTIALS</span>
+        <Tag label={Object.values(dbStatus.config).every(c=>c.healthy)?"All good":"Action needed"} color={Object.values(dbStatus.config).every(c=>c.healthy)?T.gain:T.loss}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:T.s3}}>
+        {Object.entries(dbStatus.config).map(([key,c])=><div key={key} style={{background:T.surface,border:`1px solid ${c.healthy?T.border:T.loss+"55"}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s2,marginBottom:T.s1}}>
+            <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{c.label||key}</span>
+            <Tag label={c.healthy?"OK":c.severity==="critical"?"CRITICAL":"BROKEN"} color={c.healthy?T.gain:T.loss}/>
+          </div>
+          <div style={{fontFamily:FM,fontSize:10,color:c.healthy?T.muted:T.loss,marginTop:4,lineHeight:1.45}}>{c.healthy?c.detail:c.reason}</div>
+        </div>)}
+      </div>
+      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
+        Checked live here and once a day by the cleanup cron, which emails you when one breaks. These aren&apos;t code bugs, so nothing else catches them — a sender domain drifting off the verified list silently 403&apos;d every email for days, and an empty Anthropic balance took the Assistant down while every variable still looked set.
       </div>
     </BentoTile>}
 
@@ -8929,8 +8970,34 @@ function AdminPanel(){
           {l:"Email",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text}}>{r.email}</span>},
           {l:"Joined",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.created_at)}</span>},
           {l:"Last sign-in",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.last_sign_in)}</span>},
+          {l:"Connected",r_:r=>{
+            if(r.connected==null)return<span style={{fontFamily:FM,fontSize:10,color:T.dim}}>—</span>;
+            const parts=[r.brokerage>0?`${r.brokerage} broker${r.brokerage===1?"":"s"}`:null,r.bank?"bank":null].filter(Boolean);
+            return r.connected
+              ?<span style={{fontFamily:FM,fontSize:10.5,color:T.gain,letterSpacing:"0.04em"}}>{parts.join(" · ")||"YES"}</span>
+              :<span style={{fontFamily:FM,fontSize:10.5,color:T.gold,letterSpacing:"0.06em"}}>NOTHING</span>;
+          }},
+          {l:"Activation",r_:r=>{
+            if(!r.activation_state)return<span style={{fontFamily:FM,fontSize:10,color:T.dim}}>—</span>;
+            const c=r.activation_state==="connected"?T.gain:r.activation_state==="eligible"?T.blue:r.activation_state==="sent"?T.slate:T.muted;
+            return<span title={r.activation_note||""} style={{display:"inline-flex",flexDirection:"column",gap:2}}>
+              <span style={{fontFamily:FM,fontSize:10.5,color:c,letterSpacing:"0.06em",textTransform:"uppercase"}}>{r.activation_state}</span>
+              {r.nudged_at&&<span style={{fontFamily:FM,fontSize:9.5,color:T.muted}}>{fmtDate(r.nudged_at)}</span>}
+            </span>;
+          }},
           {l:"Status",r_:r=><Tag label={r.suspended?"Suspended":r.is_root?"Root":"Active"} color={r.suspended?T.loss:r.is_root?T.gold:T.gain}/>},
-          {l:"",r:true,r_:r=><div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
+          {l:"",r:true,r_:r=><div style={{display:"flex",gap:T.s1,justifyContent:"flex-end",alignItems:"center"}}>
+            {nudgeRun[r.id]?.status==="error"&&<span title={nudgeRun[r.id].msg} style={{fontFamily:FM,fontSize:9.5,color:T.loss,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nudgeRun[r.id].msg}</span>}
+            {r.connected===false&&!r.suspended&&<button onClick={()=>nudge(r)} disabled={nudgeRun[r.id]?.status==="running"}
+              title={r.nudged_at?`Already nudged ${fmtDate(r.nudged_at)} — sends again`:r.activation_note||"Send the activation email now"}
+              style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,
+                background:nudgeRun[r.id]?.status==="ok"?`${T.gain}18`:`${T.blue}14`,
+                border:`1px solid ${nudgeRun[r.id]?.status==="ok"?T.gain+"40":T.blue+"40"}`,
+                color:nudgeRun[r.id]?.status==="ok"?T.gain:T.blue,
+                cursor:nudgeRun[r.id]?.status==="running"?"default":"pointer",opacity:nudgeRun[r.id]?.status==="running"?0.6:1,
+                fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",whiteSpace:"nowrap"}}>
+              {nudgeRun[r.id]?.status==="running"?"SENDING…":nudgeRun[r.id]?.status==="ok"?"SENT":r.nudged_at?"NUDGE AGAIN":"NUDGE"}
+            </button>}
             {r.suspended
               ?<button onClick={()=>suspend(r.id,"unsuspend")} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:`${T.gain}18`,border:`1px solid ${T.gain}40`,color:T.gain,cursor:"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em"}}>UNSUSPEND</button>
               :<button onClick={()=>suspend(r.id,"suspend")} disabled={r.is_root} title={r.is_root?"Cannot suspend a root account":""} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}40`,color:T.loss,cursor:r.is_root?"not-allowed":"pointer",opacity:r.is_root?0.4:1,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em"}}>SUSPEND</button>}
