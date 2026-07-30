@@ -17,6 +17,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **zakat:** Show 'nisab unavailable' instead of silently using stale constants (`752e681`)
 
 ### Docs
+- **backlog:** Record editable subscriptions + tour-nudge unblock (`910ea69`)
 - **backlog:** Record nisab provider chain + fail-closed unavailable state (`4b5cc77`)
 
 ## 2026-07-28

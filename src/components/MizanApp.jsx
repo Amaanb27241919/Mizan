@@ -8786,6 +8786,29 @@ function AdminPanel(){
       </div>
     </BentoTile>}
 
+    {/* ─── Upstream data feeds ───────────────────── */}
+    {dbStatus?.feeds&&Object.keys(dbStatus.feeds).length>0&&<BentoTile>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>UPSTREAM DATA FEEDS</span>
+        <Tag label={Object.values(dbStatus.feeds).every(f=>f.healthy)?"All healthy":"Feed down"} color={Object.values(dbStatus.feeds).every(f=>f.healthy)?T.gain:T.loss}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:T.s3}}>
+        {Object.entries(dbStatus.feeds).map(([key,f])=><div key={key} style={{background:T.surface,border:`1px solid ${f.healthy?T.border:T.loss+"55"}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s2,marginBottom:T.s1}}>
+            <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{f.label||key}</span>
+            <Tag label={f.healthy?"OK":"DOWN"} color={f.healthy?T.gain:T.loss}/>
+          </div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>{key}</div>
+          {f.healthy
+            ?f.source&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:4}}>via {f.source}</div>
+            :<div style={{fontFamily:FM,fontSize:10,color:T.loss,marginTop:4,lineHeight:1.45}}>{f.reason}</div>}
+        </div>)}
+      </div>
+      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
+        Probed live on load. The daily cleanup cron re-checks these and emails an alert when one goes down — a feed dying quietly is how the Zakat nisab silently went stale.
+      </div>
+    </BentoTile>}
+
     {/* ─── Maintenance · Cron Jobs ───────────────── */}
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
