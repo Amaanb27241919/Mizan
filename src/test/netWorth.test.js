@@ -8,8 +8,10 @@
 // gain — every connected user's history disagreed with their own headline, from
 // +$1.5k to −$9.9k.
 import { describe, it, expect } from 'vitest'
-import { netWorthParts, netWorthTotal, hasSnapshotableData, isBrokeragePlaid } from '../lib/netWorth.js'
-import { mergeNetWorthHistory } from '../../lib/handlers.mjs'
+import {
+  netWorthParts, netWorthTotal, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHistory,
+  NW_HISTORY_CAP,
+} from '../lib/netWorth.js'
 
 const acct = (balance, cash = 0) => ({ balance, cash })
 
@@ -129,11 +131,57 @@ describe('mergeNetWorthHistory', () => {
     expect(mergeNetWorthHistory(many, [], today, 365).length).toBeLessThanOrEqual(365)
   })
 
+  // One cap, shared. When the client kept 3650 and the cron kept 365, every
+  // nightly run silently trimmed a decade of history to a year.
+  it('defaults to the shared retention cap, not a smaller server-side one', () => {
+    expect(NW_HISTORY_CAP).toBe(3650)
+    const many = Array.from({ length: 500 }, (_, i) =>
+      ({ date: new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10), total: i }))
+    expect(mergeNetWorthHistory(many, [], today)).toHaveLength(501)
+  })
+
   it('returns entries sorted oldest to newest', () => {
     const out = mergeNetWorthHistory(
       [{ date: '2026-07-20', total: 3 }, { date: '2026-01-02', total: 1 }],
       [{ date: '2026-03-15', value: 2 }], today)
     expect(out.map(e => e.date)).toEqual([...out.map(e => e.date)].sort())
+  })
+})
+
+// The exact 2026-07-30 incident, as a regression test. The nightly cron merged
+// a user's history at 19:22 (18 -> 32 points, backfilled to May 13). A browser
+// tab open since before then still held the 18-point array and wrote it back at
+// 20:07, discarding two months. The client now merges against what is STORED
+// rather than overwriting with its own copy, so the stale tab can only ever
+// contribute its own day.
+describe('stale-tab clobber (regression)', () => {
+  const merged = [
+    { date: '2026-05-13', total: 20000 },
+    { date: '2026-06-15', total: 25000 },
+    { date: '2026-07-29', total: 32498.11 },
+  ]
+  const staleTabLocalCopy = [{ date: '2026-07-29', total: 31003.8, cash: 500, accounts: 2 }]
+  const todayFromStaleTab = { date: '2026-07-30', total: 31018.79 }
+
+  it('keeps the backfilled history a stale tab never saw', () => {
+    const out = mergeNetWorthHistory(merged, null, todayFromStaleTab, 3650)
+    expect(out.map(e => e.date)).toEqual(['2026-05-13', '2026-06-15', '2026-07-29', '2026-07-30'])
+    expect(out.find(e => e.date === '2026-05-13').total).toBe(20000)
+  })
+
+  it("does not let the stale tab's older points overwrite the merged ones", () => {
+    // What the OLD code effectively did — write the local array wholesale.
+    const clobbered = [...staleTabLocalCopy, todayFromStaleTab]
+    expect(clobbered).toHaveLength(2)
+    // What the new path does: today's point merged into the stored series.
+    const out = mergeNetWorthHistory(merged, null, todayFromStaleTab, 3650)
+    expect(out.length).toBeGreaterThan(clobbered.length)
+    expect(out.find(e => e.date === '2026-07-29').total).toBe(32498.11)
+  })
+
+  it('still records the stale tab\'s own day', () => {
+    const out = mergeNetWorthHistory(merged, null, todayFromStaleTab, 3650)
+    expect(out.at(-1)).toEqual({ date: '2026-07-30', total: 31018.79 })
   })
 })
 

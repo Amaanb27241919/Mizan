@@ -67,3 +67,46 @@ export function hasSnapshotableData({ accounts = [], plaidAccounts = [], bankBal
     || (+bankBalance || 0) !== 0
     || (+manualAssetTotal || 0) !== 0;
 }
+
+/**
+ * Days of net-worth history to retain. ONE constant because the client and the
+ * nightly cron now write the same key: when the client kept 3650 and the cron
+ * kept 365, every nightly run would silently trim a decade of history down to a
+ * year. Whoever writes last must not be able to destroy what the other kept.
+ */
+export const NW_HISTORY_CAP = 3650;
+
+/**
+ * Merge the two historical net-worth series into the canonical one. Pure.
+ *
+ * Precedence, oldest→newest, capped at NW_HISTORY_CAP entries:
+ *   1. today's freshly computed entry always wins
+ *   2. otherwise the LEGACY value wins on any shared date — the legacy
+ *      `networth_history` key was the bank-inclusive one, while the canonical
+ *      key held brokerage-only totals written by the old client effect
+ *   3. dates only one side has are carried through
+ *
+ * Runs against real financial history for every user, so it tolerates every
+ * shape actually in the database: `{date,total,cash,accounts}` (client),
+ * `{date,value}` (legacy server), a non-array/null column, and junk entries.
+ * Idempotent — re-running merges the same result, which is what makes the
+ * repair self-healing rather than a one-shot migration.
+ */
+export function mergeNetWorthHistory(canonical, legacy, todayEntry, cap = NW_HISTORY_CAP) {
+  const byDate = new Map();
+  for (const e of (Array.isArray(canonical) ? canonical : [])) {
+    if (e?.date) byDate.set(e.date, { ...e });
+  }
+  for (const e of (Array.isArray(legacy) ? legacy : [])) {
+    if (!e?.date) continue;
+    const v = Number(e.value ?? e.total);
+    if (!Number.isFinite(v)) continue;
+    byDate.set(e.date, { ...(byDate.get(e.date) || {}), date: e.date, total: v });
+  }
+  if (todayEntry?.date && Number.isFinite(Number(todayEntry.total))) {
+    byDate.set(todayEntry.date, { date: todayEntry.date, total: Number(todayEntry.total) });
+  }
+  return [...byDate.values()]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-cap);
+}

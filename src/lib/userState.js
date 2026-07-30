@@ -140,6 +140,57 @@ export async function persistUserState(key, value) {
   }
 }
 
+/**
+ * Read-merge-write for a tracked key, instead of blindly overwriting it.
+ *
+ * persistUserState() upserts the WHOLE value, so last writer wins. For an
+ * append-only key like net-worth history that is a data-loss bug: on
+ * 2026-07-30 the nightly cron merged a user's history at 19:22 and a browser
+ * tab that had been open since before then wrote its stale in-memory array
+ * back over it at 20:07, discarding two months of backfilled points. The tab
+ * wasn't wrong — it just hadn't re-hydrated since sign-in.
+ *
+ * So: re-read the row, let the caller merge its own contribution into whatever
+ * is actually stored, then write. `mergeFn(remoteValue)` must be pure and
+ * idempotent — two tabs can race here, and the loser's write must still be
+ * correct. Falls back to merging against `localFallback` when the read fails
+ * (offline, RLS), so a snapshot is never silently dropped.
+ *
+ * Returns the merged value that was written (or the local fallback).
+ */
+export async function persistMergedUserState(key, mergeFn, localFallback = null) {
+  const applyLocal = () => {
+    const merged = mergeFn(localFallback);
+    try { localStorage.setItem(key, JSON.stringify(merged)); } catch { /* quota */ }
+    return merged;
+  };
+  if (!TRACKED_KEYS.includes(key) || !isSupabaseConfigured || !supabase) return applyLocal();
+
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData?.session?.user?.id;
+    if (!userId) return applyLocal();
+
+    const { data, error } = await supabase
+      .from('user_state').select('value')
+      .eq('user_id', userId).eq('key', key).maybeSingle();
+    // A read error means we don't know what's stored. Merging into the local
+    // copy and writing would risk clobbering exactly what this exists to
+    // protect, so keep it local-only and let the next attempt reconcile.
+    if (error) return applyLocal();
+
+    const merged = mergeFn(data?.value ?? localFallback);
+    try { localStorage.setItem(key, JSON.stringify(merged)); } catch { /* quota */ }
+    await supabase.from('user_state').upsert(
+      { user_id: userId, key, value: merged, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,key' },
+    );
+    return merged;
+  } catch {
+    return applyLocal();
+  }
+}
+
 // Convenience wrapper: localStorage.setItem + persistUserState in one call.
 // Use this in place of localStorage.setItem for any tracked key.
 export function setLocalAndSync(key, value) {

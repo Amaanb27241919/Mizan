@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useAuth } from "../lib/auth.jsx";
 import { apiFetch, recordAudit } from "../lib/apiFetch.js";
-import { persistUserState } from "../lib/userState.js";
+import { persistUserState, persistMergedUserState } from "../lib/userState.js";
 import { downloadCSV } from "../lib/exportCSV.js";
 import {
   computeZakatWorksheet, nisabValueFor, isNisabAvailable,
@@ -10,7 +10,7 @@ import {
   DEFAULT_ZAKAT_WORKSHEET, ZAKAT_ASSET_FIELDS, ZAKAT_LIABILITY_FIELDS,
 } from "../lib/zakat.js";
 import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptions, detectUsageBasedSpend, normalizeMerchant } from "../lib/recurring.js";
-import { netWorthParts, hasSnapshotableData, isBrokeragePlaid } from "../lib/netWorth.js";
+import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHistory } from "../lib/netWorth.js";
 import { addNotifications, unreadCount, markAllRead, markRead, relativeTime,
   shariaChangeNotifications, dividendNotifications, priceAlertNotifications } from "../lib/notifications.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
@@ -11325,17 +11325,22 @@ export default function Mizan(){
     // Gate on "has anything loaded yet" instead, so the load gap writes nothing.
     if(!hasSnapshotableData(parts))return;
     const {total,cash}=netWorthParts(parts);
+    let cancelled=false;
     try{
       const today=new Date().toISOString().slice(0,10);
-      const hist=JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");
-      const next={date:today,total:+total.toFixed(2),cash:+cash.toFixed(2),accounts:visibleAccounts.length};
-      const without=hist.filter(h=>h.date!==today);
-      const updated=[...without,next].sort((a,b)=>a.date.localeCompare(b.date));
-      const trimmed=updated.slice(-3650);
-      localStorage.setItem("mizan_networth_history",JSON.stringify(trimmed)); // 10 years cap
-      persistUserState("mizan_networth_history",trimmed);
-      setNetWorthHistory(trimmed);
+      const local=(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}})();
+      const todayEntry={date:today,total:+total.toFixed(2),cash:+cash.toFixed(2),accounts:visibleAccounts.length};
+      // MERGE into whatever is actually stored, never overwrite with this tab's
+      // copy. A tab open since before the nightly cron holds a pre-merge array,
+      // and a blind write discards everything the cron backfilled — which is
+      // exactly what happened on 2026-07-30 (cron merged 19:22, an open tab
+      // clobbered it 20:07, losing two months of points).
+      persistMergedUserState("mizan_networth_history",
+        remote=>mergeNetWorthHistory(remote,null,todayEntry),
+        local,
+      ).then(merged=>{if(!cancelled&&Array.isArray(merged))setNetWorthHistory(merged);});
     }catch{}
+    return()=>{cancelled=true;};
   },[visibleAccounts,plaidAccounts,bankBalance,manualAssetTotalRoot,demoMode]);
 
   // Activity-derived metrics. All amounts respect the account on/off toggles.
