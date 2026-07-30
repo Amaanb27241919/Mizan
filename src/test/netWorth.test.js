@@ -9,6 +9,7 @@
 // +$1.5k to −$9.9k.
 import { describe, it, expect } from 'vitest'
 import { netWorthParts, netWorthTotal, hasSnapshotableData, isBrokeragePlaid } from '../lib/netWorth.js'
+import { mergeNetWorthHistory } from '../../lib/handlers.mjs'
 
 const acct = (balance, cash = 0) => ({ balance, cash })
 
@@ -70,6 +71,69 @@ describe('hasSnapshotableData', () => {
 
   it('is true for a bank-only user with no brokerage', () => {
     expect(hasSnapshotableData({ accounts: [], bankBalance: 2500 })).toBe(true)
+  })
+})
+
+// This runs against every user's real financial history, so it has to survive
+// every shape actually sitting in user_state — not just the happy path.
+describe('mergeNetWorthHistory', () => {
+  const today = { date: '2026-07-30', total: 32509.39 }
+
+  it('lets the legacy (bank-inclusive) value win on a shared date', () => {
+    const canonical = [{ date: '2026-07-29', total: 31003.8, cash: 500, accounts: 2 }]
+    const legacy    = [{ date: '2026-07-29', value: 32498.11 }]
+    const out = mergeNetWorthHistory(canonical, legacy, today)
+    expect(out.find(e => e.date === '2026-07-29').total).toBe(32498.11)
+  })
+
+  it('backfills dates only the legacy series has', () => {
+    const canonical = [{ date: '2026-07-29', total: 100 }]
+    const legacy    = [{ date: '2026-05-13', value: 20000 }, { date: '2026-06-01', value: 21000 }]
+    const out = mergeNetWorthHistory(canonical, legacy, today)
+    expect(out.map(e => e.date)).toEqual(['2026-05-13', '2026-06-01', '2026-07-29', '2026-07-30'])
+  })
+
+  it("today's fresh entry beats both series", () => {
+    const out = mergeNetWorthHistory(
+      [{ date: '2026-07-30', total: 1 }], [{ date: '2026-07-30', value: 2 }], today)
+    expect(out.at(-1).total).toBe(32509.39)
+  })
+
+  it('is idempotent — re-merging its own output changes nothing', () => {
+    const canonical = [{ date: '2026-07-28', total: 100 }]
+    const legacy    = [{ date: '2026-07-27', value: 90 }]
+    const once  = mergeNetWorthHistory(canonical, legacy, today)
+    const twice = mergeNetWorthHistory(once, legacy, today)
+    expect(twice).toEqual(once)
+  })
+
+  it('survives null, non-array and junk columns', () => {
+    expect(mergeNetWorthHistory(null, undefined, today)).toEqual([today])
+    expect(mergeNetWorthHistory({ not: 'an array' }, 'nope', today)).toEqual([today])
+    expect(mergeNetWorthHistory([null, {}, { date: null }], [{ value: 5 }], today)).toEqual([today])
+  })
+
+  it('drops legacy entries whose amount is not a finite number', () => {
+    const out = mergeNetWorthHistory([], [{ date: '2026-07-01', value: 'NaN' }, { date: '2026-07-02' }], today)
+    expect(out).toEqual([today])
+  })
+
+  it('keeps a negative net worth rather than treating it as missing', () => {
+    const out = mergeNetWorthHistory([], [{ date: '2026-07-29', value: -9673.99 }], today)
+    expect(out[0].total).toBe(-9673.99)
+  })
+
+  it('caps at the most recent N entries', () => {
+    const many = Array.from({ length: 400 }, (_, i) =>
+      ({ date: `2025-${String(1 + (i % 12)).padStart(2, '0')}-${String(1 + (i % 28)).padStart(2, '0')}`, total: i }))
+    expect(mergeNetWorthHistory(many, [], today, 365).length).toBeLessThanOrEqual(365)
+  })
+
+  it('returns entries sorted oldest to newest', () => {
+    const out = mergeNetWorthHistory(
+      [{ date: '2026-07-20', total: 3 }, { date: '2026-01-02', total: 1 }],
+      [{ date: '2026-03-15', value: 2 }], today)
+    expect(out.map(e => e.date)).toEqual([...out.map(e => e.date)].sort())
   })
 })
 

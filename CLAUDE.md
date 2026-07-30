@@ -85,6 +85,14 @@ src/lib/performance.js         — Pure portfolio analytics (XIRR/money-weighted
 src/lib/recurring.js           — Pure recurring-transaction detection + debt-payment matching
                                  (normalize payee, cadence from median gap, score debt↔stream).
                                  Powers Goals debt-payment auto-linking. Tested: recurring.test.js.
+src/lib/netWorth.js            — Pure net-worth composition (netWorthParts / hasSnapshotableData /
+                                 isBrokeragePlaid). THE definition of net worth: brokerage + net bank
+                                 + manual assets (Plaid investments only when SnapTrade is absent, or
+                                 a dual-linked broker double-counts). Called by BOTH the Overview
+                                 headline and the daily history snapshot — they used to each carry
+                                 their own version and disagreed by $1.5k–$9.9k per user. Any new
+                                 net-worth surface calls this, never re-sums accounts.
+                                 Tested: src/test/netWorth.test.js.
 src/lib/userState.js           — localStorage ↔ Supabase state sync (mizan_debts is a TRACKED_KEY)
 src/lib/useKeyboard.js         — Global keyboard shortcuts
 ```
@@ -108,7 +116,17 @@ lib/compliance/advisor-filter.mjs — Deterministic post-generation backstop: sc
                                  personalized-advice patterns and rewrites to the compliant redirect;
                                  wired into /api/advisor; every flag audited as compliance_filtered.
 lib/crypto.mjs                 — AES-256-GCM encrypt/decrypt. Env var is `ENCRYPTION_KEY` (NOT APP_ENCRYPTION_KEY). ✅ 2026-07-27: ACTIVATED in prod — `ENCRYPTION_KEY` is set (`ENC_ENABLED` true) and ALL 10 `user_snaptrade.snaptrade_user_secret` rows are encrypted at rest (ciphertext triple populated) with the plaintext column cleared to NULL (0 plaintext remaining, verified). `extractUserSecret` reads ciphertext-first; the plaintext fallback is now unused. Remaining hygiene: the now-empty `snaptrade_user_secret` column can be DROPPED (migration 017) after a small ciphertext-only code change (SNAP_SECRET_COLS / extractUserSecret / encryptedSecretFields still name it) — LOW priority since no plaintext values remain. ⚠️ STILL PLAINTEXT: `plaid_tokens.access_token` has NO encryption path (needs a new migration adding ciphertext cols to plaid_tokens + encrypt-on-store/decrypt-on-read) and `user_state`. (Prior finding, now superseded: 2026-07-12 the key was unset and SnapTrade secrets were plaintext.)
-lib/anomaly.mjs                — 4 anomaly detectors (brute force, 5xx spike, cron staleness, new device)
+lib/anomaly.mjs                — 6 detectors: brute force, SnapTrade 5xx spike, cron staleness,
+                                 new device, DATA_FEEDS (an upstream source dying quietly), and
+                                 CONFIG_CHECKS/checkConfig — the credential preflight. That last one
+                                 covers the outages no test or build can catch because the fault is
+                                 configuration, not code: ALERT_FROM on an unverified domain (Resend
+                                 403'd every email for days), an out-of-credits Anthropic account
+                                 (Assistant down), an unset CRON_SECRET (fail-closed → whole fleet
+                                 401s). It verifies the sender domain against the live Resend
+                                 /domains list and spends ONE Anthropic token to prove the key is
+                                 valid AND funded — presence alone proved nothing. All six run daily
+                                 from /api/cron/cleanup and surface in Admin → db-status.
 lib/alerts.mjs                 — Resend email: owner anomaly alerts + user emails (digest, re-auth, bug reports, invites) via a branded HTML shell (renderBrandedEmail, logo header). From = ALERT_FROM on the verified mizan.exchange domain
 lib/rateLimit.mjs              — DB-backed rate limiting (increment_rate_limit RPC)
 lib/fetchWithRetry.mjs         — Retry wrapper with exponential backoff
@@ -427,6 +445,8 @@ These are documented constraints, not undiscovered issues:
    - **1W** = real-time daily curve for the current week (Sunday → today) built from `mizan_networth_history` daily snapshots, with today's point pinned to the live `tot`.
    - **1M / 3M / YTD / 1Y / All** = **monthly buckets** from deposit activity + nightly net-worth snapshots (no sub-month granularity for long ranges — this is intentional).
    - The X-axis + tooltip formatters adapt per range (time → weekday → month).
+   - **All ranges share ONE bank-inclusive series** (`NW_HISTORY_KEY` = `mizan_networth_history`, entries `{date, total}`), written by both the client snapshot effect and the nightly cron via `src/lib/netWorth.js`. Fixed 2026-07-30: the client used to write brokerage-only totals while the tip was pinned to the bank-inclusive `tot`, so the whole non-brokerage balance landed in the range gain. **Never introduce a second net-worth series, and never gate a snapshot on `total > 0`** — negative net worth (debt > investments) is legitimate and those users need the line most.
+   - The shape *between* snapshot points is interpolated from **brokerage** deposit activity only — `canonicalActivityType` normalizes SnapTrade cash-in (`CONTRIBUTION` → `DEPOSIT`), but Plaid bank transactions do not feed the contribution model. Affects the curve between real points, not the totals.
 
 2. **Tax cost basis uses average cost** — SnapTrade doesn't provide lot-level cost basis. `missingBasisCount` in the Tax tab already surfaces this with a warning to users.
 
@@ -474,12 +494,13 @@ These are documented constraints, not undiscovered issues:
 | Path | Schedule (UTC) | Purpose |
 |------|---------------|---------|
 | `/api/cron/sync` | Daily 6 AM | SnapTrade sync for all users |
-| `/api/cron/cleanup` | Daily 3 AM | Data cleanup |
-| `/api/cron/nightly-snapshot` | Daily 4:55 AM | Net worth snapshot → net_worth_history |
-| `/api/cron/weekly-digest` | Mon 1 PM | Weekly portfolio digest push notification |
+| `/api/cron/cleanup` | Daily 3 AM | Data cleanup **+ the automated health sweep**: `checkDataFeeds` (upstream feeds), `checkConfig` (credential preflight), `checkCronStaleness` (the whole cron fleet). Each emails the owner on failure. Staleness used to run ONLY inside the admin panel, i.e. only while someone was already looking |
+| `/api/cron/nightly-snapshot` | Daily 4:55 AM | Net-worth snapshot → `user_state.mizan_networth_history` (`NW_HISTORY_KEY`) — brokerage + net bank, the SAME series the in-app chart draws. Also merges the legacy `networth_history` key forward (one-time, self-healing) |
+| `/api/cron/activation` | Daily 3 PM | Activation nudge: one email, ever, to users 1–45 days old with nothing connected, skipping anyone who signed in within 7 days. Deduped on the `user.activation_nudge` audit row |
+| `/api/cron/weekly-digest` | Mon 1 PM | Weekly portfolio digest push notification + email. Reads `NW_HISTORY_KEY` so it can never quote a different net worth than the app shows |
 | `/api/cron/dividend-check` | Daily 11 AM | Dividend detection + purification push notification |
 | `/api/cron/bill-reminders` | Daily 2 PM | Bill reminder push notifications |
-| `/api/cron/bot-signals` | Vercel `0 14 * * 1-5` (daily backstop) **+ GitHub Actions `*/15 * * * 1-5`** | Trading-bot strategy eval + signal generation/execution. The 15-min weekday cadence is driven by `.github/workflows/cron-bot-signals.yml` (Vercel Hobby = daily-only; public repo = free Actions minutes), hitting the endpoint with the `CRON_SECRET` bearer. |
+| `/api/cron/bot-signals` | Vercel `0 14 * * 1-5` (daily backstop) **+ GitHub Actions `*/15 * * * 1-5`** | Trading-bot strategy eval + signal generation/execution. The 15-min weekday cadence is driven by `.github/workflows/cron-bot-signals.yml` (Vercel Hobby = daily-only; public repo = free Actions minutes), hitting the endpoint with the `CRON_SECRET` bearer. Writes a `cron_jobs` heartbeat on EVERY invocation **including the market-closed early return** — the thing being monitored is "is the scheduler still firing", not "did it trade", and GitHub Actions schedules silently drop fires. Stale after 60h (clears the ~48h weekend gap). |
 
 ---
 
