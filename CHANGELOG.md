@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-07-30
+
+### Added
+- **ops:** Automate monitoring + move activation control into the admin panel (`13de635`)
+
 ## 2026-07-29
 
 ### Added
