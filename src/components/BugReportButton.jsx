@@ -8,7 +8,7 @@
 //   window.dispatchEvent(new Event("mizan:open-bug-report"))
 // Used by the About page's "Found a bug?" link.
 
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { apiFetch } from "../lib/apiFetch";
 import { Icon } from "./Icon.jsx";
 

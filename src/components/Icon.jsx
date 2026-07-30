@@ -3,7 +3,6 @@
 // the app in place of emoji. Color is driven by the T.* palette via the `color`
 // prop; default inherits currentColor. No raster, no emoji. Shared by MizanApp,
 // Goals, and any other surface that needs an icon.
-import React from "react";
 
 export const ICONS = {
   target:<><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></>,

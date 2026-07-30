@@ -12,7 +12,6 @@
 // All visuals match the rest of the app's bento tile aesthetic via CSS vars
 // (no hardcoded colors) so light/dark themes both look intentional.
 
-import React from "react";
 import { Icon } from "./Icon.jsx";
 
 const tokens = {

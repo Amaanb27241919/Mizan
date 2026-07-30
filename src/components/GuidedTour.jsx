@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 /* ─── GUIDED SPOTLIGHT TOUR ──────────────────────────────────────────────
    An interactive product walk-through that takes the user on a guided lap

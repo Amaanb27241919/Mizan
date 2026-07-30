@@ -14,6 +14,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **finances:** Edit recurring subscriptions — name, monthly amount, active status (`acfcb33`)
 
 ### Fixed
+- **security:** Override axios to >=1.18.0 — clears 10 high-severity prod advisories (`3b3d706`)
 - **onboarding:** Tour offer no longer blocked for users without a name (`524c10e`)
 - **zakat:** Show 'nisab unavailable' instead of silently using stale constants (`752e681`)
 

@@ -10,7 +10,7 @@
 //
 // No new schema. No new state. One read on mount.
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/apiFetch";
 
 // Local visual tokens mirroring the rest of the app — using CSS vars so

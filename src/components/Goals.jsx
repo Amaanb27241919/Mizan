@@ -8,7 +8,7 @@
 //
 // Backed by /api/goals (GET/POST/PUT/DELETE).
 // Named exports: GoalsOverviewWidget (used by Overview tab)
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/apiFetch.js";
 import { setLocalAndSync } from "../lib/userState.js";
 import { normalizePlaidStreams, detectRecurringOutflows, matchDebtToStream, streamPaymentsSince } from "../lib/recurring.js";

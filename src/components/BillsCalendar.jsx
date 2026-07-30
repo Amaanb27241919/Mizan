@@ -29,7 +29,7 @@
  * the theme tokens.
  */
 
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 
 // ── Local style tokens ─────────────────────────────────────────────────
 // These mirror the CSS variables defined in MizanApp.jsx's THEME_CSS so
