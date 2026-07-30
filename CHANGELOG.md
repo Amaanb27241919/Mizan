@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-29
 
 ### Added
+- **monitoring:** Alert when an upstream data feed goes stale (`73d0dee`)
 - **finances:** Edit recurring subscriptions — name, monthly amount, active status (`acfcb33`)
 
 ### Fixed

@@ -6765,8 +6765,8 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     {sub==="order"&&!isAdmin&&<ComingSoon
       title="Order Ticket"
       description="Place halal-screened buy/sell orders against your connected SnapTrade brokerage or against a free Alpaca paper account. Available for authorized users."
-      hint="Want early access? Use the AI Advisor tab to research positions while this ships."
-      action={onNav ? { label: "Open AI Advisor", onClick: () => onNav("advisor") } : null}
+      hint="Want early access? Use the Assistant tab to research positions while this ships."
+      action={onNav ? { label: "Open Assistant", onClick: () => onNav("advisor") } : null}
     />}
     {sub==="order"&&isAdmin&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
     {sub==="order"&&isAdmin&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
@@ -6902,7 +6902,13 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
 }
 
 /* ─── SETTINGS ───────────────────────────────────────── */
-/* ─── AI ADVISOR ─────────────────────────────────────── */
+/* ─── AI ASSISTANT ────────────────────────────────────────
+   User-facing name is deliberately "Assistant", never "Advisor". Marketing or
+   labelling a product as an investment *adviser* is holding out as one, which
+   can create obligations before the feature says anything — and Mizan is
+   deliberately license-free / read-only (see docs/COMPLIANCE.md). Internal ids
+   and the /api/advisor route keep their existing names; only the words a user
+   reads changed. */
 function AIAdvisor({accounts=[],activities=[],metrics={},hasKey=false}){
   const[msgs,setMsgs]=useState([]);
   const[input,setInput]=useState("");
@@ -7027,7 +7033,7 @@ Activity rows on file: ${activities.length}.`;
           boxShadow:`0 4px 14px ${T.blue}55`,
         }}>M</div>
         <div>
-          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>Mizan Advisor</div>
+          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>Mīzan Assistant</div>
           <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:2}}>Sharia-aware · powered by Claude</div>
         </div>
       </div>
@@ -7748,7 +7754,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
   const has=k=>(keys[k]||"").length>8;
 
   const APIS=[
-    {id:"anthropic",l:"Anthropic API",  tier:"AI Advisor (server-only)",url:"console.anthropic.com", cost:"~$5/mo", color:"#CC785C",serverOnly:true,fields:[]},
+    {id:"anthropic",l:"Anthropic API",  tier:"AI Assistant (server-only)",url:"console.anthropic.com", cost:"~$5/mo", color:"#CC785C",serverOnly:true,fields:[]},
     {id:"finnhub",  l:"Finnhub",        tier:"Stage 1 — Real-time",   url:"finnhub.io",             cost:"Free",   color:T.gain,   fields:[{k:"finnhub",l:"API Key",ph:"xxxxxxxx..."}]},
     {id:"polygon",  l:"Polygon.io",     tier:"Stage 2 — Charts",      url:"polygon.io",              cost:"Free",   color:T.blue,   fields:[{k:"polygon",l:"API Key",ph:"xxxxxxxx..."}]},
     {id:"snaptrade",l:"SnapTrade",      tier:"Broker Connect (consumer key server-only)",url:"snaptrade.com/developers",cost:"Free sandbox",color:"#7C3AED",fields:[{k:"snapId",l:"Client ID",ph:"your-client-id"}]},
@@ -7760,7 +7766,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
     {f:"Pre/post-market prices",    req:["finnhub"]},
     {f:"News from Finnhub",         req:["finnhub"]},
     {f:"Historical charts (Polygon)",req:["polygon"]},
-    {f:"AI Advisor",                req:[],alwaysOn:true,note:"Server-configured"},
+    {f:"AI Assistant",              req:[],alwaysOn:true,note:"Server-configured"},
     {f:"Connect Fidelity/Robinhood",req:["snapId"],alwaysOn:false,note:"Consumer key server-side"},
     {f:"Paper trading bot",         req:["alpacaId","alpacaSecret"]},
   ];
@@ -10647,7 +10653,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
     {n:"Finances",   d:"Bank balances, transactions, spending by category, recurring (Plaid)."},
     {n:"Portfolio",  d:"Holdings, activity, tax planning, backtest, rebalance, Sharia screener."},
     {n:"Goals",      d:"Savings goals, Zakat & Sadaqah ledger, retirement (FIRE) projection."},
-    {n:"AI Advisor", d:"Sharia-aware chat with your full portfolio context — ask anything."},
+    {n:"Assistant",  d:"Sharia-aware chat that explains your holdings and the screening — never a buy/sell call."},
     {n:"Settings",   d:"Brokers, 2FA, manual assets, documents, demo mode."},
   ];
   const StepDone=<>
@@ -10770,7 +10776,7 @@ const SHORTCUT_REFERENCE = {
   "g p": "Go to Portfolio",
   "g f": "Go to Finances",
   "g t": "Go to Trade",
-  "g a": "Go to AI Advisor",
+  "g a": "Go to Assistant",
   "g s": "Go to Settings",
   "r":   "Sync All",
   "/":   "Open command palette",
@@ -12087,7 +12093,7 @@ export default function Mizan(){
   // (FIRE → Goals, Backtest → Portfolio, Sharia → Screener, Order Ticket
   // Coming Soon and reachable via CommandPalette only). Keeps the dock
   // un-crowded so first-time users aren't decision-fatigued.
-  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},...(isAdmin?[{id:"trade",l:"Trade"}]:[]),{id:"goals",l:"Goals"},{id:"advisor",l:"AI Advisor"},{id:"settings",l:"Settings"}];
+  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},...(isAdmin?[{id:"trade",l:"Trade"}]:[]),{id:"goals",l:"Goals"},{id:"advisor",l:"Assistant"},{id:"settings",l:"Settings"}];
 
   // Declared here (after every state it reads) so the name nudge can defer to
   // it without either one referencing a `const` declared further down.
@@ -12442,7 +12448,7 @@ export default function Mizan(){
         {id:"nav-portfolio",label:"Go to Portfolio",     group:"Navigate", hint:"g p", icon:"▣", action:()=>setNav("portfolio")},
         {id:"nav-finances", label:"Go to Finances",      group:"Navigate", hint:"g f", icon:"$", action:()=>setNav("finances")},
         {id:"nav-goals",    label:"Go to Goals",         group:"Navigate", hint:"g g", icon:"◉", action:()=>setNav("goals")},
-        {id:"nav-advisor",  label:"Go to AI Advisor",    group:"Navigate", hint:"g a", icon:<Icon name="spark" size={14}/>, action:()=>setNav("advisor")},
+        {id:"nav-advisor",  label:"Go to Assistant",     group:"Navigate", hint:"g a", icon:<Icon name="spark" size={14}/>, action:()=>setNav("advisor")},
         {id:"nav-settings", label:"Go to Settings",      group:"Navigate", hint:"g s", icon:<Icon name="gear" size={14}/>, action:()=>setNav("settings")},
         ...(isAdmin?[{id:"nav-trade",label:"Go to Trade",group:"Navigate",hint:"g t",icon:<Icon name="hexagon" size={14}/>,action:()=>setNav("trade")}]:[]),
         // Actions
