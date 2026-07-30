@@ -86,14 +86,33 @@ src/lib/recurring.js           — Pure recurring-transaction detection + debt-p
                                  (normalize payee, cadence from median gap, score debt↔stream).
                                  Powers Goals debt-payment auto-linking. Tested: recurring.test.js.
 src/lib/netWorth.js            — Pure net-worth composition (netWorthParts / hasSnapshotableData /
-                                 isBrokeragePlaid). THE definition of net worth: brokerage + net bank
-                                 + manual assets (Plaid investments only when SnapTrade is absent, or
-                                 a dual-linked broker double-counts). Called by BOTH the Overview
-                                 headline and the daily history snapshot — they used to each carry
-                                 their own version and disagreed by $1.5k–$9.9k per user. Any new
-                                 net-worth surface calls this, never re-sums accounts.
+                                 isBrokeragePlaid) + mergeNetWorthHistory + NW_HISTORY_CAP. THE
+                                 definition of net worth: brokerage + net bank + manual assets (Plaid
+                                 investments only when SnapTrade is absent, or a dual-linked broker
+                                 double-counts). Called by BOTH the Overview headline and the daily
+                                 history snapshot — they used to each carry their own version and
+                                 disagreed by $1.5k–$9.9k per user. **Also imported by
+                                 lib/handlers.mjs** (the one client→server shared module) so the
+                                 nightly cron and the in-app snapshot merge history identically.
+                                 Any new net-worth surface calls this, never re-sums accounts.
                                  Tested: src/test/netWorth.test.js.
-src/lib/userState.js           — localStorage ↔ Supabase state sync (mizan_debts is a TRACKED_KEY)
+src/lib/notifications.js       — Pure in-app notification store + detectors (addNotifications /
+                                 unreadCount / markRead / relativeTime / shariaChangeNotifications /
+                                 dividendNotifications / priceAlertNotifications). Feed lives in the
+                                 synced TRACKED_KEY `mizan_notifications`, rendered by the header
+                                 bell (NotificationBell in MizanApp.jsx). **Detection must never be
+                                 gated on Notification.permission** — it was, so users who never
+                                 granted browser permission got no compliance/dividend/price alerts
+                                 at all AND the dividend path never seeded its "seen" set. The OS
+                                 toast is an optional extra channel built from the same copy.
+                                 A notification's `nav` MUST be in NAV_TARGETS (top-level tabs only);
+                                 sub-tab names render a blank page. Tested: notifications.test.js.
+src/lib/userState.js           — localStorage ↔ Supabase state sync (mizan_debts is a TRACKED_KEY).
+                                 `persistUserState` upserts the WHOLE value = last writer wins. For
+                                 append-only keys use **`persistMergedUserState(key, mergeFn, local)`**,
+                                 which re-reads the stored row and merges into it. A tab open since
+                                 before the nightly cron once wrote its stale array back and discarded
+                                 two months of backfilled net-worth history (2026-07-30).
 src/lib/useKeyboard.js         — Global keyboard shortcuts
 ```
 
