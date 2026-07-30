@@ -22,6 +22,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **backlog:** Record editable subscriptions + tour-nudge unblock (`910ea69`)
 - **backlog:** Record nisab provider chain + fail-closed unavailable state (`4b5cc77`)
 
+### Maintenance
+- Drop unused React default imports (automatic JSX runtime); lint 36->28 (`3253b9b`)
+
 ### Other
 - Rename user-facing 'AI Advisor' to 'Assistant' (holding-out risk) (`ae6bbf9`)
 

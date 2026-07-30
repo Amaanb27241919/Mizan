@@ -8671,6 +8671,7 @@ function AdminPanel(){
     ["dividend-check","Dividend check"],
     ["bill-reminders","Bill reminders"],
     ["weekly-digest","Weekly digest"],
+    ["activation","Activation nudge"],
     ["bot-signals","Bot signals"],
   ];
 
@@ -8789,6 +8790,28 @@ function AdminPanel(){
           <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>Last: {fmtDate(row?.created_at)}</div>
           {row?.metadata&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{Object.entries(row.metadata).map(([k,v])=>`${k}=${v}`).join(", ")}</div>}
         </div>)}
+      </div>
+    </BentoTile>}
+
+    {/* ─── Activation funnel ─────────────────────── */}
+    {stats?.funnel&&<BentoTile accent={T.blue}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ACTIVATION FUNNEL</span>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{stats.funnel.nudges_sent} nudge{stats.funnel.nudges_sent===1?"":"s"} sent</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:T.s3}}>
+        {[
+          ["SIGNED UP",  stats.funnel.signups,   null,                          T.textHi],
+          ["CONNECTED",  stats.funnel.connected, `${stats.funnel.connect_rate}% of signups`, stats.funnel.connect_rate>=50?T.gain:T.gold],
+          ["RETURNED",   stats.funnel.returned,  `${stats.funnel.return_rate}% came back`,   stats.funnel.return_rate>=50?T.gain:T.gold],
+        ].map(([l,v,sub,color])=><div key={l} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
+          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>{l}</div>
+          <div style={{fontFamily:FU,fontSize:26,fontWeight:700,color,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",lineHeight:1}}>{v}</div>
+          {sub&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:4}}>{sub}</div>}
+        </div>)}
+      </div>
+      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
+        Connecting an account is what predicts retention — every user who linked one came back, and every user who didn't, didn't. The daily activation cron emails anyone 1–30 days old who still hasn't connected, once each.
       </div>
     </BentoTile>}
 
