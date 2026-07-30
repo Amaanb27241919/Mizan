@@ -19,6 +19,7 @@ export const TRACKED_KEYS = [
   'mizan_debts',                      // debt-payoff tracker (manual + linked-account)
   'mizan_disabled_accts',             // per-account on/off toggle
   'mizan_networth_history',           // daily net-worth snapshots
+  'mizan_notifications',              // in-app notification feed (read state included)
   'mizan_screening_baseline',         // Sharia alert baseline
   'mizan_seen_dividends',             // notified dividend IDs
   'mizan_seen_dividends_initialized', // first-run flag for dividend alerts

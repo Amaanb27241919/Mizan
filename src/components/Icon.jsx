@@ -33,6 +33,7 @@ export const ICONS = {
   pencil:<><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="M14 6l4 4"/></>,
   warning:<><path d="M12 4 2.8 20h18.4L12 4Z"/><path d="M12 10v4.5M12 17.4h.01"/></>,
   info:<><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6h.01"/></>,
+  bell:<><path d="M18 8.8a6 6 0 1 0-12 0c0 5.2-2 6.7-2 6.7h16s-2-1.5-2-6.7Z"/><path d="M13.7 19.2a2 2 0 0 1-3.4 0"/></>,
   check:<path d="M4.5 12.5 9.5 17.5 19.5 6.5"/>,
   close:<path d="M6 6l12 12M18 6 6 18"/>,
 };

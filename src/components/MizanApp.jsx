@@ -11,6 +11,8 @@ import {
 } from "../lib/zakat.js";
 import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptions, detectUsageBasedSpend, normalizeMerchant } from "../lib/recurring.js";
 import { netWorthParts, hasSnapshotableData, isBrokeragePlaid } from "../lib/netWorth.js";
+import { addNotifications, unreadCount, markAllRead, markRead, relativeTime,
+  shariaChangeNotifications, dividendNotifications, priceAlertNotifications } from "../lib/notifications.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Icon, ICONS } from "./Icon.jsx";
@@ -2365,7 +2367,7 @@ function ETFOverlapPanel(){
   </CollapsibleTile>;
 }
 
-function AAOIFIScreener({holdings=[]}){
+function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
   const[results,setResults]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
   const[busy,setBusy]=useState(false);
   const[primary,setPrimary]=useState(()=>{try{return localStorage.getItem("mizan_screen_standard")||"AAOIFI";}catch{return"AAOIFI";}});
@@ -2435,20 +2437,22 @@ function AAOIFIScreener({holdings=[]}){
       if(!baseline){
         // First-ever screen: silent baseline init, no spam.
         localStorage.setItem("mizan_screening_baseline",JSON.stringify(final));persistUserState("mizan_screening_baseline",final);
-      }else if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
-        const updated={...baseline};
-        let fired=0;
-        Object.entries(final).forEach(([tk,res])=>{
-          const was=baseline[tk]?.status, now=res.status;
-          if(was&&now&&was!==now&&now==="haram"){
-            try{new Notification(`${tk} flagged non-compliant`,{body:`Sharia status: ${was} → ${now}. Tap MIZAN to review and plan exit.`,icon:"/icon-192.png"});}catch{}
-            updated[tk]=res; fired++;
-          }else if(was&&now&&was==="haram"&&now==="halal"){
-            try{new Notification(`${tk} now compliant`,{body:`Sharia status: ${was} → ${now}.`,icon:"/icon-192.png"});}catch{}
-            updated[tk]=res; fired++;
+      }else if(!demoMode){
+        // No permission gate. A holding turning non-compliant is the single most
+        // important thing this app can tell a Muslim investor, and it used to be
+        // withheld entirely from anyone who hadn't granted browser notifications.
+        const notes=shariaChangeNotifications(baseline,final,today);
+        if(notes.length){
+          onNotify?.(notes);
+          if(typeof Notification!=="undefined"&&Notification.permission==="granted"){
+            notes.forEach(n=>{try{new Notification(n.title,{body:n.body,icon:"/icon-192.png"});}catch{}});
           }
-        });
-        if(fired>0){localStorage.setItem("mizan_screening_baseline",JSON.stringify(updated));persistUserState("mizan_screening_baseline",updated);}
+          // Advance the baseline only for the tickers we actually reported, so
+          // an unreported change stays pending rather than being swallowed.
+          const updated={...baseline};
+          notes.forEach(n=>{const tk=n.meta?.ticker;if(tk&&final[tk])updated[tk]=final[tk];});
+          localStorage.setItem("mizan_screening_baseline",JSON.stringify(updated));persistUserState("mizan_screening_baseline",updated);
+        }
       }
     }catch{}
   };
@@ -4876,7 +4880,7 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp, a
 }
 
 /* ─── PORTFOLIO ──────────────────────────────────────── */
-function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav,onConnect,bankBalance=0}){
+function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],documents=[],watchlist=[],onAddWatch,onRemoveWatch,onSetAlert,onAlertPermission,demoMode=false,onNav,onConnect,bankBalance=0,onNotify}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
   const[sub,setSub]=useState("holdings");
   const[acct,setAcct]=useState("all");
@@ -5088,7 +5092,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
     {sub==="backtest"&&<HistoricalBacktest/>}
     {sub==="overlap"&&<ETFOverlapPanel/>}
 
-    {sub==="screener"&&<AAOIFIScreener holdings={merged}/>}
+    {sub==="screener"&&<AAOIFIScreener holdings={merged} onNotify={onNotify} demoMode={demoMode}/>}
     {sub==="assets"&&<ManualAssets demoMode={demoMode}/>}
   </div>;
 }
@@ -10890,6 +10894,82 @@ function KeyboardShortcuts({ onNav, onSync, onConnect, onHelp, onCommand, isAdmi
   return null;
 }
 
+/* ─── NOTIFICATION BELL + PANEL ──────────────────────────
+   The in-app record of things Mizan noticed. Until now those events existed
+   ONLY as browser Notifications behind a permission prompt, so a user who
+   never granted permission got nothing and a user who did got a toast that
+   vanished. Store lives in src/lib/notifications.js (pure, tested). */
+function NotificationBell({items=[],onMarkAllRead,onMarkRead,onClear,onNav}){
+  const [open,setOpen]=useState(false);
+  const ref=useRef(null);
+  const unread=unreadCount(items);
+
+  // Close on outside click / Escape. Registered only while open so the app
+  // isn't carrying two global listeners for a closed panel.
+  useEffect(()=>{
+    if(!open)return;
+    const onDoc=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    const onKey=e=>{if(e.key==="Escape")setOpen(false);};
+    document.addEventListener("mousedown",onDoc);
+    document.addEventListener("keydown",onKey);
+    return()=>{document.removeEventListener("mousedown",onDoc);document.removeEventListener("keydown",onKey);};
+  },[open]);
+
+  const tint=k=>k==="sharia"?T.gain:k==="dividend"?T.gold:k==="alert"?T.blue:k==="signal"?T.violet:T.slate;
+
+  return<div ref={ref} style={{position:"relative",flexShrink:0}}>
+    <button
+      onClick={()=>setOpen(v=>!v)}
+      title={unread>0?`${unread} unread notification${unread===1?"":"s"}`:"Notifications"}
+      aria-label={unread>0?`Notifications, ${unread} unread`:"Notifications"}
+      aria-expanded={open}
+      style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",
+        color:unread>0?T.blue:T.muted,padding:"5px 9px",background:unread>0?`${T.blue}14`:"transparent",
+        border:`1px solid ${unread>0?T.blue+"40":T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}>
+      <Icon name="bell" size={14}/>
+      {unread>0&&<span style={{position:"absolute",top:-5,right:-5,minWidth:15,height:15,padding:"0 4px",
+        background:T.loss,color:"#fff",borderRadius:999,fontFamily:FM,fontSize:9,fontWeight:700,
+        display:"flex",alignItems:"center",justifyContent:"center",fontVariantNumeric:"tabular-nums"}}>
+        {unread>9?"9+":unread}</span>}
+    </button>
+
+    {open&&<div className="glass-strong" style={{position:"absolute",top:"calc(100% + 8px)",right:0,width:"min(92vw,340px)",
+      maxHeight:"min(70vh,460px)",display:"flex",flexDirection:"column",
+      border:`1px solid ${T.border}`,borderRadius:T.rMd,boxShadow:"var(--sh-lg, 0 12px 32px rgba(0,0,0,0.18))",zIndex:200,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s2,
+        padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`}}>
+        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>NOTIFICATIONS</span>
+        <div style={{display:"flex",gap:T.s2}}>
+          {unread>0&&<button onClick={onMarkAllRead} style={{fontFamily:FM,fontSize:9.5,color:T.blue,background:"none",border:"none",cursor:"pointer",letterSpacing:"0.04em",padding:0}}>MARK ALL READ</button>}
+          {items.length>0&&<button onClick={onClear} style={{fontFamily:FM,fontSize:9.5,color:T.muted,background:"none",border:"none",cursor:"pointer",letterSpacing:"0.04em",padding:0}}>CLEAR</button>}
+        </div>
+      </div>
+
+      {items.length===0
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center"}}>
+          <div style={{fontFamily:FP,fontSize:13,color:T.text,marginBottom:4}}>Nothing yet</div>
+          <div style={{fontFamily:FP,fontSize:11.5,color:T.muted,lineHeight:1.5}}>
+            You&apos;ll hear from Mīzan when a holding&apos;s compliance changes, a dividend lands, or a price alert is crossed.
+          </div>
+        </div>
+        :<div style={{overflowY:"auto"}}>
+          {items.map(n=><button key={n.id}
+            onClick={()=>{onMarkRead?.(n.id);if(n.nav){onNav?.(n.nav);setOpen(false);}}}
+            style={{display:"block",width:"100%",textAlign:"left",padding:`${T.s3} ${T.s4}`,
+              background:n.read?"transparent":`${T.blue}0c`,border:"none",
+              borderBottom:`1px solid ${T.border}`,cursor:n.nav?"pointer":"default"}}>
+            <div style={{display:"flex",alignItems:"baseline",gap:T.s2,marginBottom:2}}>
+              {!n.read&&<span style={{width:6,height:6,borderRadius:999,background:tint(n.kind),flexShrink:0,transform:"translateY(-1px)"}}/>}
+              <span style={{fontFamily:FP,fontSize:12.5,fontWeight:n.read?500:700,color:T.textHi,letterSpacing:"-0.01em",flex:1}}>{n.title}</span>
+              <span style={{fontFamily:FM,fontSize:9,color:T.muted,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{relativeTime(n.ts)}</span>
+            </div>
+            {n.body&&<div style={{fontFamily:FP,fontSize:11.5,color:T.muted,lineHeight:1.45,paddingLeft:n.read?0:14}}>{n.body}</div>}
+          </button>)}
+        </div>}
+    </div>}
+  </div>;
+}
+
 export default function Mizan(){
   // Scope cross-tab broadcasts to the authenticated user so a separate tab
   // signed in as a different user can't receive (or send) state intended
@@ -11202,6 +11282,27 @@ export default function Mizan(){
   // below keeps it fresh. A stable reference means the Overview chart / perf memos
   // stop recomputing over 10y of history on every live-price tick.
   const [netWorthHistory,setNetWorthHistory]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");}catch{return[];}});
+
+  // In-app notifications. Synced, so the feed follows the user across devices.
+  const [notifications,setNotifications]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_notifications")||"[]");}catch{return[];}});
+  const writeNotifications=useCallback(next=>{
+    setNotifications(prev=>{
+      if(next===prev)return prev;   // no-op updates must not trigger a write
+      try{localStorage.setItem("mizan_notifications",JSON.stringify(next));persistUserState("mizan_notifications",next);}catch{}
+      return next;
+    });
+  },[]);
+  // Detectors call this; demo mode is excluded so fictional data never lands in
+  // a real user's feed (same rule as the net-worth snapshot).
+  const pushNotifications=useCallback(incoming=>{
+    if(!incoming?.length)return;
+    setNotifications(prev=>{
+      const next=addNotifications(prev,incoming);
+      if(next===prev)return prev;
+      try{localStorage.setItem("mizan_notifications",JSON.stringify(next));persistUserState("mizan_notifications",next);}catch{}
+      return next;
+    });
+  },[]);
 
   // Daily net-worth snapshots. Each successful sync writes one entry per day
   // (overwrites same-day so live ticks don't bloat history).
@@ -11796,9 +11897,15 @@ export default function Mizan(){
   // Dividend payment notifications — diff incoming /activities against the
   // "seen" set in localStorage. First run silently seeds the set so we don't
   // spam past dividends as if they were new.
+  // NB: this deliberately does NOT return early on notification permission.
+  // It used to, which meant a user who never granted permission got no
+  // dividend alerts AND never even seeded `mizan_seen_dividends` — the whole
+  // path was dead code for them. Detection always runs and records in-app; the
+  // browser toast is an optional extra channel below.
   useEffect(()=>{
     if(!snapActivities.length)return;
-    if(typeof Notification==="undefined"||Notification.permission!=="granted")return;
+    if(demoMode)return;
+    const canToast=typeof Notification!=="undefined"&&Notification.permission==="granted";
     let seenIds;
     try{seenIds=new Set(JSON.parse(localStorage.getItem("mizan_seen_dividends")||"[]"));}catch{seenIds=new Set();}
     const initialized=localStorage.getItem("mizan_seen_dividends_initialized")==="1";
@@ -11817,42 +11924,46 @@ export default function Mizan(){
     }
     const fresh=dividends.filter(d=>!seenIds.has(d.id));
     if(!fresh.length)return;
-    fresh.slice(0,5).forEach(d=>{
-      const tk=d.symbol?.symbol||d.symbol||"—";
-      const amt=Math.abs(+d.amount||0);
-      try{new Notification(`${tk} dividend received`,{body:`+$${amt.toFixed(2)} on ${d.trade_date}`,icon:"/icon-192.png"});}catch{}
-      seenIds.add(d.id);
-    });
-    if(fresh.length>5){
-      // Coalesce overflow into a single "+ N more" notification
-      try{new Notification(`${fresh.length-5} more dividends`,{body:"Open MIZAN → Activity to review",icon:"/icon-192.png"});}catch{}
-      fresh.slice(5).forEach(d=>seenIds.add(d.id));
-    }
+    // One source of truth for the copy — the in-app record and the OS toast
+    // can't describe the same dividend differently.
+    const notes=dividendNotifications(fresh);
+    pushNotifications(notes);
+    if(canToast)notes.forEach(n=>{try{new Notification(n.title,{body:n.body,icon:"/icon-192.png"});}catch{}});
+    fresh.forEach(d=>seenIds.add(d.id));
     try{const seenArr=[...seenIds];localStorage.setItem("mizan_seen_dividends",JSON.stringify(seenArr));persistUserState("mizan_seen_dividends",seenArr);}catch{}
-  },[snapActivities]);
+  },[snapActivities,demoMode,pushNotifications]);
 
   // Alert checker — fires browser notifications when targets are crossed.
   // Marks each alert "fired" so we don't spam every sync.
+  // Same decoupling as dividends: a price target the user explicitly set must
+  // register in-app whether or not they ever granted browser permission.
   useEffect(()=>{
     if(!live.length||!watchlist.length)return;
-    if(!("Notification"in window)||Notification.permission!=="granted")return;
+    if(demoMode)return;
+    const canToast=typeof Notification!=="undefined"&&Notification.permission==="granted";
     let mutated=false;
+    const crossings=[];
     const next=watchlist.map(w=>{
       const px=live.find(l=>l.tk===w.symbol)?.price;
       if(!px)return w;
       let n={...w};
       if(w.alertAbove&&px>=w.alertAbove&&!w.alertAboveFired){
-        try{new Notification(`${w.symbol} ↑`,{body:`Price ${px.toFixed(2)} hit target ${w.alertAbove}`});}catch{}
+        crossings.push({symbol:w.symbol,price:px,target:w.alertAbove,direction:"above"});
         n.alertAboveFired=true;mutated=true;
       }
       if(w.alertBelow&&px<=w.alertBelow&&!w.alertBelowFired){
-        try{new Notification(`${w.symbol} ↓`,{body:`Price ${px.toFixed(2)} crossed below ${w.alertBelow}`});}catch{}
+        crossings.push({symbol:w.symbol,price:px,target:w.alertBelow,direction:"below"});
         n.alertBelowFired=true;mutated=true;
       }
       return n;
     });
+    if(crossings.length){
+      const notes=priceAlertNotifications(crossings);
+      pushNotifications(notes);
+      if(canToast)notes.forEach(n=>{try{new Notification(n.title,{body:n.body});}catch{}});
+    }
     if(mutated)persistWatchlist(next);
-  },[live]);
+  },[live,demoMode,pushNotifications]);
 
   const disconnectAccount=useCallback(async(accountId,authorizationId,label)=>{
     if(demoMode){
@@ -12395,6 +12506,12 @@ export default function Mizan(){
 
       {/* Right: compact action toggles + sync */}
       <div className="mz-status-right" style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+        <NotificationBell
+          items={notifications}
+          onMarkAllRead={()=>writeNotifications(markAllRead(notifications))}
+          onMarkRead={id=>writeNotifications(markRead(notifications,id))}
+          onClear={()=>writeNotifications([])}
+          onNav={setNav}/>
         <button onClick={cycleTheme} title={`Theme: ${themeMode} (resolved: ${resolvedTheme}).`} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",color:T.muted,padding:"5px 9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}><Icon name={(themeMode==="auto"?resolvedTheme:themeMode)==="dark"?"moon":"sun"} size={14}/></button>
         {(!hasRealData||demoMode)&&<button onClick={toggleDemo} title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
         <button onClick={()=>setAuto(v=>!v)} title={`Auto-sync ${auto?"on":"off"}`} style={{fontFamily:FM,fontSize:9,color:auto?T.gain:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:auto?`${T.gain}14`:"transparent",border:`1px solid ${auto?T.gain+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{auto?"AUTO":"AUTO"}</button>
@@ -12429,7 +12546,7 @@ export default function Mizan(){
       <div className="page">
         {nav==="overview"  &&<Overview  live={live} snapAccounts={visibleAccounts} allAccounts={snapAccounts} plaidAccounts={plaidAccounts} disabledAccts={disabledAccts} onToggleAcct={toggleAcctEnabled} onDisconnectAcct={disconnectAccount} mapPosition={mapPosition} metrics={performanceMetrics} activities={snapActivities} netWorthHistory={netWorthHistory} onNav={setNav} onConnect={()=>setConn(true)} onToggleDemoFromBanner={toggleDemo} bankBalance={bankBalance} nicknames={nicknames} onSetNickname={onSetNickname} demoMode={demoMode} pendingSignals={pendingSignals}/>}
         {nav==="finances"  &&<Finances onBankBalanceChange={setBankBalance} demoMode={demoMode} onNav={setNav} nicknames={nicknames} onSetNickname={onSetNickname}/>}
-        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} botFills={botFills} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} onConnect={()=>{setConnMode("read");setConn(true);}} bankBalance={bankBalance}/>}
+        {nav==="portfolio" &&<Portfolio live={live} snapAccounts={visibleAccounts} mapPosition={mapPosition} activities={snapActivities} botFills={botFills} documents={snapDocuments} watchlist={watchlist} onAddWatch={addToWatchlist} onRemoveWatch={removeFromWatchlist} onSetAlert={setAlert} onAlertPermission={requestAlertPermission} demoMode={demoMode} onNav={setNav} onConnect={()=>{setConnMode("read");setConn(true);}} bankBalance={bankBalance} onNotify={pushNotifications}/>}
         {nav==="trade"     &&<TradeBot currentNW={visibleAccounts.reduce((s,a)=>s+(a.balance||0),0)} ytdContrib={performanceMetrics.ytdContrib||0} accounts={visibleAccounts} live={live} mapPosition={mapPosition} activities={snapActivities} onNav={setNav} onConnectTrade={()=>{setConnMode("trade");setConn(true);}} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={botIsRoot} consented={botConsented} demoMode={demoMode}/>}
         {nav==="goals"     &&<GoalsHub
           snapAccounts={visibleAccounts}
