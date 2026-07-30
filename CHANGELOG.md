@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-07-30
 
 ### Added
+- **ops:** Heartbeat + staleness alert for the trading-bot cron (`df941d6`)
 - **ops:** Automate monitoring + move activation control into the admin panel (`13de635`)
 
 ## 2026-07-29

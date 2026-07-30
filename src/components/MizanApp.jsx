@@ -10,6 +10,7 @@ import {
   DEFAULT_ZAKAT_WORKSHEET, ZAKAT_ASSET_FIELDS, ZAKAT_LIABILITY_FIELDS,
 } from "../lib/zakat.js";
 import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptions, detectUsageBasedSpend, normalizeMerchant } from "../lib/recurring.js";
+import { netWorthParts, hasSnapshotableData, isBrokeragePlaid } from "../lib/netWorth.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Icon, ICONS } from "./Icon.jsx";
@@ -460,7 +461,8 @@ const DEMO_SHARIA = {
  */
 const isBankAsset    = a => a?.type === "depository";
 const isBankDebt     = a => a?.type === "credit" || a?.type === "loan";
-const isBrokeragePlaid = a => a?.type === "investment" || a?.type === "brokerage";
+// Re-exported from src/lib/netWorth.js, which owns the net-worth composition so
+// the Overview headline and the history snapshot can't drift apart again.
 // Retirement accounts among Plaid investment accounts — 401(k)/403(b)/457,
 // IRA/Roth, pension, TSP, Keogh. Used to auto-fill the Zakat worksheet's
 // retirement row (vested value is zakatable). Subtype strings come from Plaid
@@ -1466,24 +1468,13 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   //   - Manual zakatable assets (gold, real estate, business equity)
   // Falls back to summing position market values when no broker is connected.
   const equityValue=merged.reduce((s,h)=>s+mv(h),0);
-  const balanceSum=snapAccounts.reduce((s,a)=>s+(a.balance||0),0);
   const manualAssetsRaw=(()=>{try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]");}catch{return[];}})();
   const manualAssetTotal=manualAssetsRaw.reduce((s,a)=>s+(+a.value||0),0);
-  const brokerageTot=snapAccounts.length>0?balanceSum:equityValue;
-  // Plaid investment-type balances ONLY contribute to Net Worth as a
-  // fallback when SnapTrade isn't connected at all. When SnapTrade IS
-  // connected, it is the canonical brokerage source — including Plaid
-  // investments on top would double-count any broker the user happens
-  // to link via both providers (e.g. Robinhood appears as both a
-  // SnapTrade brokerage account AND a Plaid investment account with the
-  // same underlying balance, ~$13k in both lists).
-  //
-  // Plaid depository / credit / loan accounts always count via
-  // bankBalance — they don't overlap with SnapTrade.
-  const plaidInvestmentTot = snapAccounts.length === 0
-    ? plaidAccounts.filter(isBrokeragePlaid).reduce((s,a)=>s+(+a.current_bal||0),0)
-    : 0;
-  const tot=brokerageTot+(bankBalance||0)+plaidInvestmentTot+manualAssetTotal;
+  // Composition lives in src/lib/netWorth.js — the daily history snapshot calls
+  // the same function, so the chart's line and its headline are the same number.
+  const {total:tot,brokerageTot}=netWorthParts({
+    accounts:snapAccounts,equityValue,plaidAccounts,bankBalance,manualAssetTotal,
+  });
   // Net zakatable wealth — honours the user's chosen Islamic-finance
   // methodology (silver vs gold nisab, full vs 30% long-term investment
   // valuation). Investment-class wealth (brokerage holdings, Plaid
@@ -11214,16 +11205,29 @@ export default function Mizan(){
 
   // Daily net-worth snapshots. Each successful sync writes one entry per day
   // (overwrites same-day so live ticks don't bloat history).
+  //
+  // Records the SAME total the Overview headline shows — brokerage + bank +
+  // manual assets — via the shared netWorthParts(). It used to sum brokerage
+  // balances only, so the chart drew a brokerage-only line and then pinned its
+  // last point to the bank-inclusive headline; the whole non-brokerage balance
+  // landed in the range gain. Every connected user's history disagreed with
+  // their own headline, by $1.5k to $9.9k.
+  const manualAssetTotalRoot=useMemo(()=>{
+    try{return JSON.parse(localStorage.getItem("mizan_manual_assets")||"[]").reduce((s,a)=>s+(+a.value||0),0);}
+    catch{return 0;}
+  },[]);
   useEffect(()=>{
     if(demoMode)return; // never persist the demo persona into a real user's net-worth history (local + Supabase)
-    if(!visibleAccounts.length)return;
-    const balanceSum=visibleAccounts.reduce((s,a)=>s+(a.balance||0),0);
-    if(balanceSum<=0)return;
+    const parts={accounts:visibleAccounts,plaidAccounts,bankBalance,manualAssetTotal:manualAssetTotalRoot};
+    // Don't gate on total>0: a user whose card debt exceeds their investments
+    // has a legitimately negative net worth and still needs a history line.
+    // Gate on "has anything loaded yet" instead, so the load gap writes nothing.
+    if(!hasSnapshotableData(parts))return;
+    const {total,cash}=netWorthParts(parts);
     try{
       const today=new Date().toISOString().slice(0,10);
       const hist=JSON.parse(localStorage.getItem("mizan_networth_history")||"[]");
-      const cashSum=visibleAccounts.reduce((s,a)=>s+(a.cash||0),0);
-      const next={date:today,total:+balanceSum.toFixed(2),cash:+cashSum.toFixed(2),accounts:visibleAccounts.length};
+      const next={date:today,total:+total.toFixed(2),cash:+cash.toFixed(2),accounts:visibleAccounts.length};
       const without=hist.filter(h=>h.date!==today);
       const updated=[...without,next].sort((a,b)=>a.date.localeCompare(b.date));
       const trimmed=updated.slice(-3650);
@@ -11231,7 +11235,7 @@ export default function Mizan(){
       persistUserState("mizan_networth_history",trimmed);
       setNetWorthHistory(trimmed);
     }catch{}
-  },[visibleAccounts,demoMode]);
+  },[visibleAccounts,plaidAccounts,bankBalance,manualAssetTotalRoot,demoMode]);
 
   // Activity-derived metrics. All amounts respect the account on/off toggles.
   const performanceMetrics=useMemo(()=>{
