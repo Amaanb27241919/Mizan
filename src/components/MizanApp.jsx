@@ -8811,7 +8811,7 @@ function AdminPanel(){
         </div>)}
       </div>
       <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
-        Connecting an account is what predicts retention — every user who linked one came back, and every user who didn't, didn't. The daily activation cron emails anyone 1–30 days old who still hasn't connected, once each.
+        Connecting an account is what predicts retention — every user who linked one came back, and every user who didn't, didn't. The daily activation cron emails anyone 1–45 days old who still hasn't connected, once each — skipping anyone who signed in within the last 7 days, since they're engaged rather than lapsed.
       </div>
     </BentoTile>}
 
