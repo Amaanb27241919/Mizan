@@ -2592,7 +2592,7 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
     <BentoTile>
       <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SCREEN ANY TICKER</div>
       <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,letterSpacing:"-0.005em",maxWidth:680}}>
-        Check a symbol you don’t own against the same engine that screens your holdings. This is a compliance check, not a recommendation — Mizan tells you whether a company passes the screen, never whether to buy it.
+        Type a ticker or company name and pick the match — <strong style={{color:T.text,fontWeight:600}}>the verdict and its ratios appear once you select a symbol</strong>, screened by the same engine that screens your holdings. This is a compliance check, not a recommendation: Mizan tells you whether a company passes the screen, never whether to buy it.
       </p>
       <form onSubmit={runLookup} style={{display:"flex",gap:T.s2,alignItems:"flex-start",flexWrap:"wrap"}}>
         <div style={{position:"relative",width:262}}>
@@ -2617,25 +2617,39 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
             className="field"
             style={{width:"100%",fontFamily:FM,fontSize:13,letterSpacing:"0.04em"}}
           />
-          {sugOpen&&suggestions.length>0&&<ul id="mz-sym-listbox" role="listbox" aria-label="Matching symbols" style={{
-            position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:40,margin:0,padding:T.s1,listStyle:"none",
-            background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rMd,boxShadow:T.shadow,
-            maxHeight:264,overflowY:"auto",
+          {/* The footer sits OUTSIDE the <ul> on purpose: a hint row inside a
+              listbox is announced as a selectable option. It also answers the
+              question the list itself raises — "why is there no halal status
+              next to these?" Suggestions are a name matcher; stamping each row
+              with a verdict would turn the dropdown into a curated buy list. */}
+          {sugOpen&&suggestions.length>0&&<div style={{
+            position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:40,
+            background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rMd,boxShadow:T.shadow,overflow:"hidden",
           }}>
-            {suggestions.map((s,i)=><li
-              key={s.symbol}
-              id={`mz-sym-opt-${i}`}
-              role="option"
-              aria-selected={i===sugIdx}
-              onMouseDown={e=>{e.preventDefault();pickSuggestion(s);}}
-              onMouseEnter={()=>setSugIdx(i)}
-              style={{display:"flex",alignItems:"baseline",gap:T.s2,padding:`${T.s2} ${T.s2}`,borderRadius:T.rSm,cursor:"pointer",
-                background:i===sugIdx?`${T.blue}12`:"transparent"}}
-            >
-              <span style={{fontFamily:FM,fontSize:12,fontWeight:700,color:T.textHi,letterSpacing:"0.06em",flexShrink:0,minWidth:52}}>{s.symbol}</span>
-              <span style={{fontFamily:FP,fontSize:12,color:T.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
-            </li>)}
-          </ul>}
+            <ul id="mz-sym-listbox" role="listbox" aria-label="Matching symbols" style={{
+              margin:0,padding:T.s1,listStyle:"none",maxHeight:264,overflowY:"auto",
+            }}>
+              {suggestions.map((s,i)=><li
+                key={s.symbol}
+                id={`mz-sym-opt-${i}`}
+                role="option"
+                aria-selected={i===sugIdx}
+                onMouseDown={e=>{e.preventDefault();pickSuggestion(s);}}
+                onMouseEnter={()=>setSugIdx(i)}
+                style={{display:"flex",alignItems:"baseline",gap:T.s2,padding:`${T.s2} ${T.s2}`,borderRadius:T.rSm,cursor:"pointer",
+                  background:i===sugIdx?`${T.blue}12`:"transparent"}}
+              >
+                <span style={{fontFamily:FM,fontSize:12,fontWeight:700,color:T.textHi,letterSpacing:"0.06em",flexShrink:0,minWidth:52}}>{s.symbol}</span>
+                <span style={{fontFamily:FP,fontSize:12,color:T.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+              </li>)}
+            </ul>
+            {/* preventDefault keeps focus in the input, so clicking the hint
+                doesn't blur-close the menu the user is still reading. */}
+            <div onMouseDown={e=>e.preventDefault()} style={{
+              padding:`${T.s2} ${T.s3}`,borderTop:`1px solid ${T.border}`,background:T.surface,
+              fontFamily:FM,fontSize:9.5,letterSpacing:"0.12em",fontWeight:600,color:T.muted,textAlign:"center",
+            }}>SELECT A SYMBOL TO SEE ITS VERDICT</div>
+          </div>}
         </div>
         <button type="submit" disabled={lookupBusy||!lookupQ.trim()} className="btn-primary" style={{opacity:(lookupBusy||!lookupQ.trim())?0.55:1}}>
           {lookupBusy?"Screening…":"Screen"}
