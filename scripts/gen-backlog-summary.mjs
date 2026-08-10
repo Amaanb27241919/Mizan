@@ -22,7 +22,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SRC = resolve(root, "BACKLOG.md");
+// Source defaults to the repo's BACKLOG.md. The pre-commit hook passes an
+// explicit path instead: it hands us the STAGED content, so unstaged edits made
+// after `git add` can't leak into the JSON that goes into the commit.
+// Paths resolve from the repo root, so the caller's cwd doesn't matter.
+const SRC = resolve(root, process.argv[2] || "BACKLOG.md");
 const OUT = resolve(root, "src/generated/backlog.json");
 
 // `## F — Fixes / correctness (autonomous)` → bucket F.

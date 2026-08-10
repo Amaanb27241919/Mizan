@@ -24,4 +24,30 @@ if node scripts/gen-changelog.mjs >/dev/null 2>&1; then
 else
   echo "pre-commit: CHANGELOG regen skipped (gen-changelog failed) — commit continues"
 fi
+
+# ── Backlog summary ────────────────────────────────────────────────────────
+# src/generated/backlog.json feeds the Admin Center's BACKLOG tile and is
+# committed, so it can drift whenever BACKLOG.md is edited without a build.
+# Regenerate only when BACKLOG.md is actually part of this commit — every other
+# commit skips the work entirely.
+#
+# Generated from the STAGED content (git show :BACKLOG.md), not the working
+# tree: editing the file further after `git add` would otherwise leak those
+# later edits into the JSON being committed.
+#
+# Non-blocking, matching this hook's existing posture. Production doesn't depend
+# on it — `npm run build` runs the same generator and FAILS the build (and so
+# the deploy) if BACKLOG.md can't be parsed. This hook is convenience; the build
+# is the enforcement.
+if git diff --cached --name-only 2>/dev/null | grep -qx 'BACKLOG.md'; then
+  staged_backlog=$(mktemp 2>/dev/null) || staged_backlog=""
+  if [ -n "$staged_backlog" ] && git show :BACKLOG.md > "$staged_backlog" 2>/dev/null &&
+     node scripts/gen-backlog-summary.mjs "$staged_backlog" >/dev/null 2>&1; then
+    git add src/generated/backlog.json 2>/dev/null || true
+  else
+    echo "pre-commit: backlog summary regen skipped — commit continues (npm run build will regenerate)"
+  fi
+  [ -n "$staged_backlog" ] && rm -f "$staged_backlog"
+fi
+
 exit 0
