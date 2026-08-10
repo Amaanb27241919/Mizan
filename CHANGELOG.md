@@ -15,6 +15,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **screener:** Screen any ticker, not only the ones you already own (`041a1f5`)
 
 ### Fixed
+- **ui:** Stop the cold-load flash and clip the Screener input on small phones (`5432e25`)
 - **zakat:** Dividend purification alerts read our own data, not a dead endpoint (`b097923`)
 - **ops:** Await the cron heartbeat instead of racing the runtime (`c83f515`)
 
