@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-10
+
+### Fixed
+- **ops:** Await the cron heartbeat instead of racing the runtime (`c83f515`)
+
 ## 2026-07-30
 
 ### Added
