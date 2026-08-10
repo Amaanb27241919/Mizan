@@ -125,6 +125,18 @@ lib/market/candles.mjs         — Pure (no I/O): validation (symbol regex, reso
                                  bounded window) + Polygon→chart normalization for the price chart.
                                  Powers /api/market/candles. Unit-tested (market-endpoints.test.js).
                                  NB: the chart uses POLYGON for OHLC — Finnhub free tier has no /stock/candle.
+lib/market/symbolSearch.mjs    — Pure (no I/O): query validation + Finnhub /search
+                                 normalization for the Screener's ticker TYPEAHEAD.
+                                 Powers /api/market/symbols (auth-gated, IMPERSONAL, own
+                                 `marketdata.search` rate bucket, 6h response cache since
+                                 company names are static). Finnhub /search IS on the free
+                                 tier — verified live 2026-08-10, unlike the dividend
+                                 calendar. Keeps dotted class shares (BRK.A). Name coverage
+                                 is partial (a "toyota" search returns nothing), so
+                                 suggestions degrade to empty and typing the ticker still
+                                 works. **Never attach halal verdicts to the suggestion
+                                 list** — a dropdown of names each stamped "Halal ✓" is a
+                                 curated buy list, not a lookup. Tested: symbolSearch.test.js.
 lib/compliance/policy.mjs      — The compliance boundary, in code. Three data tiers
                                  (IMPERSONAL / ACCOUNT_SERVICING / PROHIBITED), the prohibited-pattern
                                  list, and assertImpersonal(). Single source of truth for docs/COMPLIANCE.md.

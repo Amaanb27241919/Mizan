@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-10
 
 ### Added
+- **screener:** Ticker typeahead — type a company name, not just a symbol (`a2645e9`)
 - **screener:** Screen any ticker, not only the ones you already own (`041a1f5`)
 
 ### Fixed
