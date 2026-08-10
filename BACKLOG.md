@@ -11,6 +11,7 @@ Persistent backlog. Future sessions read this instead of re-deriving from scatte
 | Bucket | Meaning | Default action |
 |---|---|---|
 | **F** Fixes / correctness | Something wrong or imprecise | ✅ Fair game in maintenance mode |
+| **G** Growth / distribution | Getting Mizan in front of people | 👤 Owner-led; agent builds the measurement + surfaces |
 | **N** Net-new features (autonomous) | New surface / capability | ⏸ Parked — explicit ask only |
 | **M** Needs migration | New feature + DB schema change | ⏸ Parked — needs owner approval (CLAUDE.md §8) |
 | **P** Parked / not-autonomous | Feature blocked on keys or external setup | ⏸ Parked |
@@ -204,6 +205,90 @@ The "something is wrong" bucket. Aligned with maintenance mode.
 - **Effort:** S (data) · **User value:** medium · Extends [F3](#f3--purification_ratios-table-needs-an-ongoing-maintenance-path)
 - **Evidence:** live query of `purification_ratios` (2026-07-31) returns exactly 8 rows, all US-listed: `AMAGX, AMANX, HLAL, SPRE, SPSK, SPTE, SPUS, UMMA`. A Canadian holding a TSX/NEO-listed halal fund (e.g. Wealthsimple's `WSHR.NE`) gets no purification figure at all.
 - **Remains:** source AAOIFI-aligned impurity percentages for the Canadian-listed halal funds and seed them. Same maintenance problem as F3 — the ratios go stale annually.
+
+---
+
+## G — Growth / distribution (owner-led)
+
+Added 2026-08-10. Until now this file had no home for anything about getting Mizan
+in front of people, so that work happened off-book. Marketing is **not** a
+maintenance-mode exception — nothing here is green-lit by default. It is written
+down so it stops being invisible.
+
+**Why now — the product converts the people who find it.** Live counts as of
+2026-08-10: **12 signups · 11 brokerage-linked · 4 bank-linked · 7 active in the
+last 30 days · 4 new in the last 30 days**, with zero marketing. A ~92%
+signup→brokerage-connect rate and ~58% 30-day activity is the shape that says
+distribution, not the product, is the bottleneck. **Read it with the caveat it
+deserves:** n=12, and some of those are people the owner knows personally, so the
+ratios flatter. The direction is real; the precision is not.
+
+**The compliance line applies to a post exactly as it applies to a screen.**
+`lib/compliance/policy.mjs` already governs this — public marketing is
+IMPERSONAL-tier communication:
+
+- ✅ **Safe:** what Zakat is, how nisab is derived, how AAOIFI screening works,
+  what purification is and why almost nobody does it, why riba matters, product
+  screenshots, feature explanations.
+- ⛔ **Prohibited:** "SPUS is a great buy", any performance or return claim,
+  portfolio results, before/after screenshots implying gains, testimonials phrased
+  as advice, "we'll grow your money".
+
+The useful property: the compliance work already done tells you what you are
+allowed to say. Anything that would fail `advisor-filter.mjs` should not be a
+caption either.
+
+### G1 — Claim the social handles (brand defense, do regardless of whether you post)
+
+- **Status:** open · **Effort:** S · **Value:** high (defensive) · **Autonomous:** no — owner must register
+- **Why:** there is an active name collision. `joinmizan.com` is **Mizan Markets LLC** (Floral Park NY), which *claims RIA status* — see memory `joinmizan-competitor` and `REBRAND-INVENTORY.md`. A competitor holding the obvious handles while claiming registration is a worse outcome than any posting-cadence question.
+- **Remains:** register `@mizan…` (or the chosen brand form) on Instagram, X, TikTok, LinkedIn. Park them even if nothing is posted for months.
+- **Note:** this is entangled with the unresolved **rebrand decision** (O-bucket). If the name changes, handles claimed now are wasted — but sitting on nothing is worse. Claim the current form.
+
+### G2 — Attribution: nothing records where a signup came from
+
+- **Status:** open · **Effort:** S–M · **Value:** high · **Autonomous:** **yes** — this is the one item here an agent can just build
+- **The gap:** the Admin **ACTIVATION FUNNEL** tile already measures signups → connected → returned (built from `audit_log`, `294d063`/`8ac1447`). What it cannot say is where any of those people came from. `@vercel/speed-insights` (the only client analytics, `src/main.jsx`) measures page performance, not acquisition. **Start posting tomorrow and there is no way to tell whether it worked.**
+- **Remains:** capture `utm_source` / `utm_medium` / `utm_campaign` from the query string plus `document.referrer` at signup, persist alongside the user, and add a source breakdown to the funnel tile. Two storage options: a synced `user_state` key (no migration) or a column on `profiles` (needs a migration → M bucket, CLAUDE.md §8).
+- **Do this BEFORE the first campaign, not after.** Attribution cannot be backfilled — a signup with no recorded source is unattributable forever.
+- **Privacy:** store the source only, never a full referring URL with query params, and keep it out of anything user-facing.
+
+### G3 — Instagram: a cadence that survives contact with one operator
+
+- **Status:** open (owner instinct 2026-08-10) · **Effort:** ongoing · **Value:** unproven · **Autonomous:** no
+- **The honest constraint:** one operator, maintenance mode. Three posts then silence reads worse than never starting. Pick a cadence that can be held — **one post a week, batch-produced** — over an ambitious one that won't be.
+- **Mizan's raw material is unusually good and sits entirely in the safe tier:**
+  - The **Zakat worksheet** is scholar-calculator-grade (mirrors DarusSalam / Sacred Learning). "How is Zakat calculated on a 401k / on stocks you haven't sold" is content almost nobody does well.
+  - **Dividend purification** is genuinely under-explained in this market — most Muslim investors have never heard of it. `purification_ratios` + the AAOIFI framing is real expertise.
+  - **Screening explainers** — the Screener's "Why →" modal already generates plain-English reasoning from real ratios. That is a post format, not a feature.
+- **The proof this is the right content:** the 2026-08-09 accountant conversation. What made him want the product was the explanation, not a pitch.
+- **Before the first post:** run captions past the same tier test in `policy.mjs`. See the safe/prohibited lists at the top of this bucket.
+
+### G4 — Credibility gate: marketing invites "who says this is halal?" (blocks on O17)
+
+- **Status:** open · **Effort:** L · **Value:** high · **Autonomous:** no — recruitment
+- **The sequencing problem:** the moment Mizan is marketed to strangers rather than acquaintances, the first question is *who says this is halal?* Today the honest answer is "an AAOIFI-aligned ratio engine we built and documented." That is defensible engineering and a weak authority claim. **O17 (named Sharia scholar board) is already described in this file as "the moat"** — it is also what converts good educational content into authority rather than opinion.
+- **Not a blocker to posting**, but it caps how far the content travels, and it is the objection every serious prospect will raise. Worth starting recruitment in parallel with content rather than after.
+
+### G5 — Accountants as a distribution channel (from a real conversation)
+
+- **Status:** open · **Effort:** M · **Value:** high if it works · **Autonomous:** no
+- **Origin:** 2026-08-09, the owner spoke to an accountant who pays an Edward Jones rep to research halal names and said Mizan removing that middleman — while keeping everything else — would win him over. That conversation drove the Screener ticker lookup (`041a1f5`) and typeahead (`a2645e9`).
+- **The insight is the channel, not the testimonial:** Zakat is an accounting problem, purification is a bookkeeping problem, and Muslim accountants sit directly on top of the clients who owe both. One accountant reaches many households, and they are already trusted on exactly this.
+- **Remains:** decide whether this is worth a deliberate motion (a page aimed at practitioners, a referral path) or stays anecdotal. Note the compliance framing shifts here — an accountant recommending a *tool* is fine; Mizan paying for client referrals is a different regulatory surface and should not be assumed benign.
+
+### G6 — The landing → app boundary is unmeasured
+
+- **Status:** open · **Effort:** S · **Value:** medium · **Autonomous:** partly
+- **Detail:** the marketing site (`mizan-landing` repo → `www.mizan.exchange`) and the app (`app.mizan.exchange`) are separate properties with no funnel across the boundary. Landing SEO was done 2026-07-28 (`ece7610`/`3b62233`/`f06056a`) and GSC is verified via an HTML-tag meta in the landing `<head>` (**never remove that tag** — memory `landing-seo-and-positioning`), so search impressions are visible. What is not visible is landing visitor → app signup.
+- **Remains:** propagate UTM/referrer across the hop so [G2](#g2--attribution-nothing-records-where-a-signup-came-from) can attribute it. Pairs with G2 — neither is worth much alone.
+
+### G7 — Positioning is decided but not consistently expressed
+
+- **Status:** open · **Effort:** S · **Value:** medium · **Autonomous:** partly (copy)
+- **Decided (memory `landing-seo-and-positioning`):** Mizan is **PFM + halal screening + Zakat, self-directed** — explicitly NOT "Islamic Wealth Management," which implies advisory/RIA and contradicts the compliance posture.
+- **Drift to fix:** `index.html`'s `<title>` still reads "MĪZAN — Halal Investment Terminal". "Terminal" is from the old dark-terminal design era, and it undersells a personal-finance product to a category (traders) that is not the audience. Left unchanged 2026-08-10 because a title is a positioning decision, not a display bug.
+- **The differentiator worth leading with:** nothing else appears to combine Zakat at worksheet depth + per-dividend purification + unified brokerage/bank PFM + screening. Screening alone is the most contested corner (Zoya, Musaffa et al. have shipped it for years) and the weakest place to compete. ⚠️ **Verify competitor lineups directly before any of this becomes a public claim** — this read is not fresh.
 
 ---
 
@@ -717,5 +802,14 @@ Verification agent hit a session limit; status unconfirmed.
 - [ ] **O25** **Canada — two fiqh questions for your scholar** (both block engineering, neither is an engineering call): (a) is **nisab evaluated in USD or the user's home currency**? `/api/metals/spot` returns `nisab_gold_usd` / `nisab_silver_usd` only, so today a Canadian is compared against a USD threshold. (b) how are **RRSP / TFSA** treated for Zakat? An RRSP carries withdrawal tax and penalties that some scholars allow deducting; a TFSA generally does not. Blocks [F12](#f12--canadian-registered-accounts-rrsp--tfsa--resp--rrif--lira-are-unrecognised) and the currency half of [F10](#f10--multi-currency-mizan-sums-every-balance-as-usd-opened-up-by-the-2026-07-31-geo-change).
 - [ ] **O26** **Canada — legal review before promoting to Canadian users.** `src/components/Terms.jsx:127-129` sets governing law to the **State of New York** with a **US $100** liability cap (:106); `src/components/Privacy.jsx:133` cites GDPR but **not PIPEDA** (Canada's federal privacy law). Serving Canadians deliberately warrants counsel on both.
 - [ ] **O27** **Canada — regulatory posture on the trading bot.** Flagging, not advising: the "compliant, not an RIA" position is reasoned around **US** rules. Canadian securities regulation is **provincial** (CSA + provincial commissions). Read-only screening/Zakat is very likely fine; **extending semi-auto bot execution to a Canadian brokerage account is a different regulatory surface and must not happen by default.** Full-auto is already owner-allowlist-only (`canUseFullAuto`), which is the correct side of the line — keep it there. See CLAUDE.md §1 and O23.
+
+**Growth (added 2026-08-10 — see the [G bucket](#g--growth--distribution-owner-led))**
+
+- [ ] **G1** Claim `@mizan…` on Instagram / X / TikTok / LinkedIn. Cheapest item in this file and purely defensive: `joinmizan.com` (Mizan Markets LLC) already claims RIA status. Do it even if nothing is ever posted. Entangled with the unresolved rebrand decision — claim the current form anyway.
+- [ ] **G3** Decide a posting cadence you will actually hold (one a week, batched, beats an ambitious one that stops after three). Content that is already safe under `policy.mjs`: Zakat mechanics, purification, screening explainers. Never: picks, performance, results.
+- [ ] **G4** Start scholar recruitment (**O17**) in parallel with content, not after it — "who says this is halal?" is the first question marketing invites, and a named board is what turns explanation into authority.
+- [ ] **G7** Decide the `<title>` / positioning wording. `index.html` still says "Halal Investment Terminal"; the decided positioning is PFM + screening + Zakat, self-directed — not a trading terminal, and explicitly not "Islamic Wealth Management".
+
+> ⚠️ **G2 (attribution) is the one growth item an agent can just build, and it must land BEFORE the first campaign.** Attribution cannot be backfilled — every signup that arrives without a recorded source is unattributable forever.
 
 _Generated from a 74-agent verification workflow (wf_d94e432d-445). Regenerate by re-running the backlog sweep._
