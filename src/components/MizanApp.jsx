@@ -2595,7 +2595,13 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
         Type a ticker or company name and pick the match — <strong style={{color:T.text,fontWeight:600}}>the verdict and its ratios appear once you select a symbol</strong>, screened by the same engine that screens your holdings. This is a compliance check, not a recommendation: Mizan tells you whether a company passes the screen, never whether to buy it.
       </p>
       <form onSubmit={runLookup} style={{display:"flex",gap:T.s2,alignItems:"flex-start",flexWrap:"wrap"}}>
-        <div style={{position:"relative",width:262}}>
+        {/* flex-basis, not a fixed width. At 320px the viewport leaves 248px
+            inside this tile (main 16+16, BentoTile 20+20), so a hard 262px
+            overflowed — and html{overflow-x:clip} would have silently CLIPPED
+            the input's right edge rather than scrolling to it. Shrinking to
+            the line keeps it whole on a small phone, which is the installed-PWA
+            case. minWidth:0 lets it actually shrink inside the flex row. */}
+        <div style={{position:"relative",flex:"0 1 262px",minWidth:0}}>
           <input
             value={lookupQ}
             onChange={e=>{setLookupQ(e.target.value);setSugOpen(true);}}

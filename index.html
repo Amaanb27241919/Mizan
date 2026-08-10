@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
     <meta name="description" content="MĪZAN — Shariah-compliant investment super-app. Screen, automate, and compound." />
-    <meta name="theme-color" content="#0d1311" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#f5f2eb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e1626" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#faf8f4" media="(prefers-color-scheme: light)" />
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -18,28 +18,56 @@
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/favicon.png" />
 
-    <!-- Fonts preload -->
+    <!-- Fonts. The app's real families (Fraunces / IBM Plex Sans / IBM Plex
+         Mono) are @imported by THEME_CSS in MizanApp.jsx; these preconnects
+         warm that connection. The Sora + JetBrains Mono stylesheet that used to
+         load here was removed 2026-08-10: Sora is used nowhere in the app, and
+         JetBrains Mono only ever appears as a fallback BEHIND IBM Plex Mono in
+         the FM stacks — with Menlo/Monaco (system, zero-latency) right after
+         it. Downloading two whole families render-blocking to serve a fallback
+         that a system font already covers is pure cost. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
 
     <title>MĪZAN — Halal Investment Terminal</title>
 
+    <!-- Resolve the theme BEFORE first paint. Without this the bootstrap CSS
+         below has to guess, and whichever it guesses is a flash for everyone
+         else. Mirrors MizanApp.jsx: localStorage `mizan_theme_mode`, default
+         "light", "auto" defers to the OS. Kept tiny and fail-safe — a throwing
+         localStorage (Safari private mode) must not block the app booting. -->
+    <script>
+      try {
+        var m = localStorage.getItem('mizan_theme_mode') || 'light';
+        var dark = m === 'dark' || (m === 'auto' &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      } catch (e) {}
+    </script>
+
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      /* First-paint colors. These MUST track --mz-bg / --mz-textHi in
+         MizanApp.jsx THEME_CSS — they are what the user stares at between the
+         HTML arriving and React mounting. They used to be #07080E on #C8CCE4,
+         a near-black left over from the old terminal-era design, so every cold
+         load (and every PWA launch) flashed black before painting the paper
+         canvas. */
       html, body, #root {
         height: 100%;
-        background: #07080E;
-        color: #C8CCE4;
-        font-family: 'Sora', 'Trebuchet MS', sans-serif;
+        background: #faf8f4;
+        color: #1c1b19;
+        font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
-      ::-webkit-scrollbar { width: 4px; height: 4px; background: #07080E; }
-      ::-webkit-scrollbar-thumb { background: #252840; border-radius: 2px; }
+      html[data-theme="dark"],
+      html[data-theme="dark"] body,
+      html[data-theme="dark"] #root { background: #0e1626; color: #f4f2ec; }
+
+      ::-webkit-scrollbar { width: 4px; height: 4px; background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #d2cabb; border-radius: 2px; }
+      html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #3d4f70; }
       @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
     </style>
   </head>
