@@ -29,6 +29,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - Record the Screener lookup and the crypto auto-blessing it exposed (`fba047b`)
 - Record the dividend-cron failure, the heartbeat race, and where Canada went (`38d02c1`)
 
+### Maintenance
+- **hooks:** Regenerate the backlog summary when BACKLOG.md is committed (`b1db076`)
+
 ## 2026-07-30
 
 ### Added

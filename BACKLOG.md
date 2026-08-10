@@ -814,4 +814,6 @@ Verification agent hit a session limit; status unconfirmed.
 
 > ⚠️ **G2 (attribution) is the one growth item an agent can just build, and it must land BEFORE the first campaign.** Attribution cannot be backfilled — every signup that arrives without a recorded source is unattributable forever.
 
+_Backlog summary regenerates automatically on commit (.githooks/pre-commit).
+
 _Generated from a 74-agent verification workflow (wf_d94e432d-445). Regenerate by re-running the backlog sweep._
