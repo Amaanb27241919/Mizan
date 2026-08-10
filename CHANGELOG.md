@@ -19,6 +19,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **accuracy:** One bank-inclusive net-worth history, shared by chart and digest (`b228453`)
 
 ### Docs
+- Record the notification feed and the user_state clobber fix (`1f23adf`)
 - Update CLAUDE.md + BACKLOG; extract and test the history merge (`ff69f1d`)
 
 ## 2026-07-29

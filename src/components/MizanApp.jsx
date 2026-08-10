@@ -11,6 +11,7 @@ import {
 } from "../lib/zakat.js";
 import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptions, detectUsageBasedSpend, normalizeMerchant } from "../lib/recurring.js";
 import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHistory } from "../lib/netWorth.js";
+import { canConnectBank, showsUsTaxTools, foreignCurrencyCodes } from "../lib/region.js";
 import { addNotifications, unreadCount, markAllRead, markRead, relativeTime,
   shariaChangeNotifications, dividendNotifications, priceAlertNotifications } from "../lib/notifications.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
@@ -1510,6 +1511,10 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     zakatCreditAccounts(plaidAccounts),
     overviewExcluded,
   );
+  // Non-USD accounts make every USD-summed figure on this tile wrong. Same
+  // signal the Zakat tab raises — computed from the same inputs so the two
+  // can't disagree about whether the number is trustworthy.
+  const overviewForeignCodes = foreignCurrencyCodes(snapAccounts, plaidAccounts);
   const {
     aboveNisab: overviewAboveNisab,
     zakatDue: zakatDueOverview,
@@ -1983,6 +1988,12 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
               ? (liveNisab.status==="loading"?"Checking live gold & silver prices…":"Nisab unavailable — live metal prices couldn't be fetched")
               : overviewAboveNisab?`2.5% of net zakatable wealth${zakatSettings.investmentMethod==="longterm_30"?" (30% rule on investments)":""}`:`Below nisab (${zakatSettings.nisabStandard} standard, ${fmtUSD(nisabOverview)})`
           }</div>
+          {/* Keep the tile and the Zakat tab in lockstep: if the tab is
+              warning that mixed currencies make the figure unreliable, this
+              headline must not look authoritative. */}
+          {overviewForeignCodes.length>0&&<button onClick={()=>onNav?.("goals")} style={{display:"flex",alignItems:"center",gap:4,marginTop:T.s2,background:`${T.gold}14`,border:`1px solid ${T.gold}40`,borderRadius:T.rSm,padding:`3px ${T.s2}`,cursor:"pointer",fontFamily:FM,fontSize:10,color:T.gold,fontWeight:600,letterSpacing:"0.06em",width:"100%",justifyContent:"flex-start",textAlign:"left"}}>
+            {overviewForeignCodes.join("/")} accounts — figure unreliable
+          </button>}
           {purificationOwedTotal != null && purificationOwedTotal > 0 && (
             <button onClick={() => onNav?.("goals")} style={{display:"flex",alignItems:"center",gap:4,marginTop:T.s2,background:`${T.gold}10`,border:`1px solid ${T.gold}30`,borderRadius:T.rSm,padding:`3px ${T.s2}`,cursor:"pointer",fontFamily:FM,fontSize:10,color:T.gold,fontWeight:600,letterSpacing:"0.06em",textDecoration:"none",width:"100%",justifyContent:"flex-start"}}>
               <Icon name="leaf" size={12} color={T.gold}/>
@@ -3827,6 +3838,13 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
   // brokerage / retirement / bank account the user can tick to include in — or
   // untick to exclude from — their zakatable assets.
   const connectedAccounts = zakatConnectedAccounts(accounts, plaidAccounts);
+  // Currency integrity. Every figure below is summed and formatted as USD. A
+  // CAD or GBP balance flowing in unconverted inflates the zakatable total by
+  // the FX rate and can put someone "above nisab" who is not — a religious
+  // obligation reported wrongly. We have no FX source, so we warn loudly
+  // rather than quote a number we know to be wrong (same call as the
+  // "Nisab unavailable" state above).
+  const foreignCodes = foreignCurrencyCodes(accounts, plaidAccounts);
 
   // ── Comprehensive Zakat worksheet ──────────────────────────────────────
   // The editable worksheet is the source of truth for the manual side of the
@@ -4048,6 +4066,10 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
           <div style={{fontFamily:FP,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
         </div>)}
       </div>
+      {foreignCodes.length>0&&<div style={{marginTop:T.s4,padding:`${T.s3} ${T.s4}`,borderRadius:T.rMd,background:`${T.gold}14`,border:`1px solid ${T.gold}40`,fontFamily:FP,fontSize:12.5,lineHeight:1.55,color:T.text}}>
+        <span style={{fontFamily:FM,fontSize:10,letterSpacing:"0.14em",fontWeight:600,color:T.gold,display:"block",marginBottom:T.s1}}>MIXED CURRENCY — FIGURES UNRELIABLE</span>
+        {foreignCodes.length===1?`One or more connected accounts report balances in ${foreignCodes[0]}, not USD.`:`Connected accounts report balances in ${foreignCodes.join(", ")}, not USD.`} Mizan does not convert currencies yet, so these totals add {foreignCodes.join("/")} to USD as if the rates were equal — treat the Zakat figure above as wrong until you enter your assets manually below in USD.
+      </div>}
       {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55}}>Connect a brokerage or fill in the worksheet below to populate these figures.</div>}
     </BentoTile>}
 
@@ -4894,6 +4916,13 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
   // Gate data-dependent sub-tabs for brand-new users: Tax (loss harvesting)
   // is meaningless with no positions, so it stays hidden until holdings exist.
   const hasHoldings=snapAccounts.length>0||merged.length>0;
+  // TaxPlanner encodes US law — the 30-day wash-sale rule and a "federal +
+  // state marginal rate". None of that is true in, say, Canada (superficial
+  // loss rule, 50% inclusion rate, provincial rates, sheltered TFSA/RRSP), so
+  // showing it to a non-US user is confidently wrong advice about money. Hide
+  // rather than localise. Fails open when the country is unknown.
+  const usTaxTools=useMemo(()=>showsUsTaxTools(typeof document!=="undefined"?document.cookie:""),[]);
+  const showTaxTab=hasHoldings&&usTaxTools;
 
   const tot=merged.reduce((s,h)=>s+mv(h),0);
   const totCost=merged.reduce((s,h)=>s+cost(h),0);
@@ -4931,7 +4960,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
       const TOOLS=["rebalance","tax","dividends","backtest","overlap"];
       const topActive=TOOLS.includes(sub)?"tools":sub;
       const topTabs=[["holdings","Holdings"],["screener","Screener"],["activity","Activity"],["assets","Assets"],["tools","Tools"]];
-      const toolTabs=[["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["dividends","Dividends"],["backtest","Backtest"],["overlap","ETF Overlap"]];
+      const toolTabs=[["rebalance","Rebalance"],...(showTaxTab?[["tax","Tax"]]:[]),["dividends","Dividends"],["backtest","Backtest"],["overlap","ETF Overlap"]];
       return<>
         <TabBar tabs={topTabs} active={topActive} onChange={v=>{if(v==="tools"){if(!TOOLS.includes(sub))setSub("rebalance");}else setSub(v);}}/>
         {topActive==="tools"&&<TabBar tabs={toolTabs} active={sub} onChange={setSub} accent={T.slate}/>}
@@ -5084,7 +5113,17 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
 
     {sub==="rebalance"&&<Rebalancer holdings={merged} snapAccounts={snapAccounts} onNav={onNav}/>}
 
-    {sub==="tax"&&<TaxPlanner holdings={merged} activities={activities} snapAccounts={snapAccounts}/>}
+    {/* Gate the CONTENT too, not just the tab strip. `sub` can already be
+        "tax" (Cmd+K, a notification, or state held from before the country
+        resolved), and a hidden tab with a rendered panel would still show US
+        wash-sale guidance to a non-US user. */}
+    {sub==="tax"&&showTaxTab&&<TaxPlanner holdings={merged} activities={activities} snapAccounts={snapAccounts}/>}
+    {sub==="tax"&&!usTaxTools&&<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
+      <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,marginBottom:T.s2,letterSpacing:"-0.01em"}}>Tax tools are US-only</div>
+      <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,maxWidth:520,margin:"0 auto"}}>
+        Loss harvesting here is built on US rules — the 30-day wash-sale rule and a combined federal + state marginal rate. Those don't apply where you are, so we'd rather show nothing than something confidently wrong. Everything else in Portfolio works normally.
+      </div>
+    </BentoTile>}
 
     {/* Backtest moved here from the dropped Trade tab — it's a Portfolio
         research tool by nature, not a trading one. Uses Polygon for OHLC. */}
@@ -9855,6 +9894,14 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     return()=>{clearInterval(tick);document.removeEventListener("visibilitychange",onVis);};
   },[refresh,demoMode]);
 
+  // Can this visitor link a bank? Plaid onboards US residents only, so for
+  // everyone else we show an explanation instead of a button that 403s. The
+  // country comes from the `mz_country` cookie the Vercel middleware sets; it
+  // is a UX hint only — /api/plaid/link-token re-checks the un-forgeable edge
+  // header server-side. Read once at mount: the cookie is written on the
+  // document response, before React ever runs.
+  const bankEligible=useMemo(()=>canConnectBank(typeof document!=="undefined"?document.cookie:""),[]);
+
   // Lazy-load react-plaid-link only when user clicks Connect (keeps initial bundle small).
   const[PlaidLink,setPlaidLink]=useState(null);
   // OAuth resume: if the user is on /oauth-redirect (Plaid sent them back
@@ -9910,6 +9957,13 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       // knows exactly what to do next instead of getting a raw error.
       if(r.status===403&&(d.code==="MFA_ENROLLMENT_REQUIRED"||d.code==="MFA_VERIFICATION_REQUIRED")){
         setStatus({ok:false,msg:d.error||"Multi-factor authentication required.",code:d.code});
+        return;
+      }
+      // Region gate. The button is normally hidden for non-US visitors, but
+      // this still fires when geolocation disagrees with the cookie (VPN
+      // dropped mid-session, cookie expired, edge resolved the IP differently).
+      if(r.status===403&&d.code==="REGION_UNSUPPORTED"){
+        setStatus({ok:false,msg:d.error||"Bank connections are US-only right now.",code:d.code});
         return;
       }
       if(!r.ok||!d.link_token)throw new Error(d.error||"Could not start Plaid Link");
@@ -10093,9 +10147,19 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               border:`1px solid ${T.border}`,color:T.muted}}>
             ↓ Export CSV
           </button>}
-          <button onClick={startLink} disabled={busy||demoMode} title={demoMode?"Disable demo mode in Settings to connect a real bank":undefined} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":demoMode?"+ Connect Bank (demo)":"+ Connect Bank"}</button>
+          {bankEligible
+            ?<button onClick={startLink} disabled={busy||demoMode} title={demoMode?"Disable demo mode in Settings to connect a real bank":undefined} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":demoMode?"+ Connect Bank (demo)":"+ Connect Bank"}</button>
+            :<span title="Plaid, our bank-data provider, onboards US residents only" style={{padding:`12px ${T.s4}`,fontSize:12,fontFamily:FM,fontWeight:600,letterSpacing:"0.04em",borderRadius:T.rMd,background:`${T.slate}14`,border:`1px solid ${T.slate}40`,color:T.muted,display:"inline-flex",alignItems:"center"}}>
+              Bank linking — US only
+            </span>}
         </div>
       </div>
+      {/* Non-US visitor: explain what still works rather than showing a dead
+          button. Brokerage linking runs through SnapTrade, which is Canadian
+          and has no US-residency requirement. */}
+      {!bankEligible&&<div style={{marginTop:T.s3,padding:`${T.s3} ${T.s4}`,borderRadius:T.rMd,fontFamily:FP,fontSize:12.5,lineHeight:1.55,background:`${T.slate}0f`,border:`1px solid ${T.border}`,color:T.muted}}>
+        Bank connections run through Plaid, which onboards US residents only. Everything else works from where you are — Sharia screening, the Zakat worksheet, goals, and brokerage linking through SnapTrade.
+      </div>}
       {syncMsg&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:syncMsg.ok?T.gainBg:T.lossBg,border:`1px solid ${(syncMsg.ok?T.gain:T.loss)+"30"}`,color:syncMsg.ok?T.gain:T.loss}}>
         {syncMsg.ok?ICON_OK:ICON_NO}{syncMsg.msg}
       </div>}
