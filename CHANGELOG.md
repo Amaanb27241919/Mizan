@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-10
 
 ### Added
+- **admin:** Signup attribution (G2) + the backlog rendered in the panel (`0daa660`)
 - **screener:** Say plainly that the verdict comes after you pick a symbol (`9503d2c`)
 - **screener:** Ticker typeahead — type a company name, not just a symbol (`a2645e9`)
 - **screener:** Screen any ticker, not only the ones you already own (`041a1f5`)

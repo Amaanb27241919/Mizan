@@ -247,9 +247,11 @@ caption either.
 
 ### G2 — Attribution: nothing records where a signup came from
 
-- **Status:** open · **Effort:** S–M · **Value:** high · **Autonomous:** **yes** — this is the one item here an agent can just build
+- **Status:** ✅ **SHIPPED 2026-08-10** (`0daa660`) · **Effort:** S–M · **Value:** high · **Autonomous:** yes
 - **The gap:** the Admin **ACTIVATION FUNNEL** tile already measures signups → connected → returned (built from `audit_log`, `294d063`/`8ac1447`). What it cannot say is where any of those people came from. `@vercel/speed-insights` (the only client analytics, `src/main.jsx`) measures page performance, not acquisition. **Start posting tomorrow and there is no way to tell whether it worked.**
-- **Remains:** capture `utm_source` / `utm_medium` / `utm_campaign` from the query string plus `document.referrer` at signup, persist alongside the user, and add a source breakdown to the funnel tile. Two storage options: a synced `user_state` key (no migration) or a column on `profiles` (needs a migration → M bucket, CLAUDE.md §8).
+- **Shipped:** first-touch capture in `src/main.jsx` (before render — UTM params live on the entry URL and are gone once the app navigates), held in localStorage until there is an account, then `POST /api/user/attribution` → `user_state.mizan_attribution`. **First-write-wins is enforced server-side**, not just client-side: a stale tab, a second device or a reinstall can otherwise send a fresh `direct` long after the real first touch. Pure logic + 25 tests in `src/lib/attribution.js` (shared with the server so the funnel groups sources exactly as the browser classified them). Admin funnel gained a **WHERE THEY CAME FROM** breakdown.
+- **Privacy:** only the hostname of a referrer is read, immediately reduced to a short token and re-sanitized server-side — never a full referring URL, whose query string can carry search terms or session ids.
+- **Known limit, by design:** everyone who signed up before this shipped counts as **`unattributed`** in the breakdown rather than being dropped from the denominator. That cannot be backfilled — only grown past.
 - **Do this BEFORE the first campaign, not after.** Attribution cannot be backfilled — a signup with no recorded source is unattributable forever.
 - **Privacy:** store the source only, never a full referring URL with query params, and keep it out of anything user-facing.
 

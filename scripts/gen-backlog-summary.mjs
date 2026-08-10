@@ -32,14 +32,22 @@ const BUCKET_RE = /^##\s+([A-Z])\s+—\s+(.+?)\s*$/;
 const ITEM_RE = /^###\s+([A-Z]\d+)\s+—\s+(.+?)\s*$/;
 const DONE_RE = /✅|\bDONE\b/;
 
+// Completion is recorded two different ways in this file: older items put
+// "✅ DONE" in the heading, newer ones carry a `- **Status:** ✅ SHIPPED …`
+// bullet underneath. Read both, or freshly-completed work keeps showing as open.
+const STATUS_RE = /^-\s+\*\*Status:\*\*\s*(.+)$/;
+const STATUS_DONE_RE = /✅|\bSHIPPED\b|\bDONE\b/i;
+
 function parse(md) {
   const buckets = [];
   let current = null;
+  let lastItem = null;
   for (const line of md.split("\n")) {
     const b = line.match(BUCKET_RE);
     if (b) {
       current = { key: b[1], title: b[2].replace(/\s*\(.*\)\s*$/, "").trim(), items: [] };
       buckets.push(current);
+      lastItem = null;
       continue;
     }
     // A `### ` heading before any bucket header belongs to a session-notes
@@ -48,12 +56,19 @@ function parse(md) {
     const i = line.match(ITEM_RE);
     if (i) {
       const title = i[2].trim();
-      current.items.push({
+      lastItem = {
         id: i[1],
         // Strip the done marker from the display title; `done` carries it.
         title: title.replace(/\s*—?\s*✅\s*DONE.*$/i, "").replace(/\s*✅\s*/g, " ").trim(),
         done: DONE_RE.test(title),
-      });
+      };
+      current.items.push(lastItem);
+      continue;
+    }
+    // The Status bullet belongs to the item most recently opened above it.
+    if (lastItem && !lastItem.done) {
+      const st = line.match(STATUS_RE);
+      if (st && STATUS_DONE_RE.test(st[1])) lastItem.done = true;
     }
   }
   return buckets;

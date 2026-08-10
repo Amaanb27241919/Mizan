@@ -8,7 +8,7 @@
         {
           "id": "F1",
           "title": "Zakat calculation correctness verification",
-          "done": false
+          "done": true
         },
         {
           "id": "F2",
@@ -77,7 +77,7 @@
         }
       ],
       "archive": false,
-      "open": 12,
+      "open": 11,
       "total": 14
     },
     {
@@ -92,7 +92,7 @@
         {
           "id": "G2",
           "title": "Attribution: nothing records where a signup came from",
-          "done": false
+          "done": true
         },
         {
           "id": "G3",
@@ -121,7 +121,7 @@
         }
       ],
       "archive": false,
-      "open": 7,
+      "open": 6,
       "total": 7
     },
     {
@@ -348,7 +348,7 @@
         {
           "id": "O6",
           "title": "Submit sitemap in Google Search Console + re-scrape social debuggers (landing SEO)",
-          "done": false
+          "done": true
         },
         {
           "id": "O7",
@@ -442,7 +442,7 @@
         }
       ],
       "archive": false,
-      "open": 24,
+      "open": 23,
       "total": 24
     },
     {
