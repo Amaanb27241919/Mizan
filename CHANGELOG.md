@@ -17,6 +17,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **ops:** Await the cron heartbeat instead of racing the runtime (`c83f515`)
 
 ### Docs
+- Record the Screener lookup and the crypto auto-blessing it exposed (`fba047b`)
 - Record the dividend-cron failure, the heartbeat race, and where Canada went (`38d02c1`)
 
 ## 2026-07-30

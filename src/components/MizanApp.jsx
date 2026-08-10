@@ -2425,9 +2425,15 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
   const[lookupBusy,setLookupBusy]=useState(false);
   const[lookupRes,setLookupRes]=useState(null);   // {tk, verdict}
   const[lookupErr,setLookupErr]=useState(null);
-  const runLookup=async(e)=>{
-    e?.preventDefault?.();
-    const tk=lookupQ.trim().toUpperCase();
+  // Typeahead. `sugOpen` is set ONLY by typing, so re-running the fetch effect
+  // after a selection (which rewrites lookupQ to the chosen symbol) can't pop
+  // the menu back open over the result.
+  const[suggestions,setSuggestions]=useState([]);
+  const[sugOpen,setSugOpen]=useState(false);
+  const[sugIdx,setSugIdx]=useState(-1);          // -1 = nothing highlighted
+
+  const screenSymbolNow=async(rawTk)=>{
+    const tk=String(rawTk||"").trim().toUpperCase();
     if(!tk||lookupBusy)return;
     setLookupBusy(true);setLookupErr(null);setLookupRes(null);
     // screenTicker resolves (never rejects) with status "unknown" on failure,
@@ -2438,6 +2444,37 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
       setLookupErr(`Couldn't screen ${tk}. Check the symbol — or it may not be covered by our data provider (coverage is strongest on US-listed names).`);
     }else setLookupRes({tk,verdict:v});
     setLookupBusy(false);
+  };
+  const runLookup=(e)=>{e?.preventDefault?.();setSugOpen(false);screenSymbolNow(lookupQ);};
+  const pickSuggestion=(s)=>{
+    if(!s)return;
+    setLookupQ(s.symbol);setSugOpen(false);setSuggestions([]);setSugIdx(-1);
+    screenSymbolNow(s.symbol);
+  };
+  // Debounced name/ticker suggestions. One request per typing pause, not per
+  // keystroke — the server caches hard (company names are static), so most of
+  // these never reach Finnhub. Below 2 chars almost everything matches, so the
+  // list is noise; don't spend a request on it.
+  useEffect(()=>{
+    const term=lookupQ.trim();
+    if(term.length<2){setSuggestions([]);return;}
+    let on=true;
+    const t=setTimeout(()=>{
+      apiFetch(`/api/market/symbols?q=${encodeURIComponent(term)}`)
+        .then(r=>r.ok?r.json():{symbols:[]})
+        .then(d=>{if(on){setSuggestions(Array.isArray(d.symbols)?d.symbols:[]);setSugIdx(-1);}})
+        .catch(()=>{if(on)setSuggestions([]);});   // suggestions are a convenience; typing still works
+    },250);
+    return()=>{on=false;clearTimeout(t);};
+  },[lookupQ]);
+  const onLookupKeyDown=(e)=>{
+    if(!sugOpen||suggestions.length===0)return;
+    if(e.key==="ArrowDown"){e.preventDefault();setSugIdx(i=>(i+1)%suggestions.length);}
+    else if(e.key==="ArrowUp"){e.preventDefault();setSugIdx(i=>i<=0?suggestions.length-1:i-1);}
+    else if(e.key==="Escape"){setSugOpen(false);}
+    // Enter with nothing highlighted falls through to the form's submit, which
+    // screens exactly what was typed.
+    else if(e.key==="Enter"&&sugIdx>=0){e.preventDefault();pickSuggestion(suggestions[sugIdx]);}
   };
 
   const runScreen=async(forceAll)=>{
@@ -2557,19 +2594,49 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
       <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,letterSpacing:"-0.005em",maxWidth:680}}>
         Check a symbol you don’t own against the same engine that screens your holdings. This is a compliance check, not a recommendation — Mizan tells you whether a company passes the screen, never whether to buy it.
       </p>
-      <form onSubmit={runLookup} style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
-        <input
-          value={lookupQ}
-          onChange={e=>setLookupQ(e.target.value)}
-          placeholder="Ticker — e.g. NVDA"
-          aria-label="Ticker symbol to screen"
-          spellCheck={false}
-          autoCapitalize="characters"
-          autoCorrect="off"
-          maxLength={12}
-          className="field"
-          style={{width:210,fontFamily:FM,fontSize:13,letterSpacing:"0.06em",textTransform:"uppercase"}}
-        />
+      <form onSubmit={runLookup} style={{display:"flex",gap:T.s2,alignItems:"flex-start",flexWrap:"wrap"}}>
+        <div style={{position:"relative",width:262}}>
+          <input
+            value={lookupQ}
+            onChange={e=>{setLookupQ(e.target.value);setSugOpen(true);}}
+            onKeyDown={onLookupKeyDown}
+            // Delayed so a mousedown on a suggestion lands before the menu closes.
+            onBlur={()=>setTimeout(()=>setSugOpen(false),120)}
+            onFocus={()=>{if(suggestions.length)setSugOpen(true);}}
+            placeholder="Ticker or company — e.g. NVDA"
+            aria-label="Ticker symbol or company name to screen"
+            role="combobox"
+            aria-expanded={sugOpen&&suggestions.length>0}
+            aria-controls="mz-sym-listbox"
+            aria-autocomplete="list"
+            aria-activedescendant={sugIdx>=0?`mz-sym-opt-${sugIdx}`:undefined}
+            spellCheck={false}
+            autoCorrect="off"
+            autoComplete="off"
+            maxLength={40}
+            className="field"
+            style={{width:"100%",fontFamily:FM,fontSize:13,letterSpacing:"0.04em"}}
+          />
+          {sugOpen&&suggestions.length>0&&<ul id="mz-sym-listbox" role="listbox" aria-label="Matching symbols" style={{
+            position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:40,margin:0,padding:T.s1,listStyle:"none",
+            background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rMd,boxShadow:T.shadow,
+            maxHeight:264,overflowY:"auto",
+          }}>
+            {suggestions.map((s,i)=><li
+              key={s.symbol}
+              id={`mz-sym-opt-${i}`}
+              role="option"
+              aria-selected={i===sugIdx}
+              onMouseDown={e=>{e.preventDefault();pickSuggestion(s);}}
+              onMouseEnter={()=>setSugIdx(i)}
+              style={{display:"flex",alignItems:"baseline",gap:T.s2,padding:`${T.s2} ${T.s2}`,borderRadius:T.rSm,cursor:"pointer",
+                background:i===sugIdx?`${T.blue}12`:"transparent"}}
+            >
+              <span style={{fontFamily:FM,fontSize:12,fontWeight:700,color:T.textHi,letterSpacing:"0.06em",flexShrink:0,minWidth:52}}>{s.symbol}</span>
+              <span style={{fontFamily:FP,fontSize:12,color:T.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+            </li>)}
+          </ul>}
+        </div>
         <button type="submit" disabled={lookupBusy||!lookupQ.trim()} className="btn-primary" style={{opacity:(lookupBusy||!lookupQ.trim())?0.55:1}}>
           {lookupBusy?"Screening…":"Screen"}
         </button>
