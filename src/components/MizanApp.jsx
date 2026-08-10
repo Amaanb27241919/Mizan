@@ -2414,6 +2414,32 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
   const cacheStale=latestCacheDate&&latestCacheDate<today;
   const tickers=[...new Set(holdings.map(h=>h.tk).filter(Boolean))];
 
+  // ── Ad-hoc lookup: screen a ticker the user does NOT hold ──────────────
+  // Kept in its own state, deliberately NOT merged into `results`. That cache
+  // is holdings-scoped and load-bearing twice over: it drives the "Screened
+  // today" freshness line, and runScreen() diffs it against
+  // mizan_screening_baseline to fire compliance-change notifications. A ticker
+  // someone merely looked up once would skew the freshness label and, worse,
+  // could later fire "X is no longer compliant" for a company they never owned.
+  const[lookupQ,setLookupQ]=useState("");
+  const[lookupBusy,setLookupBusy]=useState(false);
+  const[lookupRes,setLookupRes]=useState(null);   // {tk, verdict}
+  const[lookupErr,setLookupErr]=useState(null);
+  const runLookup=async(e)=>{
+    e?.preventDefault?.();
+    const tk=lookupQ.trim().toUpperCase();
+    if(!tk||lookupBusy)return;
+    setLookupBusy(true);setLookupErr(null);setLookupRes(null);
+    // screenTicker resolves (never rejects) with status "unknown" on failure,
+    // so an unusable verdict must read as an error rather than a neutral
+    // verdict — "unknown" rendered as a grey badge looks like an answer.
+    const v=await screenTicker(tk);
+    if(!v||v.status==="unknown"){
+      setLookupErr(`Couldn't screen ${tk}. Check the symbol — or it may not be covered by our data provider (coverage is strongest on US-listed names).`);
+    }else setLookupRes({tk,verdict:v});
+    setLookupBusy(false);
+  };
+
   const runScreen=async(forceAll)=>{
     setBusy(true);
     const today=new Date().toISOString().slice(0,10);
@@ -2507,6 +2533,69 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>A/R &lt; {STANDARDS[primary].recvMax}%
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Non-perm &lt; {STANDARDS[primary].nonPermMax}% <span style={{color:T.dim,fontStyle:"italic"}}>(not evaluated — sector check applies)</span>
       </div>
+    </BentoTile>
+
+    {/* ─── Screen any ticker (not only what you hold) ─────────────
+        Added 2026-08-10 from real user feedback: an accountant described
+        paying an Edward Jones rep to research halal names. Everything else on
+        this tab screens only what the user ALREADY owns — `tickers` comes from
+        `holdings`, and the watchlist isn't screened either — so there was no
+        way to ask "is NVDA halal?" about something they don't hold.
+        /api/screen has always accepted an arbitrary symbol, so this was a
+        missing input, not missing plumbing.
+
+        COMPLIANCE (lib/compliance/policy.mjs): a screening verdict is
+        IMPERSONAL — the same religious/factual classification for everyone, a
+        pure function of the symbol and never of who is asking — which the
+        policy explicitly allows. The line this must never cross is ranking or
+        suggestion: the moment results are ordered by desirability, or framed
+        as picks, an impersonal fact becomes a personalized recommendation and
+        Mizan is doing something that requires registration. One symbol in, one
+        verdict out, and the copy says as much. */}
+    <BentoTile>
+      <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SCREEN ANY TICKER</div>
+      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,letterSpacing:"-0.005em",maxWidth:680}}>
+        Check a symbol you don’t own against the same engine that screens your holdings. This is a compliance check, not a recommendation — Mizan tells you whether a company passes the screen, never whether to buy it.
+      </p>
+      <form onSubmit={runLookup} style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
+        <input
+          value={lookupQ}
+          onChange={e=>setLookupQ(e.target.value)}
+          placeholder="Ticker — e.g. NVDA"
+          aria-label="Ticker symbol to screen"
+          spellCheck={false}
+          autoCapitalize="characters"
+          autoCorrect="off"
+          maxLength={12}
+          className="field"
+          style={{width:210,fontFamily:FM,fontSize:13,letterSpacing:"0.06em",textTransform:"uppercase"}}
+        />
+        <button type="submit" disabled={lookupBusy||!lookupQ.trim()} className="btn-primary" style={{opacity:(lookupBusy||!lookupQ.trim())?0.55:1}}>
+          {lookupBusy?"Screening…":"Screen"}
+        </button>
+      </form>
+
+      {lookupBusy&&<div style={{marginTop:T.s3,fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.04em"}}>Reading fundamentals for {lookupQ.trim().toUpperCase()}…</div>}
+
+      {lookupErr&&<div role="status" style={{marginTop:T.s3,padding:`${T.s3} ${T.s4}`,background:`${T.gold}12`,border:`1px solid ${T.gold}33`,borderRadius:T.rMd,fontFamily:FP,fontSize:12.5,color:T.text,lineHeight:1.5}}>{lookupErr}</div>}
+
+      {lookupRes&&(()=>{
+        const v=lookupRes.verdict;
+        const c=v.status==="halal"?T.gain:v.status==="haram"?T.loss:v.status==="review"?T.gold:T.muted;
+        const label=v.status==="halal"?"Halal":v.status==="haram"?"Non-Compliant":v.status==="review"?"Review":"Unscreened";
+        const held=tickers.includes(lookupRes.tk);
+        return<div style={{marginTop:T.s3,display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,flexWrap:"wrap",padding:`${T.s3} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${c}`,borderRadius:T.rMd}}>
+          <div style={{minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+              <span style={{fontFamily:FM,fontSize:13,fontWeight:700,color:T.textHi,letterSpacing:"0.06em"}}>{lookupRes.tk}</span>
+              <Tag label={label} color={c}/>
+              {held&&<span style={{fontFamily:FM,fontSize:9,letterSpacing:"0.12em",fontWeight:600,color:T.muted,border:`1px solid ${T.border}`,borderRadius:999,padding:`2px ${T.s2}`}}>IN YOUR PORTFOLIO</span>}
+            </div>
+            {(v.name||v.industry)&&<div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:2}}>{v.name||""}{v.industry?`${v.name?" · ":""}${v.industry}`:""}</div>}
+          </div>
+          <button onClick={()=>setDetail({tk:lookupRes.tk,nm:v.name||"",_screen:v})} title="Why this verdict?" style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.blue,background:"transparent",border:`1px solid ${T.blue}40`,borderRadius:T.rMd,padding:`3px ${T.s2}`,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Why →</button>
+        </div>;
+      })()}
     </BentoTile>
 
     {/* ─── Status stat tiles ────────────────────── */}

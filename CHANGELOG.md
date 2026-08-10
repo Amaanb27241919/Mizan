@@ -14,7 +14,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **ops:** Await the cron heartbeat instead of racing the runtime (`c83f515`)
 
 ### Docs
-- Record the dividend-cron failure, the heartbeat race, and where Canada went (`aacc5db`)
+- Record the dividend-cron failure, the heartbeat race, and where Canada went (`38d02c1`)
 
 ## 2026-07-30
 
