@@ -8817,6 +8817,87 @@ function AdminMessagesPanel(){
   </BentoTile>;
 }
 
+// BACKLOG.md rendered for the Admin Center. Data is generated at build time
+// (scripts/gen-backlog-summary.mjs) into ~15KB of headings — the markdown
+// itself is 176KB and has no business in a client bundle.
+//
+// Every bucket folds independently: with 87 items across 9 buckets, showing
+// them all at once is a wall nobody reads, and the two biggest (N=26, O=24) are
+// more than half of it. Archives (S "already shipped", X "obsolete") are hidden
+// behind their own toggle — they're resolved, so they're history rather than
+// queue, and they only get in the way of an operational view.
+function BacklogPanel(){
+  const KEY_PREFIX="mizan_ct_admin_backlog_";
+  const readFlag=(k,dflt)=>{try{const v=localStorage.getItem(KEY_PREFIX+k);return v===null?dflt:v==="1";}catch{return dflt;}};
+  const writeFlag=(k,v)=>{try{localStorage.setItem(KEY_PREFIX+k,v?"1":"0");}catch{}};
+
+  // All collapsed on open — the point is to expand only what you're working in.
+  const[open,setOpen]=useState(()=>{
+    const init={};
+    BACKLOG.buckets.forEach(b=>{init[b.key]=readFlag(b.key,false);});
+    return init;
+  });
+  const[showArchive,setShowArchive]=useState(()=>readFlag("archive",false));
+
+  const toggle=(k)=>setOpen(prev=>{const next={...prev,[k]:!prev[k]};writeFlag(k,next[k]);return next;});
+  const toggleArchive=()=>setShowArchive(v=>{writeFlag("archive",!v);return !v;});
+
+  const live=BACKLOG.buckets.filter(b=>!b.archive);
+  const archived=BACKLOG.buckets.filter(b=>b.archive);
+  const visible=showArchive?[...live,...archived]:live;
+  const archivedItems=archived.reduce((n,b)=>n+b.total,0);
+
+  const renderBucket=(b)=>{
+    // Colour by what the bucket means for the owner, not by size: F is the only
+    // class green-lit under maintenance mode, G and O need a person.
+    const tone=b.archive?T.slate:b.key==="F"?T.gain:b.key==="O"||b.key==="G"?T.gold:T.blue;
+    const isOpen=!!open[b.key];
+    return<div key={b.key} style={{border:`1px solid ${T.border}`,borderLeft:`3px solid ${tone}`,borderRadius:T.rMd,background:T.surface,overflow:"hidden"}}>
+      <button onClick={()=>toggle(b.key)} aria-expanded={isOpen} style={{
+        width:"100%",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap",
+        padding:`${T.s3} ${T.s4}`,background:"transparent",border:"none",cursor:"pointer",textAlign:"left",
+      }}>
+        <span aria-hidden="true" style={{color:isOpen?tone:T.muted,fontSize:11,lineHeight:1,flexShrink:0,
+          display:"inline-block",transform:isOpen?"rotate(90deg)":"none",transition:"transform 0.18s"}}>▸</span>
+        <span style={{fontFamily:FM,fontSize:12,fontWeight:700,color:tone,letterSpacing:"0.08em"}}>{b.key}</span>
+        <span style={{fontFamily:FP,fontSize:13,color:T.textHi,fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{b.title}</span>
+        <span style={{marginLeft:"auto",fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums",flexShrink:0}}>
+          {b.archive?`${b.total} archived`:`${b.open} open / ${b.total}`}
+        </span>
+      </button>
+      {isOpen&&<div style={{display:"flex",flexWrap:"wrap",gap:6,padding:`0 ${T.s4} ${T.s3}`}}>
+        {b.items.map(it=><span key={it.id} title={it.title} style={{
+          display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",
+          fontFamily:FM,fontSize:10,letterSpacing:"0.03em",
+          color:it.done?T.muted:T.text,
+          background:it.done?"transparent":`${tone}10`,
+          border:`1px solid ${it.done?T.border:`${tone}33`}`,
+          borderRadius:999,padding:`3px ${T.s2}`,
+          textDecoration:it.done?"line-through":"none",
+        }}>
+          <strong style={{fontWeight:700}}>{it.id}</strong>
+          <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{it.title}</span>
+        </span>)}
+      </div>}
+    </div>;
+  };
+
+  return<>
+    <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>{visible.map(renderBucket)}</div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,flexWrap:"wrap",marginTop:T.s3}}>
+      <button onClick={toggleArchive} aria-pressed={showArchive} style={{
+        fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",
+        padding:`5px ${T.s3}`,borderRadius:999,cursor:"pointer",
+        background:showArchive?`${T.slate}1A`:"transparent",
+        border:`1px solid ${showArchive?T.slate:T.border}`,color:showArchive?T.text:T.muted,
+      }}>{showArchive?"Hide":"Show"} archived · {archivedItems}</button>
+      <span style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,flex:1,minWidth:220}}>
+        Done-state comes from each item&rsquo;s heading or its <strong style={{color:T.text,fontWeight:600}}>Status</strong> line, so anything finished without either updated still reads as open — the consolidated block at the top of BACKLOG.md is the authority. Hover a chip for its full title.
+      </span>
+    </div>
+  </>;
+}
+
 function AdminPanel(){
   const[tab,setTab]=useState("users");
   const[stats,setStats]=useState(null);
@@ -9042,42 +9123,9 @@ function AdminPanel(){
     <CollapsibleTile
       storageKey="admin_backlog"
       title="BACKLOG"
-      subtitle={`${BACKLOG.buckets.reduce((n,b)=>n+b.open,0)} open across ${BACKLOG.buckets.length} buckets · generated from BACKLOG.md at build`}
+      subtitle={`${BACKLOG.buckets.reduce((n,b)=>n+b.open,0)} open across ${BACKLOG.buckets.filter(b=>!b.archive).length} active buckets · generated from BACKLOG.md at build`}
     >
-      <div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-        {BACKLOG.buckets.map(b=>{
-          // Colour by what the bucket means for the owner, not by size:
-          // F is the only class green-lit under maintenance mode, G and O need
-          // a person, archives are inert.
-          const tone=b.archive?T.slate:b.key==="F"?T.gain:b.key==="O"||b.key==="G"?T.gold:T.blue;
-          return<div key={b.key} style={{border:`1px solid ${T.border}`,borderLeft:`3px solid ${tone}`,borderRadius:T.rMd,background:T.surface,padding:`${T.s3} ${T.s4}`}}>
-            <div style={{display:"flex",alignItems:"baseline",gap:T.s2,flexWrap:"wrap",marginBottom:b.items.length?T.s2:0}}>
-              <span style={{fontFamily:FM,fontSize:12,fontWeight:700,color:tone,letterSpacing:"0.08em"}}>{b.key}</span>
-              <span style={{fontFamily:FP,fontSize:13,color:T.textHi,fontWeight:600}}>{b.title}</span>
-              <span style={{marginLeft:"auto",fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
-                {b.archive?`${b.total} archived`:`${b.open} open / ${b.total}`}
-              </span>
-            </div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {b.items.map(it=><span key={it.id} title={it.title} style={{
-                display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",
-                fontFamily:FM,fontSize:10,letterSpacing:"0.03em",
-                color:it.done?T.muted:T.text,
-                background:it.done?"transparent":`${tone}10`,
-                border:`1px solid ${it.done?T.border:`${tone}33`}`,
-                borderRadius:999,padding:`3px ${T.s2}`,
-                textDecoration:it.done?"line-through":"none",
-              }}>
-                <strong style={{fontWeight:700}}>{it.id}</strong>
-                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{it.title}</span>
-              </span>)}
-            </div>
-          </div>;
-        })}
-      </div>
-      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
-        Done-state comes from the item heading, so a few items completed without their heading being marked will still show as open — the consolidated status block at the top of BACKLOG.md is the authority. Hover any chip for its full title.
-      </div>
+      <BacklogPanel/>
     </CollapsibleTile>
 
     {/* ─── Config + credentials ──────────────────── */}
