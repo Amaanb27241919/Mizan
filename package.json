@@ -3,19 +3,20 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "MĪZAN — Shariah-compliant investment super-app",
+  "description": "M\u012aZAN \u2014 Shariah-compliant investment super-app",
   "scripts": {
     "dev": "node server.js",
     "vite": "vite",
     "lint": "eslint --config config/eslint.mjs .",
-    "build": "npm run lint && vite build",
+    "build": "npm run gen:backlog && npm run lint && vite build",
     "start": "NODE_ENV=production node server.js",
     "preview": "vite preview",
     "gen:icons": "node scripts/gen-pwa-icons.mjs",
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
-    "prepare": "git config core.hooksPath .githooks"
+    "prepare": "git config core.hooksPath .githooks",
+    "gen:backlog": "node scripts/gen-backlog-summary.mjs"
   },
   "dependencies": {
     "@playwright/test": "^1.61.0",

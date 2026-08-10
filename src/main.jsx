@@ -3,6 +3,26 @@ import ReactDOM from 'react-dom/client'
 import * as Sentry from '@sentry/react'
 import { SpeedInsights } from '@vercel/speed-insights/react'
 import App from './App.jsx'
+import { parseAttribution, firstTouch, ATTRIBUTION_KEY } from './lib/attribution.js'
+
+// Capture where this visit came from BEFORE anything renders (BACKLOG G2).
+// It has to run this early: the UTM params live on the entry URL, and once the
+// app starts navigating they are gone. Landing here rather than inside a
+// component also means it records for people who never sign in — the visit is
+// remembered locally and only sent to the server once they have an account.
+//
+// First touch wins, so this is a no-op for anyone already attributed.
+try {
+  const incoming = parseAttribution({
+    search:   window.location.search,
+    referrer: document.referrer,
+    selfHost: window.location.hostname,
+  })
+  let existing = null
+  try { existing = JSON.parse(localStorage.getItem(ATTRIBUTION_KEY) || 'null') } catch { /* unreadable → treat as absent */ }
+  const next = firstTouch(existing, incoming)
+  if (next) localStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(next))
+} catch { /* attribution must never block the app booting */ }
 
 // Initialize Sentry BEFORE rendering so any setup error gets captured.
 // No-op when VITE_SENTRY_DSN is unset. PII is scrubbed via beforeSend.

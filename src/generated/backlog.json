@@ -1,0 +1,521 @@
+{
+  "source": "BACKLOG.md",
+  "buckets": [
+    {
+      "key": "F",
+      "title": "Fixes / correctness",
+      "items": [
+        {
+          "id": "F1",
+          "title": "Zakat calculation correctness verification",
+          "done": false
+        },
+        {
+          "id": "F2",
+          "title": "Fix the lock-less /api/cron/bot-signals handler: duplicate-execution races (#3–#6)",
+          "done": false
+        },
+        {
+          "id": "F3",
+          "title": "purification_ratios table needs an ongoing maintenance path",
+          "done": false
+        },
+        {
+          "id": "F4",
+          "title": "Day-weighted-average-capital % return (ROAI denominator) — Phase 2 correctness remainder",
+          "done": false
+        },
+        {
+          "id": "F5",
+          "title": "Remaining npm audit findings: esbuild/vite (dev-only, needs breaking vite@8)",
+          "done": false
+        },
+        {
+          "id": "F6",
+          "title": "Fully deprecate the legacy .snaptrade-users.json plaintext flat file",
+          "done": true
+        },
+        {
+          "id": "F7",
+          "title": "Sharia screener reliability — Finnhub rate-limit handling",
+          "done": false
+        },
+        {
+          "id": "F8",
+          "title": "Invite email: rebrand to match Mizan + fix spam deliverability (user-reported)",
+          "done": true
+        },
+        {
+          "id": "F14",
+          "title": "Cron ledger leftovers from the 2026-08-10 heartbeat fix",
+          "done": false
+        },
+        {
+          "id": "F9",
+          "title": "OpenBB fundamentals adapter for Sharia screening (PROTOTYPE built, promotion blocked on diff evidence)",
+          "done": false
+        },
+        {
+          "id": "F10",
+          "title": "Multi-currency: Mizan sums every balance as USD (opened up by the 2026-07-31 geo change)",
+          "done": false
+        },
+        {
+          "id": "F11",
+          "title": "Tax tab shows US law to non-US users — BUILT, NOT DEPLOYED (2026-07-31); localisation still open",
+          "done": false
+        },
+        {
+          "id": "F12",
+          "title": "Canadian registered accounts (RRSP / TFSA / RESP / RRIF / LIRA) are unrecognised",
+          "done": false
+        },
+        {
+          "id": "F13",
+          "title": "Purification ratios cover US-listed funds only",
+          "done": false
+        }
+      ],
+      "archive": false,
+      "open": 12,
+      "total": 14
+    },
+    {
+      "key": "G",
+      "title": "Growth / distribution",
+      "items": [
+        {
+          "id": "G1",
+          "title": "Claim the social handles (brand defense, do regardless of whether you post)",
+          "done": false
+        },
+        {
+          "id": "G2",
+          "title": "Attribution: nothing records where a signup came from",
+          "done": false
+        },
+        {
+          "id": "G3",
+          "title": "Instagram: a cadence that survives contact with one operator",
+          "done": false
+        },
+        {
+          "id": "G4",
+          "title": "Credibility gate: marketing invites \"who says this is halal?\" (blocks on O17)",
+          "done": false
+        },
+        {
+          "id": "G5",
+          "title": "Accountants as a distribution channel (from a real conversation)",
+          "done": false
+        },
+        {
+          "id": "G6",
+          "title": "The landing → app boundary is unmeasured",
+          "done": false
+        },
+        {
+          "id": "G7",
+          "title": "Positioning is decided but not consistently expressed",
+          "done": false
+        }
+      ],
+      "archive": false,
+      "open": 7,
+      "total": 7
+    },
+    {
+      "key": "N",
+      "title": "Net-new features",
+      "items": [
+        {
+          "id": "N1",
+          "title": "Hijri calendar / Hawl tracking for Zakat",
+          "done": false
+        },
+        {
+          "id": "N2",
+          "title": "AI portfolio insight card on Overview (AI roadmap pending task #2)",
+          "done": false
+        },
+        {
+          "id": "N3",
+          "title": "AI Zakat & purification guidance (AI roadmap pending task #1)",
+          "done": false
+        },
+        {
+          "id": "N4",
+          "title": "Phase 3 remainder: transaction rules engine + Islamic budget categories",
+          "done": false
+        },
+        {
+          "id": "N5",
+          "title": "Grounded-AI debt answers via /api/advisor (Track 1 #6)",
+          "done": false
+        },
+        {
+          "id": "N6",
+          "title": "Per-token crypto Sharia screening verdicts (AI roadmap pending task #4)",
+          "done": false
+        },
+        {
+          "id": "N7",
+          "title": "Sharia X-Ray rules panel",
+          "done": false
+        },
+        {
+          "id": "N8",
+          "title": "Backtester Phase A: walk-forward / out-of-sample testing + honest metrics + disclaimers",
+          "done": false
+        },
+        {
+          "id": "N9",
+          "title": "AI-written weekly digest (AI roadmap pending task #3)",
+          "done": false
+        },
+        {
+          "id": "N10",
+          "title": "AI tool-calling with per-user enum'd schemas on /api/advisor",
+          "done": false
+        },
+        {
+          "id": "N11",
+          "title": "Envelope budget rollover + 'left to assign' pot (Track 2 #9)",
+          "done": false
+        },
+        {
+          "id": "N12",
+          "title": "Optional min_payment field on the debt form (Track 1 #7)",
+          "done": false
+        },
+        {
+          "id": "N13",
+          "title": "Goal funding schedules",
+          "done": false
+        },
+        {
+          "id": "N14",
+          "title": "Debt `direction` bit: qard hasan you LENT vs owe (Track 1 #5)",
+          "done": false
+        },
+        {
+          "id": "N15",
+          "title": "Maintain the ethical/BDS curated exclusion list against an authoritative source",
+          "done": false
+        },
+        {
+          "id": "N16",
+          "title": "Benchmark overlay comparing the portfolio vs SPUS/HLAL",
+          "done": false
+        },
+        {
+          "id": "N17",
+          "title": "Broaden test coverage beyond the pure src/lib modules",
+          "done": false
+        },
+        {
+          "id": "N18",
+          "title": "Phase 3 remainder: apply the recurring-detection engine to Finances subscriptions/BillsCalendar",
+          "done": false
+        },
+        {
+          "id": "N19",
+          "title": "Richer per-strategy-type screening in the bot cron (ma_crossover / breakout)",
+          "done": false
+        },
+        {
+          "id": "N20",
+          "title": "AI anomaly/security-event explainer (AI roadmap pending task #5, lower priority)",
+          "done": false
+        },
+        {
+          "id": "N21",
+          "title": "Quarterly refresh of curated Amana mutual-fund holdings",
+          "done": false
+        },
+        {
+          "id": "N22",
+          "title": "Optional: log the SnapTrade 402 response body in the symbol-search failure path",
+          "done": false
+        },
+        {
+          "id": "N23",
+          "title": "USPTO 'Mizan' trademark check: confirm joinmizan filing status + clearance search before any TM spend",
+          "done": false
+        },
+        {
+          "id": "N24",
+          "title": "Wire the ethical/BDS overlay into the trading-bot buy universe",
+          "done": false
+        },
+        {
+          "id": "N25",
+          "title": "Order Ticket: add a stop-price field for Stop / Stop-Limit order types",
+          "done": false
+        },
+        {
+          "id": "N26",
+          "title": "Compliance-tier gate for every new grounded-AI feature (owner-directed 2026-07-15)",
+          "done": false
+        }
+      ],
+      "archive": false,
+      "open": 26,
+      "total": 26
+    },
+    {
+      "key": "M",
+      "title": "Needs a DB migration",
+      "items": [
+        {
+          "id": "M1",
+          "title": "Shareable snapshot links",
+          "done": false
+        },
+        {
+          "id": "M2",
+          "title": "Multi-aggregator fallback for liabilities (MX/Finicity behind Plaid) (Track 1 #8)",
+          "done": false
+        },
+        {
+          "id": "M3",
+          "title": "Anonymous peer comparison",
+          "done": false
+        },
+        {
+          "id": "M4",
+          "title": "Phase 4: materialized daily balance table + reverse calculator to backfill net-worth history",
+          "done": false
+        }
+      ],
+      "archive": false,
+      "open": 4,
+      "total": 4
+    },
+    {
+      "key": "P",
+      "title": "Parked / not-autonomous",
+      "items": [
+        {
+          "id": "P1",
+          "title": "Wire the free Alpaca Market Data API (extended-hours prices) + swap MARKET_HOLIDAYS for /v2/clock",
+          "done": false
+        },
+        {
+          "id": "P3",
+          "title": "Plaid Canada: the whole Finances tab is dead for non-US users",
+          "done": false
+        },
+        {
+          "id": "P2",
+          "title": "Browser extension (Sharia checker)",
+          "done": false
+        }
+      ],
+      "archive": false,
+      "open": 3,
+      "total": 3
+    },
+    {
+      "key": "O",
+      "title": "Blocked on owner",
+      "items": [
+        {
+          "id": "O1",
+          "title": "Landing SEO item #3: halal-investing content pages — plan/discuss with owner before build",
+          "done": false
+        },
+        {
+          "id": "O2",
+          "title": "khanstyle02 + mmfarooki: bot consent disclosures not yet accepted",
+          "done": false
+        },
+        {
+          "id": "O3",
+          "title": "Decide fate of the tiny momentum sleeve (strategy 43c1b866)",
+          "done": false
+        },
+        {
+          "id": "O4",
+          "title": "Owner: provision Alpaca Market Data API keys",
+          "done": false
+        },
+        {
+          "id": "O5",
+          "title": "Verify Order Ticket live-quote chip under real market-hours load",
+          "done": false
+        },
+        {
+          "id": "O6",
+          "title": "Submit sitemap in Google Search Console + re-scrape social debuggers (landing SEO)",
+          "done": false
+        },
+        {
+          "id": "O7",
+          "title": "Verify the E*Trade money transfer landed in khanstyle02's account (ecfea3bb)",
+          "done": false
+        },
+        {
+          "id": "O8",
+          "title": "Repoint + re-enable DCA strategy 0fd266ae once funds land (~2026-07-08)",
+          "done": false
+        },
+        {
+          "id": "O9",
+          "title": "Revisit the full-auto allowlist boundary before any compensated/commercial arrangement",
+          "done": false
+        },
+        {
+          "id": "O10",
+          "title": "Owner: complete the custodian→bank→Individual E*Trade transfer and pick/fund the DCA target account",
+          "done": false
+        },
+        {
+          "id": "O11",
+          "title": "July 9: sell 2 SPTE at break-even and retire breakout strategy e528f2d7",
+          "done": false
+        },
+        {
+          "id": "O12",
+          "title": "CSP nonce hardening (deferred from the 2026-07-05 security audit)",
+          "done": false
+        },
+        {
+          "id": "O13",
+          "title": "APP_ENCRYPTION_KEY missing from local .env.local (blocks local SnapTrade debugging)",
+          "done": false
+        },
+        {
+          "id": "O14",
+          "title": "Provision ZOYA_API_KEY and verify the Zoya adapter mapping against the live API",
+          "done": false
+        },
+        {
+          "id": "O15",
+          "title": "Run a $1 fractional impact dry-run on the chosen broker account",
+          "done": false
+        },
+        {
+          "id": "O16",
+          "title": "Confirm SnapTrade per-broker trading/fractional capabilities (Schwab, Webull, Chase, Firstrade)",
+          "done": false
+        },
+        {
+          "id": "O17",
+          "title": "Named Sharia advisory board on the Methodology page",
+          "done": false
+        },
+        {
+          "id": "O18",
+          "title": "Rotate the CRON_SECRET (value passed through chat)",
+          "done": false
+        },
+        {
+          "id": "O19",
+          "title": "July 9: create the DCA CORE strategy (primary wealth engine)",
+          "done": false
+        },
+        {
+          "id": "O20",
+          "title": "mmfarooki full-auto onboarding — blocked on the beta tester's own setup",
+          "done": false
+        },
+        {
+          "id": "O21",
+          "title": "Build the equal-weight fractional $50/week halal basket DCA engine (Robinhood, khanstyle02)",
+          "done": false
+        },
+        {
+          "id": "O22",
+          "title": "Monetization strategy decision",
+          "done": false
+        },
+        {
+          "id": "O23",
+          "title": "RIA exposure: bot NL strategy generator + Rebalancer emit personalized advice OUTSIDE the compliance layer",
+          "done": false
+        },
+        {
+          "id": "O24",
+          "title": "Activate at-rest encryption in PRODUCTION (SnapTrade/Plaid secrets are plaintext)",
+          "done": false
+        }
+      ],
+      "archive": false,
+      "open": 24,
+      "total": 24
+    },
+    {
+      "key": "S",
+      "title": "Already shipped",
+      "items": [
+        {
+          "id": "S1",
+          "title": "Order Ticket activation: remove both gates together",
+          "done": true
+        },
+        {
+          "id": "S2",
+          "title": "Write market-hours gate + DCA/custodial findings into MIZAN-STATE-AUDIT.md and commit",
+          "done": true
+        },
+        {
+          "id": "S3",
+          "title": "Purification log/overrides not durably persisted (lost on new device)",
+          "done": true
+        },
+        {
+          "id": "S4",
+          "title": "SnapTrade rejected the refresh for all connections — resolution unconfirmed",
+          "done": true
+        },
+        {
+          "id": "S5",
+          "title": "Dividend Income Planner — verify it already shipped before scheduling",
+          "done": true
+        }
+      ],
+      "archive": true,
+      "open": 0,
+      "total": 5
+    },
+    {
+      "key": "X",
+      "title": "Obsolete",
+      "items": [
+        {
+          "id": "X1",
+          "title": "Decide full-auto vs SEMI mode for khanstyle02's bot strategies",
+          "done": true
+        },
+        {
+          "id": "X2",
+          "title": "Owner decisions for the basket DCA: broker choice + symbol list",
+          "done": true
+        }
+      ],
+      "archive": true,
+      "open": 0,
+      "total": 2
+    },
+    {
+      "key": "U",
+      "title": "Unverified",
+      "items": [
+        {
+          "id": "U1",
+          "title": "Track 2 queued improvements (S–M, behind the numbered items)",
+          "done": false
+        },
+        {
+          "id": "U2",
+          "title": "Non-US market-data coverage is unverified (TSX screening + price charts)",
+          "done": false
+        }
+      ],
+      "archive": false,
+      "open": 2,
+      "total": 2
+    }
+  ]
+}

@@ -20,6 +20,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **ops:** Await the cron heartbeat instead of racing the runtime (`c83f515`)
 
 ### Docs
+- **backlog:** Add a G bucket for growth, so distribution stops being off-book (`859c9eb`)
 - Record the display audit — cold-load flash, PWA splash, 320px clipping (`e033659`)
 - Record the ticker typeahead and its compliance shape (`9c1bd81`)
 - Record the Screener lookup and the crypto auto-blessing it exposed (`fba047b`)

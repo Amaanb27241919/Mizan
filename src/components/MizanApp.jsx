@@ -11,6 +11,10 @@ import {
 } from "../lib/zakat.js";
 import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptions, detectUsageBasedSpend, normalizeMerchant } from "../lib/recurring.js";
 import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHistory } from "../lib/netWorth.js";
+import { ATTRIBUTION_KEY } from "../lib/attribution.js";
+// Generated from BACKLOG.md at build time — headings only (~15KB), never the
+// 176KB markdown. See scripts/gen-backlog-summary.mjs.
+import BACKLOG from "../generated/backlog.json";
 import { addNotifications, unreadCount, markAllRead, markRead, relativeTime,
   shariaChangeNotifications, dividendNotifications, priceAlertNotifications } from "../lib/notifications.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
@@ -9002,10 +9006,79 @@ function AdminPanel(){
           {sub&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:4}}>{sub}</div>}
         </div>)}
       </div>
+      {/* Acquisition sources (BACKLOG G2). Recorded first-touch at the very
+          first page load and only sent once the visitor has an account, so a
+          person who browsed for a week before signing up still attributes to
+          whatever originally brought them in. */}
+      {stats.funnel.sources?.length>0&&<div style={{marginTop:T.s4}}>
+        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>WHERE THEY CAME FROM</div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {stats.funnel.sources.map(s=>{
+            const unknown=s.source==="unattributed";
+            return<div key={s.source} style={{display:"flex",alignItems:"center",gap:T.s3}}>
+              <span style={{fontFamily:FM,fontSize:11,color:unknown?T.muted:T.text,minWidth:104,fontStyle:unknown?"italic":"normal"}}>{s.source}</span>
+              {/* Bar is proportional, so a dominant source reads at a glance
+                  without needing to compare numbers. */}
+              <span style={{flex:1,height:6,background:T.dim,borderRadius:3,overflow:"hidden",minWidth:40}}>
+                <span style={{display:"block",height:"100%",width:`${Math.max(2,s.pct)}%`,background:unknown?T.slate:T.blue,borderRadius:3}}/>
+              </span>
+              <span style={{fontFamily:FM,fontSize:11,color:unknown?T.muted:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:56,textAlign:"right"}}>{s.count} · {s.pct}%</span>
+            </div>;
+          })}
+        </div>
+      </div>}
       <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
         Connecting an account is what predicts retention — every user who linked one came back, and every user who didn't, didn't. The daily activation cron emails anyone 1–45 days old who still hasn't connected, once each — skipping anyone who signed in within the last 7 days, since they're engaged rather than lapsed.
+        {stats.funnel.sources?.some(s=>s.source==="unattributed")&&" Anyone who signed up before source tracking shipped shows as unattributed — that can't be backfilled, only grown past."}
       </div>
     </BentoTile>}
+
+    {/* ─── Backlog ───────────────────────────────────
+        BACKLOG.md rendered in the panel so the queue is visible where the
+        owner already looks, instead of only in a 176KB file in the repo.
+        Generated at build time (scripts/gen-backlog-summary.mjs) into a ~15KB
+        JSON of headings only — bundling the markdown itself would ship a sixth
+        of a megabyte of prose for a panel one person opens. */}
+    <CollapsibleTile
+      storageKey="admin_backlog"
+      title="BACKLOG"
+      subtitle={`${BACKLOG.buckets.reduce((n,b)=>n+b.open,0)} open across ${BACKLOG.buckets.length} buckets · generated from BACKLOG.md at build`}
+    >
+      <div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+        {BACKLOG.buckets.map(b=>{
+          // Colour by what the bucket means for the owner, not by size:
+          // F is the only class green-lit under maintenance mode, G and O need
+          // a person, archives are inert.
+          const tone=b.archive?T.slate:b.key==="F"?T.gain:b.key==="O"||b.key==="G"?T.gold:T.blue;
+          return<div key={b.key} style={{border:`1px solid ${T.border}`,borderLeft:`3px solid ${tone}`,borderRadius:T.rMd,background:T.surface,padding:`${T.s3} ${T.s4}`}}>
+            <div style={{display:"flex",alignItems:"baseline",gap:T.s2,flexWrap:"wrap",marginBottom:b.items.length?T.s2:0}}>
+              <span style={{fontFamily:FM,fontSize:12,fontWeight:700,color:tone,letterSpacing:"0.08em"}}>{b.key}</span>
+              <span style={{fontFamily:FP,fontSize:13,color:T.textHi,fontWeight:600}}>{b.title}</span>
+              <span style={{marginLeft:"auto",fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
+                {b.archive?`${b.total} archived`:`${b.open} open / ${b.total}`}
+              </span>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {b.items.map(it=><span key={it.id} title={it.title} style={{
+                display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",
+                fontFamily:FM,fontSize:10,letterSpacing:"0.03em",
+                color:it.done?T.muted:T.text,
+                background:it.done?"transparent":`${tone}10`,
+                border:`1px solid ${it.done?T.border:`${tone}33`}`,
+                borderRadius:999,padding:`3px ${T.s2}`,
+                textDecoration:it.done?"line-through":"none",
+              }}>
+                <strong style={{fontWeight:700}}>{it.id}</strong>
+                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{it.title}</span>
+              </span>)}
+            </div>
+          </div>;
+        })}
+      </div>
+      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
+        Done-state comes from the item heading, so a few items completed without their heading being marked will still show as open — the consolidated status block at the top of BACKLOG.md is the authority. Hover any chip for its full title.
+      </div>
+    </CollapsibleTile>
 
     {/* ─── Config + credentials ──────────────────── */}
     {dbStatus?.config&&Object.keys(dbStatus.config).length>0&&<BentoTile accent={Object.values(dbStatus.config).every(c=>c.healthy)?undefined:T.loss}>
@@ -12325,6 +12398,24 @@ export default function Mizan(){
     apiFetch("/api/user/features").then(r=>r.ok?r.json():null).then(d=>{
       if(d){setIsAdmin(!!d.trading_bot);setFullAutoEnabled(!!d.full_auto);setBotIsRoot(!!d.is_root);setBotConsented(!!d.trading_bot_consented);setNeedsName(!!d.needs_name);setProfileFirst(d.first_name||"");setProfileLast(d.last_name||"");}
     }).catch(()=>{}).finally(()=>setFeaturesLoaded(true));
+  },[]);
+
+  // Hand the first touch to the server now that there's an account to attach it
+  // to (BACKLOG G2). main.jsx captured it on the very first page load, possibly
+  // days before this person signed up — that gap is the whole reason it's held
+  // in localStorage rather than sent immediately.
+  //
+  // Fire-and-forget and unconditional: the server is first-write-wins, so
+  // re-sending on every load costs one cheap request and removes any need for
+  // the client to track whether it already succeeded.
+  useEffect(()=>{
+    let stored=null;
+    try{stored=JSON.parse(localStorage.getItem(ATTRIBUTION_KEY)||"null");}catch{return;}
+    if(!stored||!stored.source)return;
+    apiFetch("/api/user/attribution",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({source:stored.source,medium:stored.medium,campaign:stored.campaign}),
+    }).catch(()=>{});   // never surface this to the user — it's operator telemetry
   },[]);
 
   // Defensive bounce: once we know the user's capabilities, a non-admin sitting
