@@ -10,7 +10,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-10
 
 ### Fixed
+- **zakat:** Dividend purification alerts read our own data, not a dead endpoint (`b097923`)
 - **ops:** Await the cron heartbeat instead of racing the runtime (`c83f515`)
+
+### Docs
+- Record the dividend-cron failure, the heartbeat race, and where Canada went (`aacc5db`)
 
 ## 2026-07-30
 

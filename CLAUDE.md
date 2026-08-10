@@ -148,6 +148,17 @@ lib/anomaly.mjs                — 6 detectors: brute force, SnapTrade 5xx spike
                                  from /api/cron/cleanup and surface in Admin → db-status.
 lib/alerts.mjs                 — Resend email: owner anomaly alerts + user emails (digest, re-auth, bug reports, invites) via a branded HTML shell (renderBrandedEmail, logo header). From = ALERT_FROM on the verified mizan.exchange domain
 lib/rateLimit.mjs              — DB-backed rate limiting (increment_rate_limit RPC)
+middleware.ts                  — Vercel Routing Middleware (repo ROOT, outside src/ and lib/ —
+                                 easy to miss when grepping). Since 2026-05-25 (`540ffda`) it
+                                 rewrites EVERY non-US visitor to /us-only.html on
+                                 `matcher: "/:path*"` — a Canadian never reaches the app. The
+                                 stated reason is Plaid, but the block is far wider than its
+                                 cause. **A narrowing that blocks nothing (plus a currency guard
+                                 and a US-only Tax-tab gate, adding lib/geo.mjs + src/lib/region.js)
+                                 is BUILT AND TESTED on branch `region/canada-narrowing`** — parked,
+                                 not merged: the owner deferred Canada on 2026-08-01 under
+                                 maintenance mode. Production is still US-only. Do not rebuild it
+                                 from scratch; check out that branch. See BACKLOG F10–F13/P3/U2.
 lib/fetchWithRetry.mjs         — Retry wrapper with exponential backoff
 lib/logger.mjs                 — Structured logging
 lib/sentry.mjs                 — Sentry backend init
