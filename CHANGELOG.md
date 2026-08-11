@@ -22,6 +22,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **ops:** Await the cron heartbeat instead of racing the runtime (`c83f515`)
 
 ### Docs
+- **backlog:** Note that the admin summary regenerates on commit (`ca40140`)
 - **backlog:** Mark G2 shipped, and teach the parser where "done" actually lives (`7c45bdd`)
 - **backlog:** Add a G bucket for growth, so distribution stops being off-book (`859c9eb`)
 - Record the display audit — cold-load flash, PWA splash, 320px clipping (`e033659`)
