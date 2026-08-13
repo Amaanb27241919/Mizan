@@ -50,3 +50,8 @@ scripts/_snaptrade-backups/
 
 # Visual-audit screenshots — local debugging artifacts, not source
 bento-audit-shots/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/

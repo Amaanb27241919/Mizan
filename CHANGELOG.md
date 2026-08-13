@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-11
+
+### Docs
+- Record that OpenBB is now on a branch, and why the untangling was risky (`3b80b2c`)
+
 ## 2026-08-10
 
 ### Added

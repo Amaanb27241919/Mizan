@@ -2,7 +2,16 @@
 
 > **SESSION PROTOCOL**: Read this file at the start of every session. Read `MIZAN-STATE-AUDIT.md` when you need architecture, schema, or feature status depth. Update `MIZAN-STATE-AUDIT.md` (last-audited date + any new findings) when you discover drift from what's documented. This file is the source of truth for how to work on Mizan correctly.
 
-> **⚙️ OPERATING MODE — MAINTENANCE (owner decision, 2026-07-07).** Mizan is feature-complete for now. **Do NOT build net-new features or "improvements" on your own initiative.** Only do work that is one of: (1) driven by **real user feedback**, (2) a fix for **something actually broken or incorrect**, or (3) **explicitly requested by the owner**. The deferred feature backlog lives in `BACKLOG.md` (buckets `N`/`M`/`P` are parked; bucket `F` = fixes, the only class green-lit by default). When you notice a possible improvement, **add it to `BACKLOG.md` and move on — do not implement it and do not pitch it** unless it fixes a real defect. The goal is a stable app the owner isn't perpetually extending.
+> **⚙️ OPERATING MODE — BOUNDED PUSH (owner decision, 2026-08-12).** Maintenance mode is **temporarily lifted for one defined push**, then resumes. Scope of the push, and nothing wider:
+> 1. **Verification infrastructure** — Playwright E2E + visual snapshots. `@playwright/test` was installed and never configured, `@testing-library/react` has zero render tests, and there is no test account. Consequence: five user-facing surfaces shipped to production in one week without a human or a machine ever seeing them render, and a 320px clipping bug was caught by reading CSS rather than looking. **This is the first task and it gates the rest** — fixing UI without it repeats the same blind shipping, faster.
+> 2. **UI/UX + accessibility** — audit against §5/§9 and fix what's real. The owner's goal is "user-friendly + UI".
+> 3. **Read-only sweeps** — backlog triage (docs here over-claim; a prior sweep reclassified 5 "pending" items as shipped), security, quality.
+>
+> **Still out of scope during the push:** net-new features from the `N`/`M`/`P` buckets, anything touching the compliance boundary (§1 — no surface may ever emit a personalized buy/sell/hold recommendation), schema migrations (§8), and CSP changes. Those still need an explicit ask.
+>
+> **Return condition:** when the push's scope is delivered, restore the MAINTENANCE banner below verbatim and record the date. Do not let "bounded push" quietly become permanent open season — the maintenance discipline is what surfaced the two real bugs of 2026-08-10 (a dividend cron that had never once worked, and crypto being auto-blessed as halal), both found by looking rather than building.
+>
+> **⚙️ PRIOR MODE — MAINTENANCE (owner decision, 2026-07-07), resumes after the push.** Mizan is feature-complete for now. **Do NOT build net-new features or "improvements" on your own initiative.** Only do work that is one of: (1) driven by **real user feedback**, (2) a fix for **something actually broken or incorrect**, or (3) **explicitly requested by the owner**. The deferred feature backlog lives in `BACKLOG.md` (buckets `N`/`M`/`P` are parked; bucket `F` = fixes, the only class green-lit by default). When you notice a possible improvement, **add it to `BACKLOG.md` and move on — do not implement it and do not pitch it** unless it fixes a real defect. The goal is a stable app the owner isn't perpetually extending.
 
 ---
 
