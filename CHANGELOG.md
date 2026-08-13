@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-13
+
+### Fixed
+- **cron:** Stop the nightly snapshot silently overwriting net-worth history (`45f608c`)
+
 ## 2026-08-11
 
 ### Docs

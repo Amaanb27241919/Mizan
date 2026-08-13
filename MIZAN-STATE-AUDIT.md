@@ -1,7 +1,7 @@
 # MĪZAN — State-of-App Audit
 
 > **Living document.** Re-run every few weeks to track drift between what's built and what's deployed.
-> Last audited: 2026-08-11 (updated) · All findings from direct file reads, no guessing.
+> Last audited: 2026-08-13 (updated) · All findings from direct file reads, no guessing.
 >
 > **2026-08-11 (hygiene — both parked prototypes are now on branches; `main`'s working tree is finally clean)** — the OpenBB screening adapter joined the Canada narrowing on a branch. Two bodies of finished, tested, deliberately-unmerged work had been living in `main`'s working tree — Canada since 2026-07-31, OpenBB since 2026-07-30 — because committing to `main` auto-deploys and neither was approved to ship. That is a safe-looking state that is actually fragile: **any `reset --hard`, `checkout .` or `stash` erases it**, which nearly happened to the 176-line OpenBB adapter while cleaning up an unrelated pre-commit-hook test (avoided by using `reset --soft` plus a targeted per-file restore).
 > **Where they live now:** Canada → **`region/canada-narrowing`** (`d1f9495`) · OpenBB → **`screening/openbb-adapter`** (`a8828bd`). Both pushed to origin, so neither depends on this machine any more. Production is unchanged by either: Canada was never deployed (prod stays US-only) and OpenBB is inert without `OPENBB_API_BASE`.

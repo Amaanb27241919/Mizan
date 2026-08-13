@@ -13,6 +13,7 @@ import { apiFetch } from "../lib/apiFetch.js";
 import { setLocalAndSync } from "../lib/userState.js";
 import { normalizePlaidStreams, detectRecurringOutflows, matchDebtToStream, streamPaymentsSince } from "../lib/recurring.js";
 import { Icon } from "./Icon.jsx";
+import { useHideValues } from "../lib/useHideValues.js";
 
 // Reuse the global theme tokens by reading the CSS custom properties so
 // this file stays decoupled from MizanApp's `T`/`FU`/`FM` constants. The
@@ -310,7 +311,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
+      <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>NAME</span>
           <input
@@ -332,7 +333,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
         </label>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
+      <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TARGET DATE</span>
           <input
@@ -507,7 +508,7 @@ function GoalCard({ goal, current, slope, accountLabels, onEdit, onDelete, onMan
 
       {goal.track_mode === "manual" && (
         <div style={{
-          display: "flex", alignItems: "center", gap: T.s2,
+          display: "flex", alignItems: "center", gap: T.s2, flexWrap: "wrap",
           paddingTop: T.s2,
           borderTop: `1px solid ${T.border}`,
         }}>
@@ -539,6 +540,7 @@ export default function Goals({
   demoMode = false,
   avgMonthlySpend = 0,
 }) {
+  const { mask } = useHideValues();
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -827,7 +829,7 @@ export default function Goals({
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: T.s4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(360px, 100%), 1fr))", gap: T.s4 }}>
         {goals.map((g) => {
           if (editingId === g.id) {
             return (
@@ -877,8 +879,12 @@ export function GoalsOverviewWidget({
   netWorthHistory = [],
   demoMode = false,
   onNav,
-  mask = (v) => v,
+  // NOTE: this used to be a `mask = (v) => v` prop default. MizanApp rendered
+  // this widget without passing `mask`, so every mask() call below was a no-op
+  // and goal + debt balances stayed in cleartext directly under the MASKED
+  // net-worth headline on the same Overview screen. Read the flag directly.
 }) {
+  const { mask } = useHideValues();
   const [goals, setGoals] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -1373,6 +1379,7 @@ function LogPaymentRow({ label = "Log payment", defaultAmount = "", onLog, onCan
 }
 
 function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkStream, onUnlinkStream, onEdit, onDelete, onLogPayment, onConfirmScheduled, onMarkPaid }) {
+  const { mask } = useHideValues();
   const { mode, original, remaining, paid, linkedMissing } = debtState(debt, accounts);
   const pct = original > 0 ? (paid / original) * 100 : 0;
   const done = remaining <= 0.005;
@@ -1389,7 +1396,7 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
     : linkedStream
       ? "Auto-synced from bank"
       : mode === "recurring"
-        ? `${fmtUSD(amt)}/${CADENCE_LABEL[debt.cadence] || "month"}${fundLabel ? ` · from ${fundLabel}` : ""}${debt.autopay ? " · auto" : ""}`
+        ? `${mask(fmtUSD(amt))}/${CADENCE_LABEL[debt.cadence] || "month"}${fundLabel ? ` · from ${fundLabel}` : ""}${debt.autopay ? " · auto" : ""}`
         : "Manual";
 
   return (
@@ -1431,12 +1438,12 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
         <div>
           <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: 2 }}>REMAINING</div>
           <div style={{ fontFamily: FU, fontSize: 26, fontWeight: 700, color: done ? T.gain : T.loss, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
-            {fmtUSD(remaining)}
+            {mask(fmtUSD(remaining))}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontFamily: FM, fontSize: 11, color: T.gain, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-            {fmtUSD(paid)} paid
+            {mask(fmtUSD(paid))} paid
           </div>
           <div style={{ fontFamily: FM, fontSize: 11, color: color, fontWeight: 600 }}>
             {Math.min(pct, 100).toFixed(1)}% cleared
@@ -1448,7 +1455,7 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: T.s3, flexWrap: "wrap" }}>
         <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, fontVariantNumeric: "tabular-nums" }}>
-          of {fmtUSD(original)} original
+          of {mask(fmtUSD(original))} original
         </span>
         <span style={{ fontFamily: FM, fontSize: 11, color: done ? T.gain : T.muted, letterSpacing: "0.04em" }}>
           {payoff}
@@ -1477,7 +1484,7 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
         }}>
           <Icon name="spark" size={12} color={T.gain} style={{ flexShrink: 0 }}/>
           <span style={{ flex: 1, minWidth: 140 }}>
-            Detected a recurring {fmtUSD(suggestion.stream.typicalAmount)}
+            Detected a recurring {mask(fmtUSD(suggestion.stream.typicalAmount))}
             {suggestion.stream.cadence && suggestion.stream.cadence !== "unknown" ? `/${(CADENCE_LABEL[suggestion.stream.cadence] || suggestion.stream.cadence)}` : ""} payment to <strong>{suggestion.stream.merchant}</strong>.
           </span>
           <button onClick={() => onLinkStream(debt.id, suggestion.stream)} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>Link payments</button>
@@ -1518,11 +1525,11 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
           <div style={{ display: "flex", gap: T.s2, alignItems: "center", flexWrap: "wrap" }}>
             {debt.autopay ? (
               <span style={{ fontFamily: FP, fontSize: 11, color: T.muted }}>
-                Auto-counting {fmtUSD(amt)}/{CADENCE_LABEL[debt.cadence] || "month"}{fundLabel ? ` from ${fundLabel}` : ""}.
+                Auto-counting {mask(fmtUSD(amt))}/{CADENCE_LABEL[debt.cadence] || "month"}{fundLabel ? ` from ${fundLabel}` : ""}.
               </span>
             ) : (
               <button onClick={() => onConfirmScheduled(debt.id)} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>
-                ✓ Confirm {CADENCE_LABEL[debt.cadence] || "month"}ly payment · {fmtUSD(amt)}
+                ✓ Confirm {CADENCE_LABEL[debt.cadence] || "month"}ly payment · {mask(fmtUSD(amt))}
               </button>
             )}
             <button onClick={() => setLogging(true)} style={smallBtnStyle}>{debt.autopay ? "+ Log extra" : "Other amount"}</button>
@@ -1541,6 +1548,7 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
 
 // Compact radio list of accounts for the form (liability picker or funding picker).
 function AccountRadioList({ accounts, selectedId, onPick, emptyHint }) {
+  const { mask } = useHideValues();
   if (accounts.length === 0) {
     return (
       <div style={{ fontFamily: FP, fontSize: 12, color: T.muted, padding: T.s3, textAlign: "center", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
@@ -1558,7 +1566,7 @@ function AccountRadioList({ accounts, selectedId, onPick, emptyHint }) {
         }}>
           <input type="radio" checked={selectedId === a.id} onChange={() => onPick(a.id)} style={{ cursor: "pointer" }}/>
           <span style={{ fontFamily: FP, fontSize: 12, color: T.text, flex: 1 }}>{a.label}</span>
-          <span style={{ fontFamily: FM, fontSize: 11, color: a.isDebt ? T.loss : T.muted }}>{fmtUSD(a.balance)}</span>
+          <span style={{ fontFamily: FM, fontSize: 11, color: a.isDebt ? T.loss : T.muted }}>{mask(fmtUSD(a.balance))}</span>
         </label>
       ))}
     </div>
@@ -1668,7 +1676,7 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: T.s3 }}>
+      <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>NAME</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Auto financing" style={inputStyle}/>
@@ -1683,7 +1691,7 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
         </label>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: T.s3 }}>
+      <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>APR (%) · OPT</span>
           <input value={apr} onChange={(e) => setApr(e.target.value)} inputMode="decimal" placeholder="0 (interest-free)" style={inputStyle}/>
@@ -1720,7 +1728,7 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
 
       {mode === "recurring" && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: T.s3, alignItems: "end" }}>
+          <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr auto", gap: T.s3, alignItems: "end" }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>PAYMENT ($)</span>
               <input value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} inputMode="decimal" placeholder="500" style={inputStyle}/>
@@ -1804,6 +1812,7 @@ const STRATEGIES = [
 // see the debt-free date, total interest, payoff order, and a burn-down chart.
 // All math is the pure computePayoffPlan simulation — nothing is stored.
 function PayoffPlanner({ planDebts }) {
+  const { mask } = useHideValues();
   const [strategy, setStrategy] = useState("riba");
   const [extra, setExtra] = useState("");
   const plan = useMemo(
@@ -1883,12 +1892,12 @@ function PayoffPlanner({ planDebts }) {
         </div>
         <div>
           <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>INTEREST PAID</div>
-          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: plan.totalInterest > 0 ? T.loss : T.gain, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(plan.totalInterest)}</div>
+          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: plan.totalInterest > 0 ? T.loss : T.gain, fontVariantNumeric: "tabular-nums" }}>{mask(fmtUSD(plan.totalInterest))}</div>
           <div style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>{plan.totalInterest > 0 ? "riba over the plan" : "no interest — qard hasan"}</div>
         </div>
         <div>
           <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>STARTING TOTAL</div>
-          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(plan.startTotal)}</div>
+          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>{mask(fmtUSD(plan.startTotal))}</div>
         </div>
       </div>
 
@@ -1926,6 +1935,7 @@ function PayoffPlanner({ planDebts }) {
 }
 
 function DebtSection({ plaidAccounts = [], demoMode = false }) {
+  const { mask } = useHideValues();
   const [debts, setDebts] = useState([]);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -2099,11 +2109,11 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
             DEBTS · {debts.length} TRACKED
           </span>
           <span style={{ fontFamily: FU, fontSize: 22, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
-            {debts.length > 0 ? <>{fmtUSD(totals.remaining)} left to clear</> : <>Pay off what you owe</>}
+            {debts.length > 0 ? <>{mask(fmtUSD(totals.remaining))} left to clear</> : <>Pay off what you owe</>}
           </span>
           <span style={{ fontFamily: FP, fontSize: 13, color: T.muted, letterSpacing: "-0.005em" }}>
             {debts.length > 0
-              ? <>{fmtUSD(totals.paid)} cleared · {Math.min(totals.pct, 100).toFixed(0)}% of {fmtUSD(totals.original)} original</>
+              ? <>{mask(fmtUSD(totals.paid))} cleared · {Math.min(totals.pct, 100).toFixed(0)}% of {mask(fmtUSD(totals.original))} original</>
               : <>Track any debt — a card, a bank loan, or money owed to a friend. Log payments, link a balance, or pay on a schedule from checking.</>}
           </span>
         </div>
@@ -2133,7 +2143,7 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: T.s4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(360px, 100%), 1fr))", gap: T.s4 }}>
         {debts.map((d) => editingId === d.id ? (
           <DebtForm
             key={d.id}

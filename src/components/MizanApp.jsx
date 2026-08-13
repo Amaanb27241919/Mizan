@@ -12,6 +12,7 @@ import {
 import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptions, detectUsageBasedSpend, normalizeMerchant } from "../lib/recurring.js";
 import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHistory } from "../lib/netWorth.js";
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
+import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 // Generated from BACKLOG.md at build time — headings only (~15KB), never the
 // 176KB markdown. See scripts/gen-backlog-summary.mjs.
 import BACKLOG from "../generated/backlog.json";
@@ -1331,31 +1332,8 @@ function SectorBreakdown({holdings=[],total=0}){
  * Eye-toggle in the Overview / Portfolio hero. Persists to localStorage
  * (so a refresh keeps the chosen state) and broadcasts via a custom
  * event so a click in one tab updates the other tab's render too. */
-const HIDE_VALUES_KEY = "mizan_hide_values";
-function readHideValues(){
-  try { return localStorage.getItem(HIDE_VALUES_KEY) === "1"; } catch { return false; }
-}
-function useHideValues(){
-  const [hidden, setHidden] = useState(readHideValues);
-  useEffect(() => {
-    const sync = () => setHidden(readHideValues());
-    window.addEventListener("storage", sync);
-    window.addEventListener("mizan-hide-values", sync);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("mizan-hide-values", sync);
-    };
-  }, []);
-  const toggle = () => {
-    try {
-      const next = !hidden;
-      localStorage.setItem(HIDE_VALUES_KEY, next ? "1" : "0");
-      setHidden(next);
-      try { window.dispatchEvent(new Event("mizan-hide-values")); } catch {}
-    } catch {}
-  };
-  return { hidden, toggle, mask: (formatted) => hidden ? "••••••" : formatted };
-}
+// Privacy mode now lives in src/lib/useHideValues.js so EXTRACTED components
+// (Goals, Finances panels) can call it too — see that file for why.
 
 // Small button: open/closed eye icon, toggles the hide flag on click.
 // Receives `hidden` + `toggle` from useHideValues so caller controls state.
@@ -3962,6 +3940,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
 }
 
 function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0,onConnect,view="zakat"}){
+  const { mask } = useHideValues();
   // The previous owner-only seed has been removed — it leaked the owner's
   // actual donation list into the JS bundle. Owner's existing donations are
   // already in Supabase user_state.mizan_sadaqah and hydrate on sign-in.
@@ -4210,7 +4189,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
       padding:`${T.s6} ${T.s6}`,
     }}>
       <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ZAKAT — {new Date().getFullYear()}</div>
-      <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:!nisabReady?T.muted:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{nisabReady?fmtUSD(zakatDue):"—"}</div>
+      <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:!nisabReady?T.muted:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{nisabReady?mask(fmtUSD(zakatDue)):"—"}</div>
       <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:!nisabReady?T.gold:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{
         !nisabReady
           ? (liveNisab.status==="loading"?"Checking live gold & silver prices…":"Nisab unavailable — can't determine whether Zakat is due")
@@ -4219,10 +4198,10 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
       <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and live nisab. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
       <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
         {[
-          ["Total zakatable assets",fmtUSD(assetsTotal)],
-          ["Less liabilities", `− ${fmtUSD(liabilitiesTotal)}`],
-          ["Net zakatable worth",fmtUSD(netZakatable),true],
-          [`Nisab (${settings.nisabStandard})`,nisabReady?fmtUSD(nisabUsd):"Unavailable"],
+          ["Total zakatable assets",mask(fmtUSD(assetsTotal))],
+          ["Less liabilities", `− ${mask(fmtUSD(liabilitiesTotal))}`],
+          ["Net zakatable worth",mask(fmtUSD(netZakatable)),true],
+          [`Nisab (${settings.nisabStandard})`,nisabReady?mask(fmtUSD(nisabUsd)):"Unavailable"],
         ].map(([l,v,b])=><div key={l}>
           <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
           <div style={{fontFamily:FP,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
@@ -4235,12 +4214,12 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
     {view==="sadaqah"&&<div className="bento-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s4}}>
       <BentoTile accent={T.gain}>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>GIVEN TOTAL</div>
-        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(given)}</div>
+        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(given))}</div>
         <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>{sadaqah.filter(s=>s.done).length} donation{sadaqah.filter(s=>s.done).length===1?"":"s"}</div>
       </BentoTile>
       <BentoTile accent={T.gold}>
         <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PLEDGED</div>
-        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:pledged>0?T.textHi:T.muted,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(pledged)}</div>
+        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:pledged>0?T.textHi:T.muted,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(pledged))}</div>
         <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1}}>{sadaqah.filter(s=>!s.done).length} outstanding</div>
       </BentoTile>
     </div>}
@@ -4277,8 +4256,8 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NISAB STANDARD</div>
           <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
             {[
-              {k:"silver",label:`Silver (${fmtUSD(liveSilver)})`,note:"612.36g · Hanafi"},
-              {k:"gold",  label:`Gold (${fmtUSD(liveGold)})`,    note:"87.48g · Jumhur"},
+              {k:"silver",label:`Silver (${mask(fmtUSD(liveSilver))})`,note:"612.36g · Hanafi"},
+              {k:"gold",  label:`Gold (${mask(fmtUSD(liveGold))})`,    note:"87.48g · Jumhur"},
             ].map(o=>(
               <button key={o.k}
                 onClick={()=>!demoMode&&saveZakatSettings({...settings,nisabStandard:o.k})}
@@ -4401,7 +4380,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>FILTER DONATIONS</span>
         {hasActiveFilter&&<button onClick={()=>{setFSearch("");setFStatus("all");setFMethod("all");setFAccount("all");setFYear("all");}} className="btn-ghost" style={{fontSize:10,padding:`4px ${T.s3}`}}>Clear</button>}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 120px 140px 140px 120px",gap:T.s2}}>
+      <div className="mz-form-row" style={{display:"grid",gridTemplateColumns:"1fr 120px 140px 140px 120px",gap:T.s2,minWidth:0}}>
         <input placeholder="Search organization…" value={fSearch} onChange={e=>setFSearch(e.target.value)} className="field"/>
         <select value={fStatus} onChange={e=>setFStatus(e.target.value)} className="field" style={{cursor:"pointer"}}>
           <option value="all">All status</option>
@@ -4428,7 +4407,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,flexWrap:"wrap",gap:T.s2}}>
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DONATION HISTORY{hasActiveFilter?<span style={{color:T.blue,marginLeft:T.s2}}>· {filtered.length} of {sadaqah.length}</span>:""}</span>
         <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
-          <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(hasActiveFilter?filteredGiven:given)} given{(hasActiveFilter?filteredPledged:pledged)>0?` · ${fmtUSD(hasActiveFilter?filteredPledged:pledged)} pledged`:""}</span>
+          <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(hasActiveFilter?filteredGiven:given))} given{(hasActiveFilter?filteredPledged:pledged)>0?` · ${mask(fmtUSD(hasActiveFilter?filteredPledged:pledged))} pledged`:""}</span>
           <button
             onClick={()=>downloadCSV(
               filtered.map(s=>({
@@ -4466,7 +4445,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
               :<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.account||"—"}</span>},
             {l:"Amount",r:true,r_:r=>editingId===r.id
               ?<input type="number" step="0.01" value={editDraft.amt} onChange={e=>setEditDraft({...editDraft,amt:e.target.value})} className="field" style={{fontSize:12,padding:`4px ${T.s2}`,fontVariantNumeric:"tabular-nums",textAlign:"right"}}/>
-              :<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.gold,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(r.amt)}</span>},
+              :<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.gold,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(r.amt))}</span>},
             {l:"Status",      r_:r=>editingId===r.id
               ?<select value={editDraft.done?"done":"pledged"} onChange={e=>setEditDraft({...editDraft,done:e.target.value==="done"})} className="field" style={{fontSize:10,padding:`4px ${T.s2}`,cursor:"pointer"}}>
                 <option value="done">Given</option>
@@ -6511,7 +6490,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     {/* Strategy Progress — one card per enabled strategy, target is always a goal */}
     {showStrat&&strategies.some(s=>s.enabled)&&<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
       <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGY PROGRESS</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:T.s3}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(260px, 100%), 1fr))",gap:T.s3}}>
         {strategies.filter(s=>s.enabled).map(s=><StrategyProgressCard key={s.id} strat={s}/>)}
       </div>
     </div>}
@@ -7236,7 +7215,7 @@ Activity rows on file: ${activities.length}.`;
               The advisor has your real account context — balances, top positions, Sharia compliance, contributions, dividends, and activity. Ask anything, or pick one of the suggestions below.
             </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:T.s3,maxWidth:780,margin:"0 auto",width:"100%"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(260px, 100%), 1fr))",gap:T.s3,maxWidth:780,margin:"0 auto",width:"100%"}}>
             {prompts.map(p=><button key={p.q} onClick={()=>send(p.q)} disabled={busy} style={{
               textAlign:"left",
               padding:`${T.s3} ${T.s4}`,
@@ -9177,7 +9156,7 @@ function AdminPanel(){
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>MAINTENANCE · CRON JOBS</span>
         <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.06em"}}>{busy?"Loading status…":"Run a job on demand"}</span>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))",gap:T.s3}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(260px, 100%), 1fr))",gap:T.s3}}>
         {CRON_JOBS.map(([job,label])=>{
           const run=cronRun[job]||{};
           const last=dbStatus?.cron?.[`cron.${job}`];
@@ -9753,6 +9732,7 @@ function GoalsHub({snapAccounts=[],plaidAccounts=[],netWorthHistory=[],demoMode=
 }
 
 function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNickname}){
+  const { mask } = useHideValues();
   const{user}=useAuth();
   // In demo mode short-circuit straight to the local fixtures so the
   // tab is fully populated without ever talking to Plaid. Toggle off
@@ -10369,7 +10349,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s2}}>BANK NET POSITION
             {loading&&<span style={{marginLeft:T.s2,color:T.blue}}>● Syncing…</span>}
           </div>
-          <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:totalBank>=0?T.textHi:T.loss,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(totalBank)}</div>
+          <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:totalBank>=0?T.textHi:T.loss,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(totalBank))}</div>
           <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{institutions.length} institution{institutions.length===1?"":"s"} · {accounts.length} account{accounts.length===1?"":"s"}</div>
         </div>
         <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
@@ -10472,8 +10452,8 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               />
               {nicknames?.[a.account_id]&&<div style={{fontSize:10,color:T.muted,marginTop:2,fontFamily:FM}}>{a.name||a.official_name||"Account"}</div>}
             </div>
-            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:isLiability?T.loss:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{isLiability?"−":""}{fmtUSD(a.current_bal)}</div>
-            {a.available_bal!=null&&a.available_bal!==a.current_bal&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(a.available_bal)} available</div>}
+            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:isLiability?T.loss:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{isLiability?"−":""}{mask(fmtUSD(a.current_bal))}</div>
+            {a.available_bal!=null&&a.available_bal!==a.current_bal&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(a.available_bal))} available</div>}
             {isInv&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,lineHeight:1.4}}>Excluded from Bank Net Position — counted as brokerage on Overview / Portfolio.</div>}
           </div>;
         })}
@@ -10487,7 +10467,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const now=new Date();
       const monthLabel=now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
       const fmtCat=s=>s.split("_").map(w=>w==="AND"?"&":w[0].toUpperCase()+w.slice(1).toLowerCase()).join(" ");
-      return<CollapsibleTile title="SPENDING BY CATEGORY" subtitle={`${monthLabel} · ${fmtUSD(monthTotal)} spent`} storageKey="fin_spending">
+      return<CollapsibleTile title="SPENDING BY CATEGORY" subtitle={`${monthLabel} · ${mask(fmtUSD(monthTotal))} spent`} storageKey="fin_spending">
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {entries.map(s=>{
             const pct=monthTotal>0?(s.total/monthTotal)*100:0;
@@ -10497,7 +10477,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${barPct}%`,background:`linear-gradient(90deg, ${T.blue}, ${T.blueDim})`,borderRadius:2}}/>
               </div>
-              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(s.total)}</span>
+              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(s.total))}</span>
               <span style={{fontFamily:FM,fontSize:11,color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
             </div>;
           })}
@@ -10511,7 +10491,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const now=new Date();
       const monthLabel=now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
       const CAT_LABEL={LOAN_PAYMENTS:"Loan & Card Payments",TRANSFER_OUT:"Outbound Transfers",BANK_FEES:"Bank Fees"};
-      return<CollapsibleTile title="DEBT PAYMENTS & TRANSFERS" subtitle={`${monthLabel} · ${fmtUSD(outTotal)}`} storageKey="fin_debt">
+      return<CollapsibleTile title="DEBT PAYMENTS & TRANSFERS" subtitle={`${monthLabel} · ${mask(fmtUSD(outTotal))}`} storageKey="fin_debt">
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {outEntries.map(e=>{
             const pct=outTotal>0?(e.total/outTotal)*100:0;
@@ -10521,14 +10501,14 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${barPct}%`,background:`linear-gradient(90deg,${T.loss}88,${T.loss}44)`,borderRadius:2}}/>
               </div>
-              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtUSD(e.total)}</span>
+              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(e.total))}</span>
               <span style={{fontFamily:FM,fontSize:11,color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
             </div>;
           })}
         </div>
         {incomeTotal>0&&<div style={{marginTop:T.s4,paddingTop:T.s3,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.14em",fontWeight:600}}>INCOME & INFLOWS THIS MONTH</span>
-          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(incomeTotal)}</span>
+          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.gain,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(incomeTotal))}</span>
         </div>}
       </CollapsibleTile>;
     })()}
@@ -10619,7 +10599,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const active=rows.filter(r=>r.active);
       const inactive=rows.filter(r=>!r.active);
       const totalMonthly=active.reduce((s,r)=>s+r.estMonthly,0);
-      return<CollapsibleTile accent={T.gold} title="RECURRING SUBSCRIPTIONS" subtitle={`${active.length} active · ${fmtUSD(totalMonthly)}/mo`} storageKey="fin_subs" right={usingPlaid?<span style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>:null}>
+      return<CollapsibleTile accent={T.gold} title="RECURRING SUBSCRIPTIONS" subtitle={`${active.length} active · ${mask(fmtUSD(totalMonthly))}/mo`} storageKey="fin_subs" right={usingPlaid?<span style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>:null}>
         <div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
             {l:"Merchant",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
@@ -10629,8 +10609,8 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               {r.edited&&<span title="You've edited this subscription — your values override what was detected" style={{fontFamily:FM,fontSize:9,color:T.blue,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.blue}55`,borderRadius:T.rSm,background:`${T.blue}12`}}>EDITED</span>}
             </div>},
             {l:"Cadence",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,textTransform:"capitalize"}}>{r.cadence}</span>},
-            {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"avg ":""}{fmtUSD(r.avgPerCharge)}</span>},
-            {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"~":""}{fmtUSD(r.estMonthly)}</span>},
+            {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"avg ":""}{mask(fmtUSD(r.avgPerCharge))}</span>},
+            {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"~":""}{mask(fmtUSD(r.estMonthly))}</span>},
             {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
             // Never editable in demo mode — an edit there would persist a
             // demo-merchant override into the user's real synced state.
@@ -10808,7 +10788,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               : (a?`${a.name} ····${a.mask}`:r.institution_name||"—");
             return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{label}</span>;
           }},
-          {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{fmtUSD(Math.abs(r.amount))}</span>;}},
+          {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{mask(fmtUSD(Math.abs(r.amount)))}</span>;}},
         ]} rows={visibleTxns}/>
         {/* Footer: counter + Load more. Empty state when filters wipe results. */}
         {filteredTxns.length===0?(
@@ -12735,7 +12715,7 @@ export default function Mizan(){
         .mz-grid-3{grid-template-columns:1fr!important;}
         .mz-grid-2{grid-template-columns:1fr!important;}
         .mz-form-row{grid-template-columns:1fr!important;}
-        .mz-dock{padding:4px!important;gap:2px!important;border-radius:14px!important;bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;left:8px!important;right:8px!important;transform:none!important;justify-content:space-around;}
+        .mz-dock{padding:4px!important;gap:2px!important;max-width:calc(100vw - 16px)!important;overflow-x:auto!important;border-radius:14px!important;bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;left:8px!important;right:8px!important;transform:none!important;justify-content:space-around;}
         .mz-dock button{padding:8px 6px!important;font-size:10px!important;border-radius:10px!important;flex:1;letter-spacing:0.02em!important;min-height:44px;}
         .mz-status{padding:0 12px!important;gap:8px!important;}
         .mz-status-mid{display:none!important;}
@@ -12825,7 +12805,7 @@ export default function Mizan(){
       </div>
 
       {/* Right: compact action toggles + sync */}
-      <div className="mz-status-right" style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+      <div className="mz-status-right" style={{display:"flex",alignItems:"center",gap:6,flexShrink:1,minWidth:0,justifyContent:"flex-end"}}>
         <NotificationBell
           items={notifications}
           onMarkAllRead={()=>writeNotifications(markAllRead(notifications))}

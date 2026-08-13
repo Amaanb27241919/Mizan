@@ -95,7 +95,11 @@ const styles = {
     border: '1px solid rgba(28,27,25,0.12)',
     borderRadius: 10,
     color: '#1c1b19',
-    fontSize: 15,
+    // 16px, not 15 — iOS Safari zooms the whole page when a focused input is
+    // under 16px. MizanApp's THEME_CSS has an `input{font-size:16px!important}`
+    // rule for exactly this, but Login renders INSTEAD of MizanApp (App.jsx),
+    // so that rule never loads here. Every sign-in field focus zoomed the page.
+    fontSize: 16,
     outline: 'none',
     boxSizing: 'border-box',
     marginBottom: 14,
