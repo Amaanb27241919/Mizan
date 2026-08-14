@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-13
 
 ### Fixed
+- **ui:** Make the phone forms usable and privacy mode actually private (`fecaee8`)
 - **cron:** Stop the nightly snapshot silently overwriting net-worth history (`45f608c`)
 
 ## 2026-08-11

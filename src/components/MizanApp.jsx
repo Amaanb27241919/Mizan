@@ -349,10 +349,33 @@ DEMO_ACCOUNTS.forEach(a => {
 // Net ~$264k invested across 6 accounts (Empower 401k, Vanguard Roth, Fidelity
 // taxable, Robinhood, Coinbase, Schwab). Tag the demo's tickers so the screener
 // doesn't show every position as "Review".
-// Demo transaction history — multi-year buys, sells, quarterly dividends,
-// monthly contributions, occasional withdrawals + fees per account.
+// Demo transaction history — multi-year buys, quarterly dividends, monthly
+// contributions, occasional withdrawals + fees per account. (No SELLs: the
+// persona is buy-and-hold, so the Performance panel's realized P&L is $0 by
+// design. Adding sells would require re-deriving every position's units.)
+//
+// DETERMINISTIC BY CONSTRUCTION. This block used to call Math.random() at
+// module load, so every page refresh regenerated the whole history and the
+// Overview's activity-derived figures moved on their own: all-time
+// contributions swung $275k–$280k, YTD contributions $26.3k–$30.2k, fees
+// $319–$449, the activity count 393–408, and the money-weighted return by a
+// full percentage point. Worse, first paint hydrates snapAccounts/
+// snapActivities from localStorage (the PREVIOUS load's random history) and
+// then fetchSnapHoldings overwrote it with a fresh one — so the demo Overview
+// visibly rendered one set of numbers and jumped to another. A seeded PRNG
+// keeps the jitter (dates and skipped months still look organic) while making
+// the fixture identical on every load. Same discipline as the balance
+// invariant above: a demo that disagrees with itself reads as a broken app.
 const DEMO_ACTIVITIES = (() => {
   const out = [];
+  // mulberry32 — 4 lines, no dependency, stable across engines.
+  let seed = 0x5EED;
+  const rnd = () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
   const now = new Date();
   const dt = (daysBack) => {
     const d = new Date(now); d.setDate(d.getDate() - daysBack);
@@ -364,27 +387,32 @@ const DEMO_ACTIVITIES = (() => {
     const acctRef = { id: acct.accountId, name: acct.accountName };
     const inst    = acct.brokerage;
 
-    // Initial big deposit ~5 years ago
+    // Contributions are sized to land well BELOW the account's current value —
+    // ~38% seed + ~23% dripped in — so the persona shows the healthy positive
+    // return its positions actually imply. The old 55% + 36×(0.5%+$500)
+    // schedule totalled MORE than the portfolio was worth ($277k contributed
+    // vs $264k held), so a book of pure winners reported a negative
+    // money-weighted return on the Overview.
     push({
-      trade_date: dt(1700 + Math.floor(Math.random()*60)), type: "DEPOSIT",
+      trade_date: dt(1700 + Math.floor(rnd()*60)), type: "DEPOSIT",
       symbol: null, units: null, price: null,
-      amount: Math.round(acct.balance * 0.55 / 100) * 100,
+      amount: Math.round(acct.balance * 0.38 / 100) * 100,
       account: acctRef, institution_name: inst,
     });
     // Monthly contributions, last 36 months — smaller, regular
     for (let m = 36; m >= 1; m--) {
-      if (Math.random() > 0.85) continue; // skip ~15% of months
+      if (rnd() > 0.85) continue; // skip ~15% of months
       push({
-        trade_date: dt(m * 30 + Math.floor(Math.random()*5)), type: "DEPOSIT",
+        trade_date: dt(m * 30 + Math.floor(rnd()*5)), type: "DEPOSIT",
         symbol: null, units: null, price: null,
-        amount: Math.round(acct.balance * 0.005 / 100) * 100 + 500,
+        amount: Math.round(acct.balance * 0.0075 / 50) * 50,
         account: acctRef, institution_name: inst,
       });
     }
     // Occasional withdrawal
-    if (Math.random() > 0.5) {
+    if (rnd() > 0.5) {
       push({
-        trade_date: dt(120 + Math.floor(Math.random()*200)), type: "WITHDRAWAL",
+        trade_date: dt(120 + Math.floor(rnd()*200)), type: "WITHDRAWAL",
         symbol: null, units: null, price: null,
         amount: -Math.round(acct.balance * 0.008 / 100) * 100,
         account: acctRef, institution_name: inst,
@@ -392,37 +420,37 @@ const DEMO_ACTIVITIES = (() => {
     }
     // Annual fee
     push({
-      trade_date: dt(60 + Math.floor(Math.random()*30)), type: "FEE",
+      trade_date: dt(60 + Math.floor(rnd()*30)), type: "FEE",
       symbol: null, units: null, price: null,
-      amount: -Math.round(Math.random() * 80 + 20),
+      amount: -Math.round(rnd() * 80 + 20),
       account: acctRef, institution_name: inst,
     });
 
-    // Per-position lots
+    // Per-position lots. The two lot prices are chosen so their unit-weighted
+    // mean is EXACTLY the position's average_purchase_price:
+    //   0.6×(0.85·ac) + 0.4×(1.225·ac) = 0.51·ac + 0.49·ac = ac
+    // The old add-on lot priced at (ac+price)/2 made the cost basis implied by
+    // the activity feed disagree with the cost basis on the holding itself — by
+    // 3% on SCHD and 53% on PLTR — so anything reconstructing basis from
+    // activities contradicted the holdings table. Same drift class the balance
+    // normalizer above was written to kill.
     acct.positions.forEach(p => {
       const tk = p.symbol.symbol;
       const sym = { symbol: tk };
       const isCrypto = p.symbol.type === "Crypto";
-      // Initial buy ~3 years ago
-      push({
-        trade_date: dt(900 + Math.floor(Math.random()*200)), type: "BUY",
-        symbol: sym, units: p.units * 0.6, price: p.average_purchase_price,
-        amount: -p.units * 0.6 * p.average_purchase_price,
+      const lot = (frac, mult, daysBack) => push({
+        trade_date: dt(daysBack), type: "BUY",
+        symbol: sym, units: p.units * frac, price: +(p.average_purchase_price * mult).toFixed(4),
+        amount: -p.units * frac * p.average_purchase_price * mult,
         account: acctRef, institution_name: inst,
       });
-      // Add-on buy ~1 year ago
-      push({
-        trade_date: dt(280 + Math.floor(Math.random()*100)), type: "BUY",
-        symbol: sym, units: p.units * 0.4,
-        price: (p.average_purchase_price + p.price) / 2,
-        amount: -p.units * 0.4 * (p.average_purchase_price + p.price) / 2,
-        account: acctRef, institution_name: inst,
-      });
+      lot(0.6, 0.850, 900 + Math.floor(rnd()*200)); // initial buy ~3 years ago
+      lot(0.4, 1.225, 280 + Math.floor(rnd()*100)); // add-on buy ~1 year ago
       // Quarterly dividends, 8 quarters back (skip crypto)
       if (!isCrypto) {
         for (let q = 1; q <= 8; q++) {
           push({
-            trade_date: dt(q * 90 + Math.floor(Math.random()*15)), type: "DIVIDEND",
+            trade_date: dt(q * 90 + Math.floor(rnd()*15)), type: "DIVIDEND",
             symbol: sym, units: 0, price: 0,
             amount: +(p.units * p.price * 0.0042).toFixed(2), // ~1.7% annual / 4
             account: acctRef, institution_name: inst,
