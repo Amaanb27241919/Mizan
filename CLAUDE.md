@@ -44,7 +44,7 @@ External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alp
 
 ### Frontend (the monolith)
 ```
-src/components/MizanApp.jsx   — 11,400+ lines. ALL views, ALL state, ALL charts.
+src/components/MizanApp.jsx   — 13,200+ lines. ALL views, ALL state, ALL charts.
                                  DO NOT split unless explicitly asked.
 src/components/Goals.jsx       — Goals tab (extracted). Savings goals + DEBT PAYOFF TRACKER
                                  (manual/recurring/balance-linked debts, counting down to $0)
@@ -128,7 +128,7 @@ src/lib/useKeyboard.js         — Global keyboard shortcuts
 ### Backend
 ```
 api/[...path].mjs              — Vercel catch-all. Routes to lib/handlers.mjs.
-lib/handlers.mjs               — 6,100+ lines. Every API route in one file.
+lib/handlers.mjs               — 7,600+ lines. Every API route in one file.
 lib/sharia.mjs                 — Sharia screening service (provider seam: Finnhub now, Zoya when ZOYA_API_KEY set). screenSymbol/screenBatch power /api/screen → governs h.sh_ app-wide
 lib/market/candles.mjs         — Pure (no I/O): validation (symbol regex, resolution whitelist,
                                  bounded window) + Polygon→chart normalization for the price chart.
@@ -185,6 +185,39 @@ lib/logger.mjs                 — Structured logging
 lib/sentry.mjs                 — Sentry backend init
 server.js                      — Dev server (Vite middleware + API on :3000)
 ```
+
+### Verification (what actually proves the app works)
+```
+npm test              — Vitest, 419 unit tests. Pure functions + static contracts. Fast (~3s).
+npm run test:e2e      — Playwright. Renders the real production build. NOT in `npm run build`.
+npm run test:all      — both
+npm run lint          — crash-focused ESLint (config/eslint.mjs). Wired INTO `npm run build`.
+
+playwright.config.js  — 3 projects: desktop 1440x900, mobile-320 (320x720), phone-landscape
+                        (667x375). The two phone projects set hasTouch:true — that is what makes
+                        Chromium report `pointer: coarse`; without it every touch-target rule is
+                        dead in the test browser and the suite passes by never evaluating them.
+                        `serviceWorkers: "block"` is LOAD-BEARING — see §5 PWA notes.
+                        Runs against `vite preview` over dist/, so what's tested is what ships.
+e2e/support/app.js    — Boots the app SIGNED IN with zero credentials: seeds a fake Supabase
+                        session into localStorage and answers every /api/** call from fixtures.
+                        No test account, no rate-limit burn, no chance of writing to prod.
+e2e/smoke.spec.js             — the app boots and renders
+e2e/responsive.spec.js        — overflow/clipping across login + every tab + every SUB-tab at real
+                                phone sizes, dock fit, header leaf-overlap, landscape sub-tab
+                                height, --mz-vh resolution. See §5 Responsive.
+e2e/mobile-and-privacy.spec.js— the two P0s from the 2026-08-13 UI audit (320px clipping, privacy
+                                mode being decorative)
+e2e/screener.spec.js          — the "screen any ticker" lookup + typeahead
+src/test/*.test.js            — 22 files. Pure logic (zakat, netWorth, performance, recurring,
+                                notifications, compliance…) plus two contract suites:
+                                demoFixtures.test.js  — demo data is deterministic and self-consistent
+                                pwaManifest.test.js   — manifest + iOS meta + splash matrix (§5)
+
+scripts/generate-pwa-screenshots.mjs — manifest install screenshots (needs a preview server)
+scripts/generate-ios-splash.mjs      — iOS launch images + their <link> tags; `--check` verifies
+```
+**The lesson that produced most of this** (2026-08-15): the fixture layer above had never worked — a service worker was bypassing `page.route()`, so specs passed *because* fixtures were inert. When you add a fixture-dependent test, **break the fixture once and confirm the test goes red.** A test that passes identically with and without its fixtures is not testing what it claims. Same applies to the guards themselves: every responsive and PWA guard here was mutation-tested, and that process caught a real hole (the responsive spec initially walked only top-level tabs and passed against a reverted sub-tab bug).
 
 ### Database (26 Migrations — all applied in prod)
 ```
@@ -507,6 +540,15 @@ npm run build   # Must exit 0 with no errors
 - [ ] Works in both light and dark theme
 - [ ] No NaN, undefined, or "[object Object]" visible to user
 
+### Responsive / touch checklist (added 2026-08-15)
+Run `npm run test:e2e` — it covers all of this automatically. Check by hand only when adding a surface the specs don't reach yet.
+- [ ] Nothing overflows at **320px** — `html{overflow-x:clip}` means over-wide content is silently CLIPPED, never scrollable, so this is invisible by eye
+- [ ] Control groups `flex-wrap` rather than relying on `flexShrink:0`; grid cells that hold inputs get `minWidth:0` (a grid item won't shrink below its content's min-content width, and Chrome gives `<input type=date>` a big one)
+- [ ] Viewport heights use `var(--mz-vh)`, never a bare `100vh`; never pair a viewport-relative min-height with a viewport-relative max-height
+- [ ] Landscape checked — a landscape phone is **568–932px wide with 320–430px of height**, so it escapes every `max-width` breakpoint
+- [ ] Touch targets ≥44px via `@media (pointer: coarse)` (`.mz-tap` / `.mz-chip-row` for small inline-styled controls) — not via a `::after` hit-area hack, see §5
+- [ ] New tab or sub-tab: confirm the responsive spec walks it
+
 ### Financial accuracy checklist
 - [ ] Values match what the underlying data source provides
 - [ ] No synthetic/fabricated data that could be mistaken for real portfolio data
@@ -674,8 +716,8 @@ Current gaps in order of user value (from MIZAN-STATE-AUDIT.md Section 6):
 
 ## 17. FILE SIZE WARNINGS
 
-🚨 **MizanApp.jsx** (~11,400 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
+🚨 **MizanApp.jsx** (~13,200 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
 
-🚨 **handlers.mjs** (~6,100 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
+🚨 **handlers.mjs** (~7,600 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
 
 Both files exceed the 800-line guideline by design — this is a known, accepted tradeoff for this project phase.

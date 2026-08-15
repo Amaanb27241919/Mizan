@@ -131,8 +131,8 @@
 | Entry | `src/main.jsx` → `src/App.jsx` → `src/components/MizanApp.jsx` |
 | Charts | recharts 2.12.7 (dashboards/donuts) · **lightweight-charts 5.2.0** (holdings candlestick price chart — `src/components/charts/PriceChart.jsx`, dynamic-imported so it stays out of the initial bundle) |
 | Charts data prep | `src/components/charts/holdingsOverlay.js` (pure — user's executed trades → chart markers) |
-| Routing | Client-side SPA (no router library — tab state in `useState`) |
-| PWA | Service worker at `public/sw.js`, manifest, VAPID push |
+| Routing | Client-side SPA (no router library — tab state in `useState`). Two URL entry points only: `/oauth-redirect` (Plaid resume) and **`?tab=` deep links** (added 2026-08-15 so the manifest's app shortcuts land where they claim; validated against the real tab list, stripped via `replaceState` after use) |
+| PWA | Service worker `public/sw.js` (cache-v19) · manifest with `id`/shortcuts/`launch_handler`/**5 install screenshots** (Chrome's richer install UI) · **22 iOS launch images** in `public/splash/` · VAPID push. Orientation unlocked 2026-08-15 (rotates). iOS status bar is `default` — **never `black-translucent`**, it renders the clock white over the paper canvas and Apple deprecated it. Guarded by `src/test/pwaManifest.test.js` |
 | Fonts | Google Fonts: Fraunces (display/stats), IBM Plex Sans (body), IBM Plex Mono (labels) |
 
 **Bundle (from last `npm run build`):**
@@ -380,7 +380,7 @@ No hardcoded secrets found in any source file. All keys read from `process.env`.
 - All 6 nav tabs with all sub-views
 - All API routes in `handlers.mjs`
 - 6 Vercel cron jobs
-- Service worker / PWA install
+- Service worker / PWA install (full install surface for Chrome + iOS as of 2026-08-15)
 - Sentry error tracking (frontend + backend)
 - All 22 Supabase migrations (020–022 applied in prod via MCP this session)
 

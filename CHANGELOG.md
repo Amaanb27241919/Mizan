@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-15
 
 ### Added
+- **pwa:** IOS launch images so an installed app stops opening on a white screen (`9813810`)
 - **pwa:** Optimize the install surface for Chrome/Android and Safari/iOS (`5deb39e`)
 
 ### Fixed

@@ -66,7 +66,26 @@ async function shoot(browser, viewport, name, steps) {
   return file;
 }
 
+/**
+ * Fail fast with the actual command to run. Without this the script just hangs
+ * on page.goto and times out, which reads like a Playwright problem rather than
+ * "you forgot the server".
+ */
+async function requirePreviewServer() {
+  try {
+    const res = await fetch(BASE, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) return;
+  } catch { /* fall through to the message below */ }
+  console.error(
+    `No preview server at ${BASE}.\n\n` +
+    `  npm run build && npx vite preview --port 4173 --strictPort\n\n` +
+    `then re-run this script (or set PREVIEW_URL).`
+  );
+  process.exit(1);
+}
+
 const run = async () => {
+  await requirePreviewServer();
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch();
   const written = [];
