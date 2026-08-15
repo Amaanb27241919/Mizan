@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-14
+
+### Fixed
+- **demo:** Stop the demo Overview figures regenerating on every page load (`71d98fa`)
+
 ## 2026-08-13
 
 ### Fixed

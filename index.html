@@ -2,7 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <!-- `user-scalable=no` was removed 2026-08-14: it blocks pinch-zoom, which
+         is a WCAG 1.4.4 failure and a real problem in an app whose densest
+         surfaces are numeric tables. It was there to stop iOS auto-zooming on
+         input focus, but THEME_CSS already solves that the correct way, by
+         forcing form controls to 16px. `interactive-widget=resizes-content`
+         makes the on-screen keyboard shrink the viewport instead of covering
+         it, so the Assistant's composer stays visible while typing. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="description" content="MĪZAN — Shariah-compliant investment super-app. Screen, automate, and compound." />
     <meta name="theme-color" content="#0e1626" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#faf8f4" media="(prefers-color-scheme: light)" />
@@ -47,6 +54,13 @@
 
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      /* Mobile-correct viewport height. Declared here as well as in THEME_CSS
+         so the surfaces that render OUTSIDE MizanApp — Login, the legal pages,
+         the error boundary — get it too. `100vh` on a phone is the URL-bar-
+         retracted height, so a 100vh box is always taller than what's on
+         screen; `dvh` tracks the real one. */
+      :root { --mz-vh: 100vh; }
+      @supports (height: 100dvh) { :root { --mz-vh: 100dvh; } }
       /* First-paint colors. These MUST track --mz-bg / --mz-textHi in
          MizanApp.jsx THEME_CSS — they are what the user stares at between the
          HTML arriving and React mounting. They used to be #07080E on #C8CCE4,

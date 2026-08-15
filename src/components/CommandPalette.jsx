@@ -209,7 +209,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
-        paddingTop: "12vh",
+        paddingTop: "calc(var(--mz-vh, 100vh) * 0.12)",
         zIndex: 220,
       }}
     >
@@ -228,7 +228,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          maxHeight: "70vh",
+          maxHeight: "calc(var(--mz-vh, 100vh) * 0.70)",
           animation: "glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)",
         }}
       >

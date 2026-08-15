@@ -360,7 +360,7 @@ export default function ConnectionHealth({ onNav } = {}) {
             {counts.ok} healthy · {counts.reauth} need attention{counts.error > 0 ? ` · ${counts.error} error` : ""}
           </div>
         </div>
-        <button onClick={load} disabled={loading}
+        <button onClick={load} disabled={loading} className="mz-tap"
           style={{
             padding: `8px ${T.s4}`,
             background: `${T.blue}14`,

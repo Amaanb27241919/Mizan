@@ -70,7 +70,7 @@ function TemplatePicker({ avgMonthlySpend, onPick, onCancel }) {
         <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
           CHOOSE A TEMPLATE
         </div>
-        <button onClick={onCancel} style={ghostBtnStyle}>Cancel</button>
+        <button onClick={onCancel} className="mz-tap" style={ghostBtnStyle}>Cancel</button>
       </div>
       <div style={{
         display: "grid",
@@ -409,8 +409,8 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
       )}
 
       <div style={{ display: "flex", gap: T.s2, justifyContent: "flex-end" }}>
-        <button onClick={onCancel} disabled={busy} style={ghostBtnStyle}>Cancel</button>
-        <button onClick={submit} disabled={busy} style={primaryBtnStyle}>
+        <button onClick={onCancel} disabled={busy} className="mz-tap" style={ghostBtnStyle}>Cancel</button>
+        <button onClick={submit} disabled={busy} className="mz-tap" style={primaryBtnStyle}>
           {busy ? "Saving…" : (initial ? "Save" : "Create goal")}
         </button>
       </div>
@@ -760,7 +760,7 @@ export default function Goals({
             Track account balances, total net worth, or manual milestones. Projections use the last 30 days.
           </span>
         </div>
-        <button onClick={() => { setCreating("picker"); setEditingId(null); }} style={primaryBtnStyle}>+ New goal</button>
+        <button onClick={() => { setCreating("picker"); setEditingId(null); }} className="mz-tap" style={primaryBtnStyle}>+ New goal</button>
       </div>
 
       {err && err.pending ? (
@@ -822,7 +822,7 @@ export default function Goals({
           <span>No goals yet.</span>
           <button
             onClick={() => { setCreating("picker"); setEditingId(null); }}
-            style={primaryBtnStyle}
+            className="mz-tap" style={primaryBtnStyle}
           >
             Set your first goal →
           </button>
@@ -950,6 +950,7 @@ export function GoalsOverviewWidget({
         </span>
         <button
           onClick={() => onNav?.("goals")}
+          className="mz-tap"
           style={{
             fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
             color: T.blue, background: "transparent", border: "none", cursor: "pointer", padding: 0,
@@ -968,6 +969,7 @@ export function GoalsOverviewWidget({
           <span style={{ fontFamily: FP, fontSize: 13, color: T.muted }}>No savings goals yet</span>
           <button
             onClick={() => onNav?.("goals")}
+            className="mz-tap"
             style={{
               fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
               color: T.blue, background: `${T.blue}18`,
@@ -1763,8 +1765,8 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
       )}
 
       <div style={{ display: "flex", gap: T.s2, justifyContent: "flex-end" }}>
-        <button onClick={onCancel} disabled={busy} style={ghostBtnStyle}>Cancel</button>
-        <button onClick={submit} disabled={busy} style={primaryBtnStyle}>{busy ? "Saving…" : (initial?.id ? "Save" : "Add debt")}</button>
+        <button onClick={onCancel} disabled={busy} className="mz-tap" style={ghostBtnStyle}>Cancel</button>
+        <button onClick={submit} disabled={busy} className="mz-tap" style={primaryBtnStyle}>{busy ? "Saving…" : (initial?.id ? "Save" : "Add debt")}</button>
       </div>
     </div>
   );
@@ -2118,7 +2120,7 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
           </span>
         </div>
         {!creating && (
-          <button onClick={() => { setCreating(true); setEditingId(null); }} style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${T.loss}, #8a2b2d)` }}>+ Add debt</button>
+          <button onClick={() => { setCreating(true); setEditingId(null); }} className="mz-tap" style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${T.loss}, #8a2b2d)` }}>+ Add debt</button>
         )}
       </div>
 
@@ -2139,7 +2141,7 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
         }}>
           <Icon name="scale" size={28} color={T.muted}/>
           <span>No debts tracked. Add one to watch the balance count down as you pay it off.</span>
-          <button onClick={() => setCreating(true)} style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${T.loss}, #8a2b2d)` }}>Add your first debt →</button>
+          <button onClick={() => setCreating(true)} className="mz-tap" style={{ ...primaryBtnStyle, background: `linear-gradient(135deg, ${T.loss}, #8a2b2d)` }}>Add your first debt →</button>
         </div>
       )}
 

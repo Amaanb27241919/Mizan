@@ -41,7 +41,7 @@ export default function LegalLayout({ title, updated, children }) {
 
 const styles = `
 .mz-legal-root {
-  min-height: 100vh;
+  min-height: var(--mz-vh, 100vh);
   background: #faf8f4;
   color: #1c1b19;
   font-family: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;

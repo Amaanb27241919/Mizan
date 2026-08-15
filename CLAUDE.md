@@ -348,6 +348,24 @@ className="btn-ghost"  — Ghost button (transparent, bordered)
 
 **Glass rule**: `glass` and `glass-strong` are for chrome surfaces ONLY. NEVER apply to data tables, stat cards, charts, or bento tiles containing financial data.
 
+### Responsive & touch (added 2026-08-15)
+Mizan is an installable PWA used on phones. Two rules drive everything here:
+
+**1. Viewport height goes through `var(--mz-vh)` — never a bare `100vh`.** On a phone `100vh` is the URL-bar-*retracted* height, so a `100vh` box is always taller than the visible area and every `calc(100vh - X)` budget under-reserves. `--mz-vh` is `100vh` upgraded to `100dvh` via `@supports`, declared in **both** THEME_CSS and `index.html` (Login, the legal pages and the error boundary render outside MizanApp, so THEME_CSS never loads for them). Also: **min-height beats max-height in CSS** — don't pair a viewport-relative floor with a viewport-relative cap, they will contradict each other on some screen size (`minHeight:60vh` + `maxHeight:calc(100vh-280px)` made the cap dead on every phone under 700px tall).
+
+**2. Touch rules key on `@media (pointer: coarse)`, NOT on width.** A landscape phone is **568–932px wide with 320–430px of height**, so it sails past every `max-width` breakpoint while still being a fingertip. Width-keyed rules are why sub-tabs measured 40px in portrait and 33px in landscape on the same device. There is a `@media (max-height: 500px) and (orientation: landscape)` block for the short-viewport case.
+
+Helper classes (all no-ops on a mouse):
+```
+.mz-tap        min-height:44px on touch — for a small inline-styled control
+.mz-chip-row   applies it to every button inside a filter/chip row
+.mz-range-row  the net-worth chart's range chips (wraps at narrow widths)
+.mz-ctrl-row   a control group that must wrap rather than overflow
+```
+**Do NOT "expand the hit area" with a 44px `::after` while leaving the box small.** It was tried and reverted: in a chip row — especially a wrapping one — the invisible regions overlap and the last-painted one wins, so chips got 8–20px of usable reach (less than their own box) and taps landed on the wrong chip. Give controls real height.
+
+Two traps that make defects here invisible: `html{overflow-x:clip}` means over-wide content is **silently clipped, never scrollable** (no scrollbar to notice), and flex parents can report honest non-overlapping rects while their *children* paint on top of each other. Both must be measured, not eyeballed. `e2e/responsive.spec.js` guards all of it across login + every tab + every sub-tab; `playwright.config.js` sets `hasTouch: true`, which is **what makes Chromium report `pointer:coarse`** — without it the touch rules never evaluate and the suite passes by not testing them.
+
 ### Theming
 Both light and dark themes must work. **Light is the default/primary face** = `data-theme="light"` (paper canvas `#faf8f4` bg, ink `#1c1b19` text). Dark = `data-theme="dark"` (**midnight-navy** base `#0e1626` — the cool inverse of the warm paper, aligned to the navy accent; warm-ivory `#f4f2ec` text). The old warm "ink/chocolate" dark base (`#1c1b19`) was replaced 2026-06-28. New users default to light (`themeMode="light"`). When adding a new UI surface, test both themes mentally — most `T.*` tokens adapt automatically. Note: `T.blue`/`T.gold`/`T.gain`/`T.loss` are hex *literals* (the codebase composes opacity as `${T.blue}40`), so they're tuned for the light theme; navy-as-small-text on the navy dark theme is still the weak spot (would need a var refactor to make accents per-theme — the brand mark itself is now fixed via the theme-swapped `mark-light.png`). **Bento tiles use a translucent fill** (`--mz-tile-fill`) so the fixed `ميزان` canvas watermark reads through them — don't restore an opaque tile background.
 

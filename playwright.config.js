@@ -55,7 +55,17 @@ export default defineConfig({
     // 320px is the tight one — `html{overflow-x:clip}` means anything wider
     // than the content budget is silently CLIPPED rather than scrollable, so
     // overflow bugs are invisible unless something actually looks at this size.
-    { name: "mobile-320", use: { ...devices["Desktop Chrome"], viewport: { width: 320, height: 720 } } },
+    //
+    // hasTouch matters as much as the viewport: it is what makes Chromium
+    // report `pointer: coarse`, and the touch-target rules are keyed on that
+    // rather than on width (every phone in LANDSCAPE is 568–932px wide, so a
+    // width-keyed rule misses it). Without hasTouch those rules were dead in
+    // the test browser and passed by never being evaluated.
+    { name: "mobile-320", use: { ...devices["Desktop Chrome"], viewport: { width: 320, height: 720 }, hasTouch: true } },
+    // A landscape phone is 320–430px TALL. This is the axis nothing tested:
+    // it is wide enough to escape every max-width breakpoint while having
+    // less vertical room than any portrait phone.
+    { name: "phone-landscape", use: { ...devices["Desktop Chrome"], viewport: { width: 667, height: 375 }, hasTouch: true } },
   ],
   webServer: {
     command: `npx vite preview --port ${PORT} --strictPort`,

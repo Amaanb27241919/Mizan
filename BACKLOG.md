@@ -159,6 +159,14 @@ The "something is wrong" bucket. Aligned with maintenance mode.
 - **`sync` / `cleanup` / `activation` write no ledger row at all** — they're tracked via `audit_log` actions instead, which works but means two different staleness mechanisms. Not broken; just worth knowing before adding a sixth cron.
 - **Minor inefficiency:** `/api/cron/sync` already pulls each user's SnapTrade `/activities` daily but stores only a count, so `/api/cron/dividend-check` fetches them again a few hours later. Fine at current user counts; if SnapTrade rate limits ever bite, cache the sync's activities rather than coupling the two crons.
 
+### F15 — Screener typeahead E2E: 5 tests fail on every project (PRE-EXISTING, not a responsive regression)
+
+- **Status:** open · **Effort:** S · **User value:** medium (either the feature or its guard is broken) · **Autonomous:** yes
+- **Found 2026-08-15** while running the suite for the responsive work. Confirmed **pre-existing**: the same 5 tests fail on a clean checkout of `main` at `71d98fa` with the responsive changes stashed, so they are unrelated to that work. They fail on `desktop` as well as both phone projects — 15 failures total, all the same 5 tests.
+- **Symptom:** `e2e/screener.spec.js` fills the ticker box with "nvidia" and waits for `getByRole("listbox", { name: /matching symbols/i })`, which never appears. The spec supplies its own `/api/market/symbols` fixture (NVDA + NVDQ), so the empty default fixture is not the cause. The tile itself renders — `the lookup tile renders` and `an unscreenable symbol shows an error` both pass.
+- **Open question, and why this isn't just "fix the test":** either the typeahead stopped rendering its listbox (a real user-facing regression in a feature built 2026-08-10 from an accountant's feedback), or the accessible name / role the spec asserts never matched the markup and these tests have never passed. **Determine which before changing either side** — if the app is at fault the fix is in `MizanApp.jsx`; if the spec is, the assertion needs to match the real accessible name. Do not "fix" it by loosening the assertion until that's known.
+- **Do not** attach halal verdicts to suggestions while in here (CLAUDE.md §4: a dropdown of names each stamped "Halal ✓" is a curated buy list). One of the failing tests exists specifically to guard that.
+
 ### F9 — OpenBB fundamentals adapter for Sharia screening (PROTOTYPE built, promotion blocked on diff evidence)
 
 - **Status:** prototype merged, DORMANT · **Effort:** M · **User value:** HIGH (screening correctness) · **Autonomous:** no — promotion is an owner call

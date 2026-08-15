@@ -11,7 +11,7 @@ const MONO = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
 
 const styles = {
   page: {
-    minHeight: '100vh',
+    minHeight: 'var(--mz-vh, 100vh)',
     width: '100%',
     background: 'radial-gradient(circle at 30% 20%, rgba(30,78,140,0.06), transparent 50%), radial-gradient(circle at 80% 90%, rgba(17,122,82,0.05), transparent 45%), #faf8f4',
     color: '#44413b',
@@ -53,6 +53,7 @@ const styles = {
   },
   tab: {
     flex: 1,
+    minHeight: 44,
     padding: '9px 12px',
     background: 'transparent',
     border: 'none',
@@ -108,6 +109,11 @@ const styles = {
   },
   button: {
     width: '100%',
+    // 44px minimum. Login renders INSTEAD of MizanApp, so the pointer:coarse
+    // touch-target rules in THEME_CSS never load here — same reason the input
+    // font-size is pinned to 16 above. Every tappable thing on this screen has
+    // to carry its own sizing.
+    minHeight: 44,
     padding: '13px 14px',
     background: 'linear-gradient(135deg, #1e4e8c, #15396b)',
     border: 'none',
@@ -138,7 +144,8 @@ const styles = {
     color: '#1e4e8c',
     cursor: 'pointer',
     fontSize: 12,
-    padding: 0,
+    minHeight: 44,
+    padding: '0 4px',
     textDecoration: 'underline',
     fontFamily: 'inherit',
   },
@@ -546,11 +553,11 @@ export default function Login() {
           color: '#87827a',
           fontFamily: SF,
         }}>
-          <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Privacy</a>
-          <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Terms</a>
-          <a href="/contact" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Contact</a>
-          <a href="/legal/SECURITY_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Security</a>
-          <a href="/legal/DATA_RETENTION_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none' }}>Data Retention</a>
+          <a href="/privacy" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 2px' }}>Privacy</a>
+          <a href="/terms" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 2px' }}>Terms</a>
+          <a href="/contact" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 2px' }}>Contact</a>
+          <a href="/legal/SECURITY_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 2px' }}>Security</a>
+          <a href="/legal/DATA_RETENTION_POLICY.pdf" target="_blank" rel="noreferrer" style={{ color: '#87827a', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 2px' }}>Data Retention</a>
         </div>
       </div>
     </div>

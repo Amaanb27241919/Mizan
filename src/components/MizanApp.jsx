@@ -124,7 +124,18 @@ const THEME_CSS = `
     --sh-sm: 0 1px 2px rgba(0,0,0,0.08);
     --sh-md: 0 4px 14px rgba(0,0,0,0.18);
     --sh-lg: 0 12px 36px rgba(0,0,0,0.32);
+
+    /* Viewport height, corrected for mobile. On a phone browser 100vh is the
+       LARGE viewport — the height with the URL bar retracted — so anything
+       sized in vh is systematically taller than what the user can actually
+       see, and any calc(100vh - X) budget under-reserves by the height of
+       the URL bar. dvh tracks the viewport as it actually is. The plain vh
+       here is the fallback for engines without dvh; the @supports below
+       upgrades it everywhere else. Use var(--mz-vh) for viewport heights —
+       never a bare 100vh. */
+    --mz-vh: 100vh;
   }
+  @supports (height: 100dvh) { :root { --mz-vh: 100dvh; } }
   /* Ambient glows — navy top-right, green bottom-left — subtle depth on canvas/ink */
   body::before{content:"";position:fixed;top:-30%;right:-20%;width:60%;height:60%;
     background:radial-gradient(ellipse,#1e4e8c0a 0%,transparent 65%);
@@ -1371,6 +1382,9 @@ function EyeToggle({ hidden, toggle, size = 18, color }){
     <button
       type="button"
       onClick={toggle}
+      // 28x28 painted, but privacy is a control people reach for in a hurry —
+      // mz-tap gives it a 44px tap region without inflating the header row.
+      className="mz-tap"
       title={hidden ? "Show values" : "Hide values"}
       aria-label={hidden ? "Show values" : "Hide values"}
       style={{
@@ -1929,7 +1943,11 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
             {snapAccounts.length>0&&<span style={{color:T.gain,marginLeft:T.s2,display:"inline-flex",alignItems:"center",gap:5}}><LiveDot on pulse/>LIVE</span>}
             <EyeToggle hidden={valuesHidden} toggle={toggleHideValues} size={14} color={T.muted}/>
           </div>
-          <div style={{display:"flex",gap:T.s1}}>
+          {/* Seven range chips need ~250px; a 320px phone's content budget is
+              248px, so "All" was being cut off — and html{overflow-x:clip}
+              means no scrollbar ever appeared to hint that it existed. Wraps
+              to a second line on narrow screens instead (see .mz-range-row). */}
+          <div className="mz-range-row" style={{display:"flex",gap:T.s1}}>
             {["1D","1W","1M","3M","YTD","1Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{r}</button>)}
           </div>
         </div>
@@ -2560,7 +2578,12 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
             Live screening across {Object.keys(STANDARDS).length} frameworks. Pick a primary standard for row badges; every standard runs in the background so you see a per-position pass count. Data: Finnhub fundamentals. Full methodology &amp; Sharia governance in Settings → Methodology.
           </p>
         </div>
-        <div style={{display:"flex",gap:T.s2,alignItems:"center",flexShrink:0}}>
+        {/* flexWrap + a shrinkable select: this group is ~400px of controls
+            with flexShrink:0 and no wrap, so on every phone up to 430px wide
+            it ran off the edge and took the "Re-screen" button with it —
+            invisibly, because html{overflow-x:clip} shows no scrollbar. The
+            Screener was unusable on a phone as a result. */}
+        <div className="mz-ctrl-row" style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap",minWidth:0,maxWidth:"100%"}}>
           <button onClick={()=>setEthicalPref(!ethical)} title="Ethical / BDS overlay — flag divestment-target names on top of the Sharia screen (does not change the Sharia verdict)" style={{fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",padding:`6px ${T.s3}`,borderRadius:999,cursor:"pointer",background:ethical?`${T.loss}1A`:"transparent",border:`1px solid ${ethical?T.loss:T.border}`,color:ethical?T.loss:T.muted,transition:"all 0.15s",whiteSpace:"nowrap"}}>Ethical/BDS {ethical?"ON":"OFF"}</button>
           <select value={primary} onChange={e=>setStandard(e.target.value)} className="field" style={{width:"auto",fontSize:12,cursor:"pointer"}}>
             {Object.entries(STANDARDS).map(([k,s])=><option key={k} value={k}>{s.name}</option>)}
@@ -2720,7 +2743,7 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
     </div>
 
     {/* ─── Compliance filter (halal-only / non-compliant / etc.) ─── */}
-    <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+    <div className="mz-chip-row" style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
       {[["all","All"],["halal","Halal"],["review","Review"],["haram","Non-Compliant"],["unknown","Unscreened"]].map(([k,l])=>{
         const n=k==="all"?enriched.length:(byStatus[k]||[]).length;
         const on=flt===k;
@@ -2807,7 +2830,7 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
       ]:[]);
       const statusColor=sc.status==="halal"?T.gain:sc.status==="haram"?T.loss:sc.status==="review"?T.gold:T.muted;
       return<div onClick={()=>setDetail(null)} style={{position:"fixed",inset:0,zIndex:1001,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-        <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:460,maxHeight:"88vh",overflowY:"auto",background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:16,boxShadow:"var(--mz-glass-shadow-lg)",padding:T.s6,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
+        <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:460,maxHeight:"calc(var(--mz-vh) * 0.88)",overflowY:"auto",background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:16,boxShadow:"var(--mz-glass-shadow-lg)",padding:T.s6,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s3,marginBottom:T.s1}}>
             <div>
               <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>{detail.tk}</div>
@@ -3174,7 +3197,7 @@ function DocumentsPanel({documents=[],accounts=[]}){
         </BentoTile>
       </div>
 
-      <div style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center",marginBottom:T.s3}}>
+      <div className="mz-chip-row" style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center",marginBottom:T.s3}}>
         <button onClick={()=>setType("all")} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,background:type==="all"?T.blue:"transparent",border:`1px solid ${type==="all"?T.blue:T.border}`,color:type==="all"?"#fff":T.muted,cursor:"pointer"}}>All</button>
         {types.map(t=><button key={t} onClick={()=>setType(t)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,background:type===t?`${colorOf(t)}22`:"transparent",border:`1px solid ${type===t?colorOf(t):T.border}`,color:type===t?colorOf(t):T.muted,cursor:"pointer"}}>{t.replace(/_/g," ")}</button>)}
         <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{marginLeft:"auto",width:"auto",fontSize:11,padding:`5px ${T.s3}`}}>
@@ -3289,7 +3312,7 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
       </BentoTile>
     </div>
 
-    <div style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center"}}>
+    <div className="mz-chip-row" style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center"}}>
       {[["all","All"],["BUY","Buys"],["SELL","Sells"],["DIVIDEND","Dividends"],["DEPOSIT","Deposits"],["WITHDRAWAL","Withdrawals"],["FEE","Fees"]].map(([v,l])=>
         <button key={v} onClick={()=>setType(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,
           background:type===v?`${colorOf(v)}22`:"transparent",
@@ -3300,7 +3323,9 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
         <option value="all">All Accounts</option>
         {acctOptions.filter(o=>o!=="all").map(id=><option key={id} value={id}>{acctNameById[id]||id}</option>)}
       </select>
-      <div style={{marginLeft:"auto",display:"flex",gap:T.s1,alignItems:"center"}}>
+      {/* Five range chips + two export buttons with no wrap ran 33px past the
+          edge at 320px, putting "Export CSV" in the clip region. */}
+      <div style={{marginLeft:"auto",display:"flex",gap:T.s1,alignItems:"center",flexWrap:"wrap"}}>
         {[["1m","1M"],["3m","3M"],["1y","1Y"],["5y","5Y"],["all","All"]].map(([v,l])=>
           <button key={v} onClick={()=>setRange(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",
             background:range===v?T.borderHi:"transparent",border:`1px solid ${range===v?T.borderHi:T.border}`,
@@ -3447,7 +3472,7 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, nisabRead
         <div style={{marginTop:T.s2,fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
           Counted: Investments <span style={{color:T.text,fontWeight:600}}>{fmtUSD(connectedTotals.invest||0)}</span>{factorPct?` (${factorPct})`:""} · Cash <span style={{color:T.text,fontWeight:600}}>{fmtUSD(connectedTotals.cash||0)}</span>
         </div>
-      </div>:(onConnect&&!demoMode&&<button onClick={onConnect} style={{
+      </div>:(onConnect&&!demoMode&&<button onClick={onConnect} className="mz-tap" style={{
         width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:T.s2,
         padding:`${T.s2} ${T.s3}`,marginBottom:T.s3,
         fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",
@@ -4670,7 +4695,7 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         <p style={{fontFamily:FP,fontSize:12,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.5}}>
           When on, the math below covers selling your screener-flagged holdings and reaching your targets with halal proxies (SPUS, HLAL, SPSK, SPRE). You choose whether to act on it.
         </p>
-        <button onClick={toggleHalal} style={{
+        <button onClick={toggleHalal} className="mz-tap" style={{
           padding:`9px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",
           background:halalOnly?T.gold:"transparent",border:`1px solid ${halalOnly?T.gold:T.border}`,
           color:halalOnly?"#000":T.text,cursor:"pointer",width:"100%",
@@ -5200,7 +5225,9 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
       <SectorBreakdown holdings={merged} total={tot}/>
 
       {/* ─── Filter chips ─────────────────────────────── */}
-      <div style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center"}}>
+      {/* mz-chip-row: 26px-tall chips get a 44px tap region on touch devices
+          without changing the row's density (see .mz-tap in THEME_CSS). */}
+      <div className="mz-chip-row" style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center"}}>
         {acctOptions.map(a=><button key={a} onClick={()=>setAcct(a)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"-0.005em",background:acct===a?T.blue:"transparent",border:`1px solid ${acct===a?T.blue:T.border}`,color:acct===a?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{a==="all"?"All Accounts":a}</button>)}
         <div style={{width:1,height:18,background:T.border,alignSelf:"center"}}/>
         {[["all","All"],["halal","Halal"],["review","Review"],["haram","Non-Compliant"]].map(([v,l])=>{
@@ -5816,11 +5843,18 @@ function HistoricalBacktest(){
           <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>SYMBOL</div>
           <input value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} className="field" style={{fontSize:16,fontWeight:600,color:T.blue,letterSpacing:"-0.01em"}}/>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
-          <div><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>FROM</div>
-            <input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="field" style={{fontSize:12}}/></div>
-          <div><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>TO</div>
-            <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="field" style={{fontSize:12}}/></div>
+        {/* mz-form-row (stacks at ≤600px) + minWidth:0 on the cells. A grid
+            item's default min-width:auto refuses to shrink below its content's
+            min-content width, and Chrome gives <input type=date> a large
+            intrinsic one — so two side-by-side date fields held this whole
+            panel ~60px wider than a 320px viewport no matter what the column
+            template said. The clipped "Run Backtest" button was downstream of
+            that, not a problem of its own. */}
+        <div className="mz-form-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
+          <div style={{minWidth:0}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>FROM</div>
+            <input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="field" style={{fontSize:12,minWidth:0}}/></div>
+          <div style={{minWidth:0}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>TO</div>
+            <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="field" style={{fontSize:12,minWidth:0}}/></div>
         </div>
         <div style={{padding:`${T.s3} ${T.s3}`,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
           <strong style={{color:T.text,fontWeight:600}}>Strategy:</strong> SMA-50 / SMA-200 crossover. Buy when 50-day crosses above 200-day; sell on cross below. Free-tier Polygon caps at 2 years of daily bars.
@@ -6667,7 +6701,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       </label>;
       return(
       <div onClick={()=>{if(!editBusy){setEditStrat(null);setEditForm(null);setEditAck(false);}}} style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:T.s4,background:"rgba(12,11,10,0.55)"}}>
-        <div className="glass-strong" onClick={e=>e.stopPropagation()} style={{maxWidth:560,width:"100%",borderRadius:T.rLg,border:`1px solid ${T.blue}40`,padding:T.s6,maxHeight:"90vh",overflowY:"auto"}}>
+        <div className="glass-strong" onClick={e=>e.stopPropagation()} style={{maxWidth:560,width:"100%",borderRadius:T.rLg,border:`1px solid ${T.blue}40`,padding:T.s6,maxHeight:"calc(var(--mz-vh) * 0.90)",overflowY:"auto"}}>
           <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:4}}>EDIT STRATEGY</div>
           <div style={{fontFamily:FU,fontSize:20,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s4}}>{(Array.isArray(editStrat.params?.universe_tickers)&&editStrat.params.universe_tickers[0])||editStrat.ticker}</div>
 
@@ -7234,7 +7268,13 @@ Activity rows on file: ${activities.length}.`;
     </div>
 
     {/* ─── CHAT THREAD ────────────────────────────── */}
-    <BentoTile style={{padding:0,display:"flex",flexDirection:"column",minHeight:"60vh",maxHeight:"calc(100vh - 280px)"}}>
+    {/* Height: "as tall as actually fits, but never below 240px". The floor
+        used to be 60vh, which scales the wrong way — on a 667px phone that's
+        400px against a 387px cap, and since min-height beats max-height in
+        CSS the cap was simply dead on every phone shorter than 700px. A fixed
+        floor keeps the two constraints from fighting, and --mz-vh measures the
+        viewport the user can actually see rather than the URL-bar-retracted one. */}
+    <BentoTile style={{padding:0,display:"flex",flexDirection:"column",minHeight:240,maxHeight:"calc(var(--mz-vh) - 280px)"}}>
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:`${T.s6} ${T.s6}`,display:"flex",flexDirection:"column",gap:T.s4}}>
         {msgs.length===0&&<div style={{margin:"auto 0",display:"flex",flexDirection:"column",gap:T.s5}}>
           <div style={{textAlign:"center"}}>
@@ -8174,7 +8214,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
               Replaces your live data with a fictional ~$435k halal portfolio across 6 accounts — useful for screenshots, sharing, or previewing MIZAN before connecting brokers.
             </p>
           </div>
-          <button onClick={onToggleDemo} style={{
+          <button onClick={onToggleDemo} className="mz-tap" style={{
             padding:`8px ${T.s4}`,borderRadius:T.rMd,
             fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",
             background:demoMode?`${T.gold}22`:"transparent",
@@ -9473,7 +9513,7 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
       display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <div style={{background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:14,
-        width:"100%",maxWidth:maxW,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"var(--mz-glass-shadow-lg)",animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
+        width:"100%",maxWidth:maxW,maxHeight:"calc(var(--mz-vh) * 0.90)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"var(--mz-glass-shadow-lg)",animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
 
         {/* Header */}
         <div style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,
@@ -11239,7 +11279,7 @@ function NotificationBell({items=[],onMarkAllRead,onMarkRead,onClear,onNav}){
     </button>
 
     {open&&<div className="glass-strong" style={{position:"absolute",top:"calc(100% + 8px)",right:0,width:"min(92vw,340px)",
-      maxHeight:"min(70vh,460px)",display:"flex",flexDirection:"column",
+      maxHeight:"min(calc(var(--mz-vh) * 0.70),460px)",display:"flex",flexDirection:"column",
       border:`1px solid ${T.border}`,borderRadius:T.rMd,boxShadow:"var(--sh-lg, 0 12px 32px rgba(0,0,0,0.18))",zIndex:200,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s2,
         padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`}}>
@@ -12646,7 +12686,7 @@ export default function Mizan(){
     &&nav==="overview"&&!showOnboarding
     &&!!authUser?.id&&authUser.id!=="single-user";
 
-  return<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
+  return<div style={{minHeight:"var(--mz-vh)",background:T.bg,color:T.text,fontFamily:FU,fontFeatureSettings:'"cv11","ss01","kern"'}}>
     {/* Atmospheric Arabic wordmark (ميزان) — fixed, translucent, sits behind all content */}
     <div aria-hidden="true" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(82vw,820px)",aspectRatio:"1058 / 380",background:resolvedTheme==="dark"?"#efe9dd":"#1e4e8c",opacity:0.08,WebkitMaskImage:"url(/wordmark-ar.png)",maskImage:"url(/wordmark-ar.png)",WebkitMaskRepeat:"no-repeat",maskRepeat:"no-repeat",WebkitMaskPosition:"center",maskPosition:"center",WebkitMaskSize:"contain",maskSize:"contain",userSelect:"none",pointerEvents:"none",zIndex:0}}></div>
     <style>{`
@@ -12782,12 +12822,128 @@ export default function Mizan(){
       }
 
       /* ── Touch targets ───────────────────────────────────────── */
-      @media(max-width:640px){
+      /* Keyed on pointer:coarse — "is this a finger?" — rather than on
+         width. Width was the wrong question: every phone in LANDSCAPE is
+         568–932px wide, so it sailed past a max-width:640px rule and got no
+         touch sizing at all. That is why the sub-tab bars measured 40px tall
+         in portrait but 33px in landscape, on the same device. */
+      @media (pointer: coarse) {
         /* min-height only — don't force padding so custom button styles survive */
         .btn-primary,.btn-ghost,.btn-danger{min-height:44px;}
+        /* Sub-tab bars (Holdings/Screener/…, Goals/Zakat/…, Connections/…) are
+           the primary navigation inside a tab, so they get the full 44px. */
+        .mz-tabbar > button{min-height:44px!important;}
+      }
+      @media(max-width:640px){
         /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
         .field{font-size:16px!important;}
         input,select,textarea{font-size:16px!important;}
+      }
+
+      /* ── Tap targets on touch devices ────────────────────────── */
+      /* The chips, pills and icon toggles in dense rows render at 23–32px,
+         below the 44px a fingertip needs.
+         An earlier attempt grew only the HIT region, with a 44px
+         pseudo-element, so the painted control could stay small. Measuring it
+         showed why that is a trap: in a row of chips — and especially a row
+         that WRAPS — each chip's invisible region overlaps its neighbours',
+         and the one painted last wins. Chips ended up with 8–20px of usable
+         reach, less than their own box, and the region a user aimed at could
+         belong to a different chip. Silent mis-taps are worse than a small
+         target, so these controls get real height instead. */
+      @media (pointer: coarse){
+        .mz-tap,.mz-chip-row button,.mz-range-row button,.mz-ctrl-row button{min-height:44px;}
+        /* Wrapped rows need vertical gap now that the rows carry real height. */
+        .mz-chip-row,.mz-range-row,.mz-ctrl-row{row-gap:6px;}
+        /* Form controls. .field and the bare elements sat at 40px — under the
+           44px a fingertip needs, and these are the controls a user has to hit
+           accurately (Zakat worksheet rows, the manual-asset form, Account
+           settings). The 16px font-size rule below stops iOS zooming on focus;
+           this is the companion that makes them tappable. */
+        .field,input:not([type=checkbox]):not([type=radio]):not([type=range]),
+        select,textarea{min-height:44px;}
+        /* Checkboxes render ~14px, which is far below any touch guidance and
+           they gate real money in the Zakat account picker. !important because
+           several are inline-styled at the call site. */
+        input[type=checkbox],input[type=radio]{
+          width:24px!important;height:24px!important;flex-shrink:0;
+        }
+        /* Range sliders: the TRACK is 4px tall, so the element's box is 4px and
+           there is almost nothing to grab on a touchscreen. Padding grows the
+           box without moving the track off the value it points at. */
+        input[type=range]{height:44px!important;}
+      }
+
+      /* ── Net-worth chart range chips ─────────────────────────── */
+      /* Seven chips need ~250px against a 248px content budget at 320px, so
+         "All" fell off the edge into the overflow-x:clip void. Wrapping costs
+         one line on the narrowest phones and nothing anywhere else. */
+      .mz-range-row{flex-wrap:wrap;justify-content:flex-end;}
+      /* The 23px range chips get their 44px tap region from .mz-tap above —
+         growing the chips themselves would turn a range selector into a wall. */
+
+      /* ── Header: stop the actions sliding under the wordmark ─── */
+      /* The action group is flex-shrink:1 with min-width:0, so on a phone it
+         was squeezed NARROWER than its own contents. Combined with
+         justify-content:flex-end the surplus spilled LEFTWARD, and the
+         notification bell ended up drawn on top of the HALAL badge — an
+         overlap on every phone width tested (320/360/390). Two flex boxes
+         reporting non-overlapping rects is why measurement missed it: the
+         parent's box was honest, its children just painted outside it.
+         Refusing to shrink the group turns any remaining excess into ordinary
+         overflow rather than a collision, and dropping the decorative badge
+         buys back the ~55px that made the excess exist. */
+      @media (max-width: 700px){
+        .mz-status-right{flex-shrink:0!important;}
+        .mz-brand-badge{display:none!important;}
+        .mz-brand{min-width:0;overflow:hidden;}
+      }
+      /* Even without the badge the action group still ran ~38px past a 320px
+         viewport, clipping "Sync All" — the one control a stuck user reaches
+         for. The DEMO toggle is the redundant one here: the Overview empty
+         state carries a "Try Demo Mode" CTA and Settings has the full tile, so
+         it yields the space rather than the sync button losing it. */
+      @media (max-width: 400px){
+        .mz-status-demo{display:none!important;}
+      }
+      /* Label swap for the header actions. Default: full label only. */
+      .mz-lbl-short{display:none;}
+      @media (max-width: 400px){
+        .mz-lbl-full{display:none;}
+        .mz-lbl-short{display:inline;}
+      }
+
+      /* ── Dock fits the narrowest phones ──────────────────────── */
+      /* Six nav pills + the tour launcher overflowed by 71px at 320px, 29px at
+         344px and 13px at 360px — and 360px is the most common Android width
+         in the world. The dock scrolls horizontally, so nothing was clipped,
+         but a primary nav you have to discover by swiping is a nav whose last
+         item (Settings) may as well not exist. */
+      @media (max-width: 400px){
+        /* The tour is optional and still reachable from Settings -> "Replay
+           tour" and the Cmd+K palette, so it yields its 36px to the nav. */
+        .mz-dock-tour{display:none!important;}
+      }
+      @media (max-width: 374px){
+        .mz-dock button{padding:8px 3px!important;font-size:9px!important;}
+      }
+
+      /* ── Landscape phones / short viewports ──────────────────── */
+      /* A landscape phone is 320–430px TALL. A 48px sticky header plus a ~68px
+         dock is ~36% of that permanently spent on chrome. Letting the header
+         scroll away reclaims it; the dock stays, since it is the navigation. */
+      @media (max-height: 500px) and (orientation: landscape){
+        /* The clock / market-status / last-sync strip only hid below 600px
+           WIDE, so a 667x375 landscape phone kept it — where it wrapped onto
+           three lines, inflated the header to ~56px on the screen with the
+           least vertical room to spare, and shoved Connect and Sync All off
+           the right edge. It is glanceable decoration; the height is not. */
+        .mz-status-mid{display:none!important;}
+        .mz-status{position:static!important;min-height:calc(40px + env(safe-area-inset-top,0px))!important;}
+        .mz-dock{bottom:calc(6px + env(safe-area-inset-bottom,0px))!important;}
+        .mz-dock button{padding:6px 10px!important;min-height:38px!important;}
+        .mz-dock-tour{width:30px!important;height:30px!important;}
+        main{padding-top:12px!important;padding-bottom:calc(74px + env(safe-area-inset-bottom,0px))!important;}
       }
 
       /* ── CommandPalette mobile: full-width sheet ─────────────── */
@@ -12802,10 +12958,10 @@ export default function Mizan(){
     {/* TOP BAR */}
     {/* STATUS BAR — slim, glanceable, single row. Brand left, info middle, actions right. */}
     <header className="mz-status glass" style={{minHeight:"calc(48px + env(safe-area-inset-top, 0px))",padding:`env(safe-area-inset-top, 0px) ${T.s5} 0`,borderBottom:`1px solid var(--mz-glass-border)`,display:"flex",alignItems:"center",gap:T.s4,position:"sticky",top:0,zIndex:100}}>
-      <div style={{display:"flex",alignItems:"center",gap:T.s2,flexShrink:0}}>
+      <div className="mz-brand" style={{display:"flex",alignItems:"center",gap:T.s2,flexShrink:0}}>
         <img src={resolvedTheme==="dark"?"/mark-light.png":"/mark.png"} alt="" width={18} height={18} style={{display:"block",flexShrink:0}}/>
         <span style={{fontFamily:FU,fontSize:15,fontWeight:700,color:T.textHi,letterSpacing:"0.04em"}}>MĪZAN</span>
-        <span style={{fontFamily:FM,fontSize:8,fontWeight:600,color:T.blue,letterSpacing:"0.18em",background:`${T.blue}18`,border:`1px solid ${T.blue}30`,padding:"3px 7px",borderRadius:999}}>HALAL</span>
+        <span className="mz-brand-badge" style={{fontFamily:FM,fontSize:8,fontWeight:600,color:T.blue,letterSpacing:"0.18em",background:`${T.blue}18`,border:`1px solid ${T.blue}30`,padding:"3px 7px",borderRadius:999}}>HALAL</span>
       </div>
 
       {/* Center: live status — clock, market, data freshness */}
@@ -12841,9 +12997,15 @@ export default function Mizan(){
           onClear={()=>writeNotifications([])}
           onNav={setNav}/>
         <button onClick={cycleTheme} title={`Theme: ${themeMode} (resolved: ${resolvedTheme}).`} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",color:T.muted,padding:"5px 9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}><Icon name={(themeMode==="auto"?resolvedTheme:themeMode)==="dark"?"moon":"sun"} size={14}/></button>
-        {(!hasRealData||demoMode)&&<button onClick={toggleDemo} title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
+        {(!hasRealData||demoMode)&&<button onClick={toggleDemo} className="mz-status-demo" title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
         <button onClick={()=>setAuto(v=>!v)} title={`Auto-sync ${auto?"on":"off"}`} style={{fontFamily:FM,fontSize:9,color:auto?T.gain:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:auto?`${T.gain}14`:"transparent",border:`1px solid ${auto?T.gain+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{auto?"AUTO":"AUTO"}</button>
-        <button onClick={()=>setConn(true)} className="btn-ghost">+ Connect</button>
+        {/* Two labels, one shown at a time (see .mz-lbl-* in THEME_CSS): the
+            full wording everywhere there is room, a glyph on narrow phones
+            where the full label pushed Sync All off the screen edge. The
+            aria-label keeps the accessible name intact either way. */}
+        <button onClick={()=>setConn(true)} className="btn-ghost" aria-label="Connect an account">
+          <span className="mz-lbl-full">+ Connect</span><span className="mz-lbl-short">+</span>
+        </button>
         {snapAccounts.length>0&&(()=>{
           const cooldownLeft=Math.max(0,forceCooldownUntil-Date.now());
           const cooling=cooldownLeft>0;
@@ -12854,7 +13016,9 @@ export default function Mizan(){
           return<button onClick={forceRefresh} disabled={disabled} title={title} style={{fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.04em",padding:`7px ${T.s3}`,borderRadius:T.rMd,border:`1px solid ${cooling?T.border:T.gold+"40"}`,background:cooling?"transparent":`${T.gold}14`,color:disabled?T.muted:T.gold,cursor:disabled?"not-allowed":"pointer",transition:"all 0.15s"}}>{label}</button>;
         })()}
         {installEvt&&!isInstalled&&<button onClick={doInstall} className="btn-ghost mz-hide-sm" title="Install MĪZAN as an app on this device" style={{display:"inline-flex",alignItems:"center",gap:5,fontFamily:FM,fontSize:9,letterSpacing:"0.06em"}}><Icon name="download" size={11}/>Install</button>}
-        <button onClick={sync} disabled={fetching} className="btn-primary mz-status-sync">{fetching?"Syncing…":"Sync All"}</button>
+        <button onClick={sync} disabled={fetching} className="btn-primary mz-status-sync" aria-label="Sync all accounts">
+          {fetching?"Syncing…":<><span className="mz-lbl-full">Sync All</span><span className="mz-lbl-short">Sync</span></>}
+        </button>
       </div>
       {forceMsg&&<div style={{position:"absolute",top:"calc(env(safe-area-inset-top, 0px) + 50px)",right:T.s3,background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--mz-glass-shadow)",zIndex:101,maxWidth:340,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>{forceMsg.msg}</div>}
     </header>
@@ -12940,7 +13104,7 @@ export default function Mizan(){
         }}>{n.l}</button>;
       })}
       {/* Optional, user-triggered tour launcher (not a forced walkthrough). */}
-      <button onClick={startTour} title="Take a tour" aria-label="Take a tour" className="dock-off" style={{
+      <button onClick={startTour} title="Take a tour" aria-label="Take a tour" className="dock-off mz-dock-tour" style={{
         width:36,height:36,padding:0,marginLeft:T.s1,flexShrink:0,
         display:"flex",alignItems:"center",justifyContent:"center",
         background:"transparent",border:"1px solid var(--mz-glass-border)",borderRadius:999,
@@ -13013,7 +13177,7 @@ export default function Mizan(){
     {(nameNudgeShowing||tourNudgeShowing)&&<div style={{
       position:"fixed",right:T.s5,bottom:"calc(100px + env(safe-area-inset-bottom, 0px))",
       zIndex:95,display:"flex",flexDirection:"column",gap:T.s3,alignItems:"flex-end",
-      maxHeight:"calc(100vh - 140px)",overflowY:"auto",
+      maxHeight:"calc(var(--mz-vh) - 140px)",overflowY:"auto",
     }}>
       {tourNudgeShowing&&<TourNudge onStart={startTour} onDismiss={markTourSeen}/>}
       {nameNudgeShowing&&<NameNudge skips={nameSkips} onSaved={setProfileName} onSkip={skipNameNudge}/>}
