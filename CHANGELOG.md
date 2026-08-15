@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-08-15
 
+### Added
+- **pwa:** Optimize the install surface for Chrome/Android and Safari/iOS (`5deb39e`)
+
 ### Fixed
 - **ui:** Make every surface work on real phone viewports, width and height (`ebe25ad`)
 

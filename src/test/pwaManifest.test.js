@@ -135,6 +135,56 @@ describe("iOS PWA meta tags", () => {
     expect(pngSize(file)).toEqual({ width: 180, height: 180 });
   });
 
+  // iOS only accepts a launch image whose media query matches the device
+  // exactly. A file that is missing, or present at the wrong pixel size, is
+  // ignored in silence and the user gets a blank white launch — the exact
+  // problem these exist to fix. So parse each tag's own media query and hold
+  // the file to it, rather than trusting the filename.
+  it("ships a correctly sized launch image for every startup-image tag", () => {
+    const tags = [...indexHtml.matchAll(
+      /<link rel="apple-touch-startup-image" media="([^"]+)" href="([^"]+)"/g
+    )];
+    expect(tags.length, "no apple-touch-startup-image tags").toBeGreaterThan(0);
+
+    const problems = [];
+    const seen = new Set();
+    for (const [, media, href] of tags) {
+      const w = +media.match(/device-width:\s*(\d+)px/)?.[1];
+      const h = +media.match(/device-height:\s*(\d+)px/)?.[1];
+      const dpr = +media.match(/-webkit-device-pixel-ratio:\s*(\d+)/)?.[1];
+      const scheme = media.match(/prefers-color-scheme:\s*(light|dark)/)?.[1];
+      if (!w || !h || !dpr || !scheme) { problems.push(`${href}: unparseable media query`); continue; }
+
+      // Two tags claiming the same device+scheme means one silently wins.
+      const k = `${w}x${h}@${dpr}/${scheme}`;
+      if (seen.has(k)) problems.push(`duplicate media query for ${k}`);
+      seen.add(k);
+
+      const file = path.join(PUB, href);
+      if (!fs.existsSync(file)) { problems.push(`${href}: missing`); continue; }
+      const { width, height } = pngSize(file);
+      if (width !== w * dpr || height !== h * dpr) {
+        problems.push(`${href}: is ${width}x${height}, media query demands ${w * dpr}x${h * dpr}`);
+      }
+    }
+    expect(problems, problems.join("\n  ")).toEqual([]);
+  });
+
+  it("covers both colour schemes for every device it covers at all", () => {
+    // A device with only a light splash gives dark-appearance users the white
+    // flash this whole matrix exists to remove.
+    const tags = [...indexHtml.matchAll(/<link rel="apple-touch-startup-image" media="([^"]+)"/g)];
+    const byDevice = {};
+    for (const [, media] of tags) {
+      const d = `${media.match(/device-width:\s*(\d+)px/)?.[1]}x${media.match(/device-height:\s*(\d+)px/)?.[1]}@${media.match(/-webkit-device-pixel-ratio:\s*(\d+)/)?.[1]}`;
+      (byDevice[d] ||= new Set()).add(media.match(/prefers-color-scheme:\s*(light|dark)/)?.[1]);
+    }
+    const incomplete = Object.entries(byDevice)
+      .filter(([, schemes]) => !(schemes.has("light") && schemes.has("dark")))
+      .map(([d]) => d);
+    expect(incomplete, `devices missing a colour scheme: ${incomplete.join(", ")}`).toEqual([]);
+  });
+
   it("allows pinch-zoom", () => {
     // WCAG 1.4.4. Mizan's densest surfaces are numeric tables.
     const m = indexHtml.match(/name="viewport"\s+content="([^"]+)"/);
