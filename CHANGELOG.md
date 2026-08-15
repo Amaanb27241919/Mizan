@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-15
+
+### Fixed
+- **ui:** Make every surface work on real phone viewports, width and height (`ebe25ad`)
+
 ## 2026-08-14
 
 ### Fixed

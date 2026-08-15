@@ -16,10 +16,25 @@
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <!-- iOS uses 180x180 on @3x devices; serving that exact size avoids a
+         resample. The file is fully opaque (verified) — iOS flattens any alpha
+         onto BLACK, which would have turned the navy mark into mud. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180.png" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- `default`, NOT `black-translucent`. Two reasons, both concrete:
+         (1) black-translucent forces the status bar's clock, battery and signal
+             to render in WHITE and gives them the page background — and Mizan's
+             default face is the paper canvas (#faf8f4). White on near-white
+             meant an invisible status bar for every light-theme user on an
+             installed iOS app. iOS has no dynamic contrast for this.
+         (2) Apple has deprecated the black-translucent value; support is slated
+             for removal.
+         `default` gives dark status text and starts the web view below the bar.
+         The safe-area padding elsewhere degrades cleanly — env(safe-area-inset-
+         top) simply resolves to 0 when the viewport no longer extends up there. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="MĪZAN" />
 
     <!-- Favicon -->

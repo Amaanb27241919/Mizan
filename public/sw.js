@@ -9,7 +9,10 @@
 // Bump this on any release that must invalidate cached app assets. The activate
 // handler deletes every cache whose name !== CACHE_NAME, so a new version forces
 // all clients to re-fetch fresh JS/CSS on next load (no stale-bundle lag).
-const CACHE_NAME = "mizan-v18";
+// v19 (2026-08-15): new offline.html palette + apple-touch-icon-180. The old
+// offline page is precached, so without a bump every existing install would
+// keep serving the pre-rebrand one.
+const CACHE_NAME = "mizan-v19";
 
 const STATIC_ASSET_EXTS = [
   ".js",
@@ -32,6 +35,7 @@ const PRECACHE_URLS = [
   "/manifest.webmanifest",
   "/icon-192.png",
   "/icon-512.png",
+  "/apple-touch-icon-180.png",
   "/favicon.png",
   "/mark.png",
   "/mark-light.png",

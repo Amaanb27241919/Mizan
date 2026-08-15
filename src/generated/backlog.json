@@ -52,8 +52,8 @@
         },
         {
           "id": "F15",
-          "title": "Screener typeahead E2E: 5 tests fail on every project (PRE-EXISTING, not a responsive regression)",
-          "done": false
+          "title": "E2E fixtures were inert: a service worker was bypassing every route stub",
+          "done": true
         },
         {
           "id": "F9",
@@ -82,7 +82,7 @@
         }
       ],
       "archive": false,
-      "open": 12,
+      "open": 11,
       "total": 15
     },
     {

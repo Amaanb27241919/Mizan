@@ -11377,6 +11377,20 @@ export default function Mizan(){
         const p=window.location.pathname;
         const q=window.location.search||"";
         if(p==="/oauth-redirect"||/[?&]oauth_state_id=/.test(q))return"finances";
+        // ?tab= deep link. This exists so the manifest's app shortcuts (Android
+        // long-press / desktop right-click on the installed icon) actually land
+        // where they say they will — without it they would all restore whatever
+        // tab localStorage last held, and the shortcut menu would be a lie.
+        // Validated against the real tab list, never trusted raw; "trade" is
+        // deliberately absent because setNav bounces non-admins off it anyway.
+        const tab=new URLSearchParams(q).get("tab");
+        if(tab&&["overview","finances","portfolio","goals","advisor","settings"].includes(tab)){
+          // Strip the param so a later reload restores the user's own last tab
+          // rather than pinning them to the shortcut's forever. Mirrors what
+          // the OAuth path above does with replaceState.
+          try{window.history.replaceState({},"",window.location.pathname);}catch{}
+          return tab;
+        }
       }
     }catch{}
     try{

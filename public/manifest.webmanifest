@@ -1,18 +1,81 @@
 {
-  "name": "MĪZAN",
+  "id": "/?source=pwa",
+  "name": "MĪZAN — Halal Investing & Zakat",
   "short_name": "MĪZAN",
-  "description": "Shariah-compliant investment super-app",
+  "description": "Sharia-compliant portfolio screening, Zakat calculation with live nisab, dividend purification, and a unified brokerage and bank view.",
+  "lang": "en",
+  "dir": "ltr",
   "display": "standalone",
-  "orientation": "portrait-primary",
   "background_color": "#faf8f4",
   "theme_color": "#faf8f4",
   "start_url": "/?source=pwa",
   "scope": "/",
-  "categories": ["finance"],
+  "categories": ["finance", "productivity"],
+  "launch_handler": { "client_mode": "navigate-existing" },
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Zakat worksheet",
+      "short_name": "Zakat",
+      "description": "Work out what Zakat you owe against live nisab",
+      "url": "/?tab=goals&source=pwa",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Screen a ticker",
+      "short_name": "Screener",
+      "description": "Check whether a stock is Sharia-compliant",
+      "url": "/?tab=portfolio&source=pwa",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Net worth",
+      "short_name": "Overview",
+      "description": "Brokerage, bank and manual assets in one figure",
+      "url": "/?tab=overview&source=pwa",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/phone-overview.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Net worth across brokerage, bank and manual assets"
+    },
+    {
+      "src": "/screenshots/phone-screener.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Sharia screening with a per-standard pass count"
+    },
+    {
+      "src": "/screenshots/phone-zakat.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Zakat worksheet with live gold and silver nisab"
+    },
+    {
+      "src": "/screenshots/desktop-overview.png",
+      "sizes": "1440x900",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Net worth across brokerage, bank and manual assets"
+    },
+    {
+      "src": "/screenshots/desktop-portfolio.png",
+      "sizes": "1440x900",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Holdings with Sharia status on every position"
+    }
   ]
 }

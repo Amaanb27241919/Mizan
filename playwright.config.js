@@ -49,6 +49,20 @@ export default defineConfig({
     // Deterministic rendering across machines.
     timezoneId: "America/Chicago",
     locale: "en-US",
+    // REQUIRED for the fixtures in e2e/support/app.js to do anything at all.
+    // These tests run against the production build, which registers /sw.js —
+    // and requests issued by a service worker BYPASS page.route(). So every
+    // `/api/**` call was going to the real preview server, hitting Vercel's SPA
+    // rewrite, and coming back as index.html with a 200. The app's JSON parse
+    // then failed and every surface fell back to its empty state — which is
+    // exactly what most specs assert, so the suite passed while the entire
+    // fixture layer was inert. Found 2026-08-15 when demo screenshots rendered
+    // "Nisab unavailable" despite a fixture supplying live nisab values.
+    // Tradeoff, stated plainly: the E2E suite no longer exercises the service
+    // worker. That is the right trade — these specs are about UI behaviour, and
+    // an inert fixture layer silently weakens every one of them — but it does
+    // mean SW caching/offline behaviour needs its own separate check.
+    serviceWorkers: "block",
   },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
