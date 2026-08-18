@@ -13,6 +13,7 @@ import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptio
 import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHistory } from "../lib/netWorth.js";
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
+import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
 // Generated from BACKLOG.md at build time — headings only (~15KB), never the
 // 176KB markdown. See scripts/gen-backlog-summary.mjs.
 import BACKLOG from "../generated/backlog.json";
@@ -277,17 +278,20 @@ const ETF_LIST=[
 // Generic broker catalog. NO `mine:true` flags or owner-specific descriptions
 // — every user sees the same neutral list, and `Connected` status is derived
 // from their own SnapTrade `mizan_brokers` localStorage entry.
+// Broker `desc` blurbs were removed 2026-08-18 on user feedback — people know
+// what Fidelity is, and both render sites are gone (Settings connections grid
+// + connect modal). Only the read-only/trade capability warning survives there.
 const BROKERS=[
-  {id:"FIDELITY", nm:"Fidelity",     desc:"Brokerage & retirement"},
-  {id:"ROBINHOOD",nm:"Robinhood",    desc:"Commission-free brokerage"},
-  {id:"SCHWAB",   nm:"Schwab",       desc:"Brokerage & retirement"},
-  {id:"EMPOWER",  nm:"Empower",      desc:"401(k) & retirement"},
-  {id:"COINBASE", nm:"Coinbase",     desc:"Crypto wallet"},
-  {id:"CHASE",    nm:"Chase",        desc:"J.P. Morgan Self-Directed"},
-  {id:"ETRADE",   nm:"E*Trade",      desc:"Commission-free"},
-  {id:"VANGUARD", nm:"Vanguard",     desc:"Index funds"},
-  {id:"ALPACA",   nm:"Alpaca",       desc:"Algo trading"},
-  {id:"WEBULL",   nm:"Webull",       desc:"Fractional shares"},
+  {id:"FIDELITY", nm:"Fidelity"},
+  {id:"ROBINHOOD",nm:"Robinhood"},
+  {id:"SCHWAB",   nm:"Schwab"},
+  {id:"EMPOWER",  nm:"Empower"},
+  {id:"COINBASE", nm:"Coinbase"},
+  {id:"CHASE",    nm:"Chase"},
+  {id:"ETRADE",   nm:"E*Trade"},
+  {id:"VANGUARD", nm:"Vanguard"},
+  {id:"ALPACA",   nm:"Alpaca"},
+  {id:"WEBULL",   nm:"Webull"},
 ];
 
 /* ─── DEMO ACCOUNTS (real tickers, real brokers, expanded book) ─── */
@@ -2398,8 +2402,10 @@ function ETFOverlapPanel(){
 function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
   const[results,setResults]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
   const[busy,setBusy]=useState(false);
-  const[primary,setPrimary]=useState(()=>{try{return localStorage.getItem("mizan_screen_standard")||"AAOIFI";}catch{return"AAOIFI";}});
-  const setStandard=v=>{setPrimary(v);try{localStorage.setItem("mizan_screen_standard",v);}catch{}};
+  // Shared with the root's mapPosition (and therefore with Overview, Holdings,
+  // the Rebalancer and Purification). This was private component state, which is
+  // why picking a standard here changed nothing anywhere else.
+  const{standard:primary,setStandard}=useScreenStandard();
   const[flt,setFlt]=useState("all");        // compliance filter: all|halal|review|haram|unknown
   const[detail,setDetail]=useState(null);   // holding whose screening breakdown is open
   // AI plain-language explanation of the open verdict (grounded in the real ratio
@@ -2549,7 +2555,16 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
   };
   useEffect(()=>{if(tickers.length)runScreen(false); /* eslint-disable-next-line */},[tickers.join(",")]);
 
-  const enriched=holdings.map(h=>({...h,_screen:results[h.tk]||{status:h.sh_||"unknown"}}));
+  // `_screen` keeps the raw server payload (ratios, per-standard pass/fail — the
+  // FACTS), while `status` is re-derived for the standard the user picked. Before
+  // this, every row showed the server's cross-standard vote no matter what was
+  // selected, which is precisely what users reported.
+  const enriched=holdings.map(h=>{
+    const raw=results[h.tk];
+    return{...h,_screen:raw
+      ?{...raw,status:statusForStandard(raw,primary)}
+      :{status:h.sh_||"unknown"}};
+  });
   const bdsExcluded=ethical?enriched.filter(h=>h._screen?.ethical?.excluded):[];
   const byStatus={halal:[],review:[],haram:[],unknown:[]};
   enriched.forEach(h=>(byStatus[h._screen.status]||byStatus.unknown).push(h));
@@ -2571,38 +2586,49 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     {/* ─── Intro + framework selector ───────────── */}
     <BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
-        <div style={{maxWidth:680}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SHARIA COMPLIANCE</div>
-          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,letterSpacing:"-0.005em"}}>
-            Live screening across {Object.keys(STANDARDS).length} frameworks. Pick a primary standard for row badges; every standard runs in the background so you see a per-position pass count. Data: Finnhub fundamentals. Full methodology &amp; Sharia governance in Settings → Methodology.
-          </p>
-        </div>
-        {/* flexWrap + a shrinkable select: this group is ~400px of controls
-            with flexShrink:0 and no wrap, so on every phone up to 430px wide
-            it ran off the edge and took the "Re-screen" button with it —
-            invisibly, because html{overflow-x:clip} shows no scrollbar. The
-            Screener was unusable on a phone as a result. */}
-        <div className="mz-ctrl-row" style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap",minWidth:0,maxWidth:"100%"}}>
-          <button onClick={()=>setEthicalPref(!ethical)} title="Ethical / BDS overlay — flag divestment-target names on top of the Sharia screen (does not change the Sharia verdict)" style={{fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",padding:`6px ${T.s3}`,borderRadius:999,cursor:"pointer",background:ethical?`${T.loss}1A`:"transparent",border:`1px solid ${ethical?T.loss:T.border}`,color:ethical?T.loss:T.muted,transition:"all 0.15s",whiteSpace:"nowrap"}}>Ethical/BDS {ethical?"ON":"OFF"}</button>
-          <select value={primary} onChange={e=>setStandard(e.target.value)} className="field" style={{width:"auto",fontSize:12,cursor:"pointer"}}>
+      {/* Standard picker FIRST. It used to sit to the RIGHT of a three-line
+          paragraph, so on a phone you scrolled past an explanation to reach the
+          control the explanation was about — and users reported not knowing the
+          standards differed at all. It now leads, with that standard's actual
+          thresholds directly beneath it, because the thresholds ARE the
+          difference between frameworks. */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap",marginBottom:T.s3}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SCREENING STANDARD</div>
+          <select value={primary} onChange={e=>setStandard(e.target.value)} className="field" aria-label="Screening standard"
+            style={{width:"auto",maxWidth:"100%",fontSize:14,fontWeight:600,cursor:"pointer",color:T.textHi}}>
             {Object.entries(STANDARDS).map(([k,s])=><option key={k} value={k}>{s.name}</option>)}
           </select>
+        </div>
+        <div className="mz-ctrl-row" style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap",minWidth:0,maxWidth:"100%"}}>
+          <button onClick={()=>setEthicalPref(!ethical)} title="Ethical / BDS overlay — flag divestment-target names on top of the Sharia screen (does not change the Sharia verdict)" style={{fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",padding:`6px ${T.s3}`,borderRadius:999,cursor:"pointer",background:ethical?`${T.loss}1A`:"transparent",border:`1px solid ${ethical?T.loss:T.border}`,color:ethical?T.loss:T.muted,transition:"all 0.15s",whiteSpace:"nowrap"}}>Ethical/BDS {ethical?"ON":"OFF"}</button>
           <button onClick={()=>runScreen(true)} disabled={busy} className="btn-primary">{busy?"Screening…":"Re-screen"}</button>
         </div>
       </div>
-      <div style={{marginTop:T.s2,display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:10,color:cacheStale?T.gold:T.muted}}>
-        <span style={{width:6,height:6,borderRadius:"50%",background:cacheStale?T.gold:T.gain,flexShrink:0,display:"inline-block"}}/>
-        {cacheAge}{cacheStale&&" — re-screen for fresh data"}
-      </div>
-      <div style={{marginTop:T.s3,padding:`${T.s2} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.6,letterSpacing:"0.02em"}}>
-        <span style={{color:T.gold,fontWeight:600}}>{STANDARDS[primary].name}</span>
-        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>{STANDARDS[primary].region}
+
+      {/* The chosen standard's own limits — this is what actually differs
+          between frameworks (AAOIFI allows 49% receivables, Dow Jones 33%). */}
+      <div style={{padding:`${T.s2} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.6,letterSpacing:"0.02em"}}>
+        {STANDARDS[primary].region}
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Debt/{STANDARDS[primary].denominator==="totalAssets"?"Assets":"MC"} &lt; {STANDARDS[primary].debtMax}%
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Cash &lt; {STANDARDS[primary].cashMax}%
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>A/R &lt; {STANDARDS[primary].recvMax}%
-        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Non-perm &lt; {STANDARDS[primary].nonPermMax}% <span style={{color:T.dim,fontStyle:"italic"}}>(not evaluated — sector check applies)</span>
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Non-perm &lt; {STANDARDS[primary].nonPermMax}% <span style={{color:T.dim,fontStyle:"italic"}}>(sector check applies)</span>
       </div>
+
+      {/* Verdict freshness. Restored after I dropped it while moving the picker
+          up — "how old is this screen?" is load-bearing on a compliance surface,
+          not decoration. */}
+      <div style={{marginTop:T.s3,display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:10,color:cacheStale?T.gold:T.muted}}>
+        <span style={{width:6,height:6,borderRadius:"50%",background:cacheStale?T.gold:T.gain,flexShrink:0,display:"inline-block"}}/>
+        {cacheAge}{cacheStale&&" — re-screen for fresh data"}
+      </div>
+
+      {/* One line, not a paragraph. And it can finally say something true: the
+          selection really does drive every compliance surface now. */}
+      <p style={{fontFamily:FP,fontSize:12,color:T.muted,margin:`${T.s3} 0 0`,lineHeight:1.5}}>
+        Every verdict in Mizan — these badges, your Overview compliance score, the Rebalancer — follows this standard. Data: Finnhub fundamentals.
+      </p>
     </BentoTile>
 
     {/* ─── Screen any ticker (not only what you hold) ─────────────
@@ -8136,8 +8162,10 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
               padding:`${T.s3} ${T.s4}`,
               transition:"all 0.18s",
             }}>
-              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:conn?T.blue:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.nm}</div>
-              <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:T.s2}}>{b.desc}</div>
+              {/* Broker blurbs ("Brokerage & retirement", "Commission-free")
+                  removed 2026-08-18 on user feedback: people know what Fidelity
+                  is, and the line cost a row of vertical space on every card. */}
+              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:conn?T.blue:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s2}}>{b.nm}</div>
               <Tag label={conn?"Connected":"Not Connected"} color={conn?T.gain:T.muted}/>
             </div>;
           })}
@@ -9699,9 +9727,13 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
                         color:c ? T.blue : T.textHi}}>{b.nm}</span>
                       {tradeBlocked ? <Tag label="Read-only" color={T.slate}/> : b.mine && <Tag label="Mine" color={T.blue}/>}
                     </div>
-                    <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:9}}>
-                      {tradeBlocked ? "SnapTrade can't place trades on this broker — connect it read-only from Settings." : b.desc}
-                    </div>
+                    {/* Only the read-only warning survives here. That one is
+                        load-bearing — it is the difference between "this will
+                        trade" and "this will not". The generic blurb was the
+                        part users said they did not need. */}
+                    {tradeBlocked&&<div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:9}}>
+                      SnapTrade can't place trades on this broker — connect it read-only from Settings.
+                    </div>}
                     <div style={{display:"flex",gap:5}}>
                       {tradeBlocked ? (
                         <div title="This broker does not support trading through SnapTrade — only read-only data access."
@@ -11729,6 +11761,12 @@ export default function Mizan(){
   // Rebalancer's halal mode, and Purification all flow from it. The hardcoded
   // SHARIA_MAP is only an instant fallback while the live screen loads.
   const[shariaScreen,setShariaScreen]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
+  // The screening standard the user picked (AAOIFI / Dow Jones / S&P Shariah / ...).
+  // Shared via localStorage + a window event rather than prop-threaded, the same
+  // way useHideValues works — the Screener's picker lives five components deep,
+  // and mapPosition here has to see the same value or the app disagrees with
+  // itself about whether a holding is compliant.
+  const{standard:screenStandard}=useScreenStandard();
 
   // Map SnapTrade position → MIZAN holding format. Robust to nested UniversalSymbol
   // shapes (some brokers wrap symbols 1–2 levels deep).
@@ -11764,7 +11802,14 @@ export default function Mizan(){
     // "review" (flag it, never bless it) until the engine returns a verdict. This
     // fixes the old bug where crypto auto-labeled "halal" (mislabeling DOGE/XRP) and
     // the demo persona's hardcoded map leaked into real users' screening.
-    const live=shariaScreen[tk]&&shariaScreen[tk].status&&shariaScreen[tk].status!=="unknown"?shariaScreen[tk].status:null;
+    // Resolve the verdict through the standard the user actually picked. This
+    // used to read `.status` directly — a cross-standard VOTE (>=5 of 7 pass)
+    // computed server-side — so switching AAOIFI -> Dow Jones changed nothing
+    // anywhere in the app. statusForStandard() reads that standard's own
+    // pass/fail, which is what makes the Overview COMPLIANCE tile, the badges,
+    // the Rebalancer and Purification all move together. See src/lib/shariaStatus.js.
+    const resolved=statusForStandard(shariaScreen[tk],screenStandard);
+    const live=resolved&&resolved!=="unknown"?resolved:null;
     // Ethical/BDS overlay flag from the screen verdict (independent of sh_). The
     // app only ACTS on it when the user turns the overlay on (see ethicalOverlay).
     const bds=shariaScreen[tk]&&shariaScreen[tk].ethical&&shariaScreen[tk].ethical.excluded?shariaScreen[tk].ethical:null;
@@ -11772,7 +11817,7 @@ export default function Mizan(){
       sh_:live||(demoMode?SHARIA_MAP[tk]:null)||"review",
       bds_:bds,
       ac_,br:broker,_live:true,_fromSnap:true};
-  },[shariaScreen,demoMode]);
+  },[shariaScreen,demoMode,screenStandard]);
 
   // Screen the user's real holdings server-side so h.sh_ reflects the live
   // verdict app-wide (not just when the Screener tab is open). Only tickers not

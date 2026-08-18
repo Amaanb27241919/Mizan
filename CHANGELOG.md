@@ -16,6 +16,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Fixed
 - **ui:** Make every surface work on real phone viewports, width and height (`ebe25ad`)
 
+### Docs
+- Correct stale figures and document the verification layer (`cab97c9`)
+
 ## 2026-08-14
 
 ### Fixed

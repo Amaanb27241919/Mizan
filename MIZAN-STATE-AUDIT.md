@@ -1,7 +1,7 @@
 # MĪZAN — State-of-App Audit
 
 > **Living document.** Re-run every few weeks to track drift between what's built and what's deployed.
-> Last audited: 2026-08-15 (updated) · All findings from direct file reads, no guessing.
+> Last audited: 2026-08-18 (updated) · All findings from direct file reads, no guessing.
 >
 > **2026-08-15 (PWA — install surface for Chrome/Android + Safari/iOS, and a test harness that was lying)** — owner ask: optimise for Google and Safari PWA. Two genuine platform defects, several install-surface gaps, and one significant harness discovery:
 > 1. **iOS status bar was invisible for every light-theme user.** `apple-mobile-web-app-status-bar-style` was `black-translucent`, which forces the clock/battery/signal to render in **white** over the page background — and Mizan's default face is the paper canvas `#faf8f4`. iOS has no dynamic contrast for this. Apple has also **deprecated** the value. Now `default` (dark text, view starts below the bar); the existing `env(safe-area-inset-top)` padding degrades cleanly to 0 in that mode.
