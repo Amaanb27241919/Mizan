@@ -80,10 +80,10 @@ test.describe("screening standard drives the verdict", () => {
     await appReady(page);
     await page.waitForTimeout(700);
 
-    // The COMPLIANCE tile's caption, e.g. "1 of 1 halal" / "0 of 1 halal · 1 non-compliant".
+    // The CONFIRMED HALAL tile's caption, e.g. "1 of 1 halal" / "0 of 1 halal · 1 non-compliant".
     const compliance = async () => {
       const t = await page.locator("main").textContent();
-      const m = t.match(/COMPLIANCE.*?(\d+ of \d+ halal[^A-Z]*)/s);
+      const m = t.match(/CONFIRMED HALAL.*?(\d+ of \d+ halal[^A-Z]*)/s);
       return (m ? m[1] : "").replace(/\s+/g, " ").trim();
     };
 

@@ -15,6 +15,7 @@ import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
 import Budgeting from "./Budgeting.jsx";
+import { moneyWeightedReturn } from "../lib/performance.js";
 // Generated from BACKLOG.md at build time — headings only (~15KB), never the
 // 176KB markdown. See scripts/gen-backlog-summary.mjs.
 import BACKLOG from "../generated/backlog.json";
@@ -1804,14 +1805,31 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     // flat (refined by any real snapshots) instead of a fake climb with an inflated
     // "gain".
     const contribInRange=totalContrib-startContrib;
-    const startBaseline=totalContrib>0?(startContrib||0):Math.max(0,tot-contribInRange);
-    const valueSpan=tot-startBaseline;
+    // The old model baselined the first point at CUMULATIVE CONTRIBUTIONS but
+    // pinned the last to MARKET VALUE. Those are different quantities, so the
+    // whole of your all-time investment gain got crammed into whatever window
+    // you happened to be looking at: 1M read +94.77% and All read +1039.86% on
+    // the demo book. It also fabricated a "growth on top" shape from a
+    // 0.6/0.4 blend that no data supports.
+    //
+    // Without snapshots we genuinely do not know what the book was worth on a
+    // past date, so we no longer pretend to. The curve is now cumulative
+    // contributions SCALED so the final point lands on today's value — the
+    // honest statement "this is how your money went in, and here is what it is
+    // worth now", with no invented alpha in any sub-window. Real snapshots
+    // still override this point-for-point immediately below, so any user with
+    // history sees measured values rather than this shape at all.
+    const scale=totalContrib>0?tot/totalContrib:0;
+    const startBaseline=totalContrib>0?startContrib*scale:Math.max(0,tot-contribInRange);
     series.forEach((p,i)=>{
-      const progress=series.length>1?i/(series.length-1):1;
-      const trackedContrib=p.contrib;
-      const baseProg=totalSpan>0?(trackedContrib-startContrib)/totalSpan:progress;
-      const blended=0.6*baseProg+0.4*progress;
-      p.value=+((startBaseline+valueSpan*blended)).toFixed(2);
+      if(totalContrib>0){
+        p.value=+(p.contrib*scale).toFixed(2);
+      }else{
+        // No cash-flow data at all (read-only broker). Anchor flat at today's
+        // value rather than drawing a fake climb from zero.
+        const progress=series.length>1?i/(series.length-1):1;
+        p.value=+((startBaseline+(tot-startBaseline)*progress).toFixed(2));
+      }
     });
 
     // Real net-worth snapshots override the interpolation for exact dates.
@@ -1835,15 +1853,40 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   },[activities,netWorthHistory,totBucket,range,intraday,tot,snap1D]);
 
   const rangeStartVal=chart.length>1?chart[0].value:null;
-  const dispGain=
-    range==="1D"?(snap1D?tot-snap1D.total:today)
-    :range==="1W"?(snap1W?tot-snap1W.total:(rangeStartVal!==null?tot-rangeStartVal:gain))
-    :rangeStartVal!==null?tot-rangeStartVal:gain;
-  const dispGpc=
-    range==="1D"?(snap1D&&snap1D.total>0?(tot-snap1D.total)/snap1D.total*100:(tot>0?(today/(tot-today))*100:0))
-    :range==="1W"?(snap1W&&snap1W.total>0?(tot-snap1W.total)/snap1W.total*100:(rangeStartVal>0?(tot-rangeStartVal)/rangeStartVal*100:gpc))
-    :rangeStartVal>0?(tot-rangeStartVal)/rangeStartVal*100:gpc;
-  const dispGainLabel=range==="All"?"all-time":range.toLowerCase();
+
+  // ── The headline is a RETURN, and only one kind of return ──────────────
+  // It used to be a raw net-worth delta over the visible range, which counts
+  // money you PAID IN as money you EARNED. On the demo book that read
+  // "+124.15%" next to net worth while other panels showed +52.97% — three
+  // different answers on one screen to what a user reads as one question
+  // ("syncing all the numbers", reported 2026-08-18).
+  //
+  // It is now money-weighted return (XIRR) from src/lib/performance.js — the
+  // same function the RETURN & RISK panel uses, so the two cannot disagree by
+  // construction. Owner decision 2026-08-18, chosen over time-weighted because
+  // TWR needs a valuation at every cash-flow date (Mizan only has snapshots
+  // from signup) and because DCA investors — Mizan's user — find TWR
+  // counter-intuitive; it is the top open request on Ghostfolio for that
+  // reason.
+  //
+  // XIRR is annualised and whole-history by nature, so it does NOT vary with
+  // the range chips. That is deliberate: the chips move the CHART. Showing a
+  // per-range "return" would mean inventing sub-window valuations, which is
+  // exactly the fabrication this change removes.
+  const mwr=useMemo(()=>moneyWeightedReturn(activities,tot),[activities,tot]);
+  const hasMwr=!!mwr?.hasFlows&&Number.isFinite(mwr?.rate);
+  // Fall back to plain return-on-cost when there are no cash flows to solve
+  // against (a read-only broker reporting no deposits). Labelled differently so
+  // the two are never confused.
+  const dispGain=hasMwr?gain:gain;
+  const dispGpc=hasMwr?mwr.rate*100:gpc;
+  // The dollar figure is a TOTAL (gain vs cost) while the percentage is a RATE
+  // (annualised XIRR). Printing "+$89,911 (19.97%)" would imply the second is
+  // the first's ratio, which it is not — they have different bases. So the
+  // percentage carries its own unit and the pair reads as two facts, not one.
+  const dispGainLabel=hasMwr?"total · money-weighted":"total return on cost";
+  const dispGpcSuffix=hasMwr?"/yr":"";
+
 
   // Empty-state welcome card — shows for fresh users with no real broker
   // connections and demo mode off. Replaces the previous behavior where new
@@ -1962,7 +2005,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         <div style={{display:"flex",gap:T.s4,marginTop:T.s2,fontFamily:FM,fontSize:12,color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
           <span style={{display:"inline-flex",alignItems:"center",gap:T.s1}}>
             <span style={{color:dispGain>=0?T.gain:T.loss,fontWeight:600}}>{valuesHidden?"••••":`${dispGain>=0?"+":""}${kf(Math.abs(dispGain))}`}</span>
-            <span style={{color:dispGpc>=0?T.gain:T.loss}}>({valuesHidden?"••":fp(dispGpc)})</span>
+            <span style={{color:dispGpc>=0?T.gain:T.loss}}>{valuesHidden?"••":`${fp(dispGpc)}${dispGpcSuffix}`}</span>
             {dispGainLabel}
           </span>
           <span style={{color:T.dim}}>·</span>
@@ -2024,7 +2067,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
           )}
         </BentoTile>
         <BentoTile>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANCE</div>
+          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CONFIRMED HALAL</div>
           <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:complianceColor,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{halalPct==null?"—":`${halalPct.toFixed(1)}%`}</div>
           <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{merged.length===0?"No holdings to screen":<>{halalCount} of {merged.length} halal{reviewCount>0?` · ${reviewCount} review`:""}{haram.length>0?` · ${haram.length} non-compliant`:""}</>}</div>
         </BentoTile>
@@ -2068,7 +2111,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",gap:T.s4}}>
           {[
-            {label:"Total Return",  value:mask(`${gain>=0?"+":""}${fmtUSD(Math.abs(gain))}`),sub:totCost>0?fp(gpc):"Unrealized",subColor:fc(gain)},
+            {label:"Total Return",  value:mask(`${gain>=0?"+":""}${fmtUSD(Math.abs(gain))}`),sub:totCost>0?`${fp(gpc)} on cost`:"Unrealized",subColor:fc(gain)},
             {label:"YTD Contrib.",  value:mask(kf(metrics.ytdContrib||0)),                sub:"This year",                    subColor:T.gain},
             {label:"All-Time",       value:mask(kf(metrics.allTimeContrib||0)),            sub:"Lifetime deposits"},
             {label:"YTD Dividends", value:mask(kf(metrics.ytdDividends||0)),               sub:"Cash received",                subColor:T.gold},

@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-17
 
 ### Added
+- **budget:** Mount the envelope budget — the tab users could never reach (`491bd00`)
 - **budget:** Envelope budgeting foundation — migration 027 + the pure math (`9e6a93c`)
 
 ### Fixed
