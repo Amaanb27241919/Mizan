@@ -5242,14 +5242,24 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
       // under a single "Tools" group so the top row stays ~5 tabs instead of 7 and
       // stops scrolling off-screen on narrow viewports. `sub` keeps its original
       // per-tool values; the top row derives its active state from them.
-      const TOOLS=["rebalance","tax","dividends","backtest","overlap"];
-      const topActive=TOOLS.includes(sub)?"tools":sub;
-      const topTabs=[["holdings","Holdings"],["screener","Screener"],["activity","Activity"],["assets","Assets"],["tools","Tools"]];
-      const toolTabs=[["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),["dividends","Dividends"],["backtest","Backtest"],["overlap","ETF Overlap"]];
-      return<>
-        <TabBar tabs={topTabs} active={topActive} onChange={v=>{if(v==="tools"){if(!TOOLS.includes(sub))setSub("rebalance");}else setSub(v);}}/>
-        {topActive==="tools"&&<TabBar tabs={toolTabs} active={sub} onChange={setSub} accent={T.slate}/>}
-      </>;
+      // Flattened 2026-08-18. This used to be two strips: a top row ending in
+      // "Tools", which revealed a second row only once tapped. It was the only
+      // depth-3 branch in the app (Portfolio → Tools → Backtest) and sat behind
+      // a label that describes none of its five unrelated contents, so nothing
+      // in it was guessable. One strip, everything at the same level; the strip
+      // already scrolls horizontally with snap, which is how this is handled
+      // everywhere else in the app.
+      //
+      // Whether Backtest and ETF Overlap earn a slot at all is a real question
+      // and deliberately NOT answered here — nav_usage (migration 028) now
+      // counts destinations, so it can be answered with evidence in a few weeks
+      // instead of taste.
+      const portfolioTabs=[
+        ["holdings","Holdings"],["screener","Screener"],["activity","Activity"],["assets","Assets"],
+        ["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),
+        ["dividends","Dividends"],["backtest","Backtest"],["overlap","ETF Overlap"],
+      ];
+      return<TabBar tabs={portfolioTabs} active={sub} onChange={setSub}/>;
     })()}
 
     {sub==="holdings"&&<>
@@ -11208,7 +11218,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
     {n:"Overview",   d:"Net worth, performance, allocation, top holdings — all in one bento."},
     {n:"Finances",   d:"Bank balances, transactions, spending by category, recurring (Plaid)."},
     {n:"Portfolio",  d:"Holdings, activity, tax planning, backtest, rebalance, Sharia screener."},
-    {n:"Goals",      d:"Savings goals, Zakat & Sadaqah ledger, retirement (FIRE) projection."},
+    {n:"Plan",       d:"Zakat worksheet, Sadaqah ledger, savings goals, retirement (FIRE) projection."},
     {n:"Assistant",  d:"Sharia-aware chat that explains your holdings and the screening — never a buy/sell call."},
     {n:"Settings",   d:"Brokers, 2FA, manual assets, documents, demo mode."},
   ];
@@ -12836,7 +12846,7 @@ export default function Mizan(){
   // (FIRE → Goals, Backtest → Portfolio, Sharia → Screener, Order Ticket
   // Coming Soon and reachable via CommandPalette only). Keeps the dock
   // un-crowded so first-time users aren't decision-fatigued.
-  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},...(isAdmin?[{id:"trade",l:"Trade"}]:[]),{id:"goals",l:"Goals"},{id:"advisor",l:"Assistant"},{id:"settings",l:"Settings"}];
+  const NAV=[{id:"overview",l:"Overview"},{id:"finances",l:"Finances"},{id:"portfolio",l:"Portfolio"},...(isAdmin?[{id:"trade",l:"Trade"}]:[]),{id:"goals",l:"Plan"},{id:"advisor",l:"Assistant"},{id:"settings",l:"Settings"}];
 
   // Declared here (after every state it reads) so the name nudge can defer to
   // it without either one referencing a `const` declared further down.
@@ -13370,7 +13380,7 @@ export default function Mizan(){
         {id:"nav-overview", label:"Go to Overview",      group:"Navigate", hint:"g o", icon:"◎", action:()=>setNav("overview")},
         {id:"nav-portfolio",label:"Go to Portfolio",     group:"Navigate", hint:"g p", icon:"▣", action:()=>setNav("portfolio")},
         {id:"nav-finances", label:"Go to Finances",      group:"Navigate", hint:"g f", icon:"$", action:()=>setNav("finances")},
-        {id:"nav-goals",    label:"Go to Goals",         group:"Navigate", hint:"g g", icon:"◉", action:()=>setNav("goals")},
+        {id:"nav-goals",    label:"Go to Plan",              group:"Navigate", hint:"g g", icon:"◉", action:()=>setNav("goals")},
         {id:"nav-advisor",  label:"Go to Assistant",     group:"Navigate", hint:"g a", icon:<Icon name="spark" size={14}/>, action:()=>setNav("advisor")},
         {id:"nav-settings", label:"Go to Settings",      group:"Navigate", hint:"g s", icon:<Icon name="gear" size={14}/>, action:()=>setNav("settings")},
         ...(isAdmin?[{id:"nav-trade",label:"Go to Trade",group:"Navigate",hint:"g t",icon:<Icon name="hexagon" size={14}/>,action:()=>setNav("trade")}]:[]),

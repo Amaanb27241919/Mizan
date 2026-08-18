@@ -412,6 +412,22 @@ Helper classes (all no-ops on a mouse):
 
 Two traps that make defects here invisible: `html{overflow-x:clip}` means over-wide content is **silently clipped, never scrollable** (no scrollbar to notice), and flex parents can report honest non-overlapping rects while their *children* paint on top of each other. Both must be measured, not eyeballed. `e2e/responsive.spec.js` guards all of it across login + every tab + every sub-tab; `playwright.config.js` sets `hasTouch: true`, which is **what makes Chromium report `pointer:coarse`** — without it the touch rules never evaluate and the suite passes by not testing them.
 
+### Type scale — fluid, and in rem (added 2026-08-18)
+**Never write a bare px font size.** Use the `--fs-*` tokens in THEME_CSS (`--fs-2xs` … `--fs-6xl`); all 1,260 call sites were migrated off px. Each is a `clamp()` interpolating between a 320px and a 1440px viewport, so type is in tune at every width instead of jumping at breakpoints.
+
+They are in **rem, not px, and that is load-bearing**: a px clamp adapts to the viewport but ignores the reader. Measured — `--fs-2xs` goes 11.06px → 13.75px when the root moves 16px → 20px, while a hardcoded 10px stays 10px forever. "Readable on any device" includes someone using iOS Dynamic Type.
+
+**The floor is 11px** (`--fs-2xs`). The app used to render 39% of its type at 9–10px, under the ~11px Apple and Google both treat as the minimum for secondary text — that, more than any layout bug, is why it read as dense. `e2e/responsive.spec.js` walks every tab asserting nothing renders below 10.9px. If the dock or a strip overflows once labels reach the floor, **fix it with padding, never by shrinking type back under the floor.**
+
+**One deliberate exception:** the iOS focus-zoom rule (`.field`, `input,select,textarea`) stays a literal `16px`. Safari zooms whenever a focused field computes under 16px, and a rem token drops below that the moment a reader *lowers* their OS text size. That is a browser behaviour threshold, not a design token — don't "tidy" it into the scale.
+
+### Information architecture (added 2026-08-18)
+6 top-level tabs · 21 destinations · **max depth 2**. Guarded by `e2e/responsive.spec.js`.
+
+- The **"Plan"** tab's nav id is still `goals`. The label changed; the id must not — `localStorage.mizan_nav`, the `?tab=` deep link, the manifest shortcut, `nav_usage` paths and every `data-tour` hook are keyed on it.
+- **Portfolio is one flat strip of 9.** It used to end in "Tools", which revealed a second strip — the app's only depth-3 branch, behind a label describing none of its five unrelated contents. Do not reintroduce nesting; the strip scrolls with snap.
+- `nav_usage` (migration 028) counts destinations per user — **counters, not an event log**, so there is no timeline and nothing financial. Use it to answer whether Backtest / ETF Overlap earn their slots rather than deciding by taste.
+
 ### PWA install surface (added 2026-08-15)
 `public/manifest.webmanifest` + the iOS meta block in `index.html`. Guarded by `src/test/pwaManifest.test.js` — read its failure messages before changing either file.
 

@@ -128,10 +128,30 @@ export async function signedIn(page, opts = {}) {
   await page.route("**/_vercel/**", (route) => route.fulfill({ status: 204, body: "" }));
 }
 
-/** Wait for the app shell to be interactive rather than racing a spinner. */
+/**
+ * Wait for the app shell to be interactive rather than racing a spinner.
+ *
+ * Deliberately does NOT use waitForLoadState("networkidle"). That was here and
+ * it was the source of real flake: once the suite passed ~145 tests, two
+ * DIFFERENT specs failed per run — always on a 30s networkidle timeout, never
+ * on an assertion, and every one of them passed in isolation. networkidle waits
+ * for a quiet period that a live app with polling and instrumentation may never
+ * give, and Playwright's own docs discourage it. A suite that reds two random
+ * tests a run teaches people to ignore red, which is worse than no suite.
+ *
+ * The element wait below is the honest signal anyway: the nav only exists once
+ * auth has resolved and React has mounted.
+ */
 export async function appReady(page) {
-  await page.waitForLoadState("networkidle");
-  // The nav is the last thing to mount and only exists once auth resolved, so
-  // it's the honest "the authenticated app is up" signal.
   await page.locator("nav, [data-tour], main").first().waitFor({ state: "visible", timeout: 15_000 });
+  // Then wait for WEB FONTS, which is the actual source of the layout race.
+  // Mizan loads Fraunces + IBM Plex from Google Fonts with font-display:swap,
+  // so before they arrive every string is measured with fallback metrics and
+  // widths differ. That produced a transient 7px horizontal overflow at 320px
+  // which appeared ONLY under parallel load (fonts arrive slower) and never in
+  // isolation — the classic shape of a race being blamed on flake.
+  //
+  // document.fonts.ready is deterministic and near-instant once cached, unlike
+  // networkidle which waits for a quiet period a live app may never give.
+  await page.evaluate(() => document.fonts?.ready).catch(() => {});
 }

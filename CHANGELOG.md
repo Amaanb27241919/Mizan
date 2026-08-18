@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-08-18
 
+### Added
+- **ui:** Fluid type scale across every surface — readable on any device (`a6f3ff2`)
+
 ### Fixed
 - **finances:** Cut the tab in half, and fix the crash the fixtures hid (`d58ac5a`)
 

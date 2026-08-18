@@ -208,6 +208,48 @@ test.describe("responsive — portrait phones", () => {
   });
 });
 
+test.describe("information architecture", () => {
+  // Pins the 2026-08-18 IA decision. Portfolio → Tools → Backtest was the app's
+  // ONLY depth-3 branch, hidden behind a junk-drawer label that described none
+  // of its five unrelated contents. Flattened to one strip; nothing was removed
+  // (21 destinations before and after), it just stopped being nested.
+  test("no navigation is more than two levels deep", async ({ page }) => {
+    await signedIn(page, { storage: { mizan_demo: "1" } });
+    await page.goto("/");
+    await appReady(page);
+    const deep = [];
+    for (const tab of TABS) {
+      const btn = page.locator(`[data-tour="nav-${tab}"]`);
+      if (!(await btn.count())) continue;
+      await btn.click({ force: true });
+      await page.waitForTimeout(400);
+      const count = await page.locator(".mz-tabbar > button").count();
+      for (let i = 0; i < count; i++) {
+        await page.evaluate((idx) => document.querySelectorAll(".mz-tabbar > button")[idx]?.click(), i);
+        await page.waitForTimeout(220);
+        // A SECOND strip appearing means a third level.
+        const strips = await page.locator(".mz-tabbar").count();
+        if (strips > 1) deep.push(`${tab} › item ${i + 1}`);
+      }
+    }
+    expect([...new Set(deep)], `depth-3 navigation found at: ${deep.join(", ")}`).toEqual([]);
+  });
+
+  test("Zakat is reachable from a nav label that suggests it", async ({ page }) => {
+    // Zakat is Mizan's #2 value proposition and it lived behind a tab called
+    // "Goals", which gives no hint it is there. The tab is now "Plan".
+    await signedIn(page);
+    await page.goto("/");
+    await appReady(page);
+    const dock = await page.locator(".mz-dock").textContent();
+    expect(dock).toContain("Plan");
+    expect(dock).not.toContain("Goals");   // the old, misleading label
+    await page.locator('[data-tour="nav-goals"]').click({ force: true });
+    await page.waitForTimeout(450);
+    await expect(page.locator(".mz-tabbar > button", { hasText: /^Zakat$/ })).toBeVisible();
+  });
+});
+
 test.describe("readability floor", () => {
   // The point of the fluid type scale. Mizan previously rendered 39% of its
   // type at 9-10px — under the ~11px Apple and Google both treat as the
