@@ -141,7 +141,7 @@ export default function BugReportButton() {
           border: `1px solid ${T.border}`,
           color: T.muted,
           fontFamily: FM,
-          fontSize: 15,
+          fontSize:"var(--fs-lg)",
           fontWeight: 600,
           lineHeight: 1,
           cursor: "pointer",
@@ -185,27 +185,27 @@ export default function BugReportButton() {
             }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: T.s3 }}>
               <div>
-                <div style={{ fontFamily: FM, fontSize: 10, color: T.blue, letterSpacing: "0.16em", fontWeight: 700, marginBottom: T.s1 }}>
+                <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.blue, letterSpacing: "0.16em", fontWeight: 700, marginBottom: T.s1 }}>
                   REPORT AN ISSUE
                 </div>
-                <div style={{ fontFamily: FU, fontSize: 18, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
+                <div style={{ fontFamily: FU, fontSize:"var(--fs-2xl)", fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
                   Tell us what went wrong
                 </div>
               </div>
               <button onClick={close} aria-label="Close"
                 style={{
                   background: "transparent", border: "none", color: T.muted,
-                  fontFamily: FM, fontSize: 18, cursor: "pointer", padding: 4, lineHeight: 1,
+                  fontFamily: FM, fontSize:"var(--fs-2xl)", cursor: "pointer", padding: 4, lineHeight: 1,
                 }}>×</button>
             </div>
 
-            <div style={{ fontFamily: FU, fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
+            <div style={{ fontFamily: FU, fontSize:"var(--fs-sm)", color: T.muted, lineHeight: 1.5 }}>
               This goes to the operator inbox. We see the page you're on and what
               you describe — never your balances, transactions, or passwords.
             </div>
 
             <div>
-              <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.14em", fontWeight: 600, marginBottom: T.s1 }}>
+              <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.14em", fontWeight: 600, marginBottom: T.s1 }}>
                 SEVERITY
               </div>
               <div style={{ display: "flex", gap: T.s1, flexWrap: "wrap" }}>
@@ -221,7 +221,7 @@ export default function BugReportButton() {
                       background: severity === v ? `${T.blue}22` : T.surface,
                       border: `1px solid ${severity === v ? T.blue + "55" : T.border}`,
                       color: severity === v ? T.textHi : T.muted,
-                      fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+                      fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: 600, letterSpacing: "0.04em",
                       borderRadius: T.rSm,
                       cursor: "pointer",
                     }}>{label}</button>
@@ -230,7 +230,7 @@ export default function BugReportButton() {
             </div>
 
             <div>
-              <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.14em", fontWeight: 600, marginBottom: T.s1 }}>
+              <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.14em", fontWeight: 600, marginBottom: T.s1 }}>
                 WHAT WENT WRONG?
               </div>
               <textarea
@@ -246,12 +246,12 @@ export default function BugReportButton() {
                   borderRadius: T.rMd,
                   padding: `${T.s3} ${T.s3}`,
                   color: T.textHi,
-                  fontFamily: FU, fontSize: 13, lineHeight: 1.5,
+                  fontFamily: FU, fontSize:"var(--fs-md)", lineHeight: 1.5,
                   outline: "none",
                   resize: "vertical",
                   boxSizing: "border-box",
                 }}/>
-              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FM, fontSize: 10, color: T.muted, marginTop: T.s1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, marginTop: T.s1 }}>
                 <span>{description.length}/2000</span>
                 <span>Press Esc to cancel</span>
               </div>
@@ -259,7 +259,7 @@ export default function BugReportButton() {
 
             {status && (
               <div style={{
-                fontFamily: FM, fontSize: 12,
+                fontFamily: FM, fontSize:"var(--fs-sm)",
                 padding: `${T.s2} ${T.s3}`,
                 borderRadius: T.rMd,
                 background: status.ok ? `${T.gain}14` : `${T.loss}14`,
@@ -275,7 +275,7 @@ export default function BugReportButton() {
                   background: "transparent",
                   border: `1px solid ${T.border}`,
                   color: T.muted,
-                  fontFamily: FM, fontSize: 12, fontWeight: 600, letterSpacing: "0.04em",
+                  fontFamily: FM, fontSize:"var(--fs-sm)", fontWeight: 600, letterSpacing: "0.04em",
                   borderRadius: T.rMd,
                   cursor: "pointer",
                 }}>Cancel</button>
@@ -285,7 +285,7 @@ export default function BugReportButton() {
                   background: `linear-gradient(135deg, ${T.blue}, ${T.blue}DD)`,
                   border: "none",
                   color: "#fff",
-                  fontFamily: FM, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em",
+                  fontFamily: FM, fontSize:"var(--fs-sm)", fontWeight: 700, letterSpacing: "0.04em",
                   borderRadius: T.rMd,
                   cursor: (busy || description.trim().length < 10) ? "not-allowed" : "pointer",
                   opacity: (busy || description.trim().length < 10) ? 0.5 : 1,

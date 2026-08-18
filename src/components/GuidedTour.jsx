@@ -177,8 +177,8 @@ export default function GuidedTour({ open, onNav, onClose, onPickSample, onPickO
         display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6,textAlign:"left",
         width:"100%",padding:`14px 16px`,borderColor:accent+"55",background:accent+"0F",
       }}>
-        <span style={{fontFamily:FM,fontSize:10,color:accent,letterSpacing:"0.14em",fontWeight:600}}>{label}</span>
-        <span style={{fontFamily:FP,fontSize:12.5,color:T.muted,lineHeight:1.5,fontWeight:400,letterSpacing:0,textTransform:"none"}}>{sub}</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:accent,letterSpacing:"0.14em",fontWeight:600}}>{label}</span>
+        <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.5,fontWeight:400,letterSpacing:0,textTransform:"none"}}>{sub}</span>
       </button>
     );
     return<div className="mz-tour-root" role="dialog" aria-modal="true" aria-label="Start the MĪZAN tour" style={{
@@ -192,9 +192,9 @@ export default function GuidedTour({ open, onNav, onClose, onPickSample, onPickO
         padding:`${T.s6} ${T.s6} ${T.s5}`, outline:"none",
         animation:reduced?undefined:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)",
       }}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>60-SECOND TOUR</div>
-        <div style={{fontFamily:FU,fontSize:23,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s2}}>Take a guided lap</div>
-        <p style={{fontFamily:FP,fontSize:13.5,color:T.muted,lineHeight:1.6,margin:`0 0 ${T.s5}`}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>60-SECOND TOUR</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s2}}>Take a guided lap</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.6,margin:`0 0 ${T.s5}`}}>
           A quick walk through all six tabs — Overview, Finances, Portfolio, Plan, Advisor, and Settings. Explore it with sample data, or use your own account.
         </p>
         <div style={{display:"flex",flexDirection:"column",gap:T.s2,marginBottom:T.s4}}>
@@ -202,7 +202,7 @@ export default function GuidedTour({ open, onNav, onClose, onPickSample, onPickO
           {choice("own",T.gold,"TOUR MY ACCOUNT","Walk through the tabs using your own (or empty) data.")}
         </div>
         <div style={{textAlign:"center"}}>
-          <button onClick={()=>close("skip")} style={{background:"none",border:"none",color:T.muted,fontFamily:FM,fontSize:11,letterSpacing:"0.04em",cursor:"pointer",padding:6}}>Maybe later</button>
+          <button onClick={()=>close("skip")} style={{background:"none",border:"none",color:T.muted,fontFamily:FM,fontSize:"var(--fs-xs)",letterSpacing:"0.04em",cursor:"pointer",padding:6}}>Maybe later</button>
         </div>
       </div>
     </div>;
@@ -243,18 +243,18 @@ export default function GuidedTour({ open, onNav, onClose, onPickSample, onPickO
       padding:`${T.s5} ${T.s5} ${T.s4}`, outline:"none",
       animation:reduced?undefined:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)",
     }}>
-      <div style={{fontFamily:FM,fontSize:9.5,color:T.blue,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s2}}>{step.eyebrow}</div>
-      <div style={{fontFamily:FU,fontSize:19,fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",marginBottom:T.s2}}>{step.title}</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,margin:`0 0 ${T.s4}`}}>{step.body}</p>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s2}}>{step.eyebrow}</div>
+      <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",marginBottom:T.s2}}>{step.title}</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.55,margin:`0 0 ${T.s4}`}}>{step.body}</p>
       <div style={{display:"flex",gap:5,marginBottom:T.s4}}>
         {steps.map((s,k)=><span key={s.key} aria-hidden="true" style={{width:k===i?16:6,height:6,borderRadius:999,background:k===i?T.blue:T.border,transition:reduced?"none":"width 0.2s, background 0.2s"}}/>)}
       </div>
       <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-        {i>0&&<button onClick={back} className="btn-ghost" style={{fontSize:12,padding:`8px ${T.s3}`}}>← Back</button>}
-        <button onClick={next} className="btn-primary" style={{flex:1,fontSize:12.5,padding:`9px ${T.s4}`}}>{last?"Done":"Next →"}</button>
-        <button onClick={()=>close("skip")} className="btn-ghost" style={{fontSize:11.5,padding:`8px ${T.s3}`,whiteSpace:"nowrap"}}>Skip</button>
+        {i>0&&<button onClick={back} className="btn-ghost" style={{fontSize:"var(--fs-sm)",padding:`8px ${T.s3}`}}>← Back</button>}
+        <button onClick={next} className="btn-primary" style={{flex:1,fontSize:"var(--fs-sm)",padding:`9px ${T.s4}`}}>{last?"Done":"Next →"}</button>
+        <button onClick={()=>close("skip")} className="btn-ghost" style={{fontSize:"var(--fs-xs)",padding:`8px ${T.s3}`,whiteSpace:"nowrap"}}>Skip</button>
       </div>
-      <div style={{fontFamily:FM,fontSize:9.5,color:T.muted,textAlign:"center",marginTop:T.s3,letterSpacing:"0.06em"}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,textAlign:"center",marginTop:T.s3,letterSpacing:"0.06em"}}>
         Step {i+1} of {steps.length} · use ← → keys
       </div>
     </div>

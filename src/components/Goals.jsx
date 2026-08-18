@@ -67,7 +67,7 @@ function TemplatePicker({ avgMonthlySpend, onPick, onCancel }) {
       display: "flex", flexDirection: "column", gap: T.s4,
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
+        <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
           CHOOSE A TEMPLATE
         </div>
         <button onClick={onCancel} className="mz-tap" style={ghostBtnStyle}>Cancel</button>
@@ -105,16 +105,16 @@ function TemplatePicker({ avgMonthlySpend, onPick, onCancel }) {
               }}
             >
               <Icon name={tmpl.icon} size={22} color={T.blue}/>
-              <span style={{ fontFamily: FP, fontSize: 13, fontWeight: 600, color: T.textHi }}>
+              <span style={{ fontFamily: FP, fontSize:"var(--fs-md)", fontWeight: 600, color: T.textHi }}>
                 {tmpl.name}
               </span>
               {suggestedTarget != null && (
-                <span style={{ fontFamily: FM, fontSize: 11, color: T.muted }}>
+                <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted }}>
                   Suggested: {fmtUSD(suggestedTarget)}
                 </span>
               )}
               {tmpl.note && (
-                <span style={{ fontFamily: FP, fontSize: 11, color: T.muted, lineHeight: 1.4 }}>
+                <span style={{ fontFamily: FP, fontSize:"var(--fs-xs)", color: T.muted, lineHeight: 1.4 }}>
                   {tmpl.note}
                 </span>
               )}
@@ -230,10 +230,10 @@ function AccountPickerRow({ acct, selected, onToggle }) {
       border: `1px solid ${selected ? T.blue + "60" : T.border}`,
     }}>
       <input type="checkbox" checked={selected} onChange={onToggle} style={{ cursor: "pointer" }} />
-      <span style={{ fontFamily: FP, fontSize: 12, color: T.text, flex: 1 }}>
+      <span style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.text, flex: 1 }}>
         {acct.label}
       </span>
-      <span style={{ fontFamily: FM, fontSize: 11, color: T.muted }}>
+      <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted }}>
         {fmtUSD(acct.balance)}
       </span>
     </label>
@@ -297,12 +297,12 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
       padding: T.s5,
       display: "flex", flexDirection: "column", gap: T.s4,
     }}>
-      <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
+      <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
         {initial?.name && !initial?.id ? `NEW GOAL · ${initial.name.toUpperCase()}` : initial ? "EDIT GOAL" : "NEW GOAL"}
       </div>
       {templateNote && (
         <div style={{
-          fontFamily: FP, fontSize: 12, color: T.gold, lineHeight: 1.5,
+          fontFamily: FP, fontSize:"var(--fs-sm)", color: T.gold, lineHeight: 1.5,
           padding: `${T.s2} ${T.s3}`,
           background: `${T.gold}10`, border: `1px solid ${T.gold}30`,
           borderRadius: T.rSm, display: "flex", alignItems: "flex-start", gap: 6,
@@ -313,7 +313,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
 
       <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>NAME</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>NAME</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -322,7 +322,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
           />
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TARGET ($)</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>TARGET ($)</span>
           <input
             value={targetAmount}
             onChange={(e) => setTargetAmount(e.target.value)}
@@ -335,7 +335,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
 
       <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TARGET DATE</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>TARGET DATE</span>
           <input
             type="date"
             value={targetDate || ""}
@@ -344,7 +344,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
           />
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TRACK MODE</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>TRACK MODE</span>
           <select
             value={trackMode}
             onChange={(e) => setTrackMode(e.target.value)}
@@ -359,7 +359,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
 
       {trackMode === "account" && (
         <div style={{ display: "flex", flexDirection: "column", gap: T.s2 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>
             ACCOUNTS ({selectedIds.size} SELECTED)
           </span>
           <div style={{
@@ -371,7 +371,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
             borderRadius: T.rMd,
           }}>
             {accountChoices.length === 0 && (
-              <div style={{ fontFamily: FP, fontSize: 12, color: T.muted, padding: T.s3, textAlign: "center" }}>
+              <div style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.muted, padding: T.s3, textAlign: "center" }}>
                 No accounts connected. Switch track mode to Manual or Net worth, or connect an account first.
               </div>
             )}
@@ -389,7 +389,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
 
       {trackMode === "manual" && (
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>MANUAL PROGRESS ($)</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>MANUAL PROGRESS ($)</span>
           <input
             value={manualProgress}
             onChange={(e) => setManualProgress(e.target.value)}
@@ -402,7 +402,7 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
 
       {err && (
         <div style={{
-          fontFamily: FP, fontSize: 12, color: T.loss,
+          fontFamily: FP, fontSize:"var(--fs-sm)", color: T.loss,
           padding: T.s2, background: `${T.loss}15`,
           border: `1px solid ${T.loss}40`, borderRadius: T.rSm,
         }}>{err}</div>
@@ -419,25 +419,25 @@ function GoalForm({ initial, accountChoices, onSave, onCancel, templateNote }) {
 }
 
 const inputStyle = {
-  fontFamily: FP, fontSize: 13, color: T.textHi,
+  fontFamily: FP, fontSize:"var(--fs-md)", color: T.textHi,
   background: T.surface, border: `1px solid ${T.border}`,
   borderRadius: 8, padding: "8px 10px",
   outline: "none",
 };
 const primaryBtnStyle = {
-  fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
+  fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: 600, letterSpacing: "0.08em",
   color: "#fff", background: `linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
   border: "none", borderRadius: 999, padding: "9px 18px",
   cursor: "pointer",
 };
 const ghostBtnStyle = {
-  fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
+  fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: 600, letterSpacing: "0.08em",
   color: T.text, background: "transparent",
   border: `1px solid ${T.border}`, borderRadius: 999, padding: "9px 18px",
   cursor: "pointer",
 };
 const smallBtnStyle = {
-  fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+  fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.06em",
   color: T.muted, background: "transparent",
   border: `1px solid ${T.border}`, borderRadius: T.rSm,
   padding: "4px 10px", cursor: "pointer",
@@ -476,10 +476,10 @@ function GoalCard({ goal, current, slope, accountLabels, onEdit, onDelete, onMan
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: T.s3 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-          <div style={{ fontFamily: FU, fontSize: 18, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
+          <div style={{ fontFamily: FU, fontSize:"var(--fs-2xl)", fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
             {goal.name}
           </div>
-          <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.04em" }}>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, letterSpacing: "0.04em" }}>
             {fmtUSD(goal.target_amount)} by {fmtDate(goal.target_date)}
             {goal.track_mode === "account" && accLabel && <> · {accLabel}</>}
             {goal.track_mode === "networth" && <> · Net worth</>}
@@ -495,13 +495,13 @@ function GoalCard({ goal, current, slope, accountLabels, onEdit, onDelete, onMan
       <ProgressBar pct={pct} color={color} />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: T.s3, flexWrap: "wrap" }}>
-        <div style={{ fontFamily: FM, fontSize: 13, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>
+        <div style={{ fontFamily: FM, fontSize:"var(--fs-md)", color: T.textHi, fontVariantNumeric: "tabular-nums" }}>
           {fmtUSD(current)} <span style={{ color: T.muted }}>/ {fmtUSD(goal.target_amount)}</span>
           <span style={{ marginLeft: 8, color: color, fontWeight: 600 }}>
             ({pct.toFixed(1)}%)
           </span>
         </div>
-        <div style={{ fontFamily: FM, fontSize: 11, color: projection.startsWith("Insufficient") ? T.loss : T.muted, letterSpacing: "0.04em" }}>
+        <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: projection.startsWith("Insufficient") ? T.loss : T.muted, letterSpacing: "0.04em" }}>
           {projection}
         </div>
       </div>
@@ -512,14 +512,14 @@ function GoalCard({ goal, current, slope, accountLabels, onEdit, onDelete, onMan
           paddingTop: T.s2,
           borderTop: `1px solid ${T.border}`,
         }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>MANUAL PROGRESS</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>MANUAL PROGRESS</span>
           {editingManual ? (
             <>
               <input
                 value={manualDraft}
                 onChange={(e) => setManualDraft(e.target.value)}
                 inputMode="decimal"
-                style={{ ...inputStyle, fontSize: 12, padding: "4px 8px", width: 120 }}
+                style={{ ...inputStyle, fontSize:"var(--fs-sm)", padding: "4px 8px", width: 120 }}
               />
               <button onClick={saveManual} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>Save</button>
               <button onClick={() => { setEditingManual(false); setManualDraft(String(goal.manual_progress || 0)); }} style={smallBtnStyle}>Cancel</button>
@@ -750,13 +750,13 @@ export default function Goals({
         transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
       }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 11, color: T.blue, letterSpacing: "0.18em", fontWeight: 600 }}>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.blue, letterSpacing: "0.18em", fontWeight: 600 }}>
             GOALS · {goals.length} ACTIVE
           </span>
-          <span style={{ fontFamily: FU, fontSize: 22, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
+          <span style={{ fontFamily: FU, fontSize:"var(--fs-3xl)", fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
             Save toward specific targets
           </span>
-          <span style={{ fontFamily: FP, fontSize: 13, color: T.muted, letterSpacing: "-0.005em" }}>
+          <span style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: T.muted, letterSpacing: "-0.005em" }}>
             Track account balances, total net worth, or manual milestones. Projections use the last 30 days.
           </span>
         </div>
@@ -765,17 +765,17 @@ export default function Goals({
 
       {err && err.pending ? (
         <div style={{
-          fontFamily: FP, fontSize: 13, color: T.gold,
+          fontFamily: FP, fontSize:"var(--fs-md)", color: T.gold,
           padding: T.s4, background: `${T.gold}12`,
           border: `1px solid ${T.gold}40`, borderRadius: T.rMd,
           lineHeight: 1.55,
         }}>
-          <strong style={{ fontFamily: FM, fontSize: 10, letterSpacing: "0.16em", color: T.gold, display: "block", marginBottom: T.s2 }}>SETUP PENDING</strong>
+          <strong style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", letterSpacing: "0.16em", color: T.gold, display: "block", marginBottom: T.s2 }}>SETUP PENDING</strong>
           Goals are ready in code but the database table hasn't been provisioned yet on this Supabase project. The operator needs to apply migration <code style={{ fontFamily: FM, background: `${T.gold}22`, padding: "1px 6px", borderRadius: 3 }}>{err.migration}</code> (under <code style={{ fontFamily: FM, background: `${T.gold}22`, padding: "1px 6px", borderRadius: 3 }}>supabase/migrations/</code>) via the Supabase SQL editor or CLI. Goals will load automatically once the table exists.
         </div>
       ) : err && (
         <div style={{
-          fontFamily: FP, fontSize: 12, color: T.loss,
+          fontFamily: FP, fontSize:"var(--fs-sm)", color: T.loss,
           padding: T.s3, background: `${T.loss}15`,
           border: `1px solid ${T.loss}40`, borderRadius: T.rMd,
         }}>{typeof err === "string" ? err : (err.message || "Failed to load goals")}</div>
@@ -805,7 +805,7 @@ export default function Goals({
 
       {loading && !creating && goals.length === 0 && (
         <div style={{
-          fontFamily: FP, fontSize: 14, color: T.muted,
+          fontFamily: FP, fontSize:"var(--fs-lg)", color: T.muted,
           padding: T.s6, textAlign: "center",
           border: `1px dashed ${T.border}`, borderRadius: T.rLg,
         }}>Loading goals…</div>
@@ -813,7 +813,7 @@ export default function Goals({
 
       {!loading && !creating && goals.length === 0 && (
         <div style={{
-          fontFamily: FP, fontSize: 14, color: T.muted,
+          fontFamily: FP, fontSize:"var(--fs-lg)", color: T.muted,
           padding: T.s8, textAlign: "center",
           border: `1px dashed ${T.border}`, borderRadius: T.rLg,
           display: "flex", flexDirection: "column", alignItems: "center", gap: T.s3,
@@ -944,7 +944,7 @@ export function GoalsOverviewWidget({
     }}>
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
+        <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
           SAVINGS GOALS
           {goals.length > 0 && <span style={{ marginLeft: 6 }}>· {goals.length}</span>}
         </span>
@@ -952,7 +952,7 @@ export function GoalsOverviewWidget({
           onClick={() => onNav?.("goals")}
           className="mz-tap"
           style={{
-            fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+            fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.06em",
             color: T.blue, background: "transparent", border: "none", cursor: "pointer", padding: 0,
           }}
         >
@@ -966,12 +966,12 @@ export function GoalsOverviewWidget({
           padding: `${T.s4} 0`, textAlign: "center",
         }}>
           <Icon name="target" size={24} color={T.muted}/>
-          <span style={{ fontFamily: FP, fontSize: 13, color: T.muted }}>No savings goals yet</span>
+          <span style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: T.muted }}>No savings goals yet</span>
           <button
             onClick={() => onNav?.("goals")}
             className="mz-tap"
             style={{
-              fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+              fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.06em",
               color: T.blue, background: `${T.blue}18`,
               border: `1px solid ${T.blue}30`, borderRadius: 999,
               padding: "6px 14px", cursor: "pointer", marginTop: T.s1,
@@ -994,30 +994,30 @@ export function GoalsOverviewWidget({
                   <div style={{ display: "flex", alignItems: "center", gap: T.s2, minWidth: 0 }}>
                     <Icon name={iconFor(g)} size={16} color={T.blue} style={{ flexShrink: 0 }}/>
                     <span style={{
-                      fontFamily: FP, fontSize: 13, fontWeight: 600, color: T.textHi,
+                      fontFamily: FP, fontSize:"var(--fs-md)", fontWeight: 600, color: T.textHi,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>
                       {g.name}
                     </span>
                   </div>
-                  <span style={{ fontFamily: FM, fontSize: 11, color, fontWeight: 600, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+                  <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color, fontWeight: 600, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
                     {Math.min(pct, 100).toFixed(0)}%
                   </span>
                 </div>
                 <ProgressBar pct={pct} color={color} />
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, fontVariantNumeric: "tabular-nums" }}>
+                  <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, fontVariantNumeric: "tabular-nums" }}>
                     {mask(fmtUSD(current))} <span style={{ opacity: 0.6 }}>/ {mask(fmtUSD(g.target_amount))}</span>
                   </span>
                   {slope > 0 && (
-                    <span style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>{proj}</span>
+                    <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted }}>{proj}</span>
                   )}
                 </div>
               </div>
             );
           })}
           {goals.length > 3 && (
-            <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, textAlign: "center" }}>
+            <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, textAlign: "center" }}>
               +{goals.length - 3} more goal{goals.length - 3 !== 1 ? "s" : ""}
             </div>
           )}
@@ -1037,15 +1037,15 @@ export function GoalsOverviewWidget({
         >
           <div style={{ display: "flex", alignItems: "center", gap: T.s2, minWidth: 0 }}>
             <Icon name="scale" size={15} color={T.loss} style={{ flexShrink: 0 }}/>
-            <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.14em", fontWeight: 600 }}>
+            <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.14em", fontWeight: 600 }}>
               DEBT · {debtTotals.count}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: T.s2, flexShrink: 0 }}>
-            <span style={{ fontFamily: FM, fontSize: 12, fontWeight: 600, color: T.loss, fontVariantNumeric: "tabular-nums" }}>
+            <span style={{ fontFamily: FM, fontSize:"var(--fs-sm)", fontWeight: 600, color: T.loss, fontVariantNumeric: "tabular-nums" }}>
               {mask(fmtUSD(debtTotals.remaining))} <span style={{ color: T.muted, fontWeight: 400 }}>left</span>
             </span>
-            <span style={{ fontFamily: FM, fontSize: 10, color: T.gain, fontWeight: 600 }}>
+            <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.gain, fontWeight: 600 }}>
               {Math.min(debtTotals.pct, 100).toFixed(0)}% cleared
             </span>
           </div>
@@ -1365,14 +1365,14 @@ function LogPaymentRow({ label = "Log payment", defaultAmount = "", onLog, onCan
         placeholder="Amount paid"
         autoFocus
         onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") onCancel(); }}
-        style={{ ...inputStyle, fontSize: 12, padding: "5px 9px", width: 120 }}
+        style={{ ...inputStyle, fontSize:"var(--fs-sm)", padding: "5px 9px", width: 120 }}
       />
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="Note (optional)"
         onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") onCancel(); }}
-        style={{ ...inputStyle, fontSize: 12, padding: "5px 9px", flex: 1, minWidth: 120 }}
+        style={{ ...inputStyle, fontSize:"var(--fs-sm)", padding: "5px 9px", flex: 1, minWidth: 120 }}
       />
       <button onClick={submit} style={{ ...smallBtnStyle, color: T.gain, borderColor: T.gain + "40" }}>{label}</button>
       <button onClick={onCancel} style={smallBtnStyle}>Cancel</button>
@@ -1418,10 +1418,10 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
         <div style={{ display: "flex", alignItems: "center", gap: T.s3, minWidth: 0 }}>
           <Icon name={iconForDebt(debt)} size={20} color={done ? T.gain : T.loss} style={{ flexShrink: 0 }}/>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-            <div style={{ fontFamily: FU, fontSize: 17, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
+            <div style={{ fontFamily: FU, fontSize:"var(--fs-xl)", fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
               {debt.name}
             </div>
-            <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.04em" }}>
+            <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, letterSpacing: "0.04em" }}>
               {debt.creditor ? <>{debt.creditor} · </> : null}{trackLine}
               {Number(debt.apr) > 0
                 ? <span style={{ color: T.loss }}> · {debt.apr}% APR</span>
@@ -1438,16 +1438,16 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
       {/* Remaining balance — the number that counts down. */}
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: T.s3, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: 2 }}>REMAINING</div>
-          <div style={{ fontFamily: FU, fontSize: 26, fontWeight: 700, color: done ? T.gain : T.loss, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: 2 }}>REMAINING</div>
+          <div style={{ fontFamily: FU, fontSize:"var(--fs-4xl)", fontWeight: 700, color: done ? T.gain : T.loss, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>
             {mask(fmtUSD(remaining))}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontFamily: FM, fontSize: 11, color: T.gain, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.gain, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
             {mask(fmtUSD(paid))} paid
           </div>
-          <div style={{ fontFamily: FM, fontSize: 11, color: color, fontWeight: 600 }}>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: color, fontWeight: 600 }}>
             {Math.min(pct, 100).toFixed(1)}% cleared
           </div>
         </div>
@@ -1456,17 +1456,17 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
       <ProgressBar pct={pct} color={color} />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: T.s3, flexWrap: "wrap" }}>
-        <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, fontVariantNumeric: "tabular-nums" }}>
           of {mask(fmtUSD(original))} original
         </span>
-        <span style={{ fontFamily: FM, fontSize: 11, color: done ? T.gain : T.muted, letterSpacing: "0.04em" }}>
+        <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: done ? T.gain : T.muted, letterSpacing: "0.04em" }}>
           {payoff}
         </span>
       </div>
 
       {linkedMissing && (
         <div style={{
-          fontFamily: FP, fontSize: 11, color: T.gold, lineHeight: 1.5,
+          fontFamily: FP, fontSize:"var(--fs-xs)", color: T.gold, lineHeight: 1.5,
           padding: `${T.s2} ${T.s3}`, background: `${T.gold}10`,
           border: `1px solid ${T.gold}30`, borderRadius: T.rSm,
           display: "flex", alignItems: "flex-start", gap: 6,
@@ -1479,7 +1479,7 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
       {/* Detected recurring payment → offer to link it (auto-syncs paydown). */}
       {suggestion && !linkedStream && onLinkStream && (
         <div style={{
-          fontFamily: FP, fontSize: 11, color: T.gain, lineHeight: 1.5,
+          fontFamily: FP, fontSize:"var(--fs-xs)", color: T.gain, lineHeight: 1.5,
           padding: `${T.s2} ${T.s3}`, background: `${T.gain}10`,
           border: `1px solid ${T.gain}30`, borderRadius: T.rSm,
           display: "flex", alignItems: "center", gap: T.s2, flexWrap: "wrap",
@@ -1496,7 +1496,7 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
       {/* Linked: paydown auto-syncs from the bank feed. */}
       {linkedStream && (
         <div style={{
-          fontFamily: FP, fontSize: 11, color: T.muted, lineHeight: 1.5,
+          fontFamily: FP, fontSize:"var(--fs-xs)", color: T.muted, lineHeight: 1.5,
           padding: `${T.s2} ${T.s3}`, background: `${T.gain}0c`,
           border: `1px solid ${T.gain}25`, borderRadius: T.rSm,
           display: "flex", alignItems: "center", gap: T.s2, flexWrap: "wrap",
@@ -1512,9 +1512,9 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
       {/* Actions vary by mode. */}
       <div style={{ paddingTop: T.s2, borderTop: `1px solid ${T.border}` }}>
         {done ? (
-          <span style={{ fontFamily: FM, fontSize: 11, color: T.gain, fontWeight: 600 }}>✓ Fully paid off</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.gain, fontWeight: 600 }}>✓ Fully paid off</span>
         ) : mode === "balance" ? (
-          <span style={{ fontFamily: FP, fontSize: 11, color: T.muted }}>
+          <span style={{ fontFamily: FP, fontSize:"var(--fs-xs)", color: T.muted }}>
             Tracks your linked balance automatically as payments post.
           </span>
         ) : logging ? (
@@ -1526,7 +1526,7 @@ function DebtCard({ debt, accounts, labelFor, suggestion, linkedStream, onLinkSt
         ) : mode === "recurring" ? (
           <div style={{ display: "flex", gap: T.s2, alignItems: "center", flexWrap: "wrap" }}>
             {debt.autopay ? (
-              <span style={{ fontFamily: FP, fontSize: 11, color: T.muted }}>
+              <span style={{ fontFamily: FP, fontSize:"var(--fs-xs)", color: T.muted }}>
                 Auto-counting {mask(fmtUSD(amt))}/{CADENCE_LABEL[debt.cadence] || "month"}{fundLabel ? ` from ${fundLabel}` : ""}.
               </span>
             ) : (
@@ -1553,7 +1553,7 @@ function AccountRadioList({ accounts, selectedId, onPick, emptyHint }) {
   const { mask } = useHideValues();
   if (accounts.length === 0) {
     return (
-      <div style={{ fontFamily: FP, fontSize: 12, color: T.muted, padding: T.s3, textAlign: "center", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
+      <div style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.muted, padding: T.s3, textAlign: "center", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
         {emptyHint}
       </div>
     );
@@ -1567,8 +1567,8 @@ function AccountRadioList({ accounts, selectedId, onPick, emptyHint }) {
           border: `1px solid ${selectedId === a.id ? T.blue + "60" : T.border}`,
         }}>
           <input type="radio" checked={selectedId === a.id} onChange={() => onPick(a.id)} style={{ cursor: "pointer" }}/>
-          <span style={{ fontFamily: FP, fontSize: 12, color: T.text, flex: 1 }}>{a.label}</span>
-          <span style={{ fontFamily: FM, fontSize: 11, color: a.isDebt ? T.loss : T.muted }}>{mask(fmtUSD(a.balance))}</span>
+          <span style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.text, flex: 1 }}>{a.label}</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: a.isDebt ? T.loss : T.muted }}>{mask(fmtUSD(a.balance))}</span>
         </label>
       ))}
     </div>
@@ -1654,7 +1654,7 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
       padding: T.s5,
       display: "flex", flexDirection: "column", gap: T.s4,
     }}>
-      <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
+      <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, letterSpacing: "0.18em", fontWeight: 600 }}>
         {initial?.id ? "EDIT DEBT" : "NEW DEBT"}
       </div>
 
@@ -1666,7 +1666,7 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
               onClick={() => pickTemplate(t)}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
-                fontFamily: FM, fontSize: 11, color: icon === t.icon ? T.blue : T.text,
+                fontFamily: FM, fontSize:"var(--fs-xs)", color: icon === t.icon ? T.blue : T.text,
                 background: icon === t.icon ? `${T.blue}14` : T.surface,
                 border: `1px solid ${icon === t.icon ? T.blue + "60" : T.border}`,
                 borderRadius: 999, padding: "6px 12px", cursor: "pointer",
@@ -1680,30 +1680,30 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
 
       <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>NAME</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>NAME</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Auto financing" style={inputStyle}/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>OWED TO · OPT</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>OWED TO · OPT</span>
           <input value={creditor} onChange={(e) => setCreditor(e.target.value)} placeholder="Bank or person" style={inputStyle}/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>ORIGINAL ($)</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>ORIGINAL ($)</span>
           <input value={original} onChange={(e) => setOriginal(e.target.value)} inputMode="decimal" placeholder="6000" style={inputStyle}/>
         </label>
       </div>
 
       <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr 1fr", gap: T.s3 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>APR (%) · OPT</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>APR (%) · OPT</span>
           <input value={apr} onChange={(e) => setApr(e.target.value)} inputMode="decimal" placeholder="0 (interest-free)" style={inputStyle}/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>PAYOFF BY · OPT</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>PAYOFF BY · OPT</span>
           <input type="date" value={targetDate || ""} onChange={(e) => setTargetDate(e.target.value)} style={inputStyle}/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>TRACK MODE</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>TRACK MODE</span>
           <select value={mode} onChange={(e) => setMode(e.target.value)} style={inputStyle}>
             <option value="manual">Manual payments</option>
             <option value="recurring">Recurring plan</option>
@@ -1712,13 +1712,13 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
         </label>
       </div>
 
-      <div style={{ fontFamily: FP, fontSize: 11, color: T.muted, lineHeight: 1.5, marginTop: -6 }}>
+      <div style={{ fontFamily: FP, fontSize:"var(--fs-xs)", color: T.muted, lineHeight: 1.5, marginTop: -6 }}>
         {modeHelp} Leave APR blank for interest-free loans (qard hasan); set it only for an interest-bearing balance like an overdue card.
       </div>
 
       {mode === "balance" && (
         <div style={{ display: "flex", flexDirection: "column", gap: T.s2 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>CREDIT / LOAN ACCOUNT</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>CREDIT / LOAN ACCOUNT</span>
           <AccountRadioList
             accounts={liabilityAccounts}
             selectedId={linkedId}
@@ -1732,11 +1732,11 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
         <>
           <div className="mz-form-row" style={{ display: "grid", minWidth: 0, gridTemplateColumns: "1fr 1fr auto", gap: T.s3, alignItems: "end" }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>PAYMENT ($)</span>
+              <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>PAYMENT ($)</span>
               <input value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} inputMode="decimal" placeholder="500" style={inputStyle}/>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>EVERY</span>
+              <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>EVERY</span>
               <select value={cadence} onChange={(e) => setCadence(e.target.value)} style={inputStyle}>
                 <option value="weekly">Week</option>
                 <option value="biweekly">2 weeks</option>
@@ -1745,11 +1745,11 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 8, cursor: "pointer" }}>
               <input type="checkbox" checked={autopay} onChange={(e) => setAutopay(e.target.checked)} style={{ cursor: "pointer" }}/>
-              <span style={{ fontFamily: FP, fontSize: 12, color: T.text }}>Autopay</span>
+              <span style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.text }}>Autopay</span>
             </label>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: T.s2 }}>
-            <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>FUNDING ACCOUNT · OPT (WHERE PAYMENTS COME FROM)</span>
+            <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>FUNDING ACCOUNT · OPT (WHERE PAYMENTS COME FROM)</span>
             <AccountRadioList
               accounts={fundingAccounts}
               selectedId={fundingId}
@@ -1761,7 +1761,7 @@ function DebtForm({ initial, liabilityAccounts, fundingAccounts, onSave, onCance
       )}
 
       {err && (
-        <div style={{ fontFamily: FP, fontSize: 12, color: T.loss, padding: T.s2, background: `${T.loss}15`, border: `1px solid ${T.loss}40`, borderRadius: T.rSm }}>{err}</div>
+        <div style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.loss, padding: T.s2, background: `${T.loss}15`, border: `1px solid ${T.loss}40`, borderRadius: T.rSm }}>{err}</div>
       )}
 
       <div style={{ display: "flex", gap: T.s2, justifyContent: "flex-end" }}>
@@ -1844,19 +1844,19 @@ function PayoffPlanner({ planDebts }) {
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: T.s3 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span style={{ fontFamily: FM, fontSize: 11, color: T.blue, letterSpacing: "0.18em", fontWeight: 600 }}>PAYOFF PLANNER</span>
-          <span style={{ fontFamily: FP, fontSize: 12, color: T.muted }}>How fast can you be debt-free? Choose an order and add anything extra.</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.blue, letterSpacing: "0.18em", fontWeight: 600 }}>PAYOFF PLANNER</span>
+          <span style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.muted }}>How fast can you be debt-free? Choose an order and add anything extra.</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: T.s2 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.1em" }}>EXTRA / MO</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>EXTRA / MO</span>
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "2px 8px" }}>
-            <span style={{ fontFamily: FM, fontSize: 12, color: T.muted }}>$</span>
+            <span style={{ fontFamily: FM, fontSize:"var(--fs-sm)", color: T.muted }}>$</span>
             <input
               value={extra}
               onChange={(e) => setExtra(e.target.value)}
               inputMode="decimal"
               placeholder="0"
-              style={{ fontFamily: FM, fontSize: 13, color: T.textHi, background: "transparent", border: "none", outline: "none", width: 72 }}
+              style={{ fontFamily: FM, fontSize:"var(--fs-md)", color: T.textHi, background: "transparent", border: "none", outline: "none", width: 72 }}
             />
           </div>
         </div>
@@ -1872,7 +1872,7 @@ function PayoffPlanner({ planDebts }) {
             style={{
               display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2,
               flex: "1 1 150px", textAlign: "left",
-              fontFamily: FM, fontSize: 12, fontWeight: 600,
+              fontFamily: FM, fontSize:"var(--fs-sm)", fontWeight: 600,
               color: strategy === s.id ? T.blue : T.text,
               background: strategy === s.id ? `${T.blue}12` : T.surface,
               border: `1px solid ${strategy === s.id ? T.blue + "60" : T.border}`,
@@ -1880,7 +1880,7 @@ function PayoffPlanner({ planDebts }) {
             }}
           >
             {s.label}
-            <span style={{ fontFamily: FP, fontSize: 10, fontWeight: 400, color: T.muted, lineHeight: 1.35 }}>{s.hint}</span>
+            <span style={{ fontFamily: FP, fontSize:"var(--fs-2xs)", fontWeight: 400, color: T.muted, lineHeight: 1.35 }}>{s.hint}</span>
           </button>
         ))}
       </div>
@@ -1888,23 +1888,23 @@ function PayoffPlanner({ planDebts }) {
       {/* Headline stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: T.s3 }}>
         <div>
-          <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>DEBT-FREE IN</div>
-          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>{plan.feasible ? durLabel : "—"}</div>
-          {freeDate && <div style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>~{freeDate}</div>}
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>DEBT-FREE IN</div>
+          <div style={{ fontFamily: FU, fontSize:"var(--fs-3xl)", fontWeight: 700, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>{plan.feasible ? durLabel : "—"}</div>
+          {freeDate && <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted }}>~{freeDate}</div>}
         </div>
         <div>
-          <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>INTEREST PAID</div>
-          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: plan.totalInterest > 0 ? T.loss : T.gain, fontVariantNumeric: "tabular-nums" }}>{mask(fmtUSD(plan.totalInterest))}</div>
-          <div style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>{plan.totalInterest > 0 ? "riba over the plan" : "no interest — qard hasan"}</div>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>INTEREST PAID</div>
+          <div style={{ fontFamily: FU, fontSize:"var(--fs-3xl)", fontWeight: 700, color: plan.totalInterest > 0 ? T.loss : T.gain, fontVariantNumeric: "tabular-nums" }}>{mask(fmtUSD(plan.totalInterest))}</div>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted }}>{plan.totalInterest > 0 ? "riba over the plan" : "no interest — qard hasan"}</div>
         </div>
         <div>
-          <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>STARTING TOTAL</div>
-          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 700, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>{mask(fmtUSD(plan.startTotal))}</div>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>STARTING TOTAL</div>
+          <div style={{ fontFamily: FU, fontSize:"var(--fs-3xl)", fontWeight: 700, color: T.textHi, fontVariantNumeric: "tabular-nums" }}>{mask(fmtUSD(plan.startTotal))}</div>
         </div>
       </div>
 
       {!plan.feasible && (
-        <div style={{ fontFamily: FP, fontSize: 12, color: T.gold, padding: `${T.s2} ${T.s3}`, background: `${T.gold}10`, border: `1px solid ${T.gold}30`, borderRadius: T.rSm }}>
+        <div style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.gold, padding: `${T.s2} ${T.s3}`, background: `${T.gold}10`, border: `1px solid ${T.gold}30`, borderRadius: T.rSm }}>
           At these payments the balance never clears (interest outpaces payments). Add an extra monthly amount to see a debt-free date.
         </div>
       )}
@@ -1914,22 +1914,22 @@ function PayoffPlanner({ planDebts }) {
       {/* Payoff order */}
       {plan.order.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.12em", fontWeight: 600 }}>PAYOFF ORDER</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.12em", fontWeight: 600 }}>PAYOFF ORDER</span>
           {plan.order.map((o, i) => {
             const eta = fmtDate(new Date(Date.now() + o.month * 30.44 * 86_400_000).toISOString().slice(0, 10));
             return (
               <div key={o.id} style={{ display: "flex", alignItems: "center", gap: T.s2 }}>
-                <span style={{ fontFamily: FM, fontSize: 11, color: T.blue, fontWeight: 600, width: 18 }}>{i + 1}.</span>
+                <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.blue, fontWeight: 600, width: 18 }}>{i + 1}.</span>
                 <Icon name={o.icon || "scale"} size={14} color={o.interestFree ? T.gain : T.loss} style={{ flexShrink: 0 }} />
-                <span style={{ fontFamily: FP, fontSize: 13, color: T.textHi, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
-                <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, fontVariantNumeric: "tabular-nums" }}>~{eta}</span>
+                <span style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: T.textHi, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
+                <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, fontVariantNumeric: "tabular-nums" }}>~{eta}</span>
               </div>
             );
           })}
         </div>
       )}
 
-      <div style={{ fontFamily: FP, fontSize: 10, color: T.muted, lineHeight: 1.5 }}>
+      <div style={{ fontFamily: FP, fontSize:"var(--fs-2xs)", color: T.muted, lineHeight: 1.5 }}>
         Estimate only. Assumes each debt's minimum (its recurring amount, your set minimum, or a card-style estimate) plus your extra, with freed-up payments rolling to the next debt. Not financial advice.
       </div>
     </div>
@@ -2107,13 +2107,13 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
         transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
       }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontFamily: FM, fontSize: 11, color: T.loss, letterSpacing: "0.18em", fontWeight: 600 }}>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.loss, letterSpacing: "0.18em", fontWeight: 600 }}>
             DEBTS · {debts.length} TRACKED
           </span>
-          <span style={{ fontFamily: FU, fontSize: 22, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
+          <span style={{ fontFamily: FU, fontSize:"var(--fs-3xl)", fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>
             {debts.length > 0 ? <>{mask(fmtUSD(totals.remaining))} left to clear</> : <>Pay off what you owe</>}
           </span>
-          <span style={{ fontFamily: FP, fontSize: 13, color: T.muted, letterSpacing: "-0.005em" }}>
+          <span style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: T.muted, letterSpacing: "-0.005em" }}>
             {debts.length > 0
               ? <>{mask(fmtUSD(totals.paid))} cleared · {Math.min(totals.pct, 100).toFixed(0)}% of {mask(fmtUSD(totals.original))} original</>
               : <>Track any debt — a card, a bank loan, or money owed to a friend. Log payments, link a balance, or pay on a schedule from checking.</>}
@@ -2134,7 +2134,7 @@ function DebtSection({ plaidAccounts = [], demoMode = false }) {
 
       {!creating && debts.length === 0 && (
         <div style={{
-          fontFamily: FP, fontSize: 14, color: T.muted,
+          fontFamily: FP, fontSize:"var(--fs-lg)", color: T.muted,
           padding: T.s8, textAlign: "center",
           border: `1px dashed ${T.border}`, borderRadius: T.rLg,
           display: "flex", flexDirection: "column", alignItems: "center", gap: T.s3,

@@ -34,7 +34,7 @@ const styles = {
     boxShadow: '0 24px 80px rgba(28,27,25,0.10)',
   },
   wordmark: {
-    fontSize: 13,
+    fontSize:"var(--fs-md)",
     letterSpacing: '0.34em',
     fontWeight: 700,
     color: '#1e4e8c',
@@ -59,7 +59,7 @@ const styles = {
     border: 'none',
     borderRadius: 9,
     color: '#87827a',
-    fontSize: 13,
+    fontSize:"var(--fs-md)",
     fontWeight: 500,
     letterSpacing: '-0.005em',
     cursor: 'pointer',
@@ -72,16 +72,16 @@ const styles = {
     boxShadow: '0 1px 3px rgba(28,27,25,0.12)',
   },
   heading: {
-    fontSize: 26,
+    fontSize:"var(--fs-4xl)",
     fontWeight: 700,
     letterSpacing: '-0.02em',
     margin: '0 0 8px 0',
     color: '#1c1b19',
   },
-  sub: { fontSize: 14, color: '#87827a', margin: '0 0 24px 0', lineHeight: 1.55 },
+  sub: { fontSize:"var(--fs-lg)", color: '#87827a', margin: '0 0 24px 0', lineHeight: 1.55 },
   label: {
     display: 'block',
-    fontSize: 11,
+    fontSize:"var(--fs-xs)",
     fontWeight: 500,
     color: '#87827a',
     marginBottom: 7,
@@ -97,10 +97,10 @@ const styles = {
     borderRadius: 10,
     color: '#1c1b19',
     // 16px, not 15 — iOS Safari zooms the whole page when a focused input is
-    // under 16px. MizanApp's THEME_CSS has an `input{font-size:16px!important}`
+    // under 16px. MizanApp's THEME_CSS has an `input{font-size:var(--fs-xl)!important}`
     // rule for exactly this, but Login renders INSTEAD of MizanApp (App.jsx),
     // so that rule never loads here. Every sign-in field focus zoomed the page.
-    fontSize: 16,
+    fontSize:"var(--fs-xl)",
     outline: 'none',
     boxSizing: 'border-box',
     marginBottom: 14,
@@ -119,7 +119,7 @@ const styles = {
     border: 'none',
     borderRadius: 10,
     color: '#faf8f4',
-    fontSize: 14,
+    fontSize:"var(--fs-lg)",
     fontWeight: 600,
     letterSpacing: '-0.005em',
     cursor: 'pointer',
@@ -129,7 +129,7 @@ const styles = {
   },
   buttonDisabled: { opacity: 0.55, cursor: 'not-allowed', boxShadow: 'none' },
   notice: {
-    fontSize: 13,
+    fontSize:"var(--fs-md)",
     color: '#1c1b19',
     background: 'rgba(30,78,140,0.07)',
     border: '1px solid rgba(30,78,140,0.20)',
@@ -137,20 +137,20 @@ const styles = {
     borderRadius: 10,
     lineHeight: 1.55,
   },
-  error: { fontSize: 12, color: '#b23a3d', marginTop: 8, marginBottom: 4 },
+  error: { fontSize:"var(--fs-sm)", color: '#b23a3d', marginTop: 8, marginBottom: 4 },
   linkBtn: {
     background: 'none',
     border: 'none',
     color: '#1e4e8c',
     cursor: 'pointer',
-    fontSize: 12,
+    fontSize:"var(--fs-sm)",
     minHeight: 44,
     padding: '0 4px',
     textDecoration: 'underline',
     fontFamily: 'inherit',
   },
   footer: {
-    fontSize: 11,
+    fontSize:"var(--fs-xs)",
     color: '#87827a',
     textAlign: 'center',
     marginTop: 18,
@@ -427,7 +427,7 @@ export default function Login() {
                   placeholder="123456"
                   value={mfaCode}
                   onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
-                  style={{ ...styles.input, letterSpacing: '0.3em', fontSize: 18, textAlign: 'center' }}
+                  style={{ ...styles.input, letterSpacing: '0.3em', fontSize:"var(--fs-2xl)", textAlign: 'center' }}
                 />
               </>
             )}
@@ -487,7 +487,7 @@ export default function Login() {
             {mode === 'signup' && (
               <div style={{
                 marginTop: 14,
-                fontSize: 11,
+                fontSize:"var(--fs-xs)",
                 lineHeight: 1.55,
                 color: '#87827a',
                 fontFamily: SF,
@@ -549,7 +549,7 @@ export default function Login() {
           flexWrap: 'wrap',
           gap: '10px 14px',
           justifyContent: 'center',
-          fontSize: 11,
+          fontSize:"var(--fs-xs)",
           color: '#87827a',
           fontFamily: SF,
         }}>

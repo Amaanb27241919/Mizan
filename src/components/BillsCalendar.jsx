@@ -241,7 +241,7 @@ export default function BillsCalendar({ recurring, txns, accounts, demoMode }) {
       }}
     >
       <div style={{
-        fontFamily: FM, fontSize: 10, color: COL.gold,
+        fontFamily: FM, fontSize:"var(--fs-2xs)", color: COL.gold,
         letterSpacing: "0.16em", fontWeight: 600, marginBottom: COL.s3,
       }}>
         UPCOMING BILLS · {countForHeader} recurring detected · ~{fmtUSD(estMonthlyTotal)}/month estimated
@@ -249,7 +249,7 @@ export default function BillsCalendar({ recurring, txns, accounts, demoMode }) {
       </div>
 
       {bills.length === 0 ? (
-        <div style={{ fontFamily: FM, fontSize: 12, color: COL.muted, padding: `${COL.s3} 0` }}>
+        <div style={{ fontFamily: FM, fontSize:"var(--fs-sm)", color: COL.muted, padding: `${COL.s3} 0` }}>
           No bill dates yet — need at least two charges from the same merchant to project a next-due date.
         </div>
       ) : (
@@ -272,17 +272,17 @@ export default function BillsCalendar({ recurring, txns, accounts, demoMode }) {
                 }}
               >
                 <span style={{
-                  fontFamily: FU, fontSize: 13, fontWeight: 600, color: COL.textHi,
+                  fontFamily: FU, fontSize:"var(--fs-md)", fontWeight: 600, color: COL.textHi,
                   letterSpacing: "-0.005em",
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                 }}>
                   {b.merchant}
                 </span>
-                <span style={{ fontFamily: FM, fontSize: 11, color: COL.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: COL.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   {b.cadence}
                 </span>
                 <span style={{
-                  fontFamily: FM, fontSize: 11,
+                  fontFamily: FM, fontSize:"var(--fs-xs)",
                   color: accent || COL.text,
                   fontVariantNumeric: "tabular-nums",
                 }}>
@@ -294,14 +294,14 @@ export default function BillsCalendar({ recurring, txns, accounts, demoMode }) {
                   )}
                 </span>
                 <span style={{
-                  fontFamily: FU, fontSize: 13, fontWeight: 600,
+                  fontFamily: FU, fontSize:"var(--fs-md)", fontWeight: 600,
                   color: COL.textHi, textAlign: "right",
                   fontVariantNumeric: "tabular-nums",
                 }}>
                   {fmtUSD(b.estAmount)}
                 </span>
                 <span style={{
-                  fontFamily: FM, fontSize: 11, color: COL.muted, textAlign: "right",
+                  fontFamily: FM, fontSize:"var(--fs-xs)", color: COL.muted, textAlign: "right",
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                 }}>
                   {b.account || "—"}

@@ -142,10 +142,19 @@ test.describe("responsive — portrait phones", () => {
   // Two flex boxes can report non-overlapping rects while their CHILDREN paint
   // on top of each other — which is exactly how the bell ended up over the
   // HALAL badge. So this compares leaf nodes, not containers.
-  test("header chrome never overlaps itself or leaves the viewport", async ({ page }) => {
-    for (const { w, h } of PORTRAIT) {
+  // Runs in BOTH states. The empty state is not representative: the broker
+  // force-refresh button only exists once accounts are connected, so it never
+  // rendered in this guard and pushed the header 17px past a 320px viewport
+  // the moment real data arrived. Same class of gap as the fixture bugs — a
+  // test that only ever sees one state proves one state.
+  for (const connected of [false, true]) {
+  test(`header chrome never overlaps itself or leaves the viewport (${connected ? "with accounts" : "empty"})`, async ({ page }) => {
+    // Widths deliberately extend past phones: sweeping found the clock strip
+    // appeared at ~601px and overflowed until ~1010px, which is iPad portrait.
+    const WIDTHS = [...PORTRAIT, { w: 600, h: 900 }, { w: 768, h: 1024 }, { w: 834, h: 1112 }];
+    for (const { w, h } of WIDTHS) {
       await page.setViewportSize({ width: w, height: h });
-      await signedIn(page);
+      await signedIn(page, connected ? { storage: { mizan_demo: "1" } } : {});
       await page.goto("/");
       await appReady(page);
       await page.waitForTimeout(400);
@@ -174,6 +183,7 @@ test.describe("responsive — portrait phones", () => {
       expect(res.maxRight, `header content runs past the ${w}px viewport`).toBeLessThanOrEqual(w + 1);
     }
   });
+  }
 
   // Login renders INSTEAD of MizanApp, so none of THEME_CSS loads there. Its
   // touch targets and layout have to be verified separately or not at all.
@@ -195,6 +205,65 @@ test.describe("responsive — portrait phones", () => {
       expect(r.over, `login overflows at ${w}px`).toBeLessThanOrEqual(1);
       expect(r.small, `login controls under 44px at ${w}px: ${r.small.join(", ")}`).toEqual([]);
     }
+  });
+});
+
+test.describe("readability floor", () => {
+  // The point of the fluid type scale. Mizan previously rendered 39% of its
+  // type at 9-10px — under the ~11px Apple and Google both treat as the
+  // practical minimum for secondary text — which is why it read as dense at
+  // every screen size rather than only small ones.
+  //
+  // Checked at the NARROWEST supported width, where clamp() sits at its floor.
+  const FLOOR_PX = 10.9;   // 11px token, minus sub-pixel rounding slack
+
+  for (const tab of ["overview", "finances", "portfolio", "goals", "settings"]) {
+    test(`no text renders below the legibility floor — ${tab}`, async ({ page }) => {
+      await page.setViewportSize({ width: 320, height: 720 });
+      await signedIn(page, { storage: { mizan_demo: "1" } });
+      await page.goto("/");
+      await appReady(page);
+      const btn = page.locator(`[data-tour="nav-${tab}"]`);
+      if (await btn.count()) { await btn.click({ force: true }); await page.waitForTimeout(500); }
+
+      const tooSmall = await page.evaluate((floor) => {
+        const bad = [];
+        for (const el of document.querySelectorAll("main *, .mz-status *, .mz-dock *")) {
+          const text = el.textContent?.trim();
+          if (!text || el.children.length) continue;          // leaf text only
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) continue;      // not rendered
+          const fs = parseFloat(getComputedStyle(el).fontSize);
+          if (fs > 0 && fs < floor) bad.push(`"${text.slice(0, 22)}" ${fs.toFixed(1)}px`);
+        }
+        return [...new Set(bad)].slice(0, 8);
+      }, FLOOR_PX);
+
+      expect(tooSmall, `text below ${FLOOR_PX}px on ${tab}:\n  ${tooSmall.join("\n  ")}`).toEqual([]);
+    });
+  }
+
+  test("type actually scales with the viewport, not just at breakpoints", async ({ page }) => {
+    await signedIn(page);
+    await page.goto("/");
+    await appReady(page);
+    const read = async (w) => {
+      await page.setViewportSize({ width: w, height: 900 });
+      await page.waitForTimeout(200);
+      return page.evaluate(() => {
+        const s = document.createElement("span");
+        s.style.fontSize = "var(--fs-2xs)";
+        document.body.appendChild(s);
+        const v = parseFloat(getComputedStyle(s).fontSize);
+        s.remove();
+        return v;
+      });
+    };
+    const small = await read(320), mid = await read(768), large = await read(1440);
+    expect(small).toBeGreaterThanOrEqual(10.9);        // floor honoured
+    expect(mid).toBeGreaterThan(small);                 // genuinely fluid
+    expect(large).toBeGreaterThan(mid);
+    expect(large).toBeLessThanOrEqual(12.1);            // capped, not runaway
   });
 });
 

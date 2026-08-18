@@ -23,15 +23,15 @@ function SentryFallback({ resetError }) {
         border: '1px solid #1F2530', borderRadius: 14, padding: '28px 32px',
         textAlign: 'center', color: '#E7E9EC',
       }}>
-        <div style={{ fontSize: 11, color: '#5C6478', letterSpacing: '0.18em', fontWeight: 600, marginBottom: 12 }}>MIZAN — SOMETHING WENT WRONG</div>
-        <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>The page hit an unexpected error.</div>
-        <div style={{ fontSize: 13, color: '#7C8597', lineHeight: 1.6, marginBottom: 20 }}>
+        <div style={{ fontSize:"var(--fs-xs)", color: '#5C6478', letterSpacing: '0.18em', fontWeight: 600, marginBottom: 12 }}>MIZAN — SOMETHING WENT WRONG</div>
+        <div style={{ fontSize:"var(--fs-xl)", fontWeight: 500, marginBottom: 8 }}>The page hit an unexpected error.</div>
+        <div style={{ fontSize:"var(--fs-md)", color: '#7C8597', lineHeight: 1.6, marginBottom: 20 }}>
           The error has been reported automatically. You can try again — most issues clear with a refresh.
         </div>
         <button onClick={() => { try { resetError() } catch {} window.location.reload() }} style={{
           padding: '10px 22px', borderRadius: 8, border: 'none',
           background: '#1E90FF', color: '#fff', cursor: 'pointer',
-          fontFamily: 'inherit', fontSize: 13, fontWeight: 600, letterSpacing: '0.04em',
+          fontFamily: 'inherit', fontSize:"var(--fs-md)", fontWeight: 600, letterSpacing: '0.04em',
         }}>Refresh</button>
       </div>
     </div>
@@ -71,7 +71,7 @@ function Gate() {
       <div style={{
         minHeight: 'var(--mz-vh, 100vh)', background: '#0B0F1E',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#5C6478', fontFamily: 'monospace', fontSize: 11, letterSpacing: '0.16em',
+        color: '#5C6478', fontFamily: 'monospace', fontSize:"var(--fs-xs)", letterSpacing: '0.16em',
       }}>SYNCING…</div>
     )
   }

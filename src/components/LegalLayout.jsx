@@ -45,7 +45,7 @@ const styles = `
   background: #faf8f4;
   color: #1c1b19;
   font-family: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 15px;
+  font-size:var(--fs-lg);
   line-height: 1.7;
   display: flex;
   flex-direction: column;
@@ -60,7 +60,7 @@ const styles = `
 .mz-legal-brand {
   font-family: "SF Mono", Menlo, monospace;
   font-weight: 600;
-  font-size: 14px;
+  font-size:var(--fs-lg);
   letter-spacing: 0.12em;
   color: #1c1b19;
   text-decoration: none;
@@ -68,7 +68,7 @@ const styles = `
 .mz-legal-nav a {
   margin-left: 18px;
   color: #87827a;
-  font-size: 13px;
+  font-size:var(--fs-md);
   text-decoration: none;
 }
 .mz-legal-nav a:hover { color: #1c1b19; }
@@ -81,26 +81,26 @@ const styles = `
   box-sizing: border-box;
 }
 .mz-legal-main h1 {
-  font-size: 32px;
+  font-size:var(--fs-5xl);
   line-height: 1.25;
   margin: 0 0 6px;
   letter-spacing: -0.01em;
 }
 .mz-legal-updated {
   color: #87827a;
-  font-size: 12px;
+  font-size:var(--fs-sm);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   margin: 0 0 36px;
 }
 .mz-legal-main h2 {
-  font-size: 20px;
+  font-size:var(--fs-2xl);
   margin-top: 40px;
   margin-bottom: 12px;
   color: #1c1b19;
 }
 .mz-legal-main h3 {
-  font-size: 16px;
+  font-size:var(--fs-xl);
   margin-top: 24px;
   margin-bottom: 8px;
   color: #44413b;
@@ -112,7 +112,7 @@ const styles = `
 }
 .mz-legal-main p.mz-lead {
   color: #1c1b19;
-  font-size: 16px;
+  font-size:var(--fs-xl);
   margin-bottom: 28px;
 }
 .mz-legal-main a {
@@ -136,7 +136,7 @@ const styles = `
   padding: 1px 6px;
   border-radius: 4px;
   font-family: "SF Mono", Menlo, monospace;
-  font-size: 13px;
+  font-size:var(--fs-md);
   color: #44413b;
 }
 .mz-legal-footer {
@@ -147,7 +147,7 @@ const styles = `
   gap: 12px;
   padding: 20px 32px;
   border-top: 1px solid #e8e2d6;
-  font-size: 12px;
+  font-size:var(--fs-sm);
   color: #5C6478;
 }
 .mz-legal-footer-links {
@@ -165,7 +165,7 @@ const styles = `
 @media (max-width: 640px) {
   .mz-legal-header, .mz-legal-footer { padding: 16px 20px; }
   .mz-legal-main { padding: 36px 20px 60px; }
-  .mz-legal-main h1 { font-size: 26px; }
+  .mz-legal-main h1 { font-size:var(--fs-4xl); }
   .mz-legal-footer {
     flex-direction: column;
     gap: 6px;

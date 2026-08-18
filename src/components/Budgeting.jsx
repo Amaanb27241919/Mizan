@@ -212,14 +212,14 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
 
   // ── Render ───────────────────────────────────────────────
   if (loading) {
-    return <Tile><div style={{ fontFamily: FM, fontSize: 12, color: TT.muted }}>Loading your budget…</div></Tile>;
+    return <Tile><div style={{ fontFamily: FM, fontSize:"var(--fs-sm)", color: TT.muted }}>Loading your budget…</div></Tile>;
   }
 
   if (demoMode) {
     return (
       <Tile accent={TT.gold}>
-        <div style={{ fontFamily: FM, fontSize: 10, color: TT.gold, letterSpacing: "0.16em", fontWeight: 600, marginBottom: TT.s2 }}>BUDGET</div>
-        <div style={{ fontFamily: FP, fontSize: 13, color: TT.muted, lineHeight: 1.55 }}>
+        <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.gold, letterSpacing: "0.16em", fontWeight: 600, marginBottom: TT.s2 }}>BUDGET</div>
+        <div style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: TT.muted, lineHeight: 1.55 }}>
           Budgets are tied to your own accounts, so they're hidden in demo mode. Turn demo off to set one up.
         </div>
       </Tile>
@@ -236,7 +236,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
     <div style={{ display: "flex", flexDirection: "column", gap: TT.s4 }}>
       {err && (
         <div role="alert" style={{
-          fontFamily: FM, fontSize: 11, color: TT.loss, background: `${TT.loss}12`,
+          fontFamily: FM, fontSize:"var(--fs-xs)", color: TT.loss, background: `${TT.loss}12`,
           border: `1px solid ${TT.loss}40`, borderRadius: TT.rMd, padding: `${TT.s2} ${TT.s3}`,
         }}>{err}</div>
       )}
@@ -247,19 +247,19 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
           <div style={{ display: "flex", alignItems: "center", gap: TT.s2 }}>
             <button className="mz-tap" onClick={() => setMonth(prevMonth(month))} aria-label="Previous month"
               style={{ background: "transparent", border: `1px solid ${TT.border}`, borderRadius: TT.rSm, color: TT.text, cursor: "pointer", padding: `4px ${TT.s3}`, fontFamily: FM }}>‹</button>
-            <span style={{ fontFamily: FM, fontSize: 11, color: TT.textHi, letterSpacing: "0.08em", minWidth: 120, textAlign: "center" }}>
+            <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: TT.textHi, letterSpacing: "0.08em", minWidth: 120, textAlign: "center" }}>
               {monthLabel(month)}
             </span>
             <button className="mz-tap" onClick={() => setMonth(nextMonth(month))} aria-label="Next month"
               style={{ background: "transparent", border: `1px solid ${TT.border}`, borderRadius: TT.rSm, color: TT.text, cursor: "pointer", padding: `4px ${TT.s3}`, fontFamily: FM }}>›</button>
           </div>
-          <div style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.16em", fontWeight: 600 }}>TO BUDGET</div>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.16em", fontWeight: 600 }}>TO BUDGET</div>
         </div>
 
-        <div style={{ fontFamily: FU, fontSize: 34, fontWeight: 700, color: toBudgetColor, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>
+        <div style={{ fontFamily: FU, fontSize:"var(--fs-5xl)", fontWeight: 700, color: toBudgetColor, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>
           {fmtUSD(toBudget)}
         </div>
-        <div style={{ fontFamily: FM, fontSize: 11, color: TT.muted, marginTop: TT.s1, lineHeight: 1.5 }}>
+        <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: TT.muted, marginTop: TT.s1, lineHeight: 1.5 }}>
           {current.overAssigned
             ? "You've assigned more than you have. Take it back from a category."
             : current.isBalanced
@@ -272,7 +272,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
 
         {/* Manual income — the path for users with no linked bank. */}
         <div style={{ marginTop: TT.s4, display: "flex", alignItems: "center", gap: TT.s2, flexWrap: "wrap" }}>
-          <label htmlFor="mz-manual-income" style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.1em" }}>
+          <label htmlFor="mz-manual-income" style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.1em" }}>
             INCOME THIS MONTH
           </label>
           <input id="mz-manual-income" type="number" inputMode="decimal" min="0" step="0.01"
@@ -282,12 +282,12 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
             onBlur={e => saveIncome(e.target.value)}
             aria-label="Income this month" />
           {manualForMonth === null && bankLinked && (
-            <span style={{ fontFamily: FM, fontSize: 10, color: TT.muted }}>
+            <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted }}>
               using {fmtUSD(current.income)} from your linked accounts
             </span>
           )}
           {!bankLinked && manualForMonth === null && (
-            <span style={{ fontFamily: FM, fontSize: 10, color: TT.gold }}>
+            <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.gold }}>
               No bank linked — enter what you earned to start budgeting
             </span>
           )}
@@ -297,7 +297,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
       {/* ── Categories ── */}
       <Tile>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: TT.s3, marginBottom: TT.s3, flexWrap: "wrap" }}>
-          <div style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.16em", fontWeight: 600 }}>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.16em", fontWeight: 600 }}>
             CATEGORIES · {rows.length}
           </div>
           <button className="mz-tap btn-ghost" onClick={() => setAdding(a => !a)}>
@@ -316,14 +316,14 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
             </div>
             {presetsToOffer.length > 0 && (
               <>
-                <div style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.1em", marginBottom: TT.s2 }}>
+                <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.1em", marginBottom: TT.s2 }}>
                   SUGGESTED
                 </div>
                 <div className="mz-chip-row" style={{ display: "flex", gap: TT.s2, flexWrap: "wrap" }}>
                   {presetsToOffer.map(p => (
                     <button key={p.category} title={p.hint} onClick={() => addCategory(p.category, p.carryover)}
                       style={{
-                        fontFamily: FM, fontSize: 11, padding: `5px ${TT.s3}`, borderRadius: 999,
+                        fontFamily: FM, fontSize:"var(--fs-xs)", padding: `5px ${TT.s3}`, borderRadius: 999,
                         background: "transparent", border: `1px solid ${TT.border}`, color: TT.text, cursor: "pointer",
                       }}>+ {p.category}</button>
                   ))}
@@ -334,7 +334,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
         )}
 
         {rows.length === 0 ? (
-          <div style={{ fontFamily: FP, fontSize: 13, color: TT.muted, lineHeight: 1.55, padding: `${TT.s4} 0` }}>
+          <div style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: TT.muted, lineHeight: 1.55, padding: `${TT.s4} 0` }}>
             No categories yet. Add one above — or start with Sadaqah, Zakat and Halal Food.
           </div>
         ) : (
@@ -348,10 +348,10 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
                   border: `1px solid ${over ? `${TT.loss}40` : TT.border}`, borderRadius: TT.rMd,
                 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontFamily: FP, fontSize: 13, color: TT.textHi, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: TT.textHi, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.category}
                     </div>
-                    <div style={{ fontFamily: FM, fontSize: 10, color: TT.muted, marginTop: 2 }}>
+                    <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, marginTop: 2 }}>
                       spent {fmtUSD(Math.abs(r.spent))} ·{" "}
                       <span style={{ color: over ? TT.loss : TT.gain }}>
                         {over ? "over by " : "left "}{fmtUSD(Math.abs(r.leftover))}
@@ -373,7 +373,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
                       : "Overspending is taken from next month's To Budget"}
                     aria-pressed={r.carryover}
                     style={{
-                      fontFamily: FM, fontSize: 9, letterSpacing: "0.06em", padding: `4px ${TT.s2}`,
+                      fontFamily: FM, fontSize:"var(--fs-2xs)", letterSpacing: "0.06em", padding: `4px ${TT.s2}`,
                       borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
                       background: r.carryover ? `${TT.blue}18` : "transparent",
                       border: `1px solid ${r.carryover ? TT.blue : TT.border}`,

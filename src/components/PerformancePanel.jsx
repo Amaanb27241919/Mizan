@@ -43,9 +43,9 @@ function normSym(sym) {
 function Stat({ label, value, sub, color, big }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>{label}</div>
+      <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>{label}</div>
       <div style={{ fontFamily: FU, fontSize: big ? 26 : 18, fontWeight: 700, color: color || T.textHi, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      {sub && <div style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>{sub}</div>}
+      {sub && <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted }}>{sub}</div>}
     </div>
   );
 }
@@ -103,21 +103,21 @@ export default function PerformancePanel({
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span style={{ fontFamily: FM, fontSize: 11, color: T.blue, letterSpacing: "0.18em", fontWeight: 600 }}>RETURN &amp; RISK</span>
-          <span style={{ fontFamily: FP, fontSize: 12, color: T.muted }}>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.blue, letterSpacing: "0.18em", fontWeight: 600 }}>RETURN &amp; RISK</span>
+          <span style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.muted }}>
             {mwrPct != null
               ? <>Money-weighted return <span style={{ fontFamily: FM, color: fc(mwrPct), fontWeight: 600 }}>{fmtPct(mwrPct)}/yr</span></>
               : <>Return &amp; risk analytics</>}
           </span>
         </div>
-        <span style={{ fontFamily: FM, fontSize: 16, color: T.muted, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
+        <span style={{ fontFamily: FM, fontSize:"var(--fs-xl)", color: T.muted, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
       </button>
 
       {open && (
         <div style={{ display: "flex", flexDirection: "column", gap: T.s5, padding: `0 ${T.s5} ${T.s5}` }}>
           {/* Return lens */}
           <div>
-            <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.12em", fontWeight: 600, marginBottom: T.s3 }}>RETURN</div>
+            <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.12em", fontWeight: 600, marginBottom: T.s3 }}>RETURN</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: T.s4 }}>
               <Stat big label="MONEY-WEIGHTED (XIRR)"
                 value={mwrPct != null ? fmtPct(mwrPct) : "—"}
@@ -140,7 +140,7 @@ export default function PerformancePanel({
 
           {/* Position P&L lens */}
           <div>
-            <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.12em", fontWeight: 600, marginBottom: T.s3 }}>POSITION P&amp;L</div>
+            <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.12em", fontWeight: 600, marginBottom: T.s3 }}>POSITION P&amp;L</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: T.s4 }}>
               <Stat label="UNREALIZED"
                 value={mask(fmtUSD(perf.unrealized))}
@@ -158,7 +158,7 @@ export default function PerformancePanel({
 
           {/* Risk lens */}
           <div>
-            <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.12em", fontWeight: 600, marginBottom: T.s3 }}>RISK</div>
+            <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.12em", fontWeight: 600, marginBottom: T.s3 }}>RISK</div>
             {perf.risk.ready ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: T.s4 }}>
                 <Stat label="MAX DRAWDOWN"
@@ -173,13 +173,13 @@ export default function PerformancePanel({
                   color={perf.risk.sharpe != null ? fc(perf.risk.sharpe) : T.muted} />
               </div>
             ) : (
-              <div style={{ fontFamily: FP, fontSize: 12, color: T.muted, padding: `${T.s3} ${T.s4}`, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
+              <div style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: T.muted, padding: `${T.s3} ${T.s4}`, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd }}>
                 Accruing daily history — {perf.risk.points}/{perf.risk.needed} days. Drawdown, volatility, and Sharpe unlock once enough net-worth snapshots exist (they build while the app is open).
               </div>
             )}
           </div>
 
-          <div style={{ fontFamily: FP, fontSize: 10, color: T.muted, lineHeight: 1.5 }}>
+          <div style={{ fontFamily: FP, fontSize:"var(--fs-2xs)", color: T.muted, lineHeight: 1.5 }}>
             Estimates. Money-weighted return (XIRR) uses your logged contributions/withdrawals + current value. Average-capital return (Modified-Dietz) divides that same gain by the day-weighted capital you actually had invested. Position P&amp;L uses average cost (broker doesn't supply lots). Risk uses the daily net-worth curve, flow-adjusted so deposits don't read as gains; Sharpe assumes a 0% risk-free rate (riba-free). Not financial advice.
           </div>
         </div>

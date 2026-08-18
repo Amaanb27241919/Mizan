@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Fixed
 - **finances:** Cut the tab in half, and fix the crash the fixtures hid (`d58ac5a`)
 
+### Docs
+- Record the 2026-08-18 feedback round in the audit doc (`916a79a`)
+
 ## 2026-08-17
 
 ### Added

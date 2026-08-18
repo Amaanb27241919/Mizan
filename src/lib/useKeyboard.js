@@ -180,7 +180,7 @@ function ShortcutKey({ children }) {
         border: `1px solid ${TT.borderHi}`,
         borderRadius: 6,
         fontFamily: FM,
-        fontSize: 11,
+        fontSize:"var(--fs-xs)",
         color: TT.textHi,
         letterSpacing: "0.04em",
         minWidth: 22,
@@ -204,7 +204,7 @@ function renderKeys(spec) {
             key: `t-${i}`,
             style: {
               fontFamily: FM,
-              fontSize: 10,
+              fontSize:"var(--fs-2xs)",
               color: TT.muted,
               letterSpacing: "0.08em",
             },
@@ -249,7 +249,7 @@ export function ShortcutHelp({ shortcuts = {}, open, onClose }) {
   const headerCellStyle = {
     textAlign: "left",
     fontFamily: FM,
-    fontSize: 10,
+    fontSize:"var(--fs-2xs)",
     color: TT.muted,
     letterSpacing: "0.12em",
     fontWeight: 600,
@@ -300,7 +300,7 @@ export function ShortcutHelp({ shortcuts = {}, open, onClose }) {
                   style: {
                     padding: `${TT.s3} 0`,
                     borderBottom: `1px solid ${TT.border}`,
-                    fontSize: 13,
+                    fontSize:"var(--fs-md)",
                     color: TT.text,
                   },
                 },
@@ -315,7 +315,7 @@ export function ShortcutHelp({ shortcuts = {}, open, onClose }) {
         {
           style: {
             fontFamily: FU,
-            fontSize: 14,
+            fontSize:"var(--fs-lg)",
             color: TT.muted,
             margin: 0,
           },
@@ -362,7 +362,7 @@ export function ShortcutHelp({ shortcuts = {}, open, onClose }) {
         {
           style: {
             fontFamily: FM,
-            fontSize: 10,
+            fontSize:"var(--fs-2xs)",
             color: TT.muted,
             letterSpacing: "0.18em",
             fontWeight: 700,
@@ -380,7 +380,7 @@ export function ShortcutHelp({ shortcuts = {}, open, onClose }) {
             paddingTop: TT.s3,
             borderTop: `1px solid ${TT.border}`,
             fontFamily: FM,
-            fontSize: 11,
+            fontSize:"var(--fs-xs)",
             color: TT.muted,
             letterSpacing: "0.04em",
           },

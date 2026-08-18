@@ -246,7 +246,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
             aria-hidden
             style={{
               fontFamily: FM,
-              fontSize: 14,
+              fontSize:"var(--fs-lg)",
               color: TT.muted,
             }}
           >
@@ -267,14 +267,14 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
               border: "none",
               outline: "none",
               fontFamily: FU,
-              fontSize: 15,
+              fontSize:"var(--fs-lg)",
               color: TT.textHi,
             }}
           />
           <span
             style={{
               fontFamily: FM,
-              fontSize: 10,
+              fontSize:"var(--fs-2xs)",
               color: TT.muted,
               letterSpacing: "0.08em",
               padding: "2px 6px",
@@ -299,7 +299,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
               style={{
                 padding: `${TT.s5} ${TT.s5}`,
                 fontFamily: FU,
-                fontSize: 13,
+                fontSize:"var(--fs-md)",
                 color: TT.muted,
                 textAlign: "center",
               }}
@@ -321,7 +321,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
                       style={{
                         padding: `${TT.s3} ${TT.s5} ${TT.s2}`,
                         fontFamily: FM,
-                        fontSize: 10,
+                        fontSize:"var(--fs-2xs)",
                         color: TT.muted,
                         letterSpacing: "0.14em",
                         fontWeight: 700,
@@ -362,7 +362,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
                               display: "inline-flex",
                               alignItems: "center",
                               justifyContent: "center",
-                              fontSize: 14,
+                              fontSize:"var(--fs-lg)",
                               color: active ? TT.textHi : TT.text,
                             }}
                           >
@@ -375,7 +375,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
                           style={{
                             flex: 1,
                             fontFamily: FU,
-                            fontSize: 14,
+                            fontSize:"var(--fs-lg)",
                             color: active ? TT.textHi : TT.text,
                           }}
                         >
@@ -385,7 +385,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
                           <span
                             style={{
                               fontFamily: FM,
-                              fontSize: 11,
+                              fontSize:"var(--fs-xs)",
                               color: TT.muted,
                               letterSpacing: "0.06em",
                               padding: "2px 6px",
@@ -413,7 +413,7 @@ export function CommandPalette({ open, onClose, commands = [], onSelect }) {
             padding: `${TT.s2} ${TT.s5}`,
             borderTop: `1px solid ${TT.border}`,
             fontFamily: FM,
-            fontSize: 10,
+            fontSize:"var(--fs-2xs)",
             color: TT.muted,
             letterSpacing: "0.08em",
           }}

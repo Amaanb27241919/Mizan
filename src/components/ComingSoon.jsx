@@ -74,7 +74,7 @@ export default function ComingSoon({
         border: `1px solid ${accent}40`,
         borderRadius: 999,
         fontFamily: FM,
-        fontSize: 9,
+        fontSize:"var(--fs-2xs)",
         color: accent,
         letterSpacing: "0.16em",
         fontWeight: 700,
@@ -85,7 +85,7 @@ export default function ComingSoon({
 
       <div style={{
         fontFamily: FU,
-        fontSize: 18,
+        fontSize:"var(--fs-2xl)",
         fontWeight: 600,
         color: tokens.textHi,
         letterSpacing: "-0.015em",
@@ -94,7 +94,7 @@ export default function ComingSoon({
       {description && (
         <div style={{
           fontFamily: FU,
-          fontSize: 13,
+          fontSize:"var(--fs-md)",
           color: tokens.muted,
           lineHeight: 1.55,
           letterSpacing: "-0.005em",
@@ -105,7 +105,7 @@ export default function ComingSoon({
       {hint && (
         <div style={{
           fontFamily: FM,
-          fontSize: 11,
+          fontSize:"var(--fs-xs)",
           color: tokens.muted,
           marginTop: 2,
           letterSpacing: "0.02em",
@@ -123,7 +123,7 @@ export default function ComingSoon({
             border: `1px solid ${accent}55`,
             color: accent,
             fontFamily: FM,
-            fontSize: 12,
+            fontSize:"var(--fs-sm)",
             fontWeight: 600,
             letterSpacing: "0.04em",
             borderRadius: tokens.rMd,

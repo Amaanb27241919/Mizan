@@ -124,7 +124,7 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
       const chart = LWC.createChart(el, {
         width: el.clientWidth || 600,
         height: CHART_HEIGHT,
-        layout: { background: { color: "transparent" }, textColor: c.muted, fontFamily: FM, fontSize: 11 },
+        layout: { background: { color: "transparent" }, textColor: c.muted, fontFamily: FM, fontSize:"var(--fs-xs)" },
         grid: { vertLines: { color: c.border }, horzLines: { color: c.border } },
         rightPriceScale: { borderColor: c.border },
         timeScale: { borderColor: c.border, timeVisible: isIntraday(tf.resolution), secondsVisible: false },
@@ -310,7 +310,7 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
 
   const toggleBtn = (label, on, onClick, title) => (
     <button type="button" onClick={onClick} aria-pressed={on} title={title} style={{
-      fontFamily: FM, fontSize: 10, letterSpacing: "0.08em", fontWeight: 600,
+      fontFamily: FM, fontSize:"var(--fs-2xs)", letterSpacing: "0.08em", fontWeight: 600,
       padding: `3px ${T.s2}`, borderRadius: T.rSm, cursor: "pointer",
       color: on ? T.textHi : T.muted, background: on ? `${T.blue}14` : "transparent",
       border: `1px solid ${on ? `${T.blue}44` : "var(--mz-border)"}`,
@@ -324,7 +324,7 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
         <div role="tablist" aria-label={`Timeframe for ${symbol}`} style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
           {TIMEFRAMES.map(t => (
             <button key={t.key} role="tab" aria-selected={t.key === tfKey} onClick={() => setTfKey(t.key)} style={{
-              fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+              fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: 600, letterSpacing: "0.04em",
               padding: `4px ${T.s3}`, borderRadius: T.rSm, cursor: "pointer",
               color: t.key === tfKey ? "#fff" : T.muted,
               background: t.key === tfKey ? T.blue : "transparent",
@@ -333,7 +333,7 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
           ))}
         </div>
         <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-          <span style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.14em", fontWeight: 600, marginRight: 4 }}>DATA</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.14em", fontWeight: 600, marginRight: 4 }}>DATA</span>
           {toggleBtn("VOL", showVolume, () => setShowVolume(v => !v), "Toggle volume")}
           {toggleBtn("SMA 50", showSMA, () => setShowSMA(v => !v), "50-period simple moving average (data, not a signal)")}
           {toggleBtn("EMA 20", showEMA, () => setShowEMA(v => !v), "20-period exponential moving average (data, not a signal)")}
@@ -347,22 +347,22 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
 
         {status === "loading" && (
           <div style={overlayStyle} aria-hidden="true">
-            <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, letterSpacing: "0.12em" }}>LOADING CHART…</div>
+            <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, letterSpacing: "0.12em" }}>LOADING CHART…</div>
           </div>
         )}
         {status === "empty" && (
           <div style={overlayStyle}>
-            <div style={{ fontFamily: FP, fontSize: 13, color: T.muted, textAlign: "center" }}>
+            <div style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: T.muted, textAlign: "center" }}>
               No chart data for {symbol}.
             </div>
           </div>
         )}
         {status === "error" && (
           <div style={overlayStyle}>
-            <div style={{ fontFamily: FP, fontSize: 13, color: T.muted, textAlign: "center", display: "flex", flexDirection: "column", gap: T.s3, alignItems: "center" }}>
+            <div style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: T.muted, textAlign: "center", display: "flex", flexDirection: "column", gap: T.s3, alignItems: "center" }}>
               Couldn’t load the chart.
               <button type="button" onClick={load} style={{
-                fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em",
+                fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: 600, letterSpacing: "0.06em",
                 padding: `5px ${T.s4}`, borderRadius: T.rSm, cursor: "pointer",
                 color: "#fff", background: T.blue, border: "none",
               }}>Retry</button>
@@ -382,7 +382,7 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
         </tbody>
       </table>
 
-      <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.1em" }}>
+      <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>
         MARKET DATA · POLYGON · MOVING AVERAGES ARE DATA, NOT SIGNALS
       </div>
     </div>

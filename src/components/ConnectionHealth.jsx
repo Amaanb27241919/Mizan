@@ -71,7 +71,7 @@ function StatusPill({ status, errorCode }) {
       border: `1px solid ${hit.color}40`,
       borderRadius: 999,
       fontFamily: FM,
-      fontSize: 10,
+      fontSize:"var(--fs-2xs)",
       fontWeight: 600,
       letterSpacing: "0.08em",
       color: hit.color,
@@ -85,7 +85,7 @@ function ProviderBadge({ provider }) {
   return (
     <span style={{
       fontFamily: FM,
-      fontSize: 8,
+      fontSize:"var(--fs-2xs)",
       fontWeight: 700,
       letterSpacing: "0.16em",
       color,
@@ -120,7 +120,7 @@ function TradePill({ it }) {
       border: `1px solid ${color}40`,
       borderRadius: 999,
       fontFamily: FM,
-      fontSize: 10,
+      fontSize:"var(--fs-2xs)",
       fontWeight: 600,
       letterSpacing: "0.08em",
       color,
@@ -137,7 +137,7 @@ function DetailsPanel({ state }) {
     return (
       <div style={{
         gridColumn: "1 / -1",
-        fontFamily: FM, fontSize: 11, color: T.muted,
+        fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted,
         background: T.surface,
         border: `1px solid ${T.border}`,
         borderRadius: T.rSm,
@@ -150,7 +150,7 @@ function DetailsPanel({ state }) {
     return (
       <div style={{
         gridColumn: "1 / -1",
-        fontFamily: FM, fontSize: 11, color: T.loss,
+        fontFamily: FM, fontSize:"var(--fs-xs)", color: T.loss,
         background: `${T.loss}12`,
         border: `1px solid ${T.loss}40`,
         borderRadius: T.rSm,
@@ -166,7 +166,7 @@ function DetailsPanel({ state }) {
             border: `1px solid ${T.border}`,
             borderRadius: T.rSm,
             color: T.text,
-            fontSize: 10,
+            fontSize:"var(--fs-2xs)",
             whiteSpace: "pre-wrap",
             wordBreak: "break-all",
           }}>{JSON.stringify(state.debug, null, 2)}</pre>
@@ -182,13 +182,13 @@ function DetailsPanel({ state }) {
   const Row = ({ label, value, accent }) => (
     <div style={{ display: "flex", justifyContent: "space-between", gap: T.s3, padding: "2px 0" }}>
       <span style={{ color: T.muted }}>{label}</span>
-      <span style={{ color: accent || T.text, textAlign: "right", fontFamily: FM, fontSize: 11 }}>{value ?? "—"}</span>
+      <span style={{ color: accent || T.text, textAlign: "right", fontFamily: FM, fontSize:"var(--fs-xs)" }}>{value ?? "—"}</span>
     </div>
   );
   return (
     <div style={{
       gridColumn: "1 / -1",
-      fontFamily: FM, fontSize: 11,
+      fontFamily: FM, fontSize:"var(--fs-xs)",
       background: T.surface,
       border: `1px solid ${T.border}`,
       borderRadius: T.rSm,
@@ -350,13 +350,13 @@ export default function ConnectionHealth({ onNav } = {}) {
         transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
       }}>
         <div>
-          <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s1 }}>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s1 }}>
             CONNECTION HEALTH
           </div>
-          <div style={{ fontFamily: FU, fontSize: 22, fontWeight: 600, color: T.textHi, letterSpacing: "-0.015em" }}>
+          <div style={{ fontFamily: FU, fontSize:"var(--fs-3xl)", fontWeight: 600, color: T.textHi, letterSpacing: "-0.015em" }}>
             {counts.total === 0 ? "No connections yet" : `${counts.total} connection${counts.total === 1 ? "" : "s"} linked`}
           </div>
-          <div style={{ fontFamily: FP, fontSize: 13, color: T.muted, marginTop: T.s1 }}>
+          <div style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: T.muted, marginTop: T.s1 }}>
             {counts.ok} healthy · {counts.reauth} need attention{counts.error > 0 ? ` · ${counts.error} error` : ""}
           </div>
         </div>
@@ -366,7 +366,7 @@ export default function ConnectionHealth({ onNav } = {}) {
             background: `${T.blue}14`,
             border: `1px solid ${T.blue}40`,
             color: T.blue,
-            fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em",
+            fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: 600, letterSpacing: "0.06em",
             borderRadius: T.rMd,
             cursor: loading ? "wait" : "pointer",
           }}>{loading ? "Refreshing…" : "↻ Refresh"}</button>
@@ -374,7 +374,7 @@ export default function ConnectionHealth({ onNav } = {}) {
 
       {err && (
         <div style={{
-          fontFamily: FP, fontSize: 12, color: T.loss,
+          fontFamily: FP, fontSize:"var(--fs-sm)", color: T.loss,
           padding: T.s3, background: `${T.loss}15`,
           border: `1px solid ${T.loss}40`, borderRadius: T.rMd,
         }}>{err}</div>
@@ -383,7 +383,7 @@ export default function ConnectionHealth({ onNav } = {}) {
       {/* Empty state */}
       {!loading && !err && items.length === 0 && (
         <div style={{
-          fontFamily: FP, fontSize: 13, color: T.muted,
+          fontFamily: FP, fontSize:"var(--fs-md)", color: T.muted,
           padding: `${T.s5} ${T.s4}`,
           textAlign: "center",
           background: T.card,
@@ -413,12 +413,12 @@ export default function ConnectionHealth({ onNav } = {}) {
             }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: T.s2, marginBottom: T.s1, flexWrap: "wrap" }}>
-                  <span style={{ fontFamily: FU, fontSize: 15, fontWeight: 600, color: T.textHi, letterSpacing: "-0.005em" }}>{it.institution}</span>
+                  <span style={{ fontFamily: FU, fontSize:"var(--fs-lg)", fontWeight: 600, color: T.textHi, letterSpacing: "-0.005em" }}>{it.institution}</span>
                   <ProviderBadge provider={it.provider} />
                   <StatusPill status={it.status} errorCode={it.error_code} />
                   <TradePill it={it} />
                 </div>
-                <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, display: "flex", flexWrap: "wrap", gap: T.s3 }}>
+                <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, display: "flex", flexWrap: "wrap", gap: T.s3 }}>
                   <span title={it.last_sync_at || ""}>Last sync: <strong style={{ color: it.last_sync_at ? T.text : T.loss }}>{relativeTime(it.last_sync_at)}</strong></span>
                   {it.error_code && it.error_code !== "DISABLED" && (
                     <span>Code: <code style={{ background: `${T.gold}1A`, padding: "1px 5px", borderRadius: 3, color: T.gold }}>{it.error_code}</code></span>
@@ -435,7 +435,7 @@ export default function ConnectionHealth({ onNav } = {}) {
                       background: "transparent",
                       border: `1px solid ${T.muted}55`,
                       color: T.muted,
-                      fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+                      fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.06em",
                       borderRadius: T.rSm,
                       cursor: "pointer",
                     }}>{itemDetails[it.item_id]?.hidden ? "DETAILS" : (itemDetails[it.item_id]?.data || itemDetails[it.item_id]?.err) ? "HIDE" : "DETAILS"}</button>
@@ -450,7 +450,7 @@ export default function ConnectionHealth({ onNav } = {}) {
                       background: "transparent",
                       border: `1px solid ${T.blue}55`,
                       color: T.blue,
-                      fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+                      fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.06em",
                       borderRadius: T.rSm,
                       cursor: resyncingId === it.item_id ? "wait" : "pointer",
                       opacity: resyncingId === it.item_id ? 0.6 : 1,
@@ -462,7 +462,7 @@ export default function ConnectionHealth({ onNav } = {}) {
                     background: it.status === "reauth" ? `${T.gold}14` : "transparent",
                     border: `1px solid ${it.status === "reauth" ? T.gold : T.border}40`,
                     color: it.status === "reauth" ? T.gold : T.muted,
-                    fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+                    fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.06em",
                     borderRadius: T.rSm,
                     cursor: "pointer",
                   }}>{it.status === "reauth" ? "RE-AUTHORIZE" : "MANAGE"}</button>
@@ -473,7 +473,7 @@ export default function ConnectionHealth({ onNav } = {}) {
                     background: "transparent",
                     border: `1px solid ${T.border}`,
                     color: T.muted,
-                    fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+                    fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.06em",
                     borderRadius: T.rSm,
                     cursor: "pointer",
                   }}>VIEW</button>
@@ -482,7 +482,7 @@ export default function ConnectionHealth({ onNav } = {}) {
               {resyncMsg && resyncMsg.itemId === it.item_id && (
                 <div style={{
                   gridColumn: "1 / -1",
-                  fontFamily: FM, fontSize: 11,
+                  fontFamily: FM, fontSize:"var(--fs-xs)",
                   color: resyncMsg.ok ? T.gain : T.loss,
                   background: `${resyncMsg.ok ? T.gain : T.loss}12`,
                   border: `1px solid ${resyncMsg.ok ? T.gain : T.loss}40`,

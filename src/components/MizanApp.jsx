@@ -16,6 +16,7 @@ import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
 import Budgeting from "./Budgeting.jsx";
 import { moneyWeightedReturn } from "../lib/performance.js";
+import { recordNavView } from "../lib/navUsage.js";
 // Generated from BACKLOG.md at build time — headings only (~15KB), never the
 // 176KB markdown. See scripts/gen-backlog-summary.mjs.
 import BACKLOG from "../generated/backlog.json";
@@ -137,6 +138,37 @@ const THEME_CSS = `
        upgrades it everywhere else. Use var(--mz-vh) for viewport heights —
        never a bare 100vh. */
     --mz-vh: 100vh;
+
+    /* ── Fluid type scale ────────────────────────────────────────────────
+       Every size interpolates between a 320px viewport and a 1440px one, so
+       type is "in tune" at any width rather than jumping at breakpoints
+       (utopia.fyi method; prescribed by ~/.claude rules/web/coding-style.md).
+
+       REM, not px, and that is the load-bearing choice. A px clamp adapts to
+       the VIEWPORT but ignores the READER — someone who has raised iOS Dynamic
+       Type or the Android font scale gets nothing from it. Measured: this
+       token goes 11.06px → 13.75px when the root moves 16px → 20px, while a
+       hardcoded 10px stays 10px forever. "Readable on any device" needs both
+       axes, so every size below is expressed in rem.
+
+       The floor is 11px, never 9 or 10. The app previously rendered 39% of its
+       type at 9–10px, under the ~11px Apple and Google both treat as the
+       practical minimum for secondary text — which is why it read as dense at
+       every screen size, not just small ones.
+
+       Verified safe inside recharts tick={{fontSize}} props (resolves normally in
+       SVG; ticks measured 22×15px with real text). */
+    --fs-2xs: clamp(0.6875rem, 0.6696rem + 0.08929vw, 0.75rem);           /* 11→12px · was 8·9·9.5·10·10.5 */
+    --fs-xs: clamp(0.7188rem, 0.692rem + 0.1339vw, 0.8125rem);            /* 11.5→13px · was 11·11.5 */
+    --fs-sm: clamp(0.75rem, 0.7143rem + 0.1786vw, 0.875rem);              /* 12→14px · was 12·12.5 */
+    --fs-md: clamp(0.8125rem, 0.7768rem + 0.1786vw, 0.9375rem);           /* 13→15px · was 13·13.5 */
+    --fs-lg: clamp(0.875rem, 0.8393rem + 0.1786vw, 1rem);                 /* 14→16px · was 14·15 */
+    --fs-xl: clamp(1rem, 0.9464rem + 0.2679vw, 1.188rem);                 /* 16→19px · was 16·17 */
+    --fs-2xl: clamp(1.125rem, 1.054rem + 0.3571vw, 1.375rem);             /* 18→22px · was 18·19·20 */
+    --fs-3xl: clamp(1.375rem, 1.304rem + 0.3571vw, 1.625rem);             /* 22→26px · was 22·23·24 */
+    --fs-4xl: clamp(1.625rem, 1.518rem + 0.5357vw, 2rem);                 /* 26→32px · was 26·28·30 */
+    --fs-5xl: clamp(1.875rem, 1.696rem + 0.8929vw, 2.5rem);               /* 30→40px · was 32·34·38 */
+    --fs-6xl: clamp(2.125rem, 1.804rem + 1.607vw, 3.25rem);               /* 34→52px · was 42·46·52 */
   }
   @supports (height: 100dvh) { :root { --mz-vh: 100dvh; } }
   /* Ambient glows — navy top-right, green bottom-left — subtle depth on canvas/ink */
@@ -930,7 +962,7 @@ function Tag({label,color}){
   return<span style={{
     display:"inline-flex",alignItems:"center",gap:T.s1,
     padding:`2px ${T.s2}`,borderRadius:999,
-    fontSize:10,fontFamily:FM,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
+    fontSize:"var(--fs-2xs)",fontFamily:FM,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
     color:c,background:`${c}18`,border:`1px solid ${c}30`,
     whiteSpace:"nowrap",
   }}>{label}</span>;
@@ -946,9 +978,9 @@ function KV({label,value,sub,subColor,accent}){return<div className="kv-card" st
   padding:`${T.s4} ${T.s5}`,
   transition:"border-color 0.2s, transform 0.18s, box-shadow 0.2s",
 }}>
-  <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",textTransform:"uppercase",fontWeight:500,marginBottom:T.s2}}>{label}</div>
-  <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,lineHeight:1.05,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{value}</div>
-  {sub&&<div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:subColor||T.muted,marginTop:T.s2,letterSpacing:"0.02em"}}>{sub}</div>}
+  <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",textTransform:"uppercase",fontWeight:500,marginBottom:T.s2}}>{label}</div>
+  <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,color:T.textHi,lineHeight:1.05,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{value}</div>
+  {sub&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:subColor||T.muted,marginTop:T.s2,letterSpacing:"0.02em"}}>{sub}</div>}
 </div>;}
 
 function Sk({vals,color,w=72,h=22,fill}){
@@ -997,8 +1029,8 @@ function Donut({slices,size=180,thickness=22,centerLabel,centerValue}){
       })}
     </svg>
     {(centerLabel||centerValue)&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",pointerEvents:"none"}}>
-      {centerLabel&&<div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:500,marginBottom:2}}>{centerLabel}</div>}
-      {centerValue&&<div style={{fontFamily:FU,fontSize:20,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{centerValue}</div>}
+      {centerLabel&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:500,marginBottom:2}}>{centerLabel}</div>}
+      {centerValue&&<div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{centerValue}</div>}
     </div>}
   </div>;
 }
@@ -1050,11 +1082,11 @@ function CollapsibleTile({title,subtitle,defaultOpen=false,storageKey,accent,rig
     background:"transparent",border:"none",borderBottom:flat?`1px solid ${T.dim}`:"none",
     cursor:"pointer",textAlign:"left",
   }}>
-    <span aria-hidden="true" style={{color:open?T.blue:T.muted,fontSize:11,lineHeight:1,flexShrink:0,
+    <span aria-hidden="true" style={{color:open?T.blue:T.muted,fontSize:"var(--fs-xs)",lineHeight:1,flexShrink:0,
       display:"inline-block",transform:open?"rotate(90deg)":"none",transition:"transform 0.18s"}}>▸</span>
     <span style={{flex:1,minWidth:0}}>
-      <span style={{display:"block",fontFamily:FM,fontSize:11,letterSpacing:"0.14em",fontWeight:600,color:T.textHi}}>{title}</span>
-      {subtitle&&<span style={{display:"block",fontFamily:FP,fontSize:11,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{subtitle}</span>}
+      <span style={{display:"block",fontFamily:FM,fontSize:"var(--fs-xs)",letterSpacing:"0.14em",fontWeight:600,color:T.textHi}}>{title}</span>
+      {subtitle&&<span style={{display:"block",fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{subtitle}</span>}
     </span>
     {right&&<span style={{flexShrink:0,marginLeft:T.s2}}>{right}</span>}
   </button>;
@@ -1065,7 +1097,7 @@ function CollapsibleTile({title,subtitle,defaultOpen=false,storageKey,accent,rig
   </BentoTile>;
 }
 
-function TT2({active,payload}){if(!active||!payload?.length)return null;return<div style={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:8,padding:"6px 12px",fontFamily:FM,fontSize:11,color:T.textHi}}>${payload[0]?.value?.toLocaleString?.("en-US",{minimumFractionDigits:2})}</div>;}
+function TT2({active,payload}){if(!active||!payload?.length)return null;return<div style={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:8,padding:"6px 12px",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.textHi}}>${payload[0]?.value?.toLocaleString?.("en-US",{minimumFractionDigits:2})}</div>;}
 
 // Data table — fintech-style. Tabular numerics, hover row highlight,
 // sticky header optional (not on by default to keep nested tables simple).
@@ -1073,7 +1105,7 @@ function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto",WebkitOverfl
   <table className="mz-tbl-desktop" style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontVariantNumeric:"tabular-nums"}}>
     <thead><tr>{cols.map(c=><th key={c.l} style={{
       padding:`${T.s3} ${T.s4}`,textAlign:c.r?"right":"left",
-      fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",
+      fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",
       borderBottom:`1px solid ${T.border}`,fontWeight:600,whiteSpace:"nowrap",
       background:T.surface,
     }}>{c.l}</th>)}</tr></thead>
@@ -1089,13 +1121,13 @@ function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto",WebkitOverfl
     background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rMd,
     padding:T.s4,cursor:onRow?"pointer":"default",
   }}>
-    <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,marginBottom:T.s2,...(cols[0]?.s?.(r)||{})}}>
+    <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,marginBottom:T.s2,...(cols[0]?.s?.(r)||{})}}>
       {cols[0]?.r_?cols[0].r_(r):r[cols[0]?.k]}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
       {cols.slice(1).filter(c=>!c.mobileHide).map(c=><div key={c.l} style={{minWidth:0}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:2}}>{c.l}</div>
-        <div style={{fontFamily:FM,fontSize:12,color:T.text,fontVariantNumeric:"tabular-nums",...(c.s?.(r)||{})}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:2}}>{c.l}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.text,fontVariantNumeric:"tabular-nums",...(c.s?.(r)||{})}}>
           {c.r_?c.r_(r):r[c.k]}
         </div>
       </div>)}
@@ -1119,7 +1151,7 @@ function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar-w
     WebkitBackdropFilter:on?"blur(20px) saturate(160%)":undefined,
     border:"none",borderRadius:T.rMd,
     color:on?T.textHi:T.muted,
-    fontFamily:FP,fontSize:13,fontWeight:on?600:500,letterSpacing:"-0.005em",
+    fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:on?600:500,letterSpacing:"-0.005em",
     cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,
     boxShadow:on?`inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.20), 0 1px 4px rgba(0,0,0,0.22), 0 0 0 1px ${acc}28`:"none",
     transition:"all 0.18s cubic-bezier(.34,1.56,.64,1)",
@@ -1347,13 +1379,13 @@ function SectorBreakdown({holdings=[],total=0}){
   return<BentoTile accent={T.blue} style={{background:`radial-gradient(circle at 100% 0%, ${T.blue}10, transparent 55%), ${T.card}`}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
       <div>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s1}}>SECTOR ALLOCATION</div>
-        <div style={{fontFamily:FP,fontSize:13,color:T.muted,letterSpacing:"-0.005em"}}>{sorted.length} sector{sorted.length===1?"":"s"} · {kf(tracked)} tracked</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s1}}>SECTOR ALLOCATION</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,letterSpacing:"-0.005em"}}>{sorted.length} sector{sorted.length===1?"":"s"} · {kf(tracked)} tracked</div>
       </div>
       {topSector&&<div style={{textAlign:"right"}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>TOP SECTOR</div>
-        <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginTop:2}}>{topSector[0]}</div>
-        <div style={{fontFamily:FM,fontSize:11,color:T.blue,fontVariantNumeric:"tabular-nums",marginTop:2}}>{(total>0?(topSector[1]/total)*100:0).toFixed(1)}%</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>TOP SECTOR</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginTop:2}}>{topSector[0]}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.blue,fontVariantNumeric:"tabular-nums",marginTop:2}}>{(total>0?(topSector[1]/total)*100:0).toFixed(1)}%</div>
       </div>}
     </div>
     <div style={{display:"flex",gap:T.s5,alignItems:"center",flexWrap:"wrap"}}>
@@ -1363,9 +1395,9 @@ function SectorBreakdown({holdings=[],total=0}){
           const pct=total>0?(val/total)*100:0;
           return<div key={sec} style={{display:"grid",gridTemplateColumns:"12px 1fr auto auto",gap:T.s2,alignItems:"center",padding:`${T.s1} 0`,borderBottom:i===sorted.length-1?"none":`1px solid ${T.border}`}}>
             <span style={{width:8,height:8,borderRadius:2,background:colorOf(sec,i)}}/>
-            <span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sec}</span>
-            <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums",marginRight:T.s3}}>{kf(val)}</span>
-            <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:48,textAlign:"right"}}>{pct.toFixed(1)}%</span>
+            <span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sec}</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums",marginRight:T.s3}}>{kf(val)}</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:48,textAlign:"right"}}>{pct.toFixed(1)}%</span>
           </div>;
         })}
       </div>
@@ -1475,7 +1507,7 @@ function NicknameEditor({accountId,defaultName,nickname,onSetNickname,
       aria-label={nickname?"Edit account nickname":"Add account nickname"}
       style={{
         background:"transparent",border:"none",cursor:"pointer",padding:2,
-        color:T.muted,lineHeight:1,fontSize:12,
+        color:T.muted,lineHeight:1,fontSize:"var(--fs-sm)",
         display:"inline-flex",alignItems:"center",
         ...(pencilStyle||{}),
       }}><Icon name="pencil" size={12}/></button>}
@@ -1942,37 +1974,37 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   return<div className="bento" style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     {/* Welcome state */}
     {isEmpty&&<BentoTile glass style={{textAlign:"center",padding:`${T.s10} ${T.s8}`}}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.22em",fontWeight:600,marginBottom:T.s3}}>WELCOME TO MĪZAN</div>
-      <div style={{fontFamily:FU,fontSize:30,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s2}}>Connect your first brokerage</div>
-      <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.6,maxWidth:540,margin:`0 auto ${T.s6}`}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.22em",fontWeight:600,marginBottom:T.s3}}>WELCOME TO MĪZAN</div>
+      <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s2}}>Connect your first brokerage</div>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",color:T.muted,lineHeight:1.6,maxWidth:540,margin:`0 auto ${T.s6}`}}>
         Link Fidelity, Robinhood, Schwab, Coinbase, or any of 60+ brokers via SnapTrade. Your real holdings, activity, and Sharia screening will appear here.
       </div>
       <div style={{display:"flex",gap:T.s2,justifyContent:"center",flexWrap:"wrap"}}>
-        <button onClick={onConnect} className="btn-primary" style={{fontSize:13,padding:`12px ${T.s5}`}}>+ Connect Account</button>
-        <button onClick={onToggleDemoFromBanner} className="btn-ghost" style={{fontSize:13,padding:`11px ${T.s5}`,color:T.gold,borderColor:T.gold+"40"}}>Try Demo Mode →</button>
+        <button onClick={onConnect} className="btn-primary" style={{fontSize:"var(--fs-md)",padding:`12px ${T.s5}`}}>+ Connect Account</button>
+        <button onClick={onToggleDemoFromBanner} className="btn-ghost" style={{fontSize:"var(--fs-md)",padding:`11px ${T.s5}`,color:T.gold,borderColor:T.gold+"40"}}>Try Demo Mode →</button>
       </div>
     </BentoTile>}
 
     {/* Bot signals awaiting approval — surfaced here so you don't have to sit on the Trade tab */}
     {pendingSignals>0&&<div onClick={()=>onNav("trade")} style={{cursor:"pointer",padding:`${T.s3} ${T.s4}`,background:`linear-gradient(135deg, ${T.blue}14, transparent 60%), ${T.surface}`,border:`1px solid ${T.blue}40`,borderRadius:T.rMd,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:T.s2}}>
-      <span style={{display:"inline-flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:12,color:T.blue,fontWeight:600}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:"var(--fs-sm)",color:T.blue,fontWeight:600}}>
         <LiveDot on pulse/>{pendingSignals} bot signal{pendingSignals===1?"":"s"} need{pendingSignals===1?"s":""} your approval
       </span>
-      <span style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.blue,letterSpacing:"0.08em"}}>REVIEW →</span>
+      <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,color:T.blue,letterSpacing:"0.08em"}}>REVIEW →</span>
     </div>}
 
     {/* Compliance alert — non-compliant holdings WITH the reason for each */}
     {haramV>0&&<div style={{padding:`${T.s3} ${T.s4}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:T.s2,marginBottom:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.14em",fontWeight:600}}>NON-COMPLIANT HOLDINGS · {haram.length} · {mask(f$(haramV))}</span>
-        <button onClick={()=>onNav("portfolio")} style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.loss,background:"transparent",border:`1px solid ${T.loss}40`,borderRadius:T.rMd,padding:`4px ${T.s3}`,cursor:"pointer",letterSpacing:"0.08em"}}>EXIT PLAN →</button>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.14em",fontWeight:600}}>NON-COMPLIANT HOLDINGS · {haram.length} · {mask(f$(haramV))}</span>
+        <button onClick={()=>onNav("portfolio")} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,color:T.loss,background:"transparent",border:`1px solid ${T.loss}40`,borderRadius:T.rMd,padding:`4px ${T.s3}`,cursor:"pointer",letterSpacing:"0.08em"}}>EXIT PLAN →</button>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:4}}>
-        {haram.slice(0,5).map(h=>{const why=reasonFor(h.tk);return<div key={h.tk} style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:T.s2,fontFamily:FM,fontSize:11,color:T.text}}>
+        {haram.slice(0,5).map(h=>{const why=reasonFor(h.tk);return<div key={h.tk} style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:T.s2,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text}}>
           <span><span style={{fontWeight:600,color:T.loss}}>{h.tk}</span>{why?<span style={{color:T.muted}}> — {why}</span>:null}</span>
           <span style={{color:T.muted,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{mask(f$(mv(h)))}</span>
         </div>;})}
-        {haram.length>5&&<span style={{fontFamily:FM,fontSize:10,color:T.muted}}>+{haram.length-5} more — see Portfolio → Screener</span>}
+        {haram.length>5&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>+{haram.length-5} more — see Portfolio → Screener</span>}
       </div>
     </div>}
 
@@ -1986,7 +2018,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
         minHeight:240,
       }}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-          <div style={{display:"inline-flex",alignItems:"center",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600}}>
+          <div style={{display:"inline-flex",alignItems:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.18em",fontWeight:600}}>
             <span>NET WORTH</span>
             {snapAccounts.length>0&&<span style={{color:T.gain,marginLeft:T.s2,display:"inline-flex",alignItems:"center",gap:5}}><LiveDot on pulse/>LIVE</span>}
             <EyeToggle hidden={valuesHidden} toggle={toggleHideValues} size={14} color={T.muted}/>
@@ -1996,13 +2028,13 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
               means no scrollbar ever appeared to hint that it existed. Wraps
               to a second line on narrow screens instead (see .mz-range-row). */}
           <div className="mz-range-row" style={{display:"flex",gap:T.s1}}>
-            {["1D","1W","1M","3M","YTD","1Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{r}</button>)}
+            {["1D","1W","1M","3M","YTD","1Y","All"].map(r=><button key={r} onClick={()=>setRange(r)} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em",background:range===r?T.blue:"transparent",border:`1px solid ${range===r?T.blue:T.border}`,color:range===r?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{r}</button>)}
           </div>
         </div>
         <div style={{display:"flex",alignItems:"baseline",gap:T.s3,marginBottom:T.s1,flexWrap:"wrap"}}>
-          <div style={{fontFamily:FU,fontSize:46,fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(tot))}</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-6xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(tot))}</div>
         </div>
-        <div style={{display:"flex",gap:T.s4,marginTop:T.s2,fontFamily:FM,fontSize:12,color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
+        <div style={{display:"flex",gap:T.s4,marginTop:T.s2,fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
           <span style={{display:"inline-flex",alignItems:"center",gap:T.s1}}>
             <span style={{color:dispGain>=0?T.gain:T.loss,fontWeight:600}}>{valuesHidden?"••••":`${dispGain>=0?"+":""}${kf(Math.abs(dispGain))}`}</span>
             <span style={{color:dispGpc>=0?T.gain:T.loss}}>{valuesHidden?"••":`${fp(dispGpc)}${dispGpcSuffix}`}</span>
@@ -2025,12 +2057,12 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
                   const yr=String(d.getFullYear()).slice(2);
                   return d.getMonth()===0?`${mo} '${yr}`:mo;
                 }}
-                tick={{fontFamily:FM,fontSize:9,fill:T.muted}} tickLine={false} axisLine={false}
+                tick={{fontFamily:FM,fontSize:"var(--fs-2xs)",fill:T.muted}} tickLine={false} axisLine={false}
                 minTickGap={36}/>
               <YAxis
                 domain={[0,"auto"]}
                 tickFormatter={v=>v===0?"$0":`$${v>=1000?(v/1000).toFixed(0)+"k":v}`}
-                tick={{fontFamily:FM,fontSize:9,fill:T.muted}} tickLine={false} axisLine={false}
+                tick={{fontFamily:FM,fontSize:"var(--fs-2xs)",fill:T.muted}} tickLine={false} axisLine={false}
                 width={50}/>
               <Tooltip
                 labelFormatter={ts=>{
@@ -2040,8 +2072,8 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
                   return d.toLocaleDateString("en-US",{year:"numeric",month:"short"});
                 }}
                 formatter={(v,name)=>[fmtUSD(v),name==="value"?"Net Worth":"Contributions"]}
-                contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)"}}
-                itemStyle={{color:T.textHi}} labelStyle={{color:T.muted,fontSize:10}}/>
+                contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",boxShadow:"var(--sh-md)"}}
+                itemStyle={{color:T.textHi}} labelStyle={{color:T.muted,fontSize:"var(--fs-2xs)"}}/>
               <Area type="monotone" dataKey="value" stroke={T.blue} strokeWidth={2} fill="url(#hero-g)" dot={false}/>
               <Line type="monotone" dataKey="contrib" stroke={T.gold} strokeWidth={1.5} dot={false} strokeDasharray="3 3"/>
             </ComposedChart>
@@ -2052,30 +2084,30 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       {/* Side stack: Zakat + Compliance + Cash */}
       <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKAT DUE</div>
-          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:nisabReady?T.textHi:T.muted,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{nisabReady?mask(fmtUSD(zakatDueOverview)):"—"}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:nisabReady?T.muted:T.gold,marginTop:T.s1}}>{
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKAT DUE</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:nisabReady?T.textHi:T.muted,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{nisabReady?mask(fmtUSD(zakatDueOverview)):"—"}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:nisabReady?T.muted:T.gold,marginTop:T.s1}}>{
             !nisabReady
               ? (liveNisab.status==="loading"?"Checking live gold & silver prices…":"Nisab unavailable — live metal prices couldn't be fetched")
               : overviewAboveNisab?`2.5% of net zakatable wealth${zakatSettings.investmentMethod==="longterm_30"?" (30% rule on investments)":""}`:`Below nisab (${zakatSettings.nisabStandard} standard, ${fmtUSD(nisabOverview)})`
           }</div>
           {purificationOwedTotal != null && purificationOwedTotal > 0 && (
-            <button onClick={() => onNav?.("goals")} style={{display:"flex",alignItems:"center",gap:4,marginTop:T.s2,background:`${T.gold}10`,border:`1px solid ${T.gold}30`,borderRadius:T.rSm,padding:`3px ${T.s2}`,cursor:"pointer",fontFamily:FM,fontSize:10,color:T.gold,fontWeight:600,letterSpacing:"0.06em",textDecoration:"none",width:"100%",justifyContent:"flex-start"}}>
+            <button onClick={() => onNav?.("goals")} style={{display:"flex",alignItems:"center",gap:4,marginTop:T.s2,background:`${T.gold}10`,border:`1px solid ${T.gold}30`,borderRadius:T.rSm,padding:`3px ${T.s2}`,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,fontWeight:600,letterSpacing:"0.06em",textDecoration:"none",width:"100%",justifyContent:"flex-start"}}>
               <Icon name="leaf" size={12} color={T.gold}/>
               <span>Purify {fmtUSD(purificationOwedTotal)} → Zakat tab</span>
             </button>
           )}
         </BentoTile>
         <BentoTile>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CONFIRMED HALAL</div>
-          <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:complianceColor,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{halalPct==null?"—":`${halalPct.toFixed(1)}%`}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{merged.length===0?"No holdings to screen":<>{halalCount} of {merged.length} halal{reviewCount>0?` · ${reviewCount} review`:""}{haram.length>0?` · ${haram.length} non-compliant`:""}</>}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CONFIRMED HALAL</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:complianceColor,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{halalPct==null?"—":`${halalPct.toFixed(1)}%`}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s1}}>{merged.length===0?"No holdings to screen":<>{halalCount} of {merged.length} halal{reviewCount>0?` · ${reviewCount} review`:""}{haram.length>0?` · ${haram.length} non-compliant`:""}</>}</div>
         </BentoTile>
         {(totalCash>0||snapAccounts.length>0)&&<BentoTile>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CASH ON HAND</div>
-          <div style={{fontFamily:FU,fontSize:24,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CASH ON HAND</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}
                title={`Brokerage cash (SnapTrade): ${fmtUSD(brokerCashSum)}\nBank deposits (Plaid depository): ${fmtUSD(bankCashContribution)}\nTotal: ${fmtUSD(totalCash)}\n\nDebts (credit / loan) reduce Net Worth elsewhere but never reduce Cash on Hand.`}>{mask(fmtUSD(totalCash))}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s1}}>
             {valuesHidden
               ? "Brokerage cash + bank deposits"
               : <>Brokerage <b style={{color:T.text}}>{fmtUSD(brokerCashSum)}</b> + Bank <b style={{color:T.text}}>{fmtUSD(bankCashContribution)}</b></>}
@@ -2087,7 +2119,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
     {/* ─── BENTO ROW 2: Allocation donut + Performance metrics ─── */}
     <div className="bento-row" style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:T.s4}}>
       <BentoTile>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ALLOCATION</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ALLOCATION</div>
         {allocSlices.length>0?<div style={{display:"flex",gap:T.s5,alignItems:"center",flexWrap:"wrap"}}>
           <Donut slices={allocSlices} size={170} thickness={20} centerLabel="Total" centerValue={mask(kf(allocSlices.reduce((s,x)=>s+x.value,0)))}/>
           <div style={{display:"flex",flexDirection:"column",gap:T.s2,flex:1,minWidth:140}}>
@@ -2096,18 +2128,18 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
               const pct=t>0?(s.value/t*100):0;
               return<div key={s.label} style={{display:"flex",alignItems:"center",gap:T.s2}}>
                 <span style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/>
-                <span style={{fontFamily:FP,fontSize:13,color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
-                <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{valuesHidden?"••":`${pct.toFixed(1)}%`}</span>
+                <span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{valuesHidden?"••":`${pct.toFixed(1)}%`}</span>
               </div>;
             })}
           </div>
-        </div>:<div style={{fontFamily:FP,fontSize:13,color:T.muted,padding:`${T.s5} 0`,textAlign:"center"}}>Connect a brokerage to see your allocation.</div>}
+        </div>:<div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,padding:`${T.s5} 0`,textAlign:"center"}}>Connect a brokerage to see your allocation.</div>}
       </BentoTile>
 
       <BentoTile>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>PERFORMANCE</span>
-          {metrics.activityCount>0&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.06em"}}>● {metrics.activityCount} activities</span>}
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>PERFORMANCE</span>
+          {metrics.activityCount>0&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.06em"}}>● {metrics.activityCount} activities</span>}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",gap:T.s4}}>
           {[
@@ -2118,9 +2150,9 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
             {label:"Fees (YTD)",    value:mask(kf(metrics.ytdFees||0)),                    sub:valuesHidden?"•••• all-time":`${kf(metrics.allTimeFees||0)} all-time`,subColor:T.loss},
             {label:"Net Inflow",    value:mask(fmtUSD((metrics.ytdContrib||0)-(metrics.ytdWithdrawals||0))),sub:"Deposits − withdrawals",subColor:T.gain},
           ].map(s=><div key={s.label}>
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1,textTransform:"uppercase"}}>{s.label}</div>
-            <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.value}</div>
-            {s.sub&&<div style={{fontFamily:FM,fontSize:10,fontWeight:500,color:s.subColor||T.muted,marginTop:T.s1}}>{s.sub}</div>}
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1,textTransform:"uppercase"}}>{s.label}</div>
+            <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.value}</div>
+            {s.sub&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:500,color:s.subColor||T.muted,marginTop:T.s1}}>{s.sub}</div>}
           </div>)}
         </div>
       </BentoTile>
@@ -2128,24 +2160,24 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
 
     {/* ─── BENTO ROW 3: Top Holdings ────────────────── */}
     {top.length>0&&<CollapsibleTile title="TOP HOLDINGS" subtitle={`${top.length} position${top.length!==1?"s":""} by value`} storageKey="ov_top" defaultOpen
-      right={snapAccounts.length>0?<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.06em"}}>● REAL</span>:null}>
+      right={snapAccounts.length>0?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.06em"}}>● REAL</span>:null}>
       <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
         {top.map(h=>{
           const gpct=gp(h),pof=tot>0?mv(h)/tot*100:0;
           return<div key={h.tk+(h.ac_||"")} style={{display:"flex",alignItems:"center",gap:T.s4,padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
             <div style={{width:56}}>
-              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{h.tk}</div>
-              <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2,letterSpacing:"0.02em"}}>{h.br}</div>
+              <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{h.tk}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2,letterSpacing:"0.02em"}}>{h.br}</div>
             </div>
             <div style={{flex:1,minWidth:50}}>
               <div style={{height:4,background:T.dim,borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${Math.min(pof*4,100)}%`,background:`linear-gradient(90deg, ${h.sh_==="haram"?T.loss:T.blue}, ${h.sh_==="haram"?T.loss:T.blueDim})`,borderRadius:2,transition:"width 0.4s"}}/>
               </div>
-              <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginTop:T.s1,letterSpacing:"0.04em"}}>{valuesHidden?"••% of book":`${pof.toFixed(1)}% of book`}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s1,letterSpacing:"0.04em"}}>{valuesHidden?"••% of book":`${pof.toFixed(1)}% of book`}</div>
             </div>
             <div style={{width:90,textAlign:"right"}}>
-              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(mv(h)))}</div>
-              <div style={{fontFamily:FM,fontSize:10,fontWeight:500,color:fc(gpct),marginTop:2}}>{valuesHidden?"••":fp(gpct)}</div>
+              <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(mv(h)))}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:500,color:fc(gpct),marginTop:2}}>{valuesHidden?"••":fp(gpct)}</div>
             </div>
             <Sk vals={Array.from({length:24},()=>mv(h)*(1+(Math.random()-.48)*.02))} color={fc(gpct)} w={80} h={28} fill/>
           </div>;
@@ -2174,10 +2206,10 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
           }}>
             {/* Type label — top-left. Sits below the action button row so
                 the two never collide regardless of card width. */}
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1,paddingRight:64,textDecoration:dim?"line-through":"none"}}>{(a.type||"").toUpperCase()}</div>
-            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:valColor,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",textDecoration:dim?"line-through":"none"}}>{mask(fmtUSD(a.val||0))}</div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2,letterSpacing:"0.04em"}}>{a.kind}{a.mask?` · ••${a.mask}`:""}</div>
-            {a.cash>0&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>{mask(fmtUSD(a.cash))} cash</div>}
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1,paddingRight:64,textDecoration:dim?"line-through":"none"}}>{(a.type||"").toUpperCase()}</div>
+            <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:valColor,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",textDecoration:dim?"line-through":"none"}}>{mask(fmtUSD(a.val||0))}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2,letterSpacing:"0.04em"}}>{a.kind}{a.mask?` · ••${a.mask}`:""}</div>
+            {a.cash>0&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s1}}>{mask(fmtUSD(a.cash))} cash</div>}
             {/* Account name — shows user nickname if set, with the broker
                 default as a small subtitle. Pencil button opens an inline
                 editor; Enter commits, Esc cancels. */}
@@ -2187,30 +2219,30 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
                 defaultName={a.nm}
                 nickname={nicknames?.[a.id]||""}
                 onSetNickname={onSetNickname}
-                primaryStyle={{fontFamily:FP,fontSize:11,color:nicknames?.[a.id]?T.textHi:T.muted,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.id]?600:400}}
-                pencilStyle={{fontSize:12}}
+                primaryStyle={{fontFamily:FP,fontSize:"var(--fs-xs)",color:nicknames?.[a.id]?T.textHi:T.muted,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.id]?600:400}}
+                pencilStyle={{fontSize:"var(--fs-sm)"}}
               />
-              {nicknames?.[a.id]&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{a.nm}</div>}
+              {nicknames?.[a.id]&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2}}>{a.nm}</div>}
             </div>
 
             {/* Action buttons — top-right. SnapTrade gets toggle + disconnect;
                 Plaid gets a "Manage →" jump to the Finances tab. */}
             {!isPlaid&&<div style={{position:"absolute",top:T.s2,right:T.s2,display:"flex",gap:4}}>
               {onToggleAcct&&<button onClick={()=>onToggleAcct(a.id)} title={dim?"Include in totals":"Hide from totals"}
-                style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
+                style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",
                   background:dim?"transparent":`${T.muted}14`,border:`1px solid ${dim?T.gain+"40":T.border}`,
                   color:dim?T.gain:T.muted,cursor:"pointer"}}>{dim?"ON":"OFF"}</button>}
               {onDisconnectAcct&&<button onClick={()=>onDisconnectAcct(a.id,a.authId,a.nm)} title="Permanently disconnect"
-                style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,lineHeight:1,
+                style={{padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-2xs)",lineHeight:1,
                   background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}><Icon name="close" size={12}/></button>}
             </div>}
             {isPlaid&&onNav&&<button onClick={()=>onNav("finances")} title="Manage in Finances tab"
-              style={{position:"absolute",top:T.s2,right:T.s2,padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",lineHeight:1.4,
+              style={{position:"absolute",top:T.s2,right:T.s2,padding:`2px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",lineHeight:1.4,
                 background:`${T.gold}14`,border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>MANAGE →</button>}
 
             {/* Source badge — anchored to the bottom-right. Small, low-contrast,
                 purely informational. Out of the action buttons' lane. */}
-            <div style={{position:"absolute",bottom:6,right:T.s3,fontFamily:FM,fontSize:8,color:isPlaid?T.gold:T.blue,opacity:0.7,letterSpacing:"0.12em",fontWeight:600}}>{isPlaid?"PLAID":"SNAPTRADE"}</div>
+            <div style={{position:"absolute",bottom:6,right:T.s3,fontFamily:FM,fontSize:"var(--fs-2xs)",color:isPlaid?T.gold:T.blue,opacity:0.7,letterSpacing:"0.12em",fontWeight:600}}>{isPlaid?"PLAID":"SNAPTRADE"}</div>
           </div>;
         })}
       </div>
@@ -2370,10 +2402,10 @@ function ETFOverlapPanel(){
   const chip=(u)=>{
     const on=sel.includes(u.symbol);
     return <button key={u.symbol} onClick={()=>toggle(u.symbol)}
-      style={{fontFamily:FM,fontSize:11,letterSpacing:.3,padding:"6px 10px",borderRadius:8,cursor:"pointer",
+      style={{fontFamily:FM,fontSize:"var(--fs-xs)",letterSpacing:.3,padding:"6px 10px",borderRadius:8,cursor:"pointer",
         border:`1px solid ${on?T.blue:T.border}`,background:on?`${T.blue}18`:"transparent",
         color:on?T.blue:T.muted,fontWeight:on?600:400,display:"inline-flex",alignItems:"center",gap:6,transition:"all .15s"}}>
-      {u.symbol}{u.vehicle==="mutual_fund"&&<span style={{fontSize:8,opacity:.7}}>MF</span>}{u.assetClass==="sukuk"&&<span style={{fontSize:8,opacity:.7}}>SUKUK</span>}
+      {u.symbol}{u.vehicle==="mutual_fund"&&<span style={{fontSize:"var(--fs-2xs)",opacity:.7}}>MF</span>}{u.assetClass==="sukuk"&&<span style={{fontSize:"var(--fs-2xs)",opacity:.7}}>SUKUK</span>}
     </button>;
   };
 
@@ -2383,40 +2415,40 @@ function ETFOverlapPanel(){
       {(universe.length?universe:sel.map(s=>({symbol:s,vehicle:"etf",assetClass:"equity"}))).map(chip)}
     </div>
 
-    {err&&<div style={{fontFamily:FM,fontSize:12,color:T.loss,padding:`${T.s3} 0`}}>{err} <button onClick={()=>setRetryN(n=>n+1)} style={{fontFamily:FM,fontSize:11,color:T.blue,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Retry</button></div>}
-    {busy&&!data&&<div style={{fontFamily:FM,fontSize:12,color:T.muted,padding:`${T.s4} 0`}}>Loading holdings…</div>}
+    {err&&<div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.loss,padding:`${T.s3} 0`}}>{err} <button onClick={()=>setRetryN(n=>n+1)} style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.blue,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Retry</button></div>}
+    {busy&&!data&&<div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,padding:`${T.s4} 0`}}>Loading holdings…</div>}
 
     {focus&&!err&&<>
       {/* headline overlap for the strongest comparable pair */}
       <div style={{display:"flex",alignItems:"center",gap:T.s5,flexWrap:"wrap",marginBottom:T.s4}}>
         <div>
-          <div style={{fontFamily:FU,fontSize:52,lineHeight:1,color:sev(focus.overlapPct),fontVariantNumeric:"tabular-nums"}}>{focus.comparable?pctS(focus.overlapPct):"—"}</div>
-          <div style={{fontFamily:FM,fontSize:10,letterSpacing:1,color:T.muted,marginTop:4}}>{focus.comparable?`${sevLabel(focus.overlapPct).toUpperCase()} · ${focus.a} ∩ ${focus.b}`:"NOT COMPARABLE"}</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-6xl)",lineHeight:1,color:sev(focus.overlapPct),fontVariantNumeric:"tabular-nums"}}>{focus.comparable?pctS(focus.overlapPct):"—"}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:1,color:T.muted,marginTop:4}}>{focus.comparable?`${sevLabel(focus.overlapPct).toUpperCase()} · ${focus.a} ∩ ${focus.b}`:"NOT COMPARABLE"}</div>
         </div>
         <div style={{flex:1,minWidth:200}}>
           {focus.comparable?<>
-            <div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.5}}>{focus.a} and {focus.b} share <strong style={{color:T.textHi}}>{focus.sharedCount}</strong> holdings. About <strong style={{color:sev(focus.overlapPct)}}>{pctS(focus.overlapPct)}</strong> of each fund is the same underlying companies.</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.5}}>{focus.a} and {focus.b} share <strong style={{color:T.textHi}}>{focus.sharedCount}</strong> holdings. About <strong style={{color:sev(focus.overlapPct)}}>{pctS(focus.overlapPct)}</strong> of each fund is the same underlying companies.</div>
             {/* overlap vs unique bar */}
             <div style={{display:"flex",height:10,borderRadius:6,overflow:"hidden",marginTop:T.s3,border:`1px solid ${T.border}`}}>
               <div style={{width:pctS(focus.overlapPct),background:sev(focus.overlapPct)}} title={`Overlap ${pctS(focus.overlapPct)}`}/>
               <div style={{flex:1,background:T.slate,opacity:.25}} title="Unique"/>
             </div>
-            <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:9,letterSpacing:.5,color:T.muted,marginTop:4}}><span>SHARED</span><span>UNIQUE</span></div>
-          </>:<div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.5}}>{focus.a} and {focus.b} are different asset classes (equity vs sukuk), so a holdings-overlap % isn’t meaningful. They’re complementary, not redundant.</div>}
+            <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:.5,color:T.muted,marginTop:4}}><span>SHARED</span><span>UNIQUE</span></div>
+          </>:<div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.5}}>{focus.a} and {focus.b} are different asset classes (equity vs sukuk), so a holdings-overlap % isn’t meaningful. They’re complementary, not redundant.</div>}
         </div>
       </div>
 
       {/* pairwise matrix when 3+ funds selected */}
       {pairs.length>1&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:T.s4}}>
-        {pairs.map(p=><span key={`${p.a}-${p.b}`} style={{fontFamily:FM,fontSize:11,padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,color:T.muted}}>
+        {pairs.map(p=><span key={`${p.a}-${p.b}`} style={{fontFamily:FM,fontSize:"var(--fs-xs)",padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,color:T.muted}}>
           {p.a}×{p.b} <strong style={{color:p.comparable?sev(p.overlapPct):T.slate}}>{p.comparable?pctS(p.overlapPct):"n/a"}</strong>
         </span>)}
       </div>}
 
       {/* shared holdings table for the focus pair */}
       {focus.comparable&&focus.shared?.length>0&&<div style={{overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FM,fontSize:12}}>
-          <thead><tr style={{color:T.muted,fontSize:9,letterSpacing:.8}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FM,fontSize:"var(--fs-sm)"}}>
+          <thead><tr style={{color:T.muted,fontSize:"var(--fs-2xs)",letterSpacing:.8}}>
             <th style={{textAlign:"left",padding:"6px 8px",fontWeight:600}}>SHARED HOLDING</th>
             <th style={{textAlign:"right",padding:"6px 8px",fontWeight:600}}>{focus.a}</th>
             <th style={{textAlign:"right",padding:"6px 8px",fontWeight:600}}>{focus.b}</th>
@@ -2427,19 +2459,19 @@ function ETFOverlapPanel(){
             <td style={{padding:"6px 8px",textAlign:"right",color:T.text,fontVariantNumeric:"tabular-nums"}}>{(s.weightB*100).toFixed(1)}%</td>
           </tr>)}</tbody>
         </table>
-        {focus.shared.length>12&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,padding:"6px 8px"}}>+{focus.shared.length-12} more shared holdings</div>}
+        {focus.shared.length>12&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,padding:"6px 8px"}}>+{focus.shared.length-12} more shared holdings</div>}
       </div>}
 
       {/* per-fund source provenance */}
       <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:T.s3,paddingTop:T.s3,borderTop:`1px solid ${T.dim}`}}>
-        {funds.map(f=><span key={f.symbol} style={{fontFamily:FM,fontSize:9,letterSpacing:.3,color:T.muted}}>
+        {funds.map(f=><span key={f.symbol} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:.3,color:T.muted}}>
           <strong style={{color:f.available?T.text:T.slate}}>{f.symbol}</strong> · {srcNote(f)}
         </span>)}
       </div>
-      {unavailable.length>0&&<div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:6}}>Holdings for {unavailable.join(", ")} activate once the ETF data source is connected.</div>}
+      {unavailable.length>0&&<div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:6}}>Holdings for {unavailable.join(", ")} activate once the ETF data source is connected.</div>}
     </>}
 
-    {!focus&&!busy&&!err&&<div style={{fontFamily:FP,fontSize:13,color:T.muted,padding:`${T.s4} 0`}}>Select at least two funds with available holdings to compare.</div>}
+    {!focus&&!busy&&!err&&<div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,padding:`${T.s4} 0`}}>Select at least two funds with available holdings to compare.</div>}
   </CollapsibleTile>;
 }
 
@@ -2638,21 +2670,21 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
           difference between frameworks. */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap",marginBottom:T.s3}}>
         <div style={{minWidth:0}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SCREENING STANDARD</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SCREENING STANDARD</div>
           <select value={primary} onChange={e=>setStandard(e.target.value)} className="field" aria-label="Screening standard"
-            style={{width:"auto",maxWidth:"100%",fontSize:14,fontWeight:600,cursor:"pointer",color:T.textHi}}>
+            style={{width:"auto",maxWidth:"100%",fontSize:"var(--fs-lg)",fontWeight:600,cursor:"pointer",color:T.textHi}}>
             {Object.entries(STANDARDS).map(([k,s])=><option key={k} value={k}>{s.name}</option>)}
           </select>
         </div>
         <div className="mz-ctrl-row" style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap",minWidth:0,maxWidth:"100%"}}>
-          <button onClick={()=>setEthicalPref(!ethical)} title="Ethical / BDS overlay — flag divestment-target names on top of the Sharia screen (does not change the Sharia verdict)" style={{fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",padding:`6px ${T.s3}`,borderRadius:999,cursor:"pointer",background:ethical?`${T.loss}1A`:"transparent",border:`1px solid ${ethical?T.loss:T.border}`,color:ethical?T.loss:T.muted,transition:"all 0.15s",whiteSpace:"nowrap"}}>Ethical/BDS {ethical?"ON":"OFF"}</button>
+          <button onClick={()=>setEthicalPref(!ethical)} title="Ethical / BDS overlay — flag divestment-target names on top of the Sharia screen (does not change the Sharia verdict)" style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.04em",padding:`6px ${T.s3}`,borderRadius:999,cursor:"pointer",background:ethical?`${T.loss}1A`:"transparent",border:`1px solid ${ethical?T.loss:T.border}`,color:ethical?T.loss:T.muted,transition:"all 0.15s",whiteSpace:"nowrap"}}>Ethical/BDS {ethical?"ON":"OFF"}</button>
           <button onClick={()=>runScreen(true)} disabled={busy} className="btn-primary">{busy?"Screening…":"Re-screen"}</button>
         </div>
       </div>
 
       {/* The chosen standard's own limits — this is what actually differs
           between frameworks (AAOIFI allows 49% receivables, Dow Jones 33%). */}
-      <div style={{padding:`${T.s2} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.6,letterSpacing:"0.02em"}}>
+      <div style={{padding:`${T.s2} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.6,letterSpacing:"0.02em"}}>
         {STANDARDS[primary].region}
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Debt/{STANDARDS[primary].denominator==="totalAssets"?"Assets":"MC"} &lt; {STANDARDS[primary].debtMax}%
         <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Cash &lt; {STANDARDS[primary].cashMax}%
@@ -2663,14 +2695,14 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
       {/* Verdict freshness. Restored after I dropped it while moving the picker
           up — "how old is this screen?" is load-bearing on a compliance surface,
           not decoration. */}
-      <div style={{marginTop:T.s3,display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:10,color:cacheStale?T.gold:T.muted}}>
+      <div style={{marginTop:T.s3,display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:cacheStale?T.gold:T.muted}}>
         <span style={{width:6,height:6,borderRadius:"50%",background:cacheStale?T.gold:T.gain,flexShrink:0,display:"inline-block"}}/>
         {cacheAge}{cacheStale&&" — re-screen for fresh data"}
       </div>
 
       {/* One line, not a paragraph. And it can finally say something true: the
           selection really does drive every compliance surface now. */}
-      <p style={{fontFamily:FP,fontSize:12,color:T.muted,margin:`${T.s3} 0 0`,lineHeight:1.5}}>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,margin:`${T.s3} 0 0`,lineHeight:1.5}}>
         Every verdict in Mizan — these badges, your Overview compliance score, the Rebalancer — follows this standard. Data: Finnhub fundamentals.
       </p>
     </BentoTile>
@@ -2693,8 +2725,8 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
         Mizan is doing something that requires registration. One symbol in, one
         verdict out, and the copy says as much. */}
     <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SCREEN ANY TICKER</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,letterSpacing:"-0.005em",maxWidth:680}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SCREEN ANY TICKER</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,letterSpacing:"-0.005em",maxWidth:680}}>
         Type a ticker or company name and pick the match — <strong style={{color:T.text,fontWeight:600}}>the verdict and its ratios appear once you select a symbol</strong>, screened by the same engine that screens your holdings. This is a compliance check, not a recommendation: Mizan tells you whether a company passes the screen, never whether to buy it.
       </p>
       <form onSubmit={runLookup} style={{display:"flex",gap:T.s2,alignItems:"flex-start",flexWrap:"wrap"}}>
@@ -2724,7 +2756,7 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
             autoComplete="off"
             maxLength={40}
             className="field"
-            style={{width:"100%",fontFamily:FM,fontSize:13,letterSpacing:"0.04em"}}
+            style={{width:"100%",fontFamily:FM,fontSize:"var(--fs-md)",letterSpacing:"0.04em"}}
           />
           {/* The footer sits OUTSIDE the <ul> on purpose: a hint row inside a
               listbox is announced as a selectable option. It also answers the
@@ -2748,15 +2780,15 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
                 style={{display:"flex",alignItems:"baseline",gap:T.s2,padding:`${T.s2} ${T.s2}`,borderRadius:T.rSm,cursor:"pointer",
                   background:i===sugIdx?`${T.blue}12`:"transparent"}}
               >
-                <span style={{fontFamily:FM,fontSize:12,fontWeight:700,color:T.textHi,letterSpacing:"0.06em",flexShrink:0,minWidth:52}}>{s.symbol}</span>
-                <span style={{fontFamily:FP,fontSize:12,color:T.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:700,color:T.textHi,letterSpacing:"0.06em",flexShrink:0,minWidth:52}}>{s.symbol}</span>
+                <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
               </li>)}
             </ul>
             {/* preventDefault keeps focus in the input, so clicking the hint
                 doesn't blur-close the menu the user is still reading. */}
             <div onMouseDown={e=>e.preventDefault()} style={{
               padding:`${T.s2} ${T.s3}`,borderTop:`1px solid ${T.border}`,background:T.surface,
-              fontFamily:FM,fontSize:9.5,letterSpacing:"0.12em",fontWeight:600,color:T.muted,textAlign:"center",
+              fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.12em",fontWeight:600,color:T.muted,textAlign:"center",
             }}>SELECT A SYMBOL TO SEE ITS VERDICT</div>
           </div>}
         </div>
@@ -2765,9 +2797,9 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
         </button>
       </form>
 
-      {lookupBusy&&<div style={{marginTop:T.s3,fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.04em"}}>Reading fundamentals for {lookupQ.trim().toUpperCase()}…</div>}
+      {lookupBusy&&<div style={{marginTop:T.s3,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,letterSpacing:"0.04em"}}>Reading fundamentals for {lookupQ.trim().toUpperCase()}…</div>}
 
-      {lookupErr&&<div role="status" style={{marginTop:T.s3,padding:`${T.s3} ${T.s4}`,background:`${T.gold}12`,border:`1px solid ${T.gold}33`,borderRadius:T.rMd,fontFamily:FP,fontSize:12.5,color:T.text,lineHeight:1.5}}>{lookupErr}</div>}
+      {lookupErr&&<div role="status" style={{marginTop:T.s3,padding:`${T.s3} ${T.s4}`,background:`${T.gold}12`,border:`1px solid ${T.gold}33`,borderRadius:T.rMd,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,lineHeight:1.5}}>{lookupErr}</div>}
 
       {lookupRes&&(()=>{
         const v=lookupRes.verdict;
@@ -2777,13 +2809,13 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
         return<div style={{marginTop:T.s3,display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,flexWrap:"wrap",padding:`${T.s3} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${c}`,borderRadius:T.rMd}}>
           <div style={{minWidth:0}}>
             <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
-              <span style={{fontFamily:FM,fontSize:13,fontWeight:700,color:T.textHi,letterSpacing:"0.06em"}}>{lookupRes.tk}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:700,color:T.textHi,letterSpacing:"0.06em"}}>{lookupRes.tk}</span>
               <Tag label={label} color={c}/>
-              {held&&<span style={{fontFamily:FM,fontSize:9,letterSpacing:"0.12em",fontWeight:600,color:T.muted,border:`1px solid ${T.border}`,borderRadius:999,padding:`2px ${T.s2}`}}>IN YOUR PORTFOLIO</span>}
+              {held&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.12em",fontWeight:600,color:T.muted,border:`1px solid ${T.border}`,borderRadius:999,padding:`2px ${T.s2}`}}>IN YOUR PORTFOLIO</span>}
             </div>
-            {(v.name||v.industry)&&<div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:2}}>{v.name||""}{v.industry?`${v.name?" · ":""}${v.industry}`:""}</div>}
+            {(v.name||v.industry)&&<div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,marginTop:2}}>{v.name||""}{v.industry?`${v.name?" · ":""}${v.industry}`:""}</div>}
           </div>
-          <button onClick={()=>setDetail({tk:lookupRes.tk,nm:v.name||"",_screen:v})} title="Why this verdict?" style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.blue,background:"transparent",border:`1px solid ${T.blue}40`,borderRadius:T.rMd,padding:`3px ${T.s2}`,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Why →</button>
+          <button onClick={()=>setDetail({tk:lookupRes.tk,nm:v.name||"",_screen:v})} title="Why this verdict?" style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,color:T.blue,background:"transparent",border:`1px solid ${T.blue}40`,borderRadius:T.rMd,padding:`3px ${T.s2}`,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>Why →</button>
         </div>;
       })()}
     </BentoTile>
@@ -2791,24 +2823,24 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
     {/* ─── Status stat tiles ────────────────────── */}
     <div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:T.s3}}>
       <BentoTile accent={T.gain}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>HALAL POSITIONS</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{byStatus.halal.length}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{kf(byStatus.halal.reduce((s,h)=>s+mv(h),0))}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>HALAL POSITIONS</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{byStatus.halal.length}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.gain,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{kf(byStatus.halal.reduce((s,h)=>s+mv(h),0))}</div>
       </BentoTile>
       <BentoTile accent={T.gold}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>REVIEW POSITIONS</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{byStatus.review.length}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{kf(reviewValue)}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>REVIEW POSITIONS</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{byStatus.review.length}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.gold,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{kf(reviewValue)}</div>
       </BentoTile>
       <BentoTile accent={T.loss} style={{background:`linear-gradient(135deg, ${T.loss}10, transparent 60%), ${T.card}`}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NON-COMPLIANT</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{byStatus.haram.length}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.loss,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{kf(haramValue)} · {haramPct.toFixed(1)}%</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NON-COMPLIANT</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{byStatus.haram.length}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.loss,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{kf(haramValue)} · {haramPct.toFixed(1)}%</div>
       </BentoTile>
       <BentoTile accent={T.gold}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PURIFICATION EST.</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(purification)}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1,lineHeight:1.45}}>Estimate: dividend yield × non-permissible income share. Real purification depends on each holding's actual dividend distributions and revenue breakdown.</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PURIFICATION EST.</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(purification)}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.gold,marginTop:T.s1,lineHeight:1.45}}>Estimate: dividend yield × non-permissible income share. Real purification depends on each holding's actual dividend distributions and revenue breakdown.</div>
       </BentoTile>
     </div>
 
@@ -2819,38 +2851,38 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
         const on=flt===k;
         const c=k==="halal"?T.gain:k==="haram"?T.loss:k==="review"?T.gold:k==="all"?T.blue:T.muted;
         return<button key={k} onClick={()=>setFlt(k)} style={{
-          fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",
+          fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.04em",
           padding:`6px ${T.s3}`,borderRadius:999,cursor:"pointer",
           background:on?`${c}1A`:"transparent",border:`1px solid ${on?c:T.border}`,
           color:on?c:T.muted,transition:"all 0.15s",
         }}>{l} <span style={{opacity:0.65,fontVariantNumeric:"tabular-nums"}}>{n}</span></button>;
       })}
-      <span style={{marginLeft:"auto",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>Tap “Why →” for the breakdown</span>
+      <span style={{marginLeft:"auto",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.04em"}}>Tap “Why →” for the breakdown</span>
     </div>
 
-    {ethical&&<div style={{padding:`${T.s2} ${T.s4}`,background:`${T.loss}0D`,border:`1px solid ${T.loss}33`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.55}}>
+    {ethical&&<div style={{padding:`${T.s2} ${T.s4}`,background:`${T.loss}0D`,border:`1px solid ${T.loss}33`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55}}>
       <span style={{color:T.loss,fontWeight:600}}>Ethical / BDS overlay ON</span> · {bdsExcluded.length} holding{bdsExcluded.length===1?"":"s"} flagged{bdsExcluded.length?`: ${bdsExcluded.map(h=>h.tk).join(", ")}`:""}. A curated divestment-target list layered on top of the Sharia verdict — it does not change the Sharia status.
     </div>}
 
     <BentoTile style={{padding:0,overflow:"hidden"}}>
       <Tbl cols={[
-        {l:"Symbol",r_:r=><div><div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r._screen.status==="haram"?T.loss:T.textHi}}>{r.tk}</div><div style={{fontFamily:FM,fontSize:9,color:T.muted}}>{r._screen.industry||r.ty||"—"}</div></div>},
-        {l:"Mkt Value",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.textHi}}>{f$(mv(r))}</span>},
+        {l:"Symbol",r_:r=><div><div style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:500,color:r._screen.status==="haram"?T.loss:T.textHi}}>{r.tk}</div><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{r._screen.industry||r.ty||"—"}</div></div>},
+        {l:"Mkt Value",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.textHi}}>{f$(mv(r))}</span>},
         {l:"Sector",r_:r=>{const c=classifyIndustry(r._screen.industry);return<Tag label={c==="haram"?"Excluded":c==="review"?"Review":c==="halal"?"OK":"—"} color={c==="haram"?T.loss:c==="review"?T.gold:c==="halal"?T.gain:T.muted}/>;}},
-        {l:"Debt/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.debtR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
-        {l:"Cash/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.cashR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
-        {l:"A/R/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.recvR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:11,color:v<49?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
+        {l:"Debt/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.debtR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
+        {l:"Cash/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.cashR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
+        {l:"A/R/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.recvR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:v<49?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
         {l:"Status",r_:r=><span style={{display:"inline-flex",gap:4,alignItems:"center",flexWrap:"wrap"}}><Tag label={r._screen.status==="halal"?"Halal":r._screen.status==="haram"?"Non-Compliant":r._screen.status==="review"?"Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>{ethical&&r._screen.ethical?.excluded&&<Tag label="BDS" color={T.loss}/>}</span>},
-        {l:"Pass / 7",r:true,mobileHide:true,r_:r=>{const bs=r._screen.byStandard;if(!bs)return<span style={{color:T.muted}}>—</span>;const pass=Object.values(bs).filter(s=>s.pass===true).length;return<span style={{fontFamily:FM,fontSize:11,color:pass>=6?T.gain:pass>=4?T.gold:T.loss}} title={Object.entries(bs).map(([k,v])=>`${STANDARDS[k]?.name||k}: ${v.pass===true?"pass":v.pass===false?"fail":"n/a"}`).join("\n")}>{pass}/{Object.keys(STANDARDS).length}</span>;}},
+        {l:"Pass / 7",r:true,mobileHide:true,r_:r=>{const bs=r._screen.byStandard;if(!bs)return<span style={{color:T.muted}}>—</span>;const pass=Object.values(bs).filter(s=>s.pass===true).length;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:pass>=6?T.gain:pass>=4?T.gold:T.loss}} title={Object.entries(bs).map(([k,v])=>`${STANDARDS[k]?.name||k}: ${v.pass===true?"pass":v.pass===false?"fail":"n/a"}`).join("\n")}>{pass}/{Object.keys(STANDARDS).length}</span>;}},
         {l:"Primary",mobileHide:true,r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return v.pass===true?<Icon name="check" size={14} color={T.gain}/>:v.pass===false?<Icon name="close" size={14} color={T.loss}/>:<span style={{color:T.muted}}>…</span>;}},
-        {l:"Why",r_:r=><button onClick={()=>setDetail(r)} title="Why this verdict?" style={{fontFamily:FM,fontSize:10,fontWeight:600,color:T.blue,background:"transparent",border:`1px solid ${T.blue}40`,borderRadius:T.rMd,padding:`3px ${T.s2}`,cursor:"pointer",whiteSpace:"nowrap"}}>Why →</button>},
+        {l:"Why",r_:r=><button onClick={()=>setDetail(r)} title="Why this verdict?" style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,color:T.blue,background:"transparent",border:`1px solid ${T.blue}40`,borderRadius:T.rMd,padding:`3px ${T.s2}`,cursor:"pointer",whiteSpace:"nowrap"}}>Why →</button>},
       ]} rows={visibleRows}/>
-      {visibleRows.length===0&&<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No {flt==="all"?"":flt==="haram"?"non-compliant ":flt+" "}positions{flt==="all"?" yet":""}.</div>}
+      {visibleRows.length===0&&<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>No {flt==="all"?"":flt==="haram"?"non-compliant ":flt+" "}positions{flt==="all"?" yet":""}.</div>}
     </BentoTile>
 
     <div className="bento-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s4}}>
       <BentoTile>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STANDARDS</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STANDARDS</div>
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {Object.entries(STANDARDS).map(([k,s])=><div key={k} style={{
             padding:`${T.s2} ${T.s3}`,
@@ -2860,26 +2892,26 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
             borderRadius:T.rMd,
           }}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s1}}>
-              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{s.name}</span>
-              <span style={{fontFamily:FM,fontSize:10,fontWeight:500,color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{s.name}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:500,color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
             </div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
               Debt &lt; {s.debtMax}% · Cash &lt; {s.cashMax}% · A/R &lt; {s.recvMax}% · Non-perm &lt; {s.nonPermMax}% <span style={{fontStyle:"italic",color:T.dim}}>(not evaluated — sector check applies)</span>
             </div>
           </div>)}
         </div>
-        <div style={{marginTop:T.s3,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+        <div style={{marginTop:T.s3,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
           <strong style={{color:T.text,fontWeight:600}}>Universal:</strong> Sector exclusion across all standards (banking, alcohol, tobacco, gambling, weapons, conventional insurance, adult entertainment, pork).
         </div>
       </BentoTile>
       <BentoTile accent={T.gold}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PURIFICATION GUIDE</div>
-        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,letterSpacing:"-0.005em"}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PURIFICATION GUIDE</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.6,letterSpacing:"-0.005em"}}>
           Income from non-compliant or mixed-revenue companies must be purified — the impure portion is donated to charity (Sadaqah), without expectation of reward. The estimate above is a conservative proxy; for precision, multiply each holding's dividend by the company's non-permissible-income ratio.
         </p>
         <div style={{marginTop:T.s4,padding:`${T.s3} ${T.s4}`,background:`linear-gradient(135deg, ${T.gold}10, transparent 70%), ${T.surface}`,borderRadius:T.rMd,border:`1px solid ${T.gold}30`}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>EXIT GUIDANCE</div>
-          <div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>EXIT GUIDANCE</div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.55,letterSpacing:"-0.005em"}}>
             For Non-Compliant positions: sell at the next reasonable opportunity, donate any gains realized after purification to charity, and replace with a Sharia-screened equivalent (SPUS / HLAL / UMMA / SPSK).
           </div>
         </div>
@@ -2903,55 +2935,55 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
         <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:460,maxHeight:"calc(var(--mz-vh) * 0.88)",overflowY:"auto",background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:16,boxShadow:"var(--mz-glass-shadow-lg)",padding:T.s6,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s3,marginBottom:T.s1}}>
             <div>
-              <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>{detail.tk}</div>
-              <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:2}}>{sc.name||detail.nm||""}{sc.industry?`${sc.name||detail.nm?" · ":""}${sc.industry}`:""}</div>
+              <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>{detail.tk}</div>
+              <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,marginTop:2}}>{sc.name||detail.nm||""}{sc.industry?`${sc.name||detail.nm?" · ":""}${sc.industry}`:""}</div>
             </div>
             <Tag label={sc.status==="halal"?"Halal":sc.status==="haram"?"Non-Compliant":sc.status==="review"?"Review":"Unscreened"} color={statusColor}/>
           </div>
 
           {sectorExcluded
             ?<div style={{padding:`${T.s3} ${T.s4}`,background:`${T.loss}12`,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,marginTop:T.s3}}>
-                <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>EXCLUDED — PROHIBITED SECTOR</div>
-                <div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.5}}>{sc.industry||"This industry"} is excluded under every standard (interest-based finance, alcohol, tobacco, gambling, weapons, conventional insurance, adult entertainment, pork). Financial ratios aren’t evaluated when the core business itself is non-compliant.</div>
+                <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>EXCLUDED — PROHIBITED SECTOR</div>
+                <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.5}}>{sc.industry||"This industry"} is excluded under every standard (interest-based finance, alcohol, tobacco, gambling, weapons, conventional insurance, adult entertainment, pork). Financial ratios aren’t evaluated when the core business itself is non-compliant.</div>
               </div>
             :<>
-              <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,margin:`${T.s4} 0 ${T.s2}`}}>{std.name} RATIO TESTS</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,margin:`${T.s4} 0 ${T.s2}`}}>{std.name} RATIO TESTS</div>
               {tests.length===0
-                ?<div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.5}}>Financial ratios aren’t available yet for {detail.tk}. Re-screen, or check back after the next data refresh.</div>
+                ?<div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.5}}>Financial ratios aren’t available yet for {detail.tk}. Re-screen, or check back after the next data refresh.</div>
                 :<div style={{display:"flex",flexDirection:"column",gap:6}}>
                   {tests.map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s2,padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${t.pass?T.gain:T.loss}`,borderRadius:T.rMd}}>
-                    <span style={{fontFamily:FM,fontSize:11,color:T.text}}>{t.rule}</span>
+                    <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text}}>{t.rule}</span>
                     <span style={{display:"flex",alignItems:"center",gap:T.s2}}>
-                      <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:t.pass?T.gain:T.loss,fontVariantNumeric:"tabular-nums"}}>{t.detail}</span>
-                      <span style={{fontFamily:FM,fontSize:10,color:T.muted}}>limit &lt;{t.limit}%</span>
+                      <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:t.pass?T.gain:T.loss,fontVariantNumeric:"tabular-nums"}}>{t.detail}</span>
+                      <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>limit &lt;{t.limit}%</span>
                       <Icon name={t.pass?"check":"close"} size={13} color={t.pass?T.gain:T.loss}/>
                     </span>
                   </div>)}
                 </div>}
-              {sc.nonPermPct==null&&<div style={{marginTop:T.s2,fontFamily:FM,fontSize:10,color:T.dim,fontStyle:"italic"}}>Non-permissible income % not evaluated on the current data provider — the sector screen carries that test.</div>}
+              {sc.nonPermPct==null&&<div style={{marginTop:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,fontStyle:"italic"}}>Non-permissible income % not evaluated on the current data provider — the sector screen carries that test.</div>}
             </>}
 
           {sc.byStandard&&<>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,margin:`${T.s4} 0 ${T.s2}`}}>ACROSS ALL STANDARDS</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,margin:`${T.s4} 0 ${T.s2}`}}>ACROSS ALL STANDARDS</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {Object.entries(sc.byStandard).map(([k,v])=>{const c=v.pass===true?T.gain:v.pass===false?T.loss:T.muted;return<span key={k} title={STANDARDS[k]?.name||k} style={{fontFamily:FM,fontSize:10,fontWeight:600,color:c,background:`${c}14`,border:`1px solid ${c}33`,borderRadius:999,padding:`3px ${T.s2}`}}>{(STANDARDS[k]?.name||k).replace(/ \(.*\)/,"")} {v.pass===true?"✓":v.pass===false?"✕":"–"}</span>;})}
+              {Object.entries(sc.byStandard).map(([k,v])=>{const c=v.pass===true?T.gain:v.pass===false?T.loss:T.muted;return<span key={k} title={STANDARDS[k]?.name||k} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,color:c,background:`${c}14`,border:`1px solid ${c}33`,borderRadius:999,padding:`3px ${T.s2}`}}>{(STANDARDS[k]?.name||k).replace(/ \(.*\)/,"")} {v.pass===true?"✓":v.pass===false?"✕":"–"}</span>;})}
             </div>
           </>}
 
           {/* AI plain-language explanation — grounded in the ratio data above. */}
           <div style={{marginTop:T.s4}}>
-            {!aiExplain&&!aiBusy&&<button onClick={()=>explainVerdict(detail)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:T.s2,padding:"10px",borderRadius:T.rMd,cursor:"pointer",background:`${T.blue}12`,border:`1px solid ${T.blue}40`,color:T.blue,fontFamily:FM,fontSize:12,fontWeight:600,letterSpacing:"0.04em"}}>✦ Explain in plain English</button>}
-            {aiBusy&&<div style={{fontFamily:FM,fontSize:12,color:T.muted,textAlign:"center",padding:"10px"}}>Reading the ratios…</div>}
+            {!aiExplain&&!aiBusy&&<button onClick={()=>explainVerdict(detail)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:T.s2,padding:"10px",borderRadius:T.rMd,cursor:"pointer",background:`${T.blue}12`,border:`1px solid ${T.blue}40`,color:T.blue,fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,letterSpacing:"0.04em"}}>✦ Explain in plain English</button>}
+            {aiBusy&&<div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,textAlign:"center",padding:"10px"}}>Reading the ratios…</div>}
             {aiExplain&&<div style={{padding:`${T.s3} ${T.s4}`,background:`${T.blue}0C`,border:`1px solid ${T.blue}28`,borderRadius:T.rMd}}>
-              <div style={{fontFamily:FM,fontSize:9,letterSpacing:"0.14em",color:T.blue,fontWeight:600,marginBottom:T.s2}}>✦ AI EXPLANATION</div>
-              <div style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{aiExplain}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.14em",color:T.blue,fontWeight:600,marginBottom:T.s2}}>✦ AI EXPLANATION</div>
+              <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{aiExplain}</div>
             </div>}
           </div>
 
-          <div style={{marginTop:T.s4,fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5}}>
+          <div style={{marginTop:T.s4,fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
             Data: {sc.source==="zoya"?"Zoya":"Finnhub"} fundamentals{sc.asOf?` · screened ${sc.asOf}`:""}. Verdicts are estimates from public financials against AAOIFI-aligned thresholds — confirm with a qualified scholar for your situation.
           </div>
-          <button onClick={()=>setDetail(null)} className="btn-ghost" style={{marginTop:T.s4,width:"100%",fontSize:13,padding:"10px"}}>Close</button>
+          <button onClick={()=>setDetail(null)} className="btn-ghost" style={{marginTop:T.s4,width:"100%",fontSize:"var(--fs-md)",padding:"10px"}}>Close</button>
         </div>
       </div>;
     })()}
@@ -3036,42 +3068,42 @@ function TaxPlanner({holdings=[],activities=[],snapAccounts=[]}){
     {/* ─── Hero + bracket selectors ────────────────── */}
     <div className="bento-row" style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:T.s4}}>
       <BentoTile accent={T.gold} style={{background:`radial-gradient(circle at 0% 0%, ${T.gold}15, transparent 55%), ${T.card}`}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>HARVESTABLE LOSS</div>
-        <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{kf(Math.abs(totalLoss))}</div>
-        <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{losers.length} position{losers.length===1?"":"s"} below cost</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>HARVESTABLE LOSS</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-5xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{kf(Math.abs(totalLoss))}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,marginTop:T.s2}}>{losers.length} position{losers.length===1?"":"s"} below cost</div>
         <div style={{marginTop:T.s4,padding:`${T.s3} ${T.s4}`,background:`${T.gold}10`,border:`1px solid ${T.gold}25`,borderRadius:T.rMd}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>ESTIMATED TAX SAVINGS</div>
-          <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.gold,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(taxSavings)}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>@ {((bracket+stateBracket)*100).toFixed(0)}% combined marginal rate</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>ESTIMATED TAX SAVINGS</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.gold,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(taxSavings)}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s1}}>@ {((bracket+stateBracket)*100).toFixed(0)}% combined marginal rate</div>
         </div>
       </BentoTile>
 
       <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <BentoTile accent={fc(ytdRealized)}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YTD REALIZED</div>
-          <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:fc(ytdRealized),letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{ytdRealized>=0?"+":""}{kf(Math.abs(ytdRealized))}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{ytdSells.length} sells YTD{missingBasisCount>0?` · ${missingBasisCount} need lot-level basis`:""}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YTD REALIZED</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:fc(ytdRealized),letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{ytdRealized>=0?"+":""}{kf(Math.abs(ytdRealized))}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s1}}>{ytdSells.length} sells YTD{missingBasisCount>0?` · ${missingBasisCount} need lot-level basis`:""}</div>
         </BentoTile>
         <BentoTile accent={T.loss}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>EST. TAX OWED</div>
-          <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(estTax)}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.loss,marginTop:T.s1}}>On gains + divs</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>EST. TAX OWED</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(estTax)}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,marginTop:T.s1}}>On gains + divs</div>
         </BentoTile>
       </div>
     </div>
 
     {/* ─── Bracket controls + intro ────────────────── */}
     <BentoTile>
-      <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,maxWidth:680,marginBottom:T.s3,letterSpacing:"-0.005em"}}>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.55,maxWidth:680,marginBottom:T.s3,letterSpacing:"-0.005em"}}>
         Surfaces unrealized losses you could harvest to offset taxable gains. Wash-sale rule: a position sold at a loss can't be repurchased within 30 days. Estimates assume your combined federal + state marginal rate.
       </div>
-      <div style={{display:"flex",gap:T.s3,alignItems:"center",fontFamily:FM,fontSize:11,color:T.muted,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:T.s3,alignItems:"center",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,flexWrap:"wrap"}}>
         <span style={{letterSpacing:"0.04em"}}>FEDERAL</span>
-        <select value={bracket} onChange={e=>setBracket(+e.target.value)} className="field" style={{width:"auto",fontSize:11,padding:`5px ${T.s3}`,cursor:"pointer"}}>
+        <select value={bracket} onChange={e=>setBracket(+e.target.value)} className="field" style={{width:"auto",fontSize:"var(--fs-xs)",padding:`5px ${T.s3}`,cursor:"pointer"}}>
           {[0.10,0.12,0.22,0.24,0.32,0.35,0.37].map(b=><option key={b} value={b}>{(b*100).toFixed(0)}%</option>)}
         </select>
         <span style={{letterSpacing:"0.04em"}}>STATE</span>
-        <select value={stateBracket} onChange={e=>setStateBracket(+e.target.value)} className="field" style={{width:"auto",fontSize:11,padding:`5px ${T.s3}`,cursor:"pointer"}}>
+        <select value={stateBracket} onChange={e=>setStateBracket(+e.target.value)} className="field" style={{width:"auto",fontSize:"var(--fs-xs)",padding:`5px ${T.s3}`,cursor:"pointer"}}>
           {[0,0.03,0.05,0.07,0.09,0.13].map(b=><option key={b} value={b}>{(b*100).toFixed(0)}%</option>)}
         </select>
       </div>
@@ -3080,22 +3112,22 @@ function TaxPlanner({holdings=[],activities=[],snapAccounts=[]}){
     {/* ─── Losers table ────────────────────────────── */}
     {losers.length===0
       ?<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
-        <div style={{fontFamily:FP,fontSize:14,fontWeight:500,color:T.muted}}>No unrealized losses across visible accounts.</div>
-        <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:T.s1}}>Nothing to harvest right now.</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:500,color:T.muted}}>No unrealized losses across visible accounts.</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,marginTop:T.s1}}>Nothing to harvest right now.</div>
       </BentoTile>
       :<BentoTile style={{padding:0,overflow:"hidden"}}>
           <Tbl cols={[
             {l:"Symbol",r_:r=><div>
-              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:r.sh_==="haram"?T.loss:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</div>
-              <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{r.ac_}</div>
+              <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:r.sh_==="haram"?T.loss:T.textHi,letterSpacing:"-0.01em"}}>{r.tk}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2}}>{r.ac_}</div>
             </div>},
-            {l:"Shares",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.sh.toFixed(3)}</span>},
-            {l:"Avg Cost",r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{f$(r.ac)}</span>},
-            {l:"Current",r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}>{f$(r.px)}</span>},
-            {l:"Loss $",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.loss,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(Math.abs(r._loss))}</span>},
-            {l:"Loss %",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.loss,fontVariantNumeric:"tabular-nums"}}>{fp(r._lossPct)}</span>},
+            {l:"Shares",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.sh.toFixed(3)}</span>},
+            {l:"Avg Cost",r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{f$(r.ac)}</span>},
+            {l:"Current",r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}>{f$(r.px)}</span>},
+            {l:"Loss $",r:true,r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.loss,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(Math.abs(r._loss))}</span>},
+            {l:"Loss %",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:T.loss,fontVariantNumeric:"tabular-nums"}}>{fp(r._lossPct)}</span>},
             {l:"Wash Risk",mobileHide:true,r_:r=>recentSells.has(r.tk)?<Tag label="< 30d sold" color={T.loss}/>:<Tag label="Clear" color={T.gain}/>},
-            {l:"Replace With",r_:r=><span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:r.sh_==="haram"?T.loss:T.gold}}>{r._replacement}</span>},
+            {l:"Replace With",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:r.sh_==="haram"?T.loss:T.gold}}>{r._replacement}</span>},
           ]} rows={losers}/>
         </BentoTile>
     }
@@ -3202,8 +3234,8 @@ function DocumentsPanel({documents=[],accounts=[]}){
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap",marginBottom:T.s4}}>
         <div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YOUR FILES</div>
-          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YOUR FILES</div>
+          <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
             Upload CSVs, PDFs, DOCX, images — any file up to 2 MB. Stored privately to your account, synced across devices, with duplicate detection by name + size.
           </p>
         </div>
@@ -3212,16 +3244,16 @@ function DocumentsPanel({documents=[],accounts=[]}){
           <button onClick={()=>fileRef.current?.click()} disabled={uploadBusy} className="btn-primary">{uploadBusy?"Uploading…":"Upload Files"}</button>
         </div>
       </div>
-      {uploadStatus&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:uploadStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(uploadStatus.ok?T.gain:T.loss)+"30"}`,color:uploadStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{uploadStatus.ok?ICON_OK:ICON_NO}{uploadStatus.msg}</div>}
+      {uploadStatus&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",background:uploadStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(uploadStatus.ok?T.gain:T.loss)+"30"}`,color:uploadStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{uploadStatus.ok?ICON_OK:ICON_NO}{uploadStatus.msg}</div>}
       {userDocs.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
           No files yet. Click <strong style={{color:T.text}}>Upload Files</strong> to add CSVs, PDFs, or DOCX. Files sync to your account so they appear on every device you sign in from.
         </div>
         :<div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
-            {l:"Uploaded",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.uploadedAt)}</span>},
+            {l:"Uploaded",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{fmtDate(r.uploadedAt)}</span>},
             {l:"Name",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-              <span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>
               {r.duplicate&&<Tag label="Duplicate" color={T.gold}/>}
             </div>},
             {l:"Type",r_:r=>{
@@ -3229,10 +3261,10 @@ function DocumentsPanel({documents=[],accounts=[]}){
               const c=ext==="CSV"?T.blue:ext==="PDF"?T.loss:ext==="DOCX"||ext==="DOC"?T.gain:T.muted;
               return<Tag label={ext||"FILE"} color={c}/>;
             }},
-            {l:"Size",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtSize(r.size)}</span>},
+            {l:"Size",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtSize(r.size)}</span>},
             {l:"",r:true,r_:r=><div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
-              <a href={r.data} download={r.name} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,textDecoration:"none"}}>Download</a>
-              <button onClick={()=>removeUserDoc(r.id)} style={{padding:`4px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:11,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}><Icon name="close" size={12}/></button>
+              <a href={r.data} download={r.name} style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,textDecoration:"none"}}>Download</a>
+              <button onClick={()=>removeUserDoc(r.id)} style={{padding:`4px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-xs)",background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer"}}><Icon name="close" size={12}/></button>
             </div>},
           ]} rows={userDocs}/>
         </div>}
@@ -3242,8 +3274,8 @@ function DocumentsPanel({documents=[],accounts=[]}){
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap",marginBottom:T.s4}}>
         <div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FROM YOUR BROKERS</div>
-          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:600}}>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FROM YOUR BROKERS</div>
+          <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.55,maxWidth:600}}>
             Statements, 1099s, trade confirmations, and broker notices pulled from SnapTrade. Coverage varies by broker — Fidelity + Robinhood expose statements + tax docs; Coinbase exports trade confirms.
           </p>
         </div>
@@ -3251,42 +3283,42 @@ function DocumentsPanel({documents=[],accounts=[]}){
 
       <div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:T.s3,marginBottom:T.s4}}>
         <BentoTile style={{padding:`${T.s3} ${T.s4}`,boxShadow:"none"}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>TOTAL</div>
-          <div style={{fontFamily:FU,fontSize:20,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{documents.length}</div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>{types.length||0} types</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>TOTAL</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{documents.length}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s1}}>{types.length||0} types</div>
         </BentoTile>
         <BentoTile style={{padding:`${T.s3} ${T.s4}`,boxShadow:"none"}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>STATEMENTS</div>
-          <div style={{fontFamily:FU,fontSize:20,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{documents.filter(d=>/STATEMENT/i.test(d.type||d.document_type||"")).length}</div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>Monthly + quarterly</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>STATEMENTS</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{documents.filter(d=>/STATEMENT/i.test(d.type||d.document_type||"")).length}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s1}}>Monthly + quarterly</div>
         </BentoTile>
         <BentoTile style={{padding:`${T.s3} ${T.s4}`,boxShadow:"none"}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>TAX / 1099s</div>
-          <div style={{fontFamily:FU,fontSize:20,fontWeight:600,color:T.gold,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{documents.filter(d=>/TAX|1099/i.test(d.type||d.document_type||"")).length}</div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>Year-end</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>TAX / 1099s</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:600,color:T.gold,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{documents.filter(d=>/TAX|1099/i.test(d.type||d.document_type||"")).length}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s1}}>Year-end</div>
         </BentoTile>
       </div>
 
       <div className="mz-chip-row" style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center",marginBottom:T.s3}}>
-        <button onClick={()=>setType("all")} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,background:type==="all"?T.blue:"transparent",border:`1px solid ${type==="all"?T.blue:T.border}`,color:type==="all"?"#fff":T.muted,cursor:"pointer"}}>All</button>
-        {types.map(t=><button key={t} onClick={()=>setType(t)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,background:type===t?`${colorOf(t)}22`:"transparent",border:`1px solid ${type===t?colorOf(t):T.border}`,color:type===t?colorOf(t):T.muted,cursor:"pointer"}}>{t.replace(/_/g," ")}</button>)}
-        <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{marginLeft:"auto",width:"auto",fontSize:11,padding:`5px ${T.s3}`}}>
+        <button onClick={()=>setType("all")} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,background:type==="all"?T.blue:"transparent",border:`1px solid ${type==="all"?T.blue:T.border}`,color:type==="all"?"#fff":T.muted,cursor:"pointer"}}>All</button>
+        {types.map(t=><button key={t} onClick={()=>setType(t)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,background:type===t?`${colorOf(t)}22`:"transparent",border:`1px solid ${type===t?colorOf(t):T.border}`,color:type===t?colorOf(t):T.muted,cursor:"pointer"}}>{t.replace(/_/g," ")}</button>)}
+        <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{marginLeft:"auto",width:"auto",fontSize:"var(--fs-xs)",padding:`5px ${T.s3}`}}>
           <option value="all">All Accounts</option>
           {accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName}</option>)}
         </select>
       </div>
 
       {filtered.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
           {documents.length===0?"No documents yet — SnapTrade syncs broker documents on a delay. Fidelity and Robinhood usually populate within 24 hours of connection.":"No documents match these filters."}
         </div>
         :<div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
             <Tbl cols={[
-              {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.date||r.created_at||"—"}</span>},
+              {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{r.date||r.created_at||"—"}</span>},
               {l:"Type",r_:r=>{const t=(r.type||r.document_type||"OTHER").toUpperCase();return<Tag label={t.replace(/_/g," ")} color={colorOf(t)}/>;}},
-              {l:"Name",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name||r.title||r.description||r.id||"—"}</span>},
-              {l:"Account",r_:r=>{const id=r.account?.id||r.accountId||r.account_id;return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{acctNameById[id]||r.institution_name||"—"}</span>;}},
-              {l:"",r:true,r_:r=>{const url=r.downloadUrl||r.download_url||r.url;return url?<a href={url} target="_blank" rel="noreferrer" style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,textDecoration:"none"}}>Download ↗</a>:<span style={{color:T.muted,fontSize:10}}>—</span>;}},
+              {l:"Name",r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em"}}>{r.name||r.title||r.description||r.id||"—"}</span>},
+              {l:"Account",r_:r=>{const id=r.account?.id||r.accountId||r.account_id;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{acctNameById[id]||r.institution_name||"—"}</span>;}},
+              {l:"",r:true,r_:r=>{const url=r.downloadUrl||r.download_url||r.url;return url?<a href={url} target="_blank" rel="noreferrer" style={{padding:`4px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,textDecoration:"none"}}>Download ↗</a>:<span style={{color:T.muted,fontSize:"var(--fs-2xs)"}}>—</span>;}},
             ]} rows={filtered}/>
           </div>
       }
@@ -3361,35 +3393,35 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     <div className="bento-row" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:T.s4}}>
       <BentoTile accent={T.blue}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BUYS</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.BUY)}</div>
-        <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{rows.filter(r=>(r.type||"").toUpperCase()==="BUY").length} txns · {rangeLabel}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BUYS</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.BUY)}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s1}}>{rows.filter(r=>(r.type||"").toUpperCase()==="BUY").length} txns · {rangeLabel}</div>
       </BentoTile>
       <BentoTile accent={T.gold}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SELLS</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.SELL)}</div>
-        <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>{rows.filter(r=>(r.type||"").toUpperCase()==="SELL").length} txns · {rangeLabel}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>SELLS</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.SELL)}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s1}}>{rows.filter(r=>(r.type||"").toUpperCase()==="SELL").length} txns · {rangeLabel}</div>
       </BentoTile>
       <BentoTile accent={T.gain}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DIVIDENDS</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.DIVIDEND)}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>Cash received · {rangeLabel}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DIVIDENDS</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(totals.DIVIDEND)}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.gain,marginTop:T.s1}}>Cash received · {rangeLabel}</div>
       </BentoTile>
       <BentoTile accent={netFlow>=0?T.gain:T.loss}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NET FLOW</div>
-        <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:netFlow>=0?T.gain:T.loss,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{netFlow>=0?"+":"-"}{kf(Math.abs(netFlow))}</div>
-        <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>Deposits − withdrawals · {rangeLabel}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NET FLOW</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,color:netFlow>=0?T.gain:T.loss,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{netFlow>=0?"+":"-"}{kf(Math.abs(netFlow))}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s1}}>Deposits − withdrawals · {rangeLabel}</div>
       </BentoTile>
     </div>
 
     <div className="mz-chip-row" style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center"}}>
       {[["all","All"],["BUY","Buys"],["SELL","Sells"],["DIVIDEND","Dividends"],["DEPOSIT","Deposits"],["WITHDRAWAL","Withdrawals"],["FEE","Fees"]].map(([v,l])=>
-        <button key={v} onClick={()=>setType(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,
+        <button key={v} onClick={()=>setType(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,
           background:type===v?`${colorOf(v)}22`:"transparent",
           border:`1px solid ${type===v?colorOf(v):T.border}`,
           color:type===v?colorOf(v):T.muted,cursor:"pointer",transition:"all 0.15s"}}>{l}</button>)}
       <div style={{width:1,height:18,background:T.border,alignSelf:"center"}}/>
-      <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{width:"auto",fontSize:11,padding:`5px ${T.s3}`}}>
+      <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{width:"auto",fontSize:"var(--fs-xs)",padding:`5px ${T.s3}`}}>
         <option value="all">All Accounts</option>
         {acctOptions.filter(o=>o!=="all").map(id=><option key={id} value={id}>{acctNameById[id]||id}</option>)}
       </select>
@@ -3397,7 +3429,7 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
           edge at 320px, putting "Export CSV" in the clip region. */}
       <div style={{marginLeft:"auto",display:"flex",gap:T.s1,alignItems:"center",flexWrap:"wrap"}}>
         {[["1m","1M"],["3m","3M"],["1y","1Y"],["5y","5Y"],["all","All"]].map(([v,l])=>
-          <button key={v} onClick={()=>setRange(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",
+          <button key={v} onClick={()=>setRange(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",
             background:range===v?T.borderHi:"transparent",border:`1px solid ${range===v?T.borderHi:T.border}`,
             color:range===v?T.text:T.muted,cursor:"pointer"}}>{l}</button>)}
         <button
@@ -3416,7 +3448,7 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
           )}
           disabled={rows.length===0}
           title={rows.length===0?"No activity to export":"Download activity as CSV"}
-          style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:rows.length===0?T.dim:T.muted,cursor:rows.length===0?"not-allowed":"pointer"}}
+          style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:rows.length===0?T.dim:T.muted,cursor:rows.length===0?"not-allowed":"pointer"}}
         >CSV ↓</button>
         <button
           onClick={async()=>{
@@ -3430,28 +3462,28 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
             setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},100);
           }}
           title="Download full activity export from server (5-year SnapTrade window)"
-          style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer"}}
+          style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer"}}
         >↓ Export CSV</button>
       </div>
     </div>
 
     {rows.length===0?
       <BentoTile style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
-        <div style={{fontFamily:FP,fontSize:14,fontWeight:500,color:T.muted}}>No activity in this range.</div>
-        <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:T.s1}}>Widen the date filter or run Sync All.</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:500,color:T.muted}}>No activity in this range.</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,marginTop:T.s1}}>Widen the date filter or run Sync All.</div>
       </BentoTile>
       :
       <BentoTile style={{padding:0,overflow:"hidden"}}>
         <Tbl cols={[
-          {l:"Date",   r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.trade_date||r.settlement_date||"—"}</span>},
+          {l:"Date",   r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.trade_date||r.settlement_date||"—"}</span>},
           {l:"Type",   r_:r=>{const t=(r.type||"").toUpperCase();return<span style={{display:"inline-flex",gap:4,alignItems:"center"}}><Tag label={t||"—"} color={colorOf(t)}/>{r._bot&&<Tag label="BOT" color={T.blue}/>}</span>;}},
-          {l:"Symbol", r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{fmtSym(r.symbol)}</span>},
-          {l:"Account",mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{acctNameById[r.account?.id]||r.institution_name||"—"}</span>},
-          {l:"Quantity",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.units?(+r.units).toLocaleString("en-US",{maximumFractionDigits:4}):"—"}</span>},
-          {l:"Price",   r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.price?f$(r.price):"—"}</span>},
-          {l:"Amount",  r:true,r_:r=>{const v=+r.amount||0;return<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:v>0?T.gain:v<0?T.loss:T.text,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{v>0?"+":v<0?"−":""}{f$(Math.abs(v))}</span>;}},
+          {l:"Symbol", r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{fmtSym(r.symbol)}</span>},
+          {l:"Account",mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{acctNameById[r.account?.id]||r.institution_name||"—"}</span>},
+          {l:"Quantity",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.units?(+r.units).toLocaleString("en-US",{maximumFractionDigits:4}):"—"}</span>},
+          {l:"Price",   r:true,mobileHide:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.price?f$(r.price):"—"}</span>},
+          {l:"Amount",  r:true,r_:r=>{const v=+r.amount||0;return<span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:v>0?T.gain:v<0?T.loss:T.text,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{v>0?"+":v<0?"−":""}{f$(Math.abs(v))}</span>;}},
         ]} rows={rows.slice(0,500)}/>
-        {rows.length>500&&<div style={{padding:`${T.s2} ${T.s4}`,fontFamily:FM,fontSize:10,color:T.muted,textAlign:"center",borderTop:`1px solid ${T.border}`}}>Showing first 500 of {rows.length} — narrow filters to see more.</div>}
+        {rows.length>500&&<div style={{padding:`${T.s2} ${T.s4}`,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,textAlign:"center",borderTop:`1px solid ${T.border}`}}>Showing first 500 of {rows.length} — narrow filters to see more.</div>}
       </BentoTile>
     }
   </div>;
@@ -3477,14 +3509,14 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, nisabRead
   const inputRow=f=>(
     <div key={f.key} style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:T.s3,alignItems:"center",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
       <div style={{minWidth:0}}>
-        <div style={{fontFamily:FP,fontSize:13,fontWeight:500,color:T.text,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:500,color:T.text,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
           {f.label}
-          {f.inv&&factorPct&&<span style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.06em",fontWeight:600,padding:`1px 5px`,borderRadius:T.rSm,background:`${T.gold}14`}}>{factorPct}</span>}
+          {f.inv&&factorPct&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.06em",fontWeight:600,padding:`1px 5px`,borderRadius:T.rSm,background:`${T.gold}14`}}>{factorPct}</span>}
         </div>
-        <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:1,lineHeight:1.35}}>{f.help}</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:1,lineHeight:1.35}}>{f.help}</div>
       </div>
       <div style={{position:"relative"}}>
-        <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:12,color:T.muted,pointerEvents:"none"}}>$</span>
+        <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,pointerEvents:"none"}}>$</span>
         <input type="number" inputMode="decimal" min="0" step="0.01"
           value={draft[f.key]||""}
           onChange={e=>onField(f.key,e.target.value)}
@@ -3492,7 +3524,7 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, nisabRead
           disabled={demoMode}
           placeholder="0"
           className="field"
-          style={{width:"100%",textAlign:"right",paddingLeft:22,fontVariantNumeric:"tabular-nums",fontFamily:FP,fontSize:14,opacity:demoMode?0.55:1}}/>
+          style={{width:"100%",textAlign:"right",paddingLeft:22,fontVariantNumeric:"tabular-nums",fontFamily:FP,fontSize:"var(--fs-lg)",opacity:demoMode?0.55:1}}/>
       </div>
     </div>
   );
@@ -3500,13 +3532,13 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, nisabRead
   const autoRow=(label,value,note)=>(
     <div key={label} style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:T.s3,alignItems:"center",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
       <div style={{minWidth:0}}>
-        <div style={{fontFamily:FP,fontSize:13,fontWeight:500,color:T.text,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:500,color:T.text,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
           {label}
-          <span style={{fontFamily:FM,fontSize:9,color:T.blue,letterSpacing:"0.06em",fontWeight:600,padding:`1px 5px`,borderRadius:T.rSm,background:`${T.blue}14`}}>AUTO</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.06em",fontWeight:600,padding:`1px 5px`,borderRadius:T.rSm,background:`${T.blue}14`}}>AUTO</span>
         </div>
-        <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:1,lineHeight:1.35}}>{note}</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:1,lineHeight:1.35}}>{note}</div>
       </div>
-      <div style={{textAlign:"right",fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",paddingRight:2}}>{fmtUSD(value)}</div>
+      <div style={{textAlign:"right",fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",paddingRight:2}}>{fmtUSD(value)}</div>
     </div>
   );
 
@@ -3519,46 +3551,46 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, nisabRead
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     <div>
-      <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ASSETS</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ASSETS</div>
 
       {/* Connected-account picker — tick the accounts to count toward Zakat,
           untick any you don't (a joint account, one you handle separately). */}
       {connectedAccounts.length>0?<div style={{marginBottom:T.s3}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:T.s2,gap:T.s2,flexWrap:"wrap"}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600}}>CONNECTED ACCOUNTS · {countedN} of {connectedAccounts.length} counted</span>
-          {factorPct&&<span style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.04em"}}>investments {factorPct}</span>}
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:600}}>CONNECTED ACCOUNTS · {countedN} of {connectedAccounts.length} counted</span>
+          {factorPct&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.04em"}}>investments {factorPct}</span>}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:220,overflowY:"auto",padding:T.s2,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
           {connectedAccounts.map(a=>{
             const on=!excludedAccounts.has(a.id);
             return<label key={a.id} style={{display:"flex",alignItems:"center",gap:T.s2,padding:`6px ${T.s2}`,borderRadius:T.rSm,cursor:demoMode?"default":"pointer",background:on?`${T.blue}14`:"transparent",border:`1px solid ${on?T.blue+"55":T.border}`,opacity:demoMode?0.6:1}}>
               <input type="checkbox" checked={on} disabled={demoMode} onChange={()=>onToggleAccount&&onToggleAccount(a.id)} style={{cursor:demoMode?"default":"pointer",accentColor:T.blue}}/>
-              <span style={{fontFamily:FM,fontSize:9,color:KIND_COLOR[a.kind]||T.muted,letterSpacing:"0.04em",fontWeight:600,padding:"1px 5px",borderRadius:T.rSm,background:`${KIND_COLOR[a.kind]||T.muted}14`,whiteSpace:"nowrap"}}>{KIND_LABEL[a.kind]||"Asset"}</span>
-              <span style={{fontFamily:FP,fontSize:12,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.label}</span>
-              <span style={{fontFamily:FM,fontSize:11,color:on?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(a.balance)}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:KIND_COLOR[a.kind]||T.muted,letterSpacing:"0.04em",fontWeight:600,padding:"1px 5px",borderRadius:T.rSm,background:`${KIND_COLOR[a.kind]||T.muted}14`,whiteSpace:"nowrap"}}>{KIND_LABEL[a.kind]||"Asset"}</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.label}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:on?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmtUSD(a.balance)}</span>
             </label>;
           })}
         </div>
-        <div style={{marginTop:T.s2,fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
+        <div style={{marginTop:T.s2,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>
           Counted: Investments <span style={{color:T.text,fontWeight:600}}>{fmtUSD(connectedTotals.invest||0)}</span>{factorPct?` (${factorPct})`:""} · Cash <span style={{color:T.text,fontWeight:600}}>{fmtUSD(connectedTotals.cash||0)}</span>
         </div>
       </div>:(onConnect&&!demoMode&&<button onClick={onConnect} className="mz-tap" style={{
         width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:T.s2,
         padding:`${T.s2} ${T.s3}`,marginBottom:T.s3,
-        fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.04em",
+        fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.04em",
         color:T.blue,background:`${T.blue}0D`,border:`1px dashed ${T.blue}55`,borderRadius:T.rSm,cursor:"pointer",
       }}>
-        <span aria-hidden="true" style={{fontSize:13,lineHeight:1}}>+</span>
+        <span aria-hidden="true" style={{fontSize:"var(--fs-md)",lineHeight:1}}>+</span>
         Connect a bank or brokerage to pick accounts here
       </button>)}
 
       {/* Manual rows — for anything NOT connected above (cash at home, gold,
           a 401k or brokerage you haven't linked, business assets, receivables) */}
-      {connectedAccounts.length>0&&<div style={{fontFamily:FP,fontSize:11,color:T.muted,margin:`${T.s2} 0`,lineHeight:1.4}}>Add below only what your connected accounts don't already cover — cash at home, gold, unlinked accounts, business assets, money owed to you.</div>}
+      {connectedAccounts.length>0&&<div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,margin:`${T.s2} 0`,lineHeight:1.4}}>Add below only what your connected accounts don't already cover — cash at home, gold, unlinked accounts, business assets, money owed to you.</div>}
       {ZAKAT_ASSET_FIELDS.map(inputRow)}
     </div>
     <div>
-      <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>WHAT YOU OWE — deducted</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>WHAT YOU OWE — deducted</div>
       {result.overdraft>0&&autoRow("Bank overdraft", result.overdraft, "Negative connected-account balance")}
 
       {/* Connected credit cards — tick the balances that count as deductible
@@ -3566,21 +3598,21 @@ function ZakatWorksheet({ draft, onField, onPersist, result, nisabUsd, nisabRead
           asset picker; shares the same excludedAccounts selection. */}
       {creditAccounts.length>0&&<div style={{marginBottom:T.s3}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:T.s2,gap:T.s2,flexWrap:"wrap"}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600}}>CONNECTED CARDS · {creditCountedN} of {creditAccounts.length} counted</span>
-          <span style={{fontFamily:FM,fontSize:11,color:T.loss,fontVariantNumeric:"tabular-nums"}}>− {fmtUSD(connectedLiabilities)}</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:600}}>CONNECTED CARDS · {creditCountedN} of {creditAccounts.length} counted</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,fontVariantNumeric:"tabular-nums"}}>− {fmtUSD(connectedLiabilities)}</span>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:180,overflowY:"auto",padding:T.s2,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
           {creditAccounts.map(a=>{
             const on=!excludedAccounts.has(a.id);
             return<label key={a.id} style={{display:"flex",alignItems:"center",gap:T.s2,padding:`6px ${T.s2}`,borderRadius:T.rSm,cursor:demoMode?"default":"pointer",background:on?`${T.loss}14`:"transparent",border:`1px solid ${on?T.loss+"55":T.border}`,opacity:demoMode?0.6:1}}>
               <input type="checkbox" checked={on} disabled={demoMode} onChange={()=>onToggleAccount&&onToggleAccount(a.id)} style={{cursor:demoMode?"default":"pointer",accentColor:T.loss}}/>
-              <span style={{fontFamily:FM,fontSize:9,color:T.loss,letterSpacing:"0.04em",fontWeight:600,padding:"1px 5px",borderRadius:T.rSm,background:`${T.loss}14`,whiteSpace:"nowrap"}}>Card</span>
-              <span style={{fontFamily:FP,fontSize:12,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.label}</span>
-              <span style={{fontFamily:FM,fontSize:11,color:on?T.loss:T.muted,fontVariantNumeric:"tabular-nums"}}>− {fmtUSD(a.balance)}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.04em",fontWeight:600,padding:"1px 5px",borderRadius:T.rSm,background:`${T.loss}14`,whiteSpace:"nowrap"}}>Card</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.label}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:on?T.loss:T.muted,fontVariantNumeric:"tabular-nums"}}>− {fmtUSD(a.balance)}</span>
             </label>;
           })}
         </div>
-        <div style={{marginTop:T.s2,fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.4}}>Ticked card balances count as short-term debt. Add anything else you owe below.</div>
+        <div style={{marginTop:T.s2,fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.4}}>Ticked card balances count as short-term debt. Add anything else you owe below.</div>
       </div>}
 
       {ZAKAT_LIABILITY_FIELDS.map(inputRow)}
@@ -3884,7 +3916,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
         background: `${T.gold}0C`,
         border: `1px solid ${T.gold}30`,
         borderRadius: T.rMd,
-        fontFamily: FM, fontSize: 11, color: T.muted, lineHeight: 1.6,
+        fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, lineHeight: 1.6,
       }}>
         <span style={{ color: T.gold, fontWeight: 600 }}>ℹ Sharia note — </span>
         Purification ratios are estimates. Consult your scholar or the fund's annual purification report for exact figures.
@@ -3895,25 +3927,25 @@ function PurificationPanel({ demoMode = false, onPurified }) {
       {/* ── Summary row ─────────────────────────────────── */}
       <div className="bento-row" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: T.s3 }}>
         <BentoTile accent={hasPending ? T.gold : T.gain}>
-          <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PURIFICATION OWED</div>
-          <div style={{ fontFamily: FU, fontSize: 24, fontWeight: 700, color: hasPending ? T.gold : T.muted, letterSpacing: "-0.025em", fontVariantNumeric: "tabular-nums" }}>{fmtUSD(totalOwed)}</div>
-          <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, marginTop: T.s1 }}>{pending.length} dividend{pending.length !== 1 ? "s" : ""} pending · {year}</div>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PURIFICATION OWED</div>
+          <div style={{ fontFamily: FU, fontSize:"var(--fs-3xl)", fontWeight: 700, color: hasPending ? T.gold : T.muted, letterSpacing: "-0.025em", fontVariantNumeric: "tabular-nums" }}>{fmtUSD(totalOwed)}</div>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, marginTop: T.s1 }}>{pending.length} dividend{pending.length !== 1 ? "s" : ""} pending · {year}</div>
         </BentoTile>
         <BentoTile accent={T.gain}>
-          <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PURIFIED YTD</div>
-          <div style={{ fontFamily: FU, fontSize: 24, fontWeight: 700, color: T.gain, letterSpacing: "-0.025em", fontVariantNumeric: "tabular-nums" }}>{fmtUSD(totalPurified)}</div>
-          <div style={{ fontFamily: FM, fontSize: 11, color: T.gain, marginTop: T.s1 }}>{purified.length} dividend{purified.length !== 1 ? "s" : ""} purified</div>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PURIFIED YTD</div>
+          <div style={{ fontFamily: FU, fontSize:"var(--fs-3xl)", fontWeight: 700, color: T.gain, letterSpacing: "-0.025em", fontVariantNumeric: "tabular-nums" }}>{fmtUSD(totalPurified)}</div>
+          <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.gain, marginTop: T.s1 }}>{purified.length} dividend{purified.length !== 1 ? "s" : ""} purified</div>
         </BentoTile>
       </div>
 
       {/* ── Controls: year picker + bulk action ─────────── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: T.s2 }}>
         <div style={{ display: "flex", gap: T.s2, alignItems: "center" }}>
-          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>YEAR</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>YEAR</span>
           {years.map(y => (
             <button key={y} onClick={() => !demoMode && setYear(y)} style={{
               padding: `4px ${T.s3}`, borderRadius: T.rSm,
-              fontFamily: FM, fontSize: 11, fontWeight: year === y ? 600 : 400,
+              fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: year === y ? 600 : 400,
               background: year === y ? `${T.blue}18` : "transparent",
               border: `1px solid ${year === y ? T.blue : T.border}`,
               color: year === y ? T.blue : T.muted,
@@ -3926,7 +3958,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
             onClick={purifyAll}
             style={{
               padding: `6px ${T.s4}`, borderRadius: T.rMd,
-              fontFamily: FM, fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+              fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: 600, letterSpacing: "0.04em",
               background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain, cursor: "pointer",
             }}
           >
@@ -3937,7 +3969,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
 
       {/* ── Dividends table ──────────────────────────────── */}
       <BentoTile style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: `${T.s3} ${T.s5}`, borderBottom: `1px solid ${T.border}`, fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>
+        <div style={{ padding: `${T.s3} ${T.s5}`, borderBottom: `1px solid ${T.border}`, fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>
           DIVIDEND PURIFICATION · {year}
         </div>
         {loading ? (
@@ -3945,9 +3977,9 @@ function PurificationPanel({ demoMode = false, onPurified }) {
             <Skeleton w="60%" h={13} /><Skeleton w="80%" h={13} /><Skeleton w="50%" h={13} />
           </div>
         ) : error ? (
-          <div style={{ padding: `${T.s6} ${T.s5}`, fontFamily: FP, fontSize: 13, color: T.muted, textAlign: "center" }}>{error}</div>
+          <div style={{ padding: `${T.s6} ${T.s5}`, fontFamily: FP, fontSize:"var(--fs-md)", color: T.muted, textAlign: "center" }}>{error}</div>
         ) : items.length === 0 ? (
-          <div style={{ padding: `${T.s8} ${T.s5}`, textAlign: "center", fontFamily: FP, fontSize: 13, color: T.muted }}>
+          <div style={{ padding: `${T.s8} ${T.s5}`, textAlign: "center", fontFamily: FP, fontSize:"var(--fs-md)", color: T.muted }}>
             {demoMode ? "No purification data." : "No dividend activity found for this year. Connect a brokerage account to track dividends."}
           </div>
         ) : (
@@ -3958,7 +3990,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                   {["Ticker", "Date", "Dividend", "Impurity %", "Owed", "Status", ""].map((h, i) => (
                     <th key={h || i} style={{
                       padding: `${T.s3} ${T.s4}`, textAlign: i >= 2 ? "right" : "left",
-                      fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.14em",
+                      fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.14em",
                       textTransform: "uppercase", borderBottom: `1px solid ${T.border}`,
                       fontWeight: 600, whiteSpace: "nowrap", background: T.surface,
                       ...(i === 5 || i === 6 ? { textAlign: "center" } : {}),
@@ -3974,15 +4006,15 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                     <tr key={it.fingerprint} className="trow" style={{ borderBottom: `1px solid ${T.border}`, opacity: done ? 0.62 : 1 }}>
                       {/* Ticker */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, borderBottom: `1px solid ${T.border}` }}>
-                        <div style={{ fontFamily: FP, fontSize: 14, fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>{it.ticker}</div>
+                        <div style={{ fontFamily: FP, fontSize:"var(--fs-lg)", fontWeight: 600, color: T.textHi, letterSpacing: "-0.01em" }}>{it.ticker}</div>
                       </td>
                       {/* Date */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, borderBottom: `1px solid ${T.border}` }}>
-                        <span style={{ fontFamily: FM, fontSize: 11, color: T.muted }}>{it.date}</span>
+                        <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted }}>{it.date}</span>
                       </td>
                       {/* Dividend amount */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "right", borderBottom: `1px solid ${T.border}` }}>
-                        <span style={{ fontFamily: FM, fontSize: 12, color: T.text, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(it.dividendAmount)}</span>
+                        <span style={{ fontFamily: FM, fontSize:"var(--fs-sm)", color: T.text, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(it.dividendAmount)}</span>
                       </td>
                       {/* Impurity % — click to override */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "right", borderBottom: `1px solid ${T.border}` }}>
@@ -3993,32 +4025,32 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                               value={editOverride.value}
                               onChange={e => setEditOverride(v => ({ ...v, value: e.target.value }))}
                               className="field"
-                              style={{ width: 60, fontSize: 11, padding: `3px ${T.s2}`, textAlign: "right" }}
+                              style={{ width: 60, fontSize:"var(--fs-xs)", padding: `3px ${T.s2}`, textAlign: "right" }}
                               autoFocus
                               onKeyDown={e => { if (e.key === "Enter") saveOverride(); if (e.key === "Escape") setEditOverride(null); }}
                             />
-                            <button onClick={saveOverride} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain, cursor: "pointer", fontFamily: FM, fontSize: 10, fontWeight: 600, display:"inline-flex", alignItems:"center" }}><Icon name="check" size={12}/></button>
-                            <button onClick={() => setEditOverride(null)} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: "transparent", border: `1px solid ${T.border}`, color: T.muted, cursor: "pointer", fontFamily: FM, fontSize: 11 }}><Icon name="close" size={12}/></button>
+                            <button onClick={saveOverride} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain, cursor: "pointer", fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, display:"inline-flex", alignItems:"center" }}><Icon name="check" size={12}/></button>
+                            <button onClick={() => setEditOverride(null)} style={{ padding: `2px ${T.s2}`, borderRadius: T.rSm, background: "transparent", border: `1px solid ${T.border}`, color: T.muted, cursor: "pointer", fontFamily: FM, fontSize:"var(--fs-xs)" }}><Icon name="close" size={12}/></button>
                           </div>
                         ) : (
                           <span
                             title={`Source: ${it.ratioSource}\nClick to override for ${it.ticker}`}
                             onClick={() => !done && !demoMode && setEditOverride({ ticker: it.ticker, value: String(it.impurityPct) })}
                             style={{
-                              fontFamily: FM, fontSize: 11, fontVariantNumeric: "tabular-nums",
+                              fontFamily: FM, fontSize:"var(--fs-xs)", fontVariantNumeric: "tabular-nums",
                               color: overrides[it.ticker] != null ? T.blue : T.muted,
                               cursor: done || demoMode ? "default" : "pointer",
                               borderBottom: done || demoMode ? "none" : `1px dashed ${T.border}`,
                             }}
                           >
                             {fmtPct(it.impurityPct)}
-                            {overrides[it.ticker] != null && <span style={{ fontSize: 9, marginLeft: 3, color: T.blue }}>override</span>}
+                            {overrides[it.ticker] != null && <span style={{ fontSize:"var(--fs-2xs)", marginLeft: 3, color: T.blue }}>override</span>}
                           </span>
                         )}
                       </td>
                       {/* Purification owed */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "right", borderBottom: `1px solid ${T.border}` }}>
-                        <span style={{ fontFamily: FP, fontSize: 13, fontWeight: 600, color: done ? T.muted : T.gold, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(it.purificationOwed)}</span>
+                        <span style={{ fontFamily: FP, fontSize:"var(--fs-md)", fontWeight: 600, color: done ? T.muted : T.gold, fontVariantNumeric: "tabular-nums" }}>{fmtUSD(it.purificationOwed)}</span>
                       </td>
                       {/* Status */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "center", borderBottom: `1px solid ${T.border}` }}>
@@ -4027,14 +4059,14 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                       {/* Action */}
                       <td style={{ padding: `${T.s3} ${T.s4}`, textAlign: "center", borderBottom: `1px solid ${T.border}` }}>
                         {done ? (
-                          <span style={{ fontFamily: FM, fontSize: 10, color: T.muted }}>—</span>
+                          <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted }}>—</span>
                         ) : (
                           <button
                             onClick={() => markPurified(it)}
                             disabled={!!busy[it.fingerprint] || demoMode}
                             style={{
                               padding: `4px ${T.s3}`, borderRadius: T.rSm,
-                              fontFamily: FM, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em",
+                              fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.04em",
                               background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain,
                               cursor: busy[it.fingerprint] || demoMode ? "not-allowed" : "pointer",
                               opacity: busy[it.fingerprint] ? 0.6 : 1,
@@ -4055,7 +4087,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
       </BentoTile>
 
       {/* ── Help row ─────────────────────────────────────── */}
-      <div style={{ fontFamily: FM, fontSize: 11, color: T.muted, lineHeight: 1.6, padding: `0 ${T.s1}` }}>
+      <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, lineHeight: 1.6, padding: `0 ${T.s1}` }}>
         <strong style={{ color: T.text }}>How purification works:</strong> Halal-screened funds may still earn a small portion of revenue from impermissible sources (interest, prohibited industries) below the AAOIFI 5% threshold. The impure fraction of any dividend you receive is computed as <em>dividend × impurity%</em> and must be donated to charity — not as a reward, but as purification of income. Click any impurity % to override it with the figure from the fund's latest annual report.
       </div>
     </div>
@@ -4311,14 +4343,14 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
       background:`radial-gradient(circle at 100% 0%, ${T.gold}1F, transparent 55%), ${T.card}`,
       padding:`${T.s6} ${T.s6}`,
     }}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ZAKAT — {new Date().getFullYear()}</div>
-      <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:!nisabReady?T.muted:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{nisabReady?mask(fmtUSD(zakatDue)):"—"}</div>
-      <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:!nisabReady?T.gold:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ZAKAT — {new Date().getFullYear()}</div>
+      <div style={{fontFamily:FU,fontSize:"var(--fs-5xl)",fontWeight:700,color:!nisabReady?T.muted:aboveNisab?T.gold:T.muted,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{nisabReady?mask(fmtUSD(zakatDue)):"—"}</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:500,color:!nisabReady?T.gold:aboveNisab?T.gain:T.muted,marginTop:T.s2,letterSpacing:"-0.005em"}}>{
         !nisabReady
           ? (liveNisab.status==="loading"?"Checking live gold & silver prices…":"Nisab unavailable — can't determine whether Zakat is due")
           : aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"
       }</div>
-      <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and live nisab. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and live nisab. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
       <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
         {[
           ["Total zakatable assets",mask(fmtUSD(assetsTotal))],
@@ -4326,24 +4358,24 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
           ["Net zakatable worth",mask(fmtUSD(netZakatable)),true],
           [`Nisab (${settings.nisabStandard})`,nisabReady?mask(fmtUSD(nisabUsd)):"Unavailable"],
         ].map(([l,v,b])=><div key={l}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
-          <div style={{fontFamily:FP,fontSize:14,fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
         </div>)}
       </div>
-      {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55}}>Connect a brokerage or fill in the worksheet below to populate these figures.</div>}
+      {isEmpty&&<div style={{marginTop:T.s4,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.55}}>Connect a brokerage or fill in the worksheet below to populate these figures.</div>}
     </BentoTile>}
 
     {/* ─── ROW 1 (Sadaqah view): donation summary ─────── */}
     {view==="sadaqah"&&<div className="bento-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s4}}>
       <BentoTile accent={T.gain}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>GIVEN TOTAL</div>
-        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(given))}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>{sadaqah.filter(s=>s.done).length} donation{sadaqah.filter(s=>s.done).length===1?"":"s"}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>GIVEN TOTAL</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(given))}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.gain,marginTop:T.s1}}>{sadaqah.filter(s=>s.done).length} donation{sadaqah.filter(s=>s.done).length===1?"":"s"}</div>
       </BentoTile>
       <BentoTile accent={T.gold}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PLEDGED</div>
-        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:pledged>0?T.textHi:T.muted,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(pledged))}</div>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gold,marginTop:T.s1}}>{sadaqah.filter(s=>!s.done).length} outstanding</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PLEDGED</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:pledged>0?T.textHi:T.muted,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(pledged))}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.gold,marginTop:T.s1}}>{sadaqah.filter(s=>!s.done).length} outstanding</div>
       </BentoTile>
     </div>}
 
@@ -4356,12 +4388,12 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
         so the Overview ZAKAT DUE tile stays in lockstep. */}
     <CollapsibleTile title="ZAKAT WORKSHEET" subtitle="Every zakatable asset, minus what you owe" storageKey="zakat_worksheet" defaultOpen>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
-        <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.5,maxWidth:520}}>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.5,maxWidth:520}}>
           Fill in what you own across the year. Amounts are stored privately and sync across your devices.
         </div>
         <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-          {demoMode&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
-          {!demoMode&&<button onClick={resetWs} className="btn-ghost" style={{fontSize:11,padding:`4px ${T.s3}`}}>Reset</button>}
+          {demoMode&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
+          {!demoMode&&<button onClick={resetWs} className="btn-ghost" style={{fontSize:"var(--fs-xs)",padding:`4px ${T.s3}`}}>Reset</button>}
         </div>
       </div>
       <ZakatWorksheet draft={wsDraft} onField={onWsField} onPersist={persistWs} result={wsResult} nisabUsd={nisabUsd} nisabReady={nisabReady} settings={settings} demoMode={demoMode}
@@ -4376,7 +4408,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
     <CollapsibleTile title="ZAKAT METHODOLOGY" subtitle="Nisab standard + investment-zakat method" storageKey="zakat_method">
       <div style={{display:"flex",flexWrap:"wrap",gap:T.s4,alignItems:"flex-start",justifyContent:"space-between"}}>
         <div style={{minWidth:0,flex:"1 1 240px"}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NISAB STANDARD</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NISAB STANDARD</div>
           <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
             {[
               {k:"silver",label:`Silver (${mask(fmtUSD(liveSilver))})`,note:"612.36g · Hanafi"},
@@ -4387,7 +4419,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
                 disabled={demoMode}
                 style={{
                   padding:`${T.s2} ${T.s3}`,
-                  fontFamily:FM,fontSize:12,fontWeight:500,
+                  fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:500,
                   textAlign:"left",
                   borderRadius:T.rSm,
                   border:`1px solid ${settings.nisabStandard===o.k?T.gold:T.border}`,
@@ -4397,13 +4429,13 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
                   opacity:demoMode?0.55:1,
                 }}>
                 <div>{o.label}</div>
-                <div style={{fontSize:10,color:T.muted,marginTop:2}}>{o.note}</div>
+                <div style={{fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2}}>{o.note}</div>
               </button>
             ))}
           </div>
         </div>
         <div style={{minWidth:0,flex:"1 1 240px"}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>INVESTMENT ZAKAT METHOD</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>INVESTMENT ZAKAT METHOD</div>
           <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
             {[
               {k:"full",       label:"Full market value",    note:"Default · scholar consensus"},
@@ -4414,7 +4446,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
                 disabled={demoMode}
                 style={{
                   padding:`${T.s2} ${T.s3}`,
-                  fontFamily:FM,fontSize:12,fontWeight:500,
+                  fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:500,
                   textAlign:"left",
                   borderRadius:T.rSm,
                   border:`1px solid ${settings.investmentMethod===o.k?T.gold:T.border}`,
@@ -4424,16 +4456,16 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
                   opacity:demoMode?0.55:1,
                 }}>
                 <div>{o.label}</div>
-                <div style={{fontSize:10,color:T.muted,marginTop:2}}>{o.note}</div>
+                <div style={{fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2}}>{o.note}</div>
               </button>
             ))}
           </div>
         </div>
       </div>
-      <div style={{marginTop:T.s3,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
+      <div style={{marginTop:T.s3,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
         Silver nisab is more inclusive (lower threshold); gold is the majority view. <strong style={{color:T.text}}>Full market value</strong> is the default — it matches the scholar-designed calculators Mizan follows, which count shares and retirement at full resale/vested value. The optional <strong style={{color:T.text}}>30% rule</strong> treats public-equity holdings as ~30% zakatable (approximating the cash/receivables/inventory share of company assets vs. exempt fixed assets) — a lighter basis some fatwa councils allow for long-term buy-and-hold investors.
       </div>
-      <div style={{marginTop:T.s2,fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.05em"}}>
+      <div style={{marginTop:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.05em"}}>
         {liveNisab.status==="unavailable"
           ? "Live gold & silver prices unavailable — nisab can't be computed right now. Figures below exclude the nisab verdict."
           : liveNisab.status==="loading"
@@ -4453,11 +4485,11 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
         <div style={{display:"flex",alignItems:"center",gap:T.s3}}>
           <Icon name="leaf" size={20} color={T.gold}/>
           <div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>DIVIDEND PURIFICATION</div>
-            <div style={{fontFamily:FP,fontSize:12,color:T.muted}}>AAOIFI-compliant — purify impure income from halal-screened funds</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>DIVIDEND PURIFICATION</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted}}>AAOIFI-compliant — purify impure income from halal-screened funds</div>
           </div>
         </div>
-        {demoMode&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
+        {demoMode&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
       </div>
       <PurificationPanel demoMode={demoMode} onPurified={()=>{
         // Refresh sadaqah total from localStorage so the donation tally updates
@@ -4472,8 +4504,8 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
         <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>LOG A DONATION</span>
-          {demoMode&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>LOG A DONATION</span>
+          {demoMode&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
         </div>
         <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
           <input ref={importRef} type="file" accept=".csv,text/csv" onChange={handleImport} style={{display:"none"}}/>
@@ -4494,14 +4526,14 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
       </form>
       <datalist id="dn-methods">{["Debit Card","Credit Card","Zelle","Cash","Check","Wire","Crypto","TBD",...allMethods].filter((v,i,a)=>a.indexOf(v)===i).map(m=><option key={m} value={m}/>)}</datalist>
       <datalist id="dn-accts">{["Checking","Savings","Brokerage","Cash",...allAccounts].filter((v,i,a)=>a.indexOf(v)===i).map(m=><option key={m} value={m}/>)}</datalist>
-      {importStatus&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:importStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(importStatus.ok?T.gain:T.loss)+"30"}`,color:importStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{importStatus.ok?ICON_OK:ICON_NO}{importStatus.msg}</div>}
+      {importStatus&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",background:importStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(importStatus.ok?T.gain:T.loss)+"30"}`,color:importStatus.ok?T.gain:T.loss,lineHeight:1.5}}>{importStatus.ok?ICON_OK:ICON_NO}{importStatus.msg}</div>}
     </BentoTile>
 
     {/* ─── ROW 3: Filters ──────────────────────────── */}
     <BentoTile>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>FILTER DONATIONS</span>
-        {hasActiveFilter&&<button onClick={()=>{setFSearch("");setFStatus("all");setFMethod("all");setFAccount("all");setFYear("all");}} className="btn-ghost" style={{fontSize:10,padding:`4px ${T.s3}`}}>Clear</button>}
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>FILTER DONATIONS</span>
+        {hasActiveFilter&&<button onClick={()=>{setFSearch("");setFStatus("all");setFMethod("all");setFAccount("all");setFYear("all");}} className="btn-ghost" style={{fontSize:"var(--fs-2xs)",padding:`4px ${T.s3}`}}>Clear</button>}
       </div>
       <div className="mz-form-row" style={{display:"grid",gridTemplateColumns:"1fr 120px 140px 140px 120px",gap:T.s2,minWidth:0}}>
         <input placeholder="Search organization…" value={fSearch} onChange={e=>setFSearch(e.target.value)} className="field"/>
@@ -4528,9 +4560,9 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
     {/* ─── ROW 4: Donation history ─────────────────── */}
     <BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DONATION HISTORY{hasActiveFilter?<span style={{color:T.blue,marginLeft:T.s2}}>· {filtered.length} of {sadaqah.length}</span>:""}</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DONATION HISTORY{hasActiveFilter?<span style={{color:T.blue,marginLeft:T.s2}}>· {filtered.length} of {sadaqah.length}</span>:""}</span>
         <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
-          <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(hasActiveFilter?filteredGiven:given))} given{(hasActiveFilter?filteredPledged:pledged)>0?` · ${mask(fmtUSD(hasActiveFilter?filteredPledged:pledged))} pledged`:""}</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(hasActiveFilter?filteredGiven:given))} given{(hasActiveFilter?filteredPledged:pledged)>0?` · ${mask(fmtUSD(hasActiveFilter?filteredPledged:pledged))} pledged`:""}</span>
           <button
             onClick={()=>downloadCSV(
               filtered.map(s=>({
@@ -4545,46 +4577,46 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
             )}
             disabled={filtered.length===0}
             title={filtered.length===0?"No donations to export":"Download donations as CSV"}
-            style={{padding:`4px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:filtered.length===0?T.dim:T.muted,cursor:filtered.length===0?"not-allowed":"pointer"}}
+            style={{padding:`4px ${T.s2}`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:filtered.length===0?T.dim:T.muted,cursor:filtered.length===0?"not-allowed":"pointer"}}
           >CSV ↓</button>
         </div>
       </div>
       {sadaqah.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No donations logged yet. Add one with the form above, or import a CSV.</div>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>No donations logged yet. Add one with the form above, or import a CSV.</div>
         :filtered.length===0
-          ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No donations match these filters. <button onClick={()=>{setFSearch("");setFStatus("all");setFMethod("all");setFAccount("all");setFYear("all");}} style={{background:"none",border:"none",color:T.blue,cursor:"pointer",textDecoration:"underline",font:"inherit"}}>Clear filters</button></div>
+          ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>No donations match these filters. <button onClick={()=>{setFSearch("");setFStatus("all");setFMethod("all");setFAccount("all");setFYear("all");}} style={{background:"none",border:"none",color:T.blue,cursor:"pointer",textDecoration:"underline",font:"inherit"}}>Clear filters</button></div>
           :<Tbl cols={[
             {l:"Date",        r_:r=>editingId===r.id
-              ?<input type="date" value={editDraft.dt} onChange={e=>setEditDraft({...editDraft,dt:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
-              :<span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.dt||"—"}</span>},
+              ?<input type="date" value={editDraft.dt} onChange={e=>setEditDraft({...editDraft,dt:e.target.value})} className="field" style={{fontSize:"var(--fs-xs)",padding:`4px ${T.s2}`}}/>
+              :<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.dt||"—"}</span>},
             {l:"Organization",r_:r=>editingId===r.id
-              ?<input value={editDraft.org} onChange={e=>setEditDraft({...editDraft,org:e.target.value})} className="field" style={{fontSize:12,padding:`4px ${T.s2}`}}/>
-              :<span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.org}</span>},
+              ?<input value={editDraft.org} onChange={e=>setEditDraft({...editDraft,org:e.target.value})} className="field" style={{fontSize:"var(--fs-sm)",padding:`4px ${T.s2}`}}/>
+              :<span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em"}}>{r.org}</span>},
             {l:"Method",mobileHide:true,r_:r=>editingId===r.id
-              ?<input list="dn-methods" value={editDraft.method} onChange={e=>setEditDraft({...editDraft,method:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
-              :<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.method||"—"}</span>},
+              ?<input list="dn-methods" value={editDraft.method} onChange={e=>setEditDraft({...editDraft,method:e.target.value})} className="field" style={{fontSize:"var(--fs-xs)",padding:`4px ${T.s2}`}}/>
+              :<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{r.method||"—"}</span>},
             {l:"Account",mobileHide:true,r_:r=>editingId===r.id
-              ?<input list="dn-accts" value={editDraft.account} onChange={e=>setEditDraft({...editDraft,account:e.target.value})} className="field" style={{fontSize:11,padding:`4px ${T.s2}`}}/>
-              :<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.account||"—"}</span>},
+              ?<input list="dn-accts" value={editDraft.account} onChange={e=>setEditDraft({...editDraft,account:e.target.value})} className="field" style={{fontSize:"var(--fs-xs)",padding:`4px ${T.s2}`}}/>
+              :<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{r.account||"—"}</span>},
             {l:"Amount",r:true,r_:r=>editingId===r.id
-              ?<input type="number" step="0.01" value={editDraft.amt} onChange={e=>setEditDraft({...editDraft,amt:e.target.value})} className="field" style={{fontSize:12,padding:`4px ${T.s2}`,fontVariantNumeric:"tabular-nums",textAlign:"right"}}/>
-              :<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.gold,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(r.amt))}</span>},
+              ?<input type="number" step="0.01" value={editDraft.amt} onChange={e=>setEditDraft({...editDraft,amt:e.target.value})} className="field" style={{fontSize:"var(--fs-sm)",padding:`4px ${T.s2}`,fontVariantNumeric:"tabular-nums",textAlign:"right"}}/>
+              :<span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.gold,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(r.amt))}</span>},
             {l:"Status",      r_:r=>editingId===r.id
-              ?<select value={editDraft.done?"done":"pledged"} onChange={e=>setEditDraft({...editDraft,done:e.target.value==="done"})} className="field" style={{fontSize:10,padding:`4px ${T.s2}`,cursor:"pointer"}}>
+              ?<select value={editDraft.done?"done":"pledged"} onChange={e=>setEditDraft({...editDraft,done:e.target.value==="done"})} className="field" style={{fontSize:"var(--fs-2xs)",padding:`4px ${T.s2}`,cursor:"pointer"}}>
                 <option value="done">Given</option>
                 <option value="pledged">Pledged</option>
               </select>
               :<Tag label={r.done?"Given":"Pledged"} color={r.done?T.gain:T.gold}/>},
             {l:"",r:true,     r_:r=>demoMode
-              ?<span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>—</span>
+              ?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.04em"}}>—</span>
               :editingId===r.id
               ?<div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
-                <button onClick={saveEdit} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:`${T.gain}18`,border:`1px solid ${T.gain}40`,color:T.gain,cursor:"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em"}}>SAVE</button>
-                <button onClick={cancelEdit} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:10,letterSpacing:"0.04em"}}>×</button>
+                <button onClick={saveEdit} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:`${T.gain}18`,border:`1px solid ${T.gain}40`,color:T.gain,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em"}}>SAVE</button>
+                <button onClick={cancelEdit} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.04em"}}>×</button>
               </div>
               :<div style={{display:"flex",gap:T.s1,justifyContent:"flex-end"}}>
-                <button onClick={()=>startEdit(r)} title="Edit this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:10,letterSpacing:"0.04em"}}>EDIT</button>
-                <button onClick={()=>remove(r.id)} title="Remove this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}><Icon name="close" size={12}/></button>
+                <button onClick={()=>startEdit(r)} title="Edit this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.04em"}}>EDIT</button>
+                <button onClick={()=>remove(r.id)} title="Remove this entry" style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-xs)"}}><Icon name="close" size={12}/></button>
               </div>},
           ]} rows={filtered}/>}
     </BentoTile>
@@ -4753,24 +4785,24 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
       <BentoTile style={{
         background:`radial-gradient(circle at 0% 0%, ${T.blue}15, transparent 55%), ${T.card}`,
       }}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PORTFOLIO REBALANCE</div>
-        <div style={{fontFamily:FU,fontSize:34,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmt$(targetedTotal)}</div>
-        <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>rebalanceable · total NAV {fmt$(total)} {byClass.other>0?<>· <span style={{color:T.dim}}>{fmt$(byClass.other)} held outside</span></>:null}</div>
-        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>PORTFOLIO REBALANCE</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-5xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{fmt$(targetedTotal)}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,marginTop:T.s2}}>rebalanceable · total NAV {fmt$(total)} {byClass.other>0?<>· <span style={{color:T.dim}}>{fmt$(byClass.other)} held outside</span></>:null}</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
           Set your own target weights per asset class. Mizan shows the difference between your live allocation and the targets you set — the figures below are that math, not recommendations. You decide what, if anything, to trade.
         </p>
       </BentoTile>
       <BentoTile accent={halalOnly?T.gold:undefined} style={halalOnly?{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}:undefined}>
-        <div style={{fontFamily:FM,fontSize:10,color:halalOnly?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>HALAL-ONLY REBALANCE</div>
-        <p style={{fontFamily:FP,fontSize:12,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.5}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:halalOnly?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>HALAL-ONLY REBALANCE</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.5}}>
           When on, the math below covers selling your screener-flagged holdings and reaching your targets with halal proxies (SPUS, HLAL, SPSK, SPRE). You choose whether to act on it.
         </p>
         <button onClick={toggleHalal} className="mz-tap" style={{
-          padding:`9px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",
+          padding:`9px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.06em",
           background:halalOnly?T.gold:"transparent",border:`1px solid ${halalOnly?T.gold:T.border}`,
           color:halalOnly?"#000":T.text,cursor:"pointer",width:"100%",
         }}>{halalOnly?"Halal Mode: ON":"Halal Mode: OFF"}</button>
-        {halalOnly&&haramHoldings.length>0&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rSm,background:`${T.loss}10`,border:`1px solid ${T.loss}30`,fontFamily:FM,fontSize:10,color:T.loss,lineHeight:1.5}}>
+        {halalOnly&&haramHoldings.length>0&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rSm,background:`${T.loss}10`,border:`1px solid ${T.loss}30`,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,lineHeight:1.5}}>
           {haramHoldings.length} holding{haramHoldings.length===1?"":"s"} flagged non-compliant by the screener ({fmt$(haramSellTotal)})
         </div>}
       </BentoTile>
@@ -4779,25 +4811,25 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
     {/* ─── ROW 2: Targets editor ───────────────────────────────── */}
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TARGET ALLOCATION</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TARGET ALLOCATION</span>
         <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-          <span style={{fontFamily:FM,fontSize:11,color:sumOK?T.gain:T.loss,fontVariantNumeric:"tabular-nums"}}>Sum: {targetSum.toFixed(1)}%{!sumOK&&" — must equal 100%"}</span>
-          <button onClick={()=>saveTargets(DEFAULT_REBALANCE_TARGETS)} className="btn-ghost" style={{fontSize:10}}>Reset defaults</button>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:sumOK?T.gain:T.loss,fontVariantNumeric:"tabular-nums"}}>Sum: {targetSum.toFixed(1)}%{!sumOK&&" — must equal 100%"}</span>
+          <button onClick={()=>saveTargets(DEFAULT_REBALANCE_TARGETS)} className="btn-ghost" style={{fontSize:"var(--fs-2xs)"}}>Reset defaults</button>
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:T.s3}}>
         {ASSET_CLASSES.map(c=><div key={c.key} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500,marginBottom:T.s2}}>{c.label.toUpperCase()}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:500,marginBottom:T.s2}}>{c.label.toUpperCase()}</div>
           <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
             <input
               type="number" min={0} max={100} step={1}
               value={targets[c.key]??0}
               onChange={e=>saveTargets({...targets,[c.key]:Math.max(0,Math.min(100,+e.target.value||0))})}
-              className="field" style={{fontSize:18,fontWeight:700,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums",width:"100%"}}
+              className="field" style={{fontSize:"var(--fs-2xl)",fontWeight:700,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums",width:"100%"}}
             />
-            <span style={{fontFamily:FM,fontSize:14,color:T.muted,fontWeight:600}}>%</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-lg)",color:T.muted,fontWeight:600}}>%</span>
           </div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s2,fontVariantNumeric:"tabular-nums"}}>Target value {fmt$((+targets[c.key]||0)/100*targetedTotal)}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s2,fontVariantNumeric:"tabular-nums"}}>Target value {fmt$((+targets[c.key]||0)/100*targetedTotal)}</div>
         </div>)}
       </div>
     </BentoTile>
@@ -4805,19 +4837,19 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
     {/* ─── ROW 3: Drift table ──────────────────────────────────── */}
     <BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DRIFT ANALYSIS</span>
-        <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>green ≤ 5% · yellow ≤ 10% · red &gt; 10%</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>DRIFT ANALYSIS</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>green ≤ 5% · yellow ≤ 10% · red &gt; 10%</span>
       </div>
       <Tbl cols={[
-        {l:"Asset Class",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.cls.label}</span>},
-        {l:"Target %",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.tgt.toFixed(1)}%</span>},
-        {l:"Current %",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{r.cur.toFixed(1)}%</span>},
-        {l:"Current $",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmt$(r.currentValue)}</span>},
-        {l:"Drift",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,fontVariantNumeric:"tabular-nums",color:r.drift>0?T.gain:r.drift<0?T.loss:T.muted}}>{r.drift>0?"+":""}{r.drift.toFixed(1)}%</span>},
-        {l:"$ Move",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.drift>0?"−":"+"}{fmt$(Math.abs(r.dollarDrift))}</span>},
+        {l:"Asset Class",r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em"}}>{r.cls.label}</span>},
+        {l:"Target %",r:true,r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,fontVariantNumeric:"tabular-nums"}}>{r.tgt.toFixed(1)}%</span>},
+        {l:"Current %",r:true,r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{r.cur.toFixed(1)}%</span>},
+        {l:"Current $",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{fmt$(r.currentValue)}</span>},
+        {l:"Drift",r:true,r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,fontVariantNumeric:"tabular-nums",color:r.drift>0?T.gain:r.drift<0?T.loss:T.muted}}>{r.drift>0?"+":""}{r.drift.toFixed(1)}%</span>},
+        {l:"$ Move",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.drift>0?"−":"+"}{fmt$(Math.abs(r.dollarDrift))}</span>},
         {l:"Status",r_:r=><Tag label={r.status==="ok"?"OK":r.status==="warn"?"Warning":"Alert"} color={r.status==="ok"?T.gain:r.status==="warn"?T.gold:T.loss}/>},
       ]} rows={driftRows}/>
-      {byClass.other>0&&<div style={{padding:`${T.s3} ${T.s5}`,background:T.surface,borderTop:`1px solid ${T.border}`,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
+      {byClass.other>0&&<div style={{padding:`${T.s3} ${T.s5}`,background:T.surface,borderTop:`1px solid ${T.border}`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
         Other / uncategorized (crypto, bonds, etc.): <span style={{color:T.text,fontWeight:600}}>{fmt$(byClass.other)}</span> · {(total>0?byClass.other/total*100:0).toFixed(1)}% of total NAV — held outside the rebalanceable slice. Targets above apply to the remaining <span style={{color:T.text,fontWeight:600}}>{fmt$(targetedTotal)}</span>.
       </div>}
     </BentoTile>
@@ -4825,13 +4857,13 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
     {/* ─── ROW 4: Trade suggestions ────────────────────────────── */}
     <BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TO REACH YOUR TARGETS{suggestions.length>0&&<span style={{color:T.blue,marginLeft:T.s2}}>· {suggestions.length}</span>}</span>
-        <span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TO REACH YOUR TARGETS{suggestions.length>0&&<span style={{color:T.blue,marginLeft:T.s2}}>· {suggestions.length}</span>}</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>
           Sell {fmt$(sellTotal)} · Buy {fmt$(buyTotal)} · Est. cost $0 (commission-free)
         </span>
       </div>
       {suggestions.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>
           {total===0
             ?"Connect a brokerage or enable demo mode to see rebalance suggestions."
             :sumOK
@@ -4840,20 +4872,20 @@ function Rebalancer({holdings=[],snapAccounts=[],onNav}){
         </div>
         :<Tbl cols={[
           {l:"Action",r_:r=><Tag label={r.side.toUpperCase()} color={r.side==="sell"?T.loss:T.gain}/>},
-          {l:"Symbol",r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.sym}</span>},
-          {l:"Qty",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontVariantNumeric:"tabular-nums",color:T.text}}>{r.qty.toLocaleString()}</span>},
-          {l:"~Price",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,color:T.muted,fontVariantNumeric:"tabular-nums"}}>${r.price.toFixed(2)}</span>},
-          {l:"~Amount",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.side==="sell"?T.loss:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmt$(r.amount)}</span>},
-          {l:"Reason",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.4}}>{r.reason}</span>},
+          {l:"Symbol",r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.sym}</span>},
+          {l:"Qty",r:true,r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontVariantNumeric:"tabular-nums",color:T.text}}>{r.qty.toLocaleString()}</span>},
+          {l:"~Price",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>${r.price.toFixed(2)}</span>},
+          {l:"~Amount",r:true,r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:r.side==="sell"?T.loss:T.gain,fontVariantNumeric:"tabular-nums"}}>{fmt$(r.amount)}</span>},
+          {l:"Reason",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.4}}>{r.reason}</span>},
           {l:"",r:true,r_:r=><button
             onClick={()=>copyToOrder(r)}
-            style={{padding:`5px ${T.s3}`,borderRadius:T.rSm,background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,cursor:"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",whiteSpace:"nowrap"}}
+            style={{padding:`5px ${T.s3}`,borderRadius:T.rSm,background:`${T.blue}18`,border:`1px solid ${T.blue}40`,color:T.blue,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em",whiteSpace:"nowrap"}}
             title="Copy this trade to the clipboard — paste into your broker"
           >COPY</button>},
         ]} rows={suggestions}/>}
       <div style={{padding:`${T.s3} ${T.s5}`,borderTop:`1px solid ${T.border}`,background:T.surface}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.blue,letterSpacing:"0.14em",fontWeight:600,marginBottom:4}}>SELF-DIRECTED · NOT ADVICE</div>
-        <p style={{fontFamily:FP,fontSize:11.5,color:T.muted,margin:0,lineHeight:1.55}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.14em",fontWeight:600,marginBottom:4}}>SELF-DIRECTED · NOT ADVICE</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,margin:0,lineHeight:1.55}}>
           MĪZAN is a self-directed tool, not an investment adviser. These figures are the arithmetic between your holdings and the targets <em>you</em> set — not recommendations. “Copy” places the details on your clipboard; you decide on and place any trade yourself, in your own brokerage.
         </p>
       </div>
@@ -4948,38 +4980,38 @@ function HoldingExpanded({ tk, state, costBasis = null, trades = null }) {
     <div style={{ padding: `${T.s4} ${T.s5}`, background: `${T.blue}06`, borderTop: `1px solid ${T.border}`, display: "flex", flexDirection: "column", gap: T.s4 }}>
       {/* Price chart — IMPERSONAL market data (see docs/COMPLIANCE.md) */}
       <div>
-        <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PRICE</div>
+        <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>PRICE</div>
         <PriceChart symbol={tk} costBasis={costBasis} trades={trades} />
       </div>
 
       {/* Earnings row */}
       <div style={{ display: "flex", alignItems: "center", gap: T.s3, flexWrap: "wrap" }}>
-        <span style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>NEXT EARNINGS</span>
+        <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600 }}>NEXT EARNINGS</span>
         {earnings ? (
           <div style={{ display: "flex", alignItems: "center", gap: T.s2, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FP, fontSize: 13, fontWeight: 600, color: T.textHi }}>
+            <span style={{ fontFamily: FP, fontSize:"var(--fs-md)", fontWeight: 600, color: T.textHi }}>
               {earnings.date}
               {earnings.hour && (
-                <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, marginLeft: T.s1, fontWeight: 400 }}>
+                <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, marginLeft: T.s1, fontWeight: 400 }}>
                   · {earnings.hour === "bmo" ? "Before Open" : earnings.hour === "amc" ? "After Close" : earnings.hour}
                 </span>
               )}
             </span>
             {earnings.epsEstimate != null && +earnings.epsEstimate !== 0 && (
-              <span style={{ fontFamily: FM, fontSize: 11, color: T.gold }}>Est. EPS ${(+earnings.epsEstimate).toFixed(2)}</span>
+              <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.gold }}>Est. EPS ${(+earnings.epsEstimate).toFixed(2)}</span>
             )}
             {soonLabel && <Tag label={soonLabel} color={daysAway <= 1 ? T.loss : T.gold} />}
           </div>
         ) : (
-          <span style={{ fontFamily: FM, fontSize: 11, color: T.muted }}>None in next 30 days</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted }}>None in next 30 days</span>
         )}
       </div>
 
       {/* News */}
       <div>
-        <div style={{ fontFamily: FM, fontSize: 9, color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>RECENT NEWS</div>
+        <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.16em", fontWeight: 600, marginBottom: T.s2 }}>RECENT NEWS</div>
         {news.length === 0 ? (
-          <span style={{ fontFamily: FM, fontSize: 12, color: T.muted }}>No recent coverage found for {tk}.</span>
+          <span style={{ fontFamily: FM, fontSize:"var(--fs-sm)", color: T.muted }}>No recent coverage found for {tk}.</span>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: T.s3 }}>
             {news.slice(0, 3).map((n, j) => (
@@ -4993,13 +5025,13 @@ function HoldingExpanded({ tk, state, costBasis = null, trades = null }) {
                 }} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{
-                    fontFamily: FP, fontSize: 13, fontWeight: 500, color: T.textHi, lineHeight: 1.4,
+                    fontFamily: FP, fontSize:"var(--fs-md)", fontWeight: 500, color: T.textHi, lineHeight: 1.4,
                     overflow: "hidden", display: "-webkit-box",
                     WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                   }}>
                     {n.h}
                   </div>
-                  <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, marginTop: 3 }}>
+                  <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, marginTop: 3 }}>
                     {n.src} · {_relTime(n.datetime)}
                   </div>
                 </div>
@@ -5062,7 +5094,7 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp, a
             {["Symbol", "Shares", "Avg Cost", "Price", "Today", "Mkt Value", "Gain/Loss", "Sharia"].map((h, i) => (
               <th key={h} style={{
                 padding: `${T.s3} ${T.s4}`, textAlign: (i === 0 || h === "Sharia") ? "left" : "right",
-                fontFamily: FM, fontSize: 10, color: T.muted, letterSpacing: "0.14em",
+                fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.14em",
                 textTransform: "uppercase", borderBottom: `1px solid ${T.border}`,
                 fontWeight: 600, whiteSpace: "nowrap", background: T.surface,
               }}>{h}</th>
@@ -5092,47 +5124,47 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp, a
                       }}><Icon name="chevron" size={11} color={isOpen ? T.blue : T.muted}/></span>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: T.s1 }}>
-                          <span style={{ fontFamily: FP, fontSize: 14, fontWeight: 600, color: r.sh_ === "haram" ? T.loss : T.textHi, letterSpacing: "-0.01em" }}>{r.tk}</span>
+                          <span style={{ fontFamily: FP, fontSize:"var(--fs-lg)", fontWeight: 600, color: r.sh_ === "haram" ? T.loss : T.textHi, letterSpacing: "-0.01em" }}>{r.tk}</span>
                           {earningsSoon && (
                             <span title={`Earnings ${nextE.date}`} style={{
-                              fontFamily: FM, fontSize: 9, fontWeight: 600, letterSpacing: "0.04em",
+                              fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.04em",
                               color: T.gold, background: `${T.gold}18`, border: `1px solid ${T.gold}30`,
                               borderRadius: 999, padding: "1px 5px", whiteSpace: "nowrap",
                             }}><Icon name="calendar" size={9} color={T.gold} style={{display:"inline-block",verticalAlign:"-1px",marginRight:3}}/>{daysAway}d</span>
                           )}
                         </div>
-                        <div style={{ fontFamily: FM, fontSize: 10, color: T.muted, marginTop: 2 }}>{r.ac_}</div>
+                        <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, marginTop: 2 }}>{r.ac_}</div>
                       </div>
                     </div>
                   </td>
                   {/* Shares */}
                   <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
-                    <span style={{ fontFamily: FM, fontSize: 12, color: T.text, fontVariantNumeric: "tabular-nums" }}>{valuesHidden ? "••••" : r.sh.toFixed(3)}</span>
+                    <span style={{ fontFamily: FM, fontSize:"var(--fs-sm)", color: T.text, fontVariantNumeric: "tabular-nums" }}>{valuesHidden ? "••••" : r.sh.toFixed(3)}</span>
                   </td>
                   {/* Avg Cost */}
                   <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
-                    <span style={{ fontFamily: FM, fontSize: 11, color: T.muted, fontVariantNumeric: "tabular-nums" }}>{mask(f$(r.ac))}</span>
+                    <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, fontVariantNumeric: "tabular-nums" }}>{mask(f$(r.ac))}</span>
                   </td>
                   {/* Price */}
                   <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
                     <div style={{ textAlign: "right" }}>
-                      <div style={{ fontFamily: FM, fontSize: 13, fontWeight: 500, color: r._live ? T.textHi : T.text, fontVariantNumeric: "tabular-nums" }}>{mask(f$(r.px))}</div>
-                      {r._live && <div style={{ fontFamily: FM, fontSize: 9, color: T.gain, letterSpacing: "0.06em", marginTop: 1 }}>● LIVE</div>}
+                      <div style={{ fontFamily: FM, fontSize:"var(--fs-md)", fontWeight: 500, color: r._live ? T.textHi : T.text, fontVariantNumeric: "tabular-nums" }}>{mask(f$(r.px))}</div>
+                      {r._live && <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.gain, letterSpacing: "0.06em", marginTop: 1 }}>● LIVE</div>}
                     </div>
                   </td>
                   {/* Today */}
                   <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
-                    <span style={{ fontFamily: FM, fontSize: 11, fontWeight: 500, color: fc(r._p), fontVariantNumeric: "tabular-nums" }}>{valuesHidden ? "••" : (r._p ? fp(r._p) : "—")}</span>
+                    <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: 500, color: fc(r._p), fontVariantNumeric: "tabular-nums" }}>{valuesHidden ? "••" : (r._p ? fp(r._p) : "—")}</span>
                   </td>
                   {/* Mkt Value */}
                   <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
-                    <span style={{ fontFamily: FP, fontSize: 14, fontWeight: 600, color: T.textHi, letterSpacing: "-0.005em", fontVariantNumeric: "tabular-nums" }}>{mask(f$(mv(r)))}</span>
+                    <span style={{ fontFamily: FP, fontSize:"var(--fs-lg)", fontWeight: 600, color: T.textHi, letterSpacing: "-0.005em", fontVariantNumeric: "tabular-nums" }}>{mask(f$(mv(r)))}</span>
                   </td>
                   {/* Gain/Loss */}
                   <td style={{ ...tdBase(isOpen), textAlign: "right" }}>
                     <div style={{ textAlign: "right" }}>
-                      <div style={{ fontFamily: FM, fontSize: 12, fontWeight: 500, color: fc(gv(r)), fontVariantNumeric: "tabular-nums" }}>{mask(`${gv(r) >= 0 ? "+" : ""}${f$(gv(r))}`)}</div>
-                      <div style={{ fontFamily: FM, fontSize: 10, color: fc(gp(r)), marginTop: 1 }}>{valuesHidden ? "••" : fp(gp(r))}</div>
+                      <div style={{ fontFamily: FM, fontSize:"var(--fs-sm)", fontWeight: 500, color: fc(gv(r)), fontVariantNumeric: "tabular-nums" }}>{mask(`${gv(r) >= 0 ? "+" : ""}${f$(gv(r))}`)}</div>
+                      <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: fc(gp(r)), marginTop: 1 }}>{valuesHidden ? "••" : fp(gp(r))}</div>
                     </div>
                   </td>
                   {/* Sharia */}
@@ -5228,13 +5260,13 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
           borderColor:T.blue+"30",
           padding:`${T.s6} ${T.s6}`,
         }}>
-          <div style={{display:"inline-flex",alignItems:"center",fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>
+          <div style={{display:"inline-flex",alignItems:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>
             <span>MARKET VALUE</span>
             {snapAccounts.length>0&&<span style={{color:T.gain,marginLeft:T.s2,display:"inline-flex",alignItems:"center",gap:5}}><LiveDot on pulse/>LIVE</span>}
             <EyeToggle hidden={valuesHidden} toggle={toggleHideValues} size={14} color={T.muted}/>
           </div>
-          <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(tot))}</div>
-          <div style={{display:"flex",gap:T.s4,marginTop:T.s3,fontFamily:FM,fontSize:12,color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-6xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.035em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(tot))}</div>
+          <div style={{display:"flex",gap:T.s4,marginTop:T.s3,fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,flexWrap:"wrap",alignItems:"center"}}>
             <span>
               <span style={{color:totGain>=0?T.gain:T.loss,fontWeight:600}}>{valuesHidden?"••••":`${totGain>=0?"+":""}${kf(Math.abs(totGain))}`}</span>{" "}
               <span style={{color:totGain>=0?T.gain:T.loss}}>({valuesHidden?"••":fp(totGainPct)})</span>{" "}
@@ -5246,7 +5278,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
               <span style={{color:fc(today)}}>({valuesHidden?"••":fp(todayPct)})</span>
             </span>
           </div>
-          {merged.length>0&&<div style={{marginTop:T.s4,display:"flex",alignItems:"center",gap:T.s3,fontFamily:FM,fontSize:11,color:T.muted}}>
+          {merged.length>0&&<div style={{marginTop:T.s4,display:"flex",alignItems:"center",gap:T.s3,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>
             <span>{merged.length} position{merged.length===1?"":"s"}</span>
             <span style={{color:T.dim}}>·</span>
             <span>Cost basis <span style={{color:T.textHi,fontWeight:600}}>{mask(fmtUSD(totCost))}</span></span>
@@ -5255,25 +5287,25 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
 
         <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
           <BentoTile accent={totGain>=0?T.gain:T.loss}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>TOTAL RETURN</div>
-            <div style={{fontFamily:FU,fontSize:26,fontWeight:700,color:fc(totGain),letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(`${totGain>=0?"+":""}${kf(Math.abs(totGain))}`)}</div>
-            <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:fc(totGain),marginTop:T.s1}}>{totCost>0?(valuesHidden?"••":fp(totGainPct)):"Unrealized"}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>TOTAL RETURN</div>
+            <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:fc(totGain),letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(`${totGain>=0?"+":""}${kf(Math.abs(totGain))}`)}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:fc(totGain),marginTop:T.s1}}>{totCost>0?(valuesHidden?"••":fp(totGainPct)):"Unrealized"}</div>
           </BentoTile>
           {haramV>0?<BentoTile accent={T.loss} style={{background:`linear-gradient(135deg, ${T.loss}10, transparent 60%), ${T.card}`}}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NON-COMPLIANT</div>
-            <div style={{fontFamily:FU,fontSize:26,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(haramV))}</div>
-            <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.loss,marginTop:T.s1}}>{haram.length} position{haram.length===1?"":"s"} · Exit required</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>NON-COMPLIANT</div>
+            <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{mask(f$(haramV))}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.loss,marginTop:T.s1}}>{haram.length} position{haram.length===1?"":"s"} · Exit required</div>
           </BentoTile>:<BentoTile accent={T.gain}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANT</div>
-            <div style={{fontFamily:FU,fontSize:26,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{halalCount}/{merged.length}</div>
-            <div style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.gain,marginTop:T.s1}}>positions halal</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>COMPLIANT</div>
+            <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{halalCount}/{merged.length}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.gain,marginTop:T.s1}}>positions halal</div>
           </BentoTile>}
         </div>
       </div>
 
       {/* ─── BENTO ROW 2: Broker allocation (only when multiple brokers) ──── */}
       {brokerSlices.length>1&&<BentoTile>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ALLOCATION BY BROKERAGE</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ALLOCATION BY BROKERAGE</div>
         <div style={{display:"flex",gap:T.s5,alignItems:"center",flexWrap:"wrap"}}>
           <Donut slices={brokerSlices} size={160} thickness={18} centerLabel="Total" centerValue={mask(kf(brokerSlices.reduce((s,x)=>s+x.value,0)))}/>
           <div style={{display:"flex",flexDirection:"column",gap:T.s2,flex:1,minWidth:200}}>
@@ -5282,9 +5314,9 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
               const pct=tt>0?(s.value/tt*100):0;
               return<div key={s.label} style={{display:"flex",alignItems:"center",gap:T.s2}}>
                 <span style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/>
-                <span style={{fontFamily:FP,fontSize:13,color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
-                <span style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{mask(kf(s.value))}</span>
-                <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:45,textAlign:"right"}}>{valuesHidden?"••":`${pct.toFixed(1)}%`}</span>
+                <span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,flex:1,letterSpacing:"-0.005em"}}>{s.label}</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{mask(kf(s.value))}</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:45,textAlign:"right"}}>{valuesHidden?"••":`${pct.toFixed(1)}%`}</span>
               </div>;
             })}
           </div>
@@ -5298,14 +5330,14 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
       {/* mz-chip-row: 26px-tall chips get a 44px tap region on touch devices
           without changing the row's density (see .mz-tap in THEME_CSS). */}
       <div className="mz-chip-row" style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center"}}>
-        {acctOptions.map(a=><button key={a} onClick={()=>setAcct(a)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"-0.005em",background:acct===a?T.blue:"transparent",border:`1px solid ${acct===a?T.blue:T.border}`,color:acct===a?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{a==="all"?"All Accounts":a}</button>)}
+        {acctOptions.map(a=><button key={a} onClick={()=>setAcct(a)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,letterSpacing:"-0.005em",background:acct===a?T.blue:"transparent",border:`1px solid ${acct===a?T.blue:T.border}`,color:acct===a?"#fff":T.muted,cursor:"pointer",transition:"all 0.15s"}}>{a==="all"?"All Accounts":a}</button>)}
         <div style={{width:1,height:18,background:T.border,alignSelf:"center"}}/>
         {[["all","All"],["halal","Halal"],["review","Review"],["haram","Non-Compliant"]].map(([v,l])=>{
           const c=v==="halal"?T.gain:v==="haram"?T.loss:v==="review"?T.gold:T.blue;
-          return<button key={v} onClick={()=>setScreen(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"-0.005em",background:screen===v?`${c}22`:"transparent",border:`1px solid ${screen===v?c:T.border}`,color:screen===v?c:T.muted,cursor:"pointer",transition:"all 0.15s"}}>{l}</button>;
+          return<button key={v} onClick={()=>setScreen(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,letterSpacing:"-0.005em",background:screen===v?`${c}22`:"transparent",border:`1px solid ${screen===v?c:T.border}`,color:screen===v?c:T.muted,cursor:"pointer",transition:"all 0.15s"}}>{l}</button>;
         })}
         <div style={{marginLeft:"auto",display:"flex",gap:T.s1,alignItems:"center"}}>
-          {[["mv","Value"],["gp","Gain%"],["tk","A-Z"]].map(([v,l])=><button key={v} onClick={()=>setSort(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:sort===v?T.borderHi:"transparent",border:`1px solid ${sort===v?T.borderHi:T.border}`,color:sort===v?T.text:T.muted,cursor:"pointer"}}>{l}</button>)}
+          {[["mv","Value"],["gp","Gain%"],["tk","A-Z"]].map(([v,l])=><button key={v} onClick={()=>setSort(v)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",background:sort===v?T.borderHi:"transparent",border:`1px solid ${sort===v?T.borderHi:T.border}`,color:sort===v?T.text:T.muted,cursor:"pointer"}}>{l}</button>)}
           <button
             onClick={()=>downloadCSV(
               filtered.map(h=>({
@@ -5318,7 +5350,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
             )}
             disabled={filtered.length===0}
             title={filtered.length===0?"No rows to export":"Download visible holdings as CSV"}
-            style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:filtered.length===0?T.dim:T.muted,cursor:filtered.length===0?"not-allowed":"pointer"}}
+            style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:filtered.length===0?T.dim:T.muted,cursor:filtered.length===0?"not-allowed":"pointer"}}
           >CSV ↓</button>
           <button
             onClick={async()=>{
@@ -5332,7 +5364,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
               setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},100);
             }}
             title="Download full holdings export from server (Plaid cache + fresh SnapTrade pull)"
-            style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer"}}
+            style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer"}}
           >↓ Export CSV</button>
         </div>
       </div>
@@ -5345,20 +5377,20 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
           // longer show perpetual skeleton rows here — that read as a stuck
           // load for a user who simply hasn't linked an account yet.)
           ?<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center"}}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s3}}>HOLDINGS</div>
-            <div style={{fontFamily:FU,fontSize:22,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s2}}>Connect a brokerage to see your holdings</div>
-            <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.6,maxWidth:460,margin:`0 auto ${T.s5}`}}>Your positions, cost basis, live prices, P&amp;L, and per-holding Sharia screening appear here once you link a broker via SnapTrade.</div>
-            <button onClick={onConnect} className="btn-primary" style={{fontSize:13,padding:`11px ${T.s5}`}}>+ Connect Account</button>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s3}}>HOLDINGS</div>
+            <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s2}}>Connect a brokerage to see your holdings</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.6,maxWidth:460,margin:`0 auto ${T.s5}`}}>Your positions, cost basis, live prices, P&amp;L, and per-holding Sharia screening appear here once you link a broker via SnapTrade.</div>
+            <button onClick={onConnect} className="btn-primary" style={{fontSize:"var(--fs-md)",padding:`11px ${T.s5}`}}>+ Connect Account</button>
           </div>
           :filtered.length===0
-            ?<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No positions match these filters.</div>
+            ?<div style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>No positions match these filters.</div>
             :null}
       </BentoTile>
 
       {/* ─── Watchlist section ─ merged in from the dropped sub-tab so
           tracked tickers live alongside owned positions in one pane. */}
       <div style={{display:"flex",alignItems:"center",gap:T.s3,marginTop:T.s3}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TRACKED SYMBOLS</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>TRACKED SYMBOLS</span>
         <div style={{flex:1,height:1,background:T.border}}/>
       </div>
       <Watchlist live={live} watchlist={watchlist} onAdd={onAddWatch} onRemove={onRemoveWatch} onSetAlert={onSetAlert} onAlertPermission={onAlertPermission}/>
@@ -5391,33 +5423,33 @@ function Watchlist({live=[],watchlist=[],onAdd,onRemove,onSetAlert,onAlertPermis
 
   return<CollapsibleTile title="WATCHLIST" subtitle={watchlist.length>0?`${watchlist.length} symbol${watchlist.length!==1?"s":""} tracked`:"Track prices + set price alerts"} storageKey="pf_watchlist" defaultOpen={false}>
       <div style={{display:"flex",justifyContent:"flex-end",gap:T.s2,alignItems:"center",flexWrap:"wrap",marginBottom:T.s4}}>
-        {notifPerm!=="granted"&&<button onClick={onAlertPermission} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",background:`${T.gold}18`,border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>{notifPerm==="denied"?"Alerts blocked":"Enable alerts"}</button>}
+        {notifPerm!=="granted"&&<button onClick={onAlertPermission} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",background:`${T.gold}18`,border:`1px solid ${T.gold}40`,color:T.gold,cursor:"pointer"}}>{notifPerm==="denied"?"Alerts blocked":"Enable alerts"}</button>}
         <form onSubmit={submit} style={{display:"flex",gap:T.s2}}>
           <input value={input} onChange={e=>setInput(e.target.value.toUpperCase())} placeholder="Add ticker"
-            className="field" style={{width:120,fontSize:12,padding:`6px ${T.s3}`}}/>
-          <button type="submit" className="btn-primary" style={{fontSize:11,padding:`6px ${T.s4}`}}>+ Add</button>
+            className="field" style={{width:120,fontSize:"var(--fs-sm)",padding:`6px ${T.s3}`}}/>
+          <button type="submit" className="btn-primary" style={{fontSize:"var(--fs-xs)",padding:`6px ${T.s4}`}}>+ Add</button>
         </form>
       </div>
     {watchlist.length===0
-      ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+      ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
           No symbols yet. Add a ticker above to track price + set alerts.
         </div>
       :<div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
-            {l:"Symbol",r_:r=><span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.symbol}</span>},
-            {l:"Price",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;return<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:px?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{px?f$(px):"—"}</span>;}},
-            {l:"Change",r:true,r_:r=>{const p=live.find(l=>l.tk===r.symbol)?.pct;return<span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:fc(p),fontVariantNumeric:"tabular-nums"}}>{p?fp(p):"—"}</span>;}},
+            {l:"Symbol",r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{r.symbol}</span>},
+            {l:"Price",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;return<span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:px?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{px?f$(px):"—"}</span>;}},
+            {l:"Change",r:true,r_:r=>{const p=live.find(l=>l.tk===r.symbol)?.pct;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:fc(p),fontVariantNumeric:"tabular-nums"}}>{p?fp(p):"—"}</span>;}},
             {l:"Trend",r_:r=>{
               const px=live.find(l=>l.tk===r.symbol)?.price;
-              if(!px)return<span style={{color:T.muted,fontSize:10}}>—</span>;
+              if(!px)return<span style={{color:T.muted,fontSize:"var(--fs-2xs)"}}>—</span>;
               const p=live.find(l=>l.tk===r.symbol)?.pct||0;
               return<Sk vals={Array.from({length:18},(_,i)=>px*(1-((p/100)*(1-i/17))))} color={fc(p)} w={70} h={22} fill/>;
             }},
-            {l:"Added @",r:true,r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.addPrice?f$(r.addPrice):"—"}</span>},
-            {l:"Vs Add",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;if(!px||!r.addPrice)return<span style={{color:T.muted}}>—</span>;const pct=((px-r.addPrice)/r.addPrice)*100;return<span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:fc(pct),fontVariantNumeric:"tabular-nums"}}>{fp(pct)}</span>;}},
-            {l:"Alert ↑",r_:r=><input type="number" placeholder="—" defaultValue={r.alertAbove||""} onBlur={e=>onSetAlert(r.symbol,"alertAbove",e.target.value)} className="field" style={{width:78,fontSize:11,padding:`4px ${T.s2}`}}/>},
-            {l:"Alert ↓",r_:r=><input type="number" placeholder="—" defaultValue={r.alertBelow||""} onBlur={e=>onSetAlert(r.symbol,"alertBelow",e.target.value)} className="field" style={{width:78,fontSize:11,padding:`4px ${T.s2}`}}/>},
-            {l:"",r_:r=><button onClick={()=>onRemove(r.symbol)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}><Icon name="close" size={12}/></button>},
+            {l:"Added @",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.addPrice?f$(r.addPrice):"—"}</span>},
+            {l:"Vs Add",r:true,r_:r=>{const px=live.find(l=>l.tk===r.symbol)?.price;if(!px||!r.addPrice)return<span style={{color:T.muted}}>—</span>;const pct=((px-r.addPrice)/r.addPrice)*100;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:fc(pct),fontVariantNumeric:"tabular-nums"}}>{fp(pct)}</span>;}},
+            {l:"Alert ↑",r_:r=><input type="number" placeholder="—" defaultValue={r.alertAbove||""} onBlur={e=>onSetAlert(r.symbol,"alertAbove",e.target.value)} className="field" style={{width:78,fontSize:"var(--fs-xs)",padding:`4px ${T.s2}`}}/>},
+            {l:"Alert ↓",r_:r=><input type="number" placeholder="—" defaultValue={r.alertBelow||""} onBlur={e=>onSetAlert(r.symbol,"alertBelow",e.target.value)} className="field" style={{width:78,fontSize:"var(--fs-xs)",padding:`4px ${T.s2}`}}/>},
+            {l:"",r_:r=><button onClick={()=>onRemove(r.symbol)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-xs)"}}><Icon name="close" size={12}/></button>},
           ]} rows={watchlist}/>
         </div>}
   </CollapsibleTile>;
@@ -5467,52 +5499,52 @@ function DividendPlanner({holdings=[],portfolioValue=0}){
 
   const last=proj.rows[proj.rows.length-1]||{net:0,gross:0};
   const first=proj.rows[0]||{net:0};
-  const num=(v,set,step=1,min=0)=><input type="number" value={v} min={min} step={step} onChange={e=>set(Math.max(min,+e.target.value||0))} className="field" style={{width:"100%",fontSize:13,padding:`8px ${T.s3}`,fontVariantNumeric:"tabular-nums"}}/>;
-  const Field=({label,children,hint})=><div><div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:6}}>{label}</div>{children}{hint&&<div style={{fontFamily:FP,fontSize:10,color:T.dim,marginTop:4,lineHeight:1.4}}>{hint}</div>}</div>;
+  const num=(v,set,step=1,min=0)=><input type="number" value={v} min={min} step={step} onChange={e=>set(Math.max(min,+e.target.value||0))} className="field" style={{width:"100%",fontSize:"var(--fs-md)",padding:`8px ${T.s3}`,fontVariantNumeric:"tabular-nums"}}/>;
+  const Field=({label,children,hint})=><div><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:6}}>{label}</div>{children}{hint&&<div style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.dim,marginTop:4,lineHeight:1.4}}>{hint}</div>}</div>;
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     <BentoTile accent={T.gain} style={{background:`radial-gradient(circle at 100% 0%, ${T.gain}12, transparent 55%), ${T.card}`}}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s2}}>DIVIDEND INCOME · YEAR {years}</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s2}}>DIVIDEND INCOME · YEAR {years}</div>
       <div style={{display:"flex",gap:T.s6,flexWrap:"wrap",alignItems:"baseline"}}>
         <div>
-          <div style={{fontFamily:FU,fontSize:38,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(last.net))}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s2}}>net dividends / yr · ~{mask(fmtUSD(Math.round(last.net/12)))}/mo</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-5xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(last.net))}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s2}}>net dividends / yr · ~{mask(fmtUSD(Math.round(last.net/12)))}/mo</div>
         </div>
         <div>
-          <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.gold,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(Math.round(proj.totPurif)))}</div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>purification owed over {years}y</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,color:T.gold,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(Math.round(proj.totPurif)))}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s1}}>purification owed over {years}y</div>
         </div>
         <div>
-          <div style={{fontFamily:FU,fontSize:22,fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(Math.round(proj.finalBal)))}</div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1}}>projected balance</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(Math.round(proj.finalBal)))}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s1}}>projected balance</div>
         </div>
       </div>
-      <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:T.s3,lineHeight:1.5,maxWidth:560}}>Estimates only. The impure fraction of a halal-fund dividend ({impurity}%) is owed to charity, so only the <strong style={{color:T.text}}>net</strong> is yours to keep or reinvest. Confirm each fund's actual impurity % in Zakat → Dividend Purification.</div>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s3,lineHeight:1.5,maxWidth:560}}>Estimates only. The impure fraction of a halal-fund dividend ({impurity}%) is owed to charity, so only the <strong style={{color:T.text}}>net</strong> is yours to keep or reinvest. Confirm each fund's actual impurity % in Zakat → Dividend Purification.</div>
     </BentoTile>
 
     <div className="bento-row" style={{display:"grid",gridTemplateColumns:"minmax(240px,1fr) 2fr",gap:T.s4}}>
       <BentoTile>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ASSUMPTIONS</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ASSUMPTIONS</div>
         <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
           <Field label="STARTING BALANCE">{num(start,setStart,100)}</Field>
           <Field label="MONTHLY CONTRIBUTION">{num(monthly,setMonthly,25)}</Field>
           <Field label={`DIVIDEND YIELD · ${yld}%`} hint={derivedYield!=null?"Blended from your current halal-fund holdings.":"Halal-fund blended default."}>{num(yld,setYld,0.1)}</Field>
           <Field label={`PRICE GROWTH · ${growth}%/yr`}>{num(growth,setGrowth,0.5)}</Field>
           <Field label={`PURIFICATION · ${impurity}%`} hint="Impure share of dividends owed to charity.">{num(impurity,setImpurity,0.1)}</Field>
-          <label style={{display:"flex",alignItems:"center",gap:T.s2,cursor:"pointer",fontFamily:FP,fontSize:13,color:T.text}}>
+          <label style={{display:"flex",alignItems:"center",gap:T.s2,cursor:"pointer",fontFamily:FP,fontSize:"var(--fs-md)",color:T.text}}>
             <input type="checkbox" checked={drip} onChange={e=>setDrip(e.target.checked)}/> Reinvest dividends (DRIP)
           </label>
           <div>
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:6}}>HORIZON</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:6}}>HORIZON</div>
             <div style={{display:"flex",gap:T.s1,flexWrap:"wrap"}}>
-              {[5,10,15,20,30].map(y=><button key={y} onClick={()=>setYears(y)} style={{padding:`5px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:11,fontWeight:600,cursor:"pointer",background:years===y?T.gain:"transparent",border:`1px solid ${years===y?T.gain:T.border}`,color:years===y?"#fff":T.muted}}>{y}y</button>)}
+              {[5,10,15,20,30].map(y=><button key={y} onClick={()=>setYears(y)} style={{padding:`5px ${T.s3}`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,cursor:"pointer",background:years===y?T.gain:"transparent",border:`1px solid ${years===y?T.gain:T.border}`,color:years===y?"#fff":T.muted}}>{y}y</button>)}
             </div>
           </div>
         </div>
       </BentoTile>
 
       <BentoTile>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PROJECTED ANNUAL DIVIDENDS · GROSS vs NET</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PROJECTED ANNUAL DIVIDENDS · GROSS vs NET</div>
         <div style={{height:280}}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={proj.rows} margin={{top:8,right:8,left:0,bottom:0}}>
@@ -5520,17 +5552,17 @@ function DividendPlanner({holdings=[],portfolioValue=0}){
                 <linearGradient id="divNet" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.gain} stopOpacity={0.35}/><stop offset="100%" stopColor={T.gain} stopOpacity={0}/></linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={T.dim} vertical={false}/>
-              <XAxis dataKey="label" tick={{fontSize:10,fontFamily:FM,fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false} interval="preserveStartEnd"/>
-              <YAxis tick={{fontSize:10,fontFamily:FM,fill:T.muted}} axisLine={false} tickLine={false} width={54} tickFormatter={v=>`$${kf(v)}`}/>
-              <Tooltip formatter={(v,n)=>[mask(fmtUSD(v)),n==="net"?"Net (yours)":"Gross"]} labelFormatter={l=>`Year ${l.replace("Y","")}`} contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12}}/>
+              <XAxis dataKey="label" tick={{fontSize:"var(--fs-2xs)",fontFamily:FM,fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false} interval="preserveStartEnd"/>
+              <YAxis tick={{fontSize:"var(--fs-2xs)",fontFamily:FM,fill:T.muted}} axisLine={false} tickLine={false} width={54} tickFormatter={v=>`$${kf(v)}`}/>
+              <Tooltip formatter={(v,n)=>[mask(fmtUSD(v)),n==="net"?"Net (yours)":"Gross"]} labelFormatter={l=>`Year ${l.replace("Y","")}`} contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-sm)"}}/>
               <Area type="monotone" dataKey="gross" stroke={T.gold} strokeWidth={1.5} fill="none" strokeDasharray="4 3"/>
               <Area type="monotone" dataKey="net" stroke={T.gain} strokeWidth={2} fill="url(#divNet)"/>
             </AreaChart>
           </ResponsiveContainer>
         </div>
         <div style={{display:"flex",gap:T.s4,marginTop:T.s2,flexWrap:"wrap"}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.gain}}>● Net (after purification) — Y1 {mask(fmtUSD(first.net))} → Y{years} {mask(fmtUSD(last.net))}</span>
-          <span style={{fontFamily:FM,fontSize:10,color:T.gold}}>┄ Gross</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain}}>● Net (after purification) — Y1 {mask(fmtUSD(first.net))} → Y{years} {mask(fmtUSD(last.net))}</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold}}>┄ Gross</span>
         </div>
       </BentoTile>
     </div>
@@ -5565,7 +5597,7 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
   return<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
     <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>RETIREMENT PARAMETERS</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>RETIREMENT PARAMETERS</div>
         {[
           {l:"Current Age",v:age,set:setAge,min:18,max:75,step:1,fmt:v=>v},
           {l:"Target Retirement Age",v:targetAge,set:setTargetAge,min:30,max:80,step:1,fmt:v=>v},
@@ -5575,26 +5607,26 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
           {l:"Safe Withdrawal Rate",v:withdrawRate,set:setWithdrawRate,min:0.02,max:0.06,step:0.005,fmt:v=>`${(v*100).toFixed(1)}%`},
         ].map(s=><div key={s.l}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:T.s1}}>
-            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>{s.l.toUpperCase()}</span>
-            <span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{s.fmt(s.v)}</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>{s.l.toUpperCase()}</span>
+            <span style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{s.fmt(s.v)}</span>
           </div>
           <input type="range" min={s.min} max={s.max} step={s.step} value={s.v} onChange={e=>s.set(+e.target.value)} style={{width:"100%",accentColor:T.blue,cursor:"pointer",height:4}}/>
         </div>)}
         <div style={{padding:`${T.s3} ${T.s4}`,background:`linear-gradient(135deg, ${T.gain}12, transparent 70%), ${T.gainBg}`,border:`1px solid ${T.gain}30`,borderRadius:T.rMd,marginTop:T.s2}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>FIRE NUMBER</div>
-          <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.gain,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(fireTarget)}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s1}}>Supports {kf(targetSpend)}/yr at {(withdrawRate*100).toFixed(1)}%</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>FIRE NUMBER</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.gain,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(fireTarget)}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s1}}>Supports {kf(targetSpend)}/yr at {(withdrawRate*100).toFixed(1)}%</div>
         </div>
       </BentoTile>
 
       <BentoTile>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PROJECTION</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>PROJECTION</div>
         {[
           ["Years to FIRE",yearAtTarget?(yearAtTarget.year===age?"Already at FIRE":`${yearAtTarget.year-age} yrs`):"Not reached",yearAtTarget?T.gain:T.muted],
           ["FIRE at age",yearAtTarget?yearAtTarget.year:"—"],
           ["Balance at target",balanceAtRetirement?kf(balanceAtRetirement.nominal):"—"],
           ["Today's $ at target",balanceAtRetirement?kf(balanceAtRetirement.real):"—"],
-        ].map(([l,v,clr])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:12}}>
+        ].map(([l,v,clr])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:"var(--fs-sm)"}}>
           <span style={{color:T.muted,letterSpacing:"0.04em"}}>{l}</span>
           <span style={{color:clr||T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{v}</span>
         </div>)}
@@ -5602,22 +5634,22 @@ function FireCalculator({currentNW=0,ytdContrib=0}){
     </div>
 
     <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>NET WORTH PROJECTION · Nominal vs Inflation-Adjusted</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>NET WORTH PROJECTION · Nominal vs Inflation-Adjusted</div>
       <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={projection} margin={{top:10,right:14,bottom:8,left:14}}>
           <defs><linearGradient id="fireG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={T.blue} stopOpacity={0.32}/><stop offset="95%" stopColor={T.blue} stopOpacity={0}/></linearGradient></defs>
           <CartesianGrid stroke={T.border} strokeDasharray="2 4" vertical={false}/>
-          <XAxis dataKey="year" tick={{fontFamily:FM,fontSize:10,fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false}/>
-          <YAxis tickFormatter={v=>kf(v)} tick={{fontFamily:FM,fontSize:10,fill:T.muted}} axisLine={false} tickLine={false} width={60}/>
+          <XAxis dataKey="year" tick={{fontFamily:FM,fontSize:"var(--fs-2xs)",fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false}/>
+          <YAxis tickFormatter={v=>kf(v)} tick={{fontFamily:FM,fontSize:"var(--fs-2xs)",fill:T.muted}} axisLine={false} tickLine={false} width={60}/>
           <Tooltip
             formatter={(v,name)=>[kf(v),name==="nominal"?"Nominal":"Real (today's $)"]}
-            contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)"}}
+            contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",boxShadow:"var(--sh-md)"}}
             itemStyle={{color:T.textHi}} labelStyle={{color:T.muted}}/>
           <Area type="monotone" dataKey="nominal" stroke={T.blue} strokeWidth={2} fill="url(#fireG)" dot={false}/>
           <Line type="monotone" dataKey="real" stroke={T.gold} strokeWidth={1.8} strokeDasharray="3 3" dot={false}/>
         </ComposedChart>
       </ResponsiveContainer>
-      <div style={{display:"flex",gap:T.s4,fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s3,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:T.s4,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s3,flexWrap:"wrap"}}>
         <span style={{display:"flex",alignItems:"center",gap:T.s1}}><span style={{width:12,height:2,background:T.blue,display:"inline-block",borderRadius:1}}/>Nominal balance</span>
         <span style={{display:"flex",alignItems:"center",gap:T.s1}}><span style={{width:12,height:2,background:T.gold,display:"inline-block",borderRadius:1}}/>Inflation-adjusted (today's $)</span>
       </div>
@@ -5640,10 +5672,10 @@ function OrderPreviewModal({preview={},onConfirm,onCancel,busy,side,sym,qty}){
     <div style={{background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:14,width:"100%",maxWidth:480,boxShadow:"var(--mz-glass-shadow-lg)",overflow:"hidden",animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)"}}>
       <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
-          <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi}}>Confirm {side==="buy"?"Buy":"Sell"} {sym}</div>
-          <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:2}}>SnapTrade preview · review before placing</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:T.textHi}}>Confirm {side==="buy"?"Buy":"Sell"} {sym}</div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:2}}>SnapTrade preview · review before placing</div>
         </div>
-        <button onClick={onCancel} style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:18,lineHeight:1}}><Icon name="close" size={16}/></button>
+        <button onClick={onCancel} style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:"var(--fs-2xl)",lineHeight:1}}><Icon name="close" size={16}/></button>
       </div>
       <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:8}}>
         {[
@@ -5654,20 +5686,20 @@ function OrderPreviewModal({preview={},onConfirm,onCancel,busy,side,sym,qty}){
           ["Est. fees",fees!=null?f$(fees):"—"],
           ["Est. total",estCost!=null?f$(estCost):"—"],
           ["Remaining cash",remaining!=null?kf(remaining):"—"],
-        ].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:12}}>
+        ].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:"var(--fs-sm)"}}>
           <span style={{color:T.muted}}>{l}</span>
           <span style={{color:T.textHi}}>{v}</span>
         </div>)}
-        {warnings.length>0&&<div style={{padding:"10px 12px",background:`${T.gold}0E`,border:`1px solid ${T.gold}30`,borderRadius:8,fontFamily:FM,fontSize:10,color:T.gold,lineHeight:1.5}}>
+        {warnings.length>0&&<div style={{padding:"10px 12px",background:`${T.gold}0E`,border:`1px solid ${T.gold}30`,borderRadius:8,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,lineHeight:1.5}}>
           <Icon name="warning" size={12} color={T.gold} style={{display:"inline-block",verticalAlign:"-2px",marginRight:4}}/>{Array.isArray(warnings)?warnings.join(" · "):String(warnings)}
         </div>}
-        <div style={{padding:"10px 12px",background:`${T.gain}0E`,border:`1px solid ${T.gain}25`,borderRadius:8,fontFamily:FP,fontSize:11,color:T.text,lineHeight:1.5}}>
+        <div style={{padding:"10px 12px",background:`${T.gain}0E`,border:`1px solid ${T.gain}25`,borderRadius:8,fontFamily:FP,fontSize:"var(--fs-xs)",color:T.text,lineHeight:1.5}}>
           <Icon name="check" size={12} color={T.gain} style={{display:"inline-block",verticalAlign:"-2px",marginRight:4}}/>Sharia pre-check: spot equity, no margin, no derivatives. Run the screener after placing if {sym} isn't classified yet.
         </div>
       </div>
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end"}}>
-        <button onClick={onCancel} disabled={busy} style={{padding:"8px 16px",borderRadius:8,fontFamily:FM,fontSize:11,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.text,cursor:busy?"not-allowed":"pointer"}}>Cancel</button>
-        <button onClick={onConfirm} disabled={busy} style={{padding:"8px 18px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",background:busy?T.dim:`linear-gradient(135deg, ${side==="buy"?T.gain:T.loss}, ${side==="buy"?T.gain:T.loss}DD)`,border:"none",color:busy?T.muted:"#fff",cursor:busy?"not-allowed":"pointer",boxShadow:busy?"none":`0 2px 8px ${(side==="buy"?T.gain:T.loss)}55`}}>{busy?"Placing…":`Confirm ${side==="buy"?"Buy":"Sell"}`}</button>
+        <button onClick={onCancel} disabled={busy} style={{padding:"8px 16px",borderRadius:8,fontFamily:FM,fontSize:"var(--fs-xs)",letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.text,cursor:busy?"not-allowed":"pointer"}}>Cancel</button>
+        <button onClick={onConfirm} disabled={busy} style={{padding:"8px 18px",borderRadius:8,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.06em",background:busy?T.dim:`linear-gradient(135deg, ${side==="buy"?T.gain:T.loss}, ${side==="buy"?T.gain:T.loss}DD)`,border:"none",color:busy?T.muted:"#fff",cursor:busy?"not-allowed":"pointer",boxShadow:busy?"none":`0 2px 8px ${(side==="buy"?T.gain:T.loss)}55`}}>{busy?"Placing…":`Confirm ${side==="buy"?"Buy":"Sell"}`}</button>
       </div>
     </div>
   </div>;
@@ -5770,10 +5802,10 @@ function StrategyReality({strat}){
   const lossPct=Number(strat?.stop_loss_pct)||Number(strat?.max_drawdown_pct)||0;
 
   return<div style={{marginTop:T.s3,padding:T.s3,background:T.bg,borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
-    <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>HISTORICAL REALITY CHECK · {ticker}</div>
-    {busy&&<div style={{height:90,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:11,color:T.muted}}>Running backtest on 2yr of {ticker} bars…</div>}
-    {!busy&&err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
-    {!busy&&!err&&!hasData&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.5}}>Not enough historical data to backtest {ticker} (needs ~200 daily bars). Treat the profit target as an unvalidated goal and size risk accordingly.</div>}
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>HISTORICAL REALITY CHECK · {ticker}</div>
+    {busy&&<div style={{height:90,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Running backtest on 2yr of {ticker} bars…</div>}
+    {!busy&&err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>{ICON_NO}{err}</div>}
+    {!busy&&!err&&!hasData&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.5}}>Not enough historical data to backtest {ticker} (needs ~200 daily bars). Treat the profit target as an unvalidated goal and size risk accordingly.</div>}
     {!busy&&!err&&hasData&&<>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:T.s2,marginBottom:T.s3}}>
         {[
@@ -5781,31 +5813,31 @@ function StrategyReality({strat}){
           ["Max drawdown",`-${stats.maxDrawdown.toFixed(1)}%`,T.loss],
           ["Hist. return",`${stats.totalRet.toFixed(1)}%`,fc(stats.totalRet)],
         ].map(([l,v,clr])=><div key={l} style={{padding:T.s2,background:T.surface,borderRadius:T.rSm,border:`1px solid ${T.border}`}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>{l.toUpperCase()}</div>
-          <div style={{fontFamily:FU,fontSize:17,fontWeight:700,color:clr,fontVariantNumeric:"tabular-nums"}}>{v}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>{l.toUpperCase()}</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-xl)",fontWeight:700,color:clr,fontVariantNumeric:"tabular-nums"}}>{v}</div>
         </div>)}
       </div>
-      <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:T.s2}}>RETURN DISTRIBUTION · {stats.trades} CLOSED TRADES</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:T.s2}}>RETURN DISTRIBUTION · {stats.trades} CLOSED TRADES</div>
       <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:T.s3}}>
         {stats.dist.map(d=><div key={d.label} style={{display:"grid",gridTemplateColumns:"96px 1fr 24px",gap:T.s2,alignItems:"center"}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{d.label}</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{d.label}</span>
           <div style={{height:8,background:T.surface,borderRadius:999,overflow:"hidden"}}>
             <div style={{height:"100%",width:`${(d.count/maxDistCount)*100}%`,background:d.label.includes("-")&&!d.label.startsWith("-5")?T.loss:d.label.startsWith("> ")||d.label.startsWith("10")||d.label.startsWith("5")?T.gain:d.label.startsWith("0")?T.gain:T.loss,borderRadius:999}}/>
           </div>
-          <span style={{fontFamily:FM,fontSize:10,color:T.textHi,fontWeight:600,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{d.count}</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.textHi,fontWeight:600,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{d.count}</span>
         </div>)}
       </div>
       {mismatch&&<div style={{padding:T.s3,background:T.lossBg,border:`1px solid ${T.loss}50`,borderRadius:T.rMd,marginBottom:T.s2}}>
-        <div style={{display:"flex",alignItems:"center",gap:4,fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.12em",fontWeight:600,marginBottom:4}}><Icon name="warning" size={12} color={T.loss}/>TARGET MAY NOT BE REALISTIC</div>
-        <div style={{fontFamily:FP,fontSize:12,color:T.text,lineHeight:1.55,fontVariantNumeric:"tabular-nums"}}>
+        <div style={{display:"flex",alignItems:"center",gap:4,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.12em",fontWeight:600,marginBottom:4}}><Icon name="warning" size={12} color={T.loss}/>TARGET MAY NOT BE REALISTIC</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,lineHeight:1.55,fontVariantNumeric:"tabular-nums"}}>
           Your target is <strong style={{color:T.loss}}>{target}%</strong>; historically this strategy achieved <strong style={{color:T.textHi}}>~{expectedRet.toFixed(1)}%</strong> over a comparable {Number(strat?.time_horizon_days)||0}-day period. Hitting your target would require materially more risk than the backtest shows — or may not be achievable at all.
         </div>
       </div>}
-      {!mismatch&&expectedRet!=null&&<div style={{padding:`${T.s2} ${T.s3}`,background:`${T.gold}10`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,marginBottom:T.s2,fontFamily:FP,fontSize:12,color:T.gold,lineHeight:1.5,fontVariantNumeric:"tabular-nums"}}>
+      {!mismatch&&expectedRet!=null&&<div style={{padding:`${T.s2} ${T.s3}`,background:`${T.gold}10`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,marginBottom:T.s2,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.gold,lineHeight:1.5,fontVariantNumeric:"tabular-nums"}}>
         Over a comparable {Number(strat?.time_horizon_days)||0}-day window this strategy historically returned ~{expectedRet.toFixed(1)}%. Your {target}% target is within reach of past results but is still a goal, not a guarantee.
       </div>}
     </>}
-    <div style={{padding:T.s3,background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:11,color:T.gold,lineHeight:1.6}}>
+    <div style={{padding:T.s3,background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:"var(--fs-xs)",color:T.gold,lineHeight:1.6}}>
       This is a <strong>TARGET, not a guarantee.</strong> Aggressive return targets require high risk. This strategy could lose up to {lossPct||stats.maxDrawdown?.toFixed?.(0)||"a significant portion"}% of allocated capital. Past backtest performance does not predict live results. Not financial advice.
     </div>
   </div>;
@@ -5843,27 +5875,27 @@ function StrategyProgressCard({strat}){
   return<BentoTile accent={pnl!=null?(pnl>=0?T.gain:T.loss):T.blue} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
-        <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{headline}</span>
-        {held&&cands.length>1&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.06em"}}>HELD</span>}
+        <span style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi}}>{headline}</span>
+        {held&&cands.length>1&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em"}}>HELD</span>}
         <Tag label={lyr.toUpperCase()} color={lyrColor}/>
         {isDca&&<Tag label="DCA" color={T.gain}/>}
       </div>
-      <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em"}}>{isDca?`ACCUMULATE · ${cadence}D`:`TARGET ${strat.profit_target_pct}%`}</span>
+      <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em"}}>{isDca?`ACCUMULATE · ${cadence}D`:`TARGET ${strat.profit_target_pct}%`}</span>
     </div>
-    {noData?<div style={{fontFamily:FP,fontSize:12,color:T.muted}}>Progress data not available yet — check back after the next bot run.</div>:<>
+    {noData?<div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted}}>Progress data not available yet — check back after the next bot run.</div>:<>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
         <div>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>ALLOCATED</div>
-          <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{f$(capital,0)}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>ALLOCATED</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{f$(capital,0)}</div>
         </div>
         <div>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>CURRENT VALUE</div>
-          <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:pnl!=null?fc(pnl):T.textHi,fontVariantNumeric:"tabular-nums"}}>{current!=null?f$(current,0):"—"}</div>
-          {pnl!=null&&<div style={{fontFamily:FM,fontSize:10,color:fc(pnl),fontWeight:600,fontVariantNumeric:"tabular-nums",marginTop:2}}>{pnl>=0?"+":"−"}{f$(pnl,0)} ({fp(pnlPct)})</div>}
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>CURRENT VALUE</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:pnl!=null?fc(pnl):T.textHi,fontVariantNumeric:"tabular-nums"}}>{current!=null?f$(current,0):"—"}</div>
+          {pnl!=null&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:fc(pnl),fontWeight:600,fontVariantNumeric:"tabular-nums",marginTop:2}}>{pnl>=0?"+":"−"}{f$(pnl,0)} ({fp(pnlPct)})</div>}
         </div>
       </div>
       <div>
-        <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4,fontVariantNumeric:"tabular-nums"}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:4,fontVariantNumeric:"tabular-nums"}}>
           <span style={{letterSpacing:"0.08em"}}>{barLabel}</span>
           <span style={{color:T.textHi,fontWeight:600}}>{barPct!=null?`${barPct.toFixed(0)}%`:"—"}</span>
         </div>
@@ -5871,11 +5903,11 @@ function StrategyProgressCard({strat}){
           <div style={{height:"100%",width:`${barPct||0}%`,background:`linear-gradient(90deg, ${T.gain}, ${T.blue})`,borderRadius:999,transition:"width 300ms cubic-bezier(0.16,1,0.3,1)"}}/>
         </div>
       </div>
-      <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums",borderTop:`1px solid ${T.border}`,paddingTop:T.s2}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums",borderTop:`1px solid ${T.border}`,paddingTop:T.s2}}>
         <span>{isDca?`Accumulate · hold (no auto-sell)`:`${daysElapsed!=null?`Day ${daysElapsed}`:"Day —"}${daysHorizon!=null?` of ${daysHorizon}`:""}`}</span>
         <span>{trades!=null?`${trades} ${isDca?"buy":"trade"}${trades===1?"":"s"}${isDca?"":" executed"}`:"— trades"}</span>
       </div>
-      {realized!=null&&closedCount>0&&<div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
+      {realized!=null&&closedCount>0&&<div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:"var(--fs-xs)",fontVariantNumeric:"tabular-nums"}}>
         <span style={{color:T.muted}}>Realized ({closedCount} closed)</span>
         <span style={{color:fc(realized),fontWeight:600}}>{`${realized>=0?"+":"−"}${f$(realized,0)}`}</span>
       </div>}
@@ -5908,10 +5940,10 @@ function HistoricalBacktest(){
   return<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
     <div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>BACKTEST INPUTS</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>BACKTEST INPUTS</div>
         <div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>SYMBOL</div>
-          <input value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} className="field" style={{fontSize:16,fontWeight:600,color:T.blue,letterSpacing:"-0.01em"}}/>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>SYMBOL</div>
+          <input value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} className="field" style={{fontSize:"var(--fs-xl)",fontWeight:600,color:T.blue,letterSpacing:"-0.01em"}}/>
         </div>
         {/* mz-form-row (stacks at ≤600px) + minWidth:0 on the cells. A grid
             item's default min-width:auto refuses to shrink below its content's
@@ -5921,20 +5953,20 @@ function HistoricalBacktest(){
             template said. The clipped "Run Backtest" button was downstream of
             that, not a problem of its own. */}
         <div className="mz-form-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
-          <div style={{minWidth:0}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>FROM</div>
-            <input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="field" style={{fontSize:12,minWidth:0}}/></div>
-          <div style={{minWidth:0}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>TO</div>
-            <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="field" style={{fontSize:12,minWidth:0}}/></div>
+          <div style={{minWidth:0}}><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>FROM</div>
+            <input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="field" style={{fontSize:"var(--fs-sm)",minWidth:0}}/></div>
+          <div style={{minWidth:0}}><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>TO</div>
+            <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="field" style={{fontSize:"var(--fs-sm)",minWidth:0}}/></div>
         </div>
-        <div style={{padding:`${T.s3} ${T.s3}`,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`,fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+        <div style={{padding:`${T.s3} ${T.s3}`,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
           <strong style={{color:T.text,fontWeight:600}}>Strategy:</strong> SMA-50 / SMA-200 crossover. Buy when 50-day crosses above 200-day; sell on cross below. Free-tier Polygon caps at 2 years of daily bars.
         </div>
         <button onClick={run} disabled={busy} className="btn-primary" style={{padding:`10px ${T.s4}`}}>{busy?"Fetching bars…":"Run Backtest"}</button>
-        {err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
+        {err&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>{ICON_NO}{err}</div>}
       </BentoTile>
 
       {bars.length>0&&<BentoTile>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>RESULTS</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>RESULTS</div>
         {[
           ["Bars analyzed",stats.bars||0],
           ["Trades",stats.trades||0],
@@ -5942,7 +5974,7 @@ function HistoricalBacktest(){
           ["Strategy return",stats.trades?`${stats.totalRet.toFixed(1)}%`:"—",stats.trades?fc(stats.totalRet):null],
           ["Buy & hold",`${(stats.buyHold||0).toFixed(1)}%`,fc(stats.buyHold||0)],
           ["Edge vs B&H",stats.trades?`${(stats.totalRet-stats.buyHold).toFixed(1)}%`:"—",stats.trades?fc(stats.totalRet-stats.buyHold):null],
-        ].map(([l,v,clr])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:12}}>
+        ].map(([l,v,clr])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:"var(--fs-sm)"}}>
           <span style={{color:T.muted,letterSpacing:"0.04em"}}>{l}</span>
           <span style={{color:clr||T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{v}</span>
         </div>)}
@@ -5950,21 +5982,21 @@ function HistoricalBacktest(){
     </div>
 
     <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>{symbol} · CLOSE / SMA-50 / SMA-200</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>{symbol} · CLOSE / SMA-50 / SMA-200</div>
       {bars.length===0
-        ?<div style={{height:320,display:"flex",alignItems:"center",justifyContent:"center",border:`1px dashed ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:13,color:T.muted}}>Run a backtest to load bars from Polygon</div>
+        ?<div style={{height:320,display:"flex",alignItems:"center",justifyContent:"center",border:`1px dashed ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>Run a backtest to load bars from Polygon</div>
         :<ResponsiveContainer width="100%" height={320}>
           <ComposedChart data={series} margin={{top:6,right:14,bottom:8,left:14}}>
             <CartesianGrid stroke={T.border} strokeDasharray="2 4" vertical={false}/>
-            <XAxis dataKey="date" tick={{fontFamily:FM,fontSize:10,fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false} minTickGap={60}/>
-            <YAxis tickFormatter={v=>`$${v.toFixed(0)}`} tick={{fontFamily:FM,fontSize:10,fill:T.muted}} axisLine={false} tickLine={false} width={60} domain={["auto","auto"]}/>
-            <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--sh-md)"}} itemStyle={{color:T.textHi}} labelStyle={{color:T.muted}}/>
+            <XAxis dataKey="date" tick={{fontFamily:FM,fontSize:"var(--fs-2xs)",fill:T.muted}} axisLine={{stroke:T.border}} tickLine={false} minTickGap={60}/>
+            <YAxis tickFormatter={v=>`$${v.toFixed(0)}`} tick={{fontFamily:FM,fontSize:"var(--fs-2xs)",fill:T.muted}} axisLine={false} tickLine={false} width={60} domain={["auto","auto"]}/>
+            <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.borderHi}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",boxShadow:"var(--sh-md)"}} itemStyle={{color:T.textHi}} labelStyle={{color:T.muted}}/>
             <Line type="monotone" dataKey="c" stroke={T.text} strokeWidth={1.2} dot={false} name="Close"/>
             <Line type="monotone" dataKey="sma50" stroke={T.blue} strokeWidth={1.8} dot={false} name="SMA-50"/>
             <Line type="monotone" dataKey="sma200" stroke={T.gold} strokeWidth={1.8} dot={false} name="SMA-200"/>
           </ComposedChart>
         </ResponsiveContainer>}
-      {trades.length>0&&<div style={{marginTop:T.s3,maxHeight:220,overflowY:"auto",background:T.surface,borderRadius:T.rMd,padding:T.s2,border:`1px solid ${T.border}`,fontFamily:FM,fontSize:11}}>
+      {trades.length>0&&<div style={{marginTop:T.s3,maxHeight:220,overflowY:"auto",background:T.surface,borderRadius:T.rMd,padding:T.s2,border:`1px solid ${T.border}`,fontFamily:FM,fontSize:"var(--fs-xs)"}}>
         {trades.slice(-20).reverse().map((t,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"auto 1fr auto auto",gap:T.s3,padding:`5px ${T.s2}`,borderBottom:`1px solid ${T.border}`,alignItems:"center"}}>
           <Tag label={t.side} color={t.side==="BUY"?T.gain:T.loss}/>
           <span style={{color:T.muted,letterSpacing:"0.04em"}}>{t.date}</span>
@@ -6281,12 +6313,12 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     ];
     return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
       <BentoTile style={{textAlign:"center",padding:`${T.s8} ${T.s6}`}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s3}}>COMING SOON</div>
-        <div style={{fontFamily:FU,fontSize:32,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s3}}>MĪZAN Trading Bot</div>
-        <p style={{fontFamily:FP,fontSize:14,color:T.muted,maxWidth:560,margin:`0 auto ${T.s4}`,lineHeight:1.65}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s3}}>COMING SOON</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-5xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s3}}>MĪZAN Trading Bot</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-lg)",color:T.muted,maxWidth:560,margin:`0 auto ${T.s4}`,lineHeight:1.65}}>
           Halal systematic trading — manual, assisted, or fully automated. Every trade is screened against AAOIFI standards before it reaches your broker.
         </p>
-        <div style={{display:"inline-flex",alignItems:"center",gap:T.s2,padding:`6px ${T.s3}`,borderRadius:T.rMd,background:`${T.blue}15`,border:`1px solid ${T.blue}30`,fontFamily:FM,fontSize:11,color:T.blue}}>
+        <div style={{display:"inline-flex",alignItems:"center",gap:T.s2,padding:`6px ${T.s3}`,borderRadius:T.rMd,background:`${T.blue}15`,border:`1px solid ${T.blue}30`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.blue}}>
           All positions Sharia-screened · Stop-loss mandatory · No riba
         </div>
       </BentoTile>
@@ -6297,35 +6329,35 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             <Icon name={l.icon} size={24} color={l.badgeColor}/>
             <Tag label={l.badge} color={l.badgeColor}/>
           </div>
-          <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi,letterSpacing:"0.02em"}}>{l.title}</div>
-          <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:0}}>{l.desc}</p>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:T.textHi,letterSpacing:"0.02em"}}>{l.title}</div>
+          <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.6,margin:0}}>{l.desc}</p>
         </BentoTile>)}
       </div>
 
       {/* Demo preview: disabled order ticket form */}
       <BentoTile style={{position:"relative",overflow:"hidden",opacity:0.75}}>
-        <div style={{position:"absolute",top:T.s3,right:T.s3,padding:`4px ${T.s2}`,background:`${T.blue}20`,border:`1px solid ${T.blue}40`,borderRadius:T.rSm,fontFamily:FM,fontSize:9,color:T.blue,fontWeight:600,letterSpacing:"0.1em",zIndex:1}}>PREVIEW · ADMIN ONLY</div>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>ORDER TICKET</div>
+        <div style={{position:"absolute",top:T.s3,right:T.s3,padding:`4px ${T.s2}`,background:`${T.blue}20`,border:`1px solid ${T.blue}40`,borderRadius:T.rSm,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,fontWeight:600,letterSpacing:"0.1em",zIndex:1}}>PREVIEW · ADMIN ONLY</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>ORDER TICKET</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s3,opacity:0.6,pointerEvents:"none"}}>
           {[["Symbol","SPUS"],["Quantity","10"],["Order Type","Market"],["Side","Buy"]].map(([l,v])=><div key={l}>
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:4,letterSpacing:"0.08em"}}>{l.toUpperCase()}</div>
-            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`8px ${T.s3}`,fontFamily:FM,fontSize:13,color:T.textHi}}>{v}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:4,letterSpacing:"0.08em"}}>{l.toUpperCase()}</div>
+            <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`8px ${T.s3}`,fontFamily:FM,fontSize:"var(--fs-md)",color:T.textHi}}>{v}</div>
           </div>)}
         </div>
-        <div style={{marginTop:T.s3,height:36,background:`${T.blue}20`,borderRadius:T.rMd,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:11,color:`${T.blue}60`,letterSpacing:"0.1em",opacity:0.6}}>PREVIEW — SHARIA SCREEN + ORDER PREVIEW</div>
+        <div style={{marginTop:T.s3,height:36,background:`${T.blue}20`,borderRadius:T.rMd,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:"var(--fs-xs)",color:`${T.blue}60`,letterSpacing:"0.1em",opacity:0.6}}>PREVIEW — SHARIA SCREEN + ORDER PREVIEW</div>
       </BentoTile>
 
       {/* Sample signal card */}
       <BentoTile accent={T.gold} style={{opacity:0.75}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",marginBottom:4}}>BOT SIGNAL · PREVIEW</div>
-            <div style={{fontFamily:FM,fontSize:14,fontWeight:600,color:T.textHi}}>BUY 5 SPUS · Momentum strategy</div>
-            <div style={{fontFamily:FM,fontSize:11,color:T.gold,marginTop:4}}>Suggested at $62.18 · Expires in 58 min</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",marginBottom:4}}>BOT SIGNAL · PREVIEW</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi}}>BUY 5 SPUS · Momentum strategy</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.gold,marginTop:4}}>Suggested at $62.18 · Expires in 58 min</div>
           </div>
           <div style={{display:"flex",gap:T.s2,opacity:0.5,pointerEvents:"none"}}>
-            <button className="btn-primary" style={{fontSize:11,padding:`6px ${T.s3}`}}>Approve</button>
-            <button className="btn-ghost" style={{fontSize:11,padding:`6px ${T.s3}`}}>Reject</button>
+            <button className="btn-primary" style={{fontSize:"var(--fs-xs)",padding:`6px ${T.s3}`}}>Approve</button>
+            <button className="btn-ghost" style={{fontSize:"var(--fs-xs)",padding:`6px ${T.s3}`}}>Reject</button>
           </div>
         </div>
       </BentoTile>
@@ -6337,33 +6369,33 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     {/* Kill Switch */}
     <BentoTile accent={allPaused?T.loss:T.gain} style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s3}}>
       <div>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:4}}>AUTOMATION STATUS</div>
-        <div style={{display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:14,fontWeight:600,color:allPaused?T.loss:T.gain}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:4}}>AUTOMATION STATUS</div>
+        <div style={{display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:"var(--fs-lg)",fontWeight:600,color:allPaused?T.loss:T.gain}}>
           {strategies.length===0?"No strategies configured":allPaused?<><Icon name="pause" size={14} color={T.loss}/>All automation paused</>:<><Icon name="play" size={14} color={T.gain}/>Automation running</>}
         </div>
       </div>
       <div style={{display:"flex",gap:T.s3,alignItems:"center"}}>
-        {killSwitchMsg&&<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{killSwitchMsg}</span>}
-        {strategies.some(s=>s.enabled)&&<button onClick={activateKillSwitch} disabled={killSwitchBusy} style={{display:"inline-flex",alignItems:"center",gap:6,padding:`8px ${T.s4}`,borderRadius:T.rMd,border:`1px solid ${T.loss}60`,background:`${T.loss}15`,color:T.loss,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.08em",cursor:"pointer"}}><Icon name="stop" size={12} color={T.loss}/>PAUSE ALL</button>}
+        {killSwitchMsg&&<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{killSwitchMsg}</span>}
+        {strategies.some(s=>s.enabled)&&<button onClick={activateKillSwitch} disabled={killSwitchBusy} style={{display:"inline-flex",alignItems:"center",gap:6,padding:`8px ${T.s4}`,borderRadius:T.rMd,border:`1px solid ${T.loss}60`,background:`${T.loss}15`,color:T.loss,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.08em",cursor:"pointer"}}><Icon name="stop" size={12} color={T.loss}/>PAUSE ALL</button>}
       </div>
     </BentoTile>
 
     {/* First-use consent gate (beta / non-root). Until accepted, the builder and
         default-layer card are hidden — the server also blocks create/execute. */}
     {showStrat&&needsConsent&&<BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BEFORE YOU START · BETA</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.7,margin:`0 0 ${T.s3}`}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BEFORE YOU START · BETA</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.7,margin:`0 0 ${T.s3}`}}>
         Trade is an <strong>experimental beta</strong>. <strong>Mizan is not a registered investment adviser (RIA)</strong> and this is <strong>not financial advice</strong>. You build your own strategies and they run only on <strong>your own connected brokerage</strong> — <strong>you approve every trade yourself</strong> (no autonomous execution). Trading carries real risk: <strong>you can lose money, up to your full allocated capital</strong>. Stop-loss, max-drawdown, the daily cap, and the Sharia gate stay enforced, but they don't guarantee against loss.
       </p>
-      <button onClick={acceptConsent} disabled={consentBusy} className="btn-primary" style={{fontSize:11,opacity:consentBusy?0.6:1}}>{consentBusy?"Saving…":"I understand — enable Trade for my account"}</button>
+      <button onClick={acceptConsent} disabled={consentBusy} className="btn-primary" style={{fontSize:"var(--fs-xs)",opacity:consentBusy?0.6:1}}>{consentBusy?"Saving…":"I understand — enable Trade for my account"}</button>
     </BentoTile>}
 
     {/* Execution Layer — the 3-layer premise, front and center. Sets the default
         for NEW strategies; each strategy still overrides its own layer below. */}
     {showStrat&&!needsConsent&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>EXECUTION LAYER · DEFAULT FOR NEW STRATEGIES</div>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>Each strategy overrides its own below</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>EXECUTION LAYER · DEFAULT FOR NEW STRATEGIES</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>Each strategy overrides its own below</div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:T.s2}}>
         {LAYERS.map(k=>{const m=LAYER_META[k];const on=defaultLayer===k;const n=k==="manual"?"1":k==="semi"?"2":"3";return(
@@ -6375,14 +6407,14 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           }}>
             <div style={{display:"flex",alignItems:"center",gap:T.s2,width:"100%"}}>
               <Icon name={m.icon} size={18} color={on?m.color:T.muted}/>
-              <span style={{fontFamily:FM,fontSize:9,color:on?m.color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginLeft:"auto"}}>LAYER {n}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:on?m.color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginLeft:"auto"}}>LAYER {n}</span>
             </div>
-            <span style={{fontFamily:FM,fontSize:12,fontWeight:600,color:on?m.color:T.textHi}}>{m.label}</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:on?m.color:T.textHi}}>{m.label}</span>
           </button>
         );})}
       </div>
-      <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:`${T.s3} 0 0`}}>{LAYER_META[defaultLayer].blurb}</p>
-      {defaultLayer==="full"&&<div style={{marginTop:T.s2,fontFamily:FM,fontSize:11,color:T.loss}}>Full-auto still requires the per-account AUTO ON toggle below — off by default even here.</div>}
+      <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.6,margin:`${T.s3} 0 0`}}>{LAYER_META[defaultLayer].blurb}</p>
+      {defaultLayer==="full"&&<div style={{marginTop:T.s2,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>Full-auto still requires the per-account AUTO ON toggle below — off by default even here.</div>}
     </BentoTile>}
 
     {/* Quick Preset — Halal Bogleheads lazy portfolio. One-tap, per-sleeve pickable
@@ -6391,27 +6423,27 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     {showStrat&&!needsConsent&&<BentoTile accent={T.gain}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s3,flexWrap:"wrap"}}>
         <div style={{minWidth:200,flex:1}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>QUICK PRESET · HALAL LAZY PORTFOLIO</div>
-          <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:4}}>Halal Bogleheads</div>
-          <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:0}}>The Islamic three-fund lazy portfolio — US equity, international, and sukuk (halal fixed income). Weekly DCA that rebalances via new contributions and holds long-term. Never auto-sells.</p>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>QUICK PRESET · HALAL LAZY PORTFOLIO</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:4}}>Halal Bogleheads</div>
+          <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.6,margin:0}}>The Islamic three-fund lazy portfolio — US equity, international, and sukuk (halal fixed income). Weekly DCA that rebalances via new contributions and holds long-term. Never auto-sells.</p>
         </div>
-        <button onClick={()=>setBogleOpen(o=>!o)} className={bogleOpen?"btn-ghost":"btn-primary"} style={{fontSize:11,whiteSpace:"nowrap"}}>{bogleOpen?"Close":"Configure →"}</button>
+        <button onClick={()=>setBogleOpen(o=>!o)} className={bogleOpen?"btn-ghost":"btn-primary"} style={{fontSize:"var(--fs-xs)",whiteSpace:"nowrap"}}>{bogleOpen?"Close":"Configure →"}</button>
       </div>
 
       {bogleOpen&&<div style={{marginTop:T.s4,paddingTop:T.s4,borderTop:`1px solid ${T.border}`}}>
         {bogleSleeves.length===0
-          ?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Loading preset options…</div>
+          ?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading preset options…</div>
           :<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
             {bogleSleeves.map(s=>{
               const active=bogleSel[s.key];
               const included=s.core||!!active;
               return<div key={s.key} style={{opacity:included?1:0.6}}>
                 <div style={{display:"flex",alignItems:"baseline",gap:T.s2,marginBottom:T.s2,flexWrap:"wrap"}}>
-                  <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,letterSpacing:"0.02em"}}>{s.label}</span>
-                  <span style={{fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums"}}>~{Math.round(s.weight*100)}%</span>
+                  <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:T.textHi,letterSpacing:"0.02em"}}>{s.label}</span>
+                  <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>~{Math.round(s.weight*100)}%</span>
                   {s.core
-                    ?<span style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.08em"}}>CORE</span>
-                    :<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.08em"}}>{active?"ON · tap to remove":"OPTIONAL TILT"}</span>}
+                    ?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.08em"}}>CORE</span>
+                    :<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.08em"}}>{active?"ON · tap to remove":"OPTIONAL TILT"}</span>}
                 </div>
                 <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
                   {s.options.map(o=>{
@@ -6421,26 +6453,26 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
                       padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,cursor:"pointer",transition:"all 0.15s",
                       border:`1px solid ${on?T.gain:T.border}`,background:on?`${T.gain}14`:"transparent",minWidth:150,
                     }}>
-                      <span style={{fontFamily:FM,fontSize:12,fontWeight:600,color:on?T.gain:T.textHi,letterSpacing:"0.04em"}}>{o.ticker}</span>
-                      <span style={{fontFamily:FP,fontSize:10,color:T.muted,lineHeight:1.4}}>{o.name} · {o.expense}% ER</span>
+                      <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:on?T.gain:T.textHi,letterSpacing:"0.04em"}}>{o.ticker}</span>
+                      <span style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.4}}>{o.name} · {o.expense}% ER</span>
                     </button>;
                   })}
                 </div>
               </div>;
             })}
-            <div style={{fontFamily:FM,fontSize:10,color:T.dim,lineHeight:1.5,marginTop:T.s1}}>Weights are targets — the bot buys the most-underweight affordable member each week to converge on them. You set the weekly amount + account in the review below.</div>
-            <div><button onClick={buildBoglehead} disabled={bogleBusy} className="btn-primary" style={{fontSize:11,opacity:bogleBusy?0.6:1}}>{bogleBusy?"Building…":"Build Halal Bogleheads →"}</button></div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,lineHeight:1.5,marginTop:T.s1}}>Weights are targets — the bot buys the most-underweight affordable member each week to converge on them. You set the weekly amount + account in the review below.</div>
+            <div><button onClick={buildBoglehead} disabled={bogleBusy} className="btn-primary" style={{fontSize:"var(--fs-xs)",opacity:bogleBusy?0.6:1}}>{bogleBusy?"Building…":"Build Halal Bogleheads →"}</button></div>
           </div>}
       </div>}
     </BentoTile>}
 
     {/* NL Strategy Builder */}
     {showStrat&&!needsConsent&&<BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>NATURAL LANGUAGE STRATEGY BUILDER</div>
-      <p style={{fontFamily:FP,fontSize:12,color:T.muted,marginBottom:T.s3,lineHeight:1.6}}>Describe a trading goal in plain English. The AI parses it into a structured, risk-bounded strategy with mandatory stop-loss.</p>
-      <textarea value={nlInput} onChange={e=>setNlInput(e.target.value)} placeholder='e.g. "Use $500 in my E*Trade account, run a momentum swing-trade on SPUS, target 20% return, within 4 weeks"' style={{width:"100%",minHeight:80,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:T.s3,fontFamily:FP,fontSize:13,color:T.textHi,resize:"vertical",boxSizing:"border-box"}}/>
-      {nlErr&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginTop:T.s2}}>{nlErr}</div>}
-      <button onClick={parseNl} disabled={nlBusy||!nlInput.trim()} className="btn-primary" style={{marginTop:T.s3,fontSize:11}}>{nlBusy?"Parsing…":"Parse Strategy"}</button>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>NATURAL LANGUAGE STRATEGY BUILDER</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,marginBottom:T.s3,lineHeight:1.6}}>Describe a trading goal in plain English. The AI parses it into a structured, risk-bounded strategy with mandatory stop-loss.</p>
+      <textarea value={nlInput} onChange={e=>setNlInput(e.target.value)} placeholder='e.g. "Use $500 in my E*Trade account, run a momentum swing-trade on SPUS, target 20% return, within 4 weeks"' style={{width:"100%",minHeight:80,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:T.s3,fontFamily:FP,fontSize:"var(--fs-md)",color:T.textHi,resize:"vertical",boxSizing:"border-box"}}/>
+      {nlErr&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,marginTop:T.s2}}>{nlErr}</div>}
+      <button onClick={parseNl} disabled={nlBusy||!nlInput.trim()} className="btn-primary" style={{marginTop:T.s3,fontSize:"var(--fs-xs)"}}>{nlBusy?"Parsing…":"Parse Strategy"}</button>
 
       {/* Strategy Review Modal (inline) — honest reality-check before activation */}
       {nlResult&&(()=>{
@@ -6465,13 +6497,13 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           ["Max trades / day",nlResult.max_trades_per_day!=null?`${nlResult.max_trades_per_day}`:"—"],
         ];
         return<div style={{marginTop:T.s4,padding:T.s4,background:T.surface,borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STRATEGY REVIEW · REALITY CHECK</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s3}}>STRATEGY REVIEW · REALITY CHECK</div>
         {nlDisclaimer&&<div style={{marginBottom:T.s3,padding:T.s3,background:`${T.blue}0E`,border:`1px solid ${T.blue}30`,borderRadius:T.rMd}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.blue,letterSpacing:"0.14em",fontWeight:600,marginBottom:4}}>SELF-DIRECTED · NOT ADVICE</div>
-          <p style={{fontFamily:FP,fontSize:11.5,color:T.text,margin:0,lineHeight:1.55}}>{nlDisclaimer}</p>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.14em",fontWeight:600,marginBottom:4}}>SELF-DIRECTED · NOT ADVICE</div>
+          <p style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.text,margin:0,lineHeight:1.55}}>{nlDisclaimer}</p>
         </div>}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:`${T.s1} ${T.s4}`,marginBottom:T.s3}}>
-          {plain.map(([k,v])=><div key={k} style={{display:"flex",justifyContent:"space-between",gap:T.s2,padding:`5px 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
+          {plain.map(([k,v])=><div key={k} style={{display:"flex",justifyContent:"space-between",gap:T.s2,padding:`5px 0`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:"var(--fs-xs)",fontVariantNumeric:"tabular-nums"}}>
             <span style={{color:T.muted,letterSpacing:"0.02em"}}>{k}</span>
             <span style={{color:k==="Profit target (GOAL)"?T.gold:T.textHi,fontWeight:600,textAlign:"right"}}>{v}</span>
           </div>)}
@@ -6480,13 +6512,13 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         {/* Brokerage account selector — the strategy runs on this connected account.
             Defaults to the account the AI resolved from your text, else the first one. */}
         <div style={{marginBottom:T.s3}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s1}}>BROKERAGE ACCOUNT</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s1}}>BROKERAGE ACCOUNT</div>
           {snapAccounts.length===0
-            ?<div style={{fontFamily:FM,fontSize:11,color:T.loss}}>No brokerage connected. Connect one in Settings → Connections before activating.</div>
+            ?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>No brokerage connected. Connect one in Settings → Connections before activating.</div>
             :<select value={nlAccount} onChange={e=>setNlAccount(e.target.value)} className="field" style={{width:"100%"}}>
               {snapAccounts.map(a=>{const id=acctId(a);return<option key={id} value={id}>{(a.brokerage||a.name||"Account")}{a.accountName?` — ${a.accountName}`:""}{a.balance!=null?` (${kf(a.balance)})`:""}</option>;})}
             </select>}
-          {nlResult.account_id&&!snapAccounts.find(a=>acctId(a)===nlResult.account_id)&&<div style={{fontFamily:FM,fontSize:10,color:T.gold,marginTop:4}}>Couldn’t match “{nlResult.account_id}” to a connected account — pick one above.</div>}
+          {nlResult.account_id&&!snapAccounts.find(a=>acctId(a)===nlResult.account_id)&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,marginTop:4}}>Couldn’t match “{nlResult.account_id}” to a connected account — pick one above.</div>}
         </div>
 
         {/* Deployable capital — how much of THIS account's buying power the strategy
@@ -6500,16 +6532,16 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           const reserve=Math.max(0,bp-deployable);
           const setPct=np=>{const c=Math.min(100,Math.max(5,np));setNlResult(prev=>({...prev,capital_allocated:bp>0?Math.floor(bp*c/100):prev.capital_allocated,params:{...(prev.params||{}),deploy_pct:c}}));};
           return<div style={{marginBottom:T.s3}}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s2}}>DEPLOYABLE CAPITAL</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s2}}>DEPLOYABLE CAPITAL</div>
             {bp>0?<>
-              <div style={{display:"flex",justifyContent:"space-between",gap:T.s2,fontFamily:FM,fontSize:11,marginBottom:T.s2,flexWrap:"wrap"}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:T.s2,fontFamily:FM,fontSize:"var(--fs-xs)",marginBottom:T.s2,flexWrap:"wrap"}}>
                 <span style={{color:T.muted}}>Buying power <span style={{color:T.textHi,fontWeight:600}}>{f(bp)}</span></span>
                 <span style={{color:T.muted}}>Deploy <span style={{color:T.blue,fontWeight:600}}>{pct}% = {f(deployable)}</span></span>
                 <span style={{color:T.muted}}>Reserved <span style={{color:T.gain,fontWeight:600}}>{f(reserve)}</span></span>
               </div>
               <input type="range" min={5} max={100} step={5} value={pct} onChange={e=>setPct(+e.target.value)} style={{width:"100%",accentColor:T.blue}}/>
-              <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:4,lineHeight:1.5}}>Deploy as much or as little as you choose — the reserved portion stays untouched in every mode (Manual · Semi · Full).</div>
-            </>:<div style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>Select a funded brokerage account to set a deployable %. Current allocation: {f(nlResult.capital_allocated)}.</div>}
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,marginTop:4,lineHeight:1.5}}>Deploy as much or as little as you choose — the reserved portion stays untouched in every mode (Manual · Semi · Full).</div>
+            </>:<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>Select a funded brokerage account to set a deployable %. Current allocation: {f(nlResult.capital_allocated)}.</div>}
           </div>;
         })()}
 
@@ -6517,15 +6549,15 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             Only for dca strategies; blank/0 falls back to deploying the full
             allocation as whole shares become affordable. */}
         {nlResult.strategy_type==="dca"&&<div style={{marginBottom:T.s3}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s2}}>WEEKLY AMOUNT</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s2}}>WEEKLY AMOUNT</div>
           <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-            <span style={{fontFamily:FM,fontSize:14,color:T.muted}}>$</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-lg)",color:T.muted}}>$</span>
             <input type="number" min={0} step={10} value={nlResult.params?.dca_amount||""} placeholder="e.g. 50"
               onChange={e=>{const v=Math.max(0,Number(e.target.value)||0);setNlResult(prev=>({...prev,params:{...(prev.params||{}),dca_amount:v}}));}}
               className="field" style={{width:140,fontVariantNumeric:"tabular-nums"}}/>
-            <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>every {nlResult.params?.dca_cadence_days||7} days</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>every {nlResult.params?.dca_cadence_days||7} days</span>
           </div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.dim,marginTop:4,lineHeight:1.5}}>Each period the bot buys whole shares of the most-underweight member up to this amount, capped by your deployable allocation above. Leave blank to deploy the full allocation as shares become affordable.</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,marginTop:4,lineHeight:1.5}}>Each period the bot buys whole shares of the most-underweight member up to this amount, capped by your deployable allocation above. Leave blank to deploy the full allocation as shares become affordable.</div>
         </div>}
 
         {/* Faithfully captured trader rules + honest "approximated" label. */}
@@ -6535,27 +6567,27 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           if(!dr&&!ex)return null;
           return<div style={{marginBottom:T.s3,padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
             <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s2,flexWrap:"wrap"}}>
-              <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:600}}>YOUR RULES — CAPTURED</span>
-              <span style={{fontFamily:FM,fontSize:9,fontWeight:600,color:T.gold,background:`${T.gold}14`,border:`1px solid ${T.gold}33`,borderRadius:999,padding:`2px ${T.s2}`,letterSpacing:"0.04em"}}>APPROXIMATED · DAILY LONG-ONLY · NOT TICK-BY-TICK</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:600}}>YOUR RULES — CAPTURED</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,color:T.gold,background:`${T.gold}14`,border:`1px solid ${T.gold}33`,borderRadius:999,padding:`2px ${T.s2}`,letterSpacing:"0.04em"}}>APPROXIMATED · DAILY LONG-ONLY · NOT TICK-BY-TICK</span>
             </div>
-            {dr&&<div style={{fontFamily:FP,fontSize:12,color:T.text,lineHeight:1.55,marginBottom:ex?T.s2:0}}>{dr}</div>}
-            {ex&&<div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5}}><span style={{fontWeight:600}}>Executed as:</span> {ex}</div>}
+            {dr&&<div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,lineHeight:1.55,marginBottom:ex?T.s2:0}}>{dr}</div>}
+            {ex&&<div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}><span style={{fontWeight:600}}>Executed as:</span> {ex}</div>}
           </div>;
         })()}
 
         {/* Client-side backtest reality check + mismatch warning + risk disclosure */}
         <StrategyReality strat={nlResult}/>
 
-        {nlResult.risk_disclosure&&<div style={{marginTop:T.s3,padding:T.s3,background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.gold,lineHeight:1.6}}>
+        {nlResult.risk_disclosure&&<div style={{marginTop:T.s3,padding:T.s3,background:`${T.gold}12`,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.gold,lineHeight:1.6}}>
           <Icon name="warning" size={13} color={T.gold} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>{nlResult.risk_disclosure}
         </div>}
-        <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer",margin:`${T.s3} 0`}}>
+        <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text,cursor:"pointer",margin:`${T.s3} 0`}}>
           <input type="checkbox" checked={riskAck} onChange={e=>setRiskAck(e.target.checked)} style={{marginTop:2}}/>
           I understand this is a TARGET, not a guarantee. The strategy could lose up to {nlResult.stop_loss_pct||nlResult.max_drawdown_pct}% of my allocated capital, and backtest results do not predict live performance.
         </label>
         <div style={{display:"flex",gap:T.s3}}>
-          <button onClick={saveNlStrategy} disabled={!riskAck||!nlAccount} title={!nlAccount?"Select a brokerage account first":""} className="btn-primary" style={{fontSize:11,opacity:(riskAck&&nlAccount)?1:0.5}}>Activate Strategy</button>
-          <button onClick={()=>{setNlResult(null);setRiskAck(false);}} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
+          <button onClick={saveNlStrategy} disabled={!riskAck||!nlAccount} title={!nlAccount?"Select a brokerage account first":""} className="btn-primary" style={{fontSize:"var(--fs-xs)",opacity:(riskAck&&nlAccount)?1:0.5}}>Activate Strategy</button>
+          <button onClick={()=>{setNlResult(null);setRiskAck(false);}} className="btn-ghost" style={{fontSize:"var(--fs-xs)"}}>Cancel</button>
         </div>
       </div>;})()}
     </BentoTile>}
@@ -6563,19 +6595,19 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     {/* Pending Signals — the Signals view. Always rendered here (with an empty state). */}
     {showSignals&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>PENDING SIGNALS</div>
-        <button onClick={loadSignals} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingSignals?"Loading…":"Refresh"}</button>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>PENDING SIGNALS</div>
+        <button onClick={loadSignals} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingSignals?"Loading…":"Refresh"}</button>
       </div>
-      {loadingSignals&&!signals.length?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Loading signals…</div>:
-       signals.length===0?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>No pending signals.</div>:
+      {loadingSignals&&!signals.length?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading signals…</div>:
+       signals.length===0?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>No pending signals.</div>:
        signals.map(sig=><div key={sig.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
         <div>
-          <div style={{fontFamily:FM,fontSize:13,fontWeight:600,color:sig.side==="buy"?T.gain:T.loss}}>{sig.side.toUpperCase()} {sig.qty} {sig.ticker}</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>~${Number(sig.suggested_price||0).toFixed(2)} · Expires {new Date(sig.expires_at).toLocaleTimeString()}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:sig.side==="buy"?T.gain:T.loss}}>{sig.side.toUpperCase()} {sig.qty} {sig.ticker}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>~${Number(sig.suggested_price||0).toFixed(2)} · Expires {new Date(sig.expires_at).toLocaleTimeString()}</div>
         </div>
         <div style={{display:"flex",gap:T.s2}}>
-          <button onClick={()=>approveSignal(sig.id)} className="btn-primary" style={{fontSize:10,padding:`5px ${T.s3}`}}>Approve</button>
-          <button onClick={()=>rejectSignal(sig.id)} className="btn-ghost" style={{fontSize:10,padding:`5px ${T.s3}`}}>Reject</button>
+          <button onClick={()=>approveSignal(sig.id)} className="btn-primary" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s3}`}}>Approve</button>
+          <button onClick={()=>rejectSignal(sig.id)} className="btn-ghost" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s3}`}}>Reject</button>
         </div>
       </div>)}
     </BentoTile>}
@@ -6595,25 +6627,25 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       const stratLabel=id=>{const s=strategies.find(x=>x.id===id);if(!s)return null;const c=Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[];return c.length>1?`${c.length} halal names`:(c[0]||s.ticker);};
       return<CollapsibleTile title="BOT ACTIVITY · ALL ACTIONS" subtitle="Every signal the bot generated + its outcome" storageKey="bot_activity">
         <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",marginBottom:T.s3}}>
-          <button onClick={loadActivity} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingActivity?"Loading…":"Refresh"}</button>
+          <button onClick={loadActivity} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingActivity?"Loading…":"Refresh"}</button>
         </div>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5,marginBottom:T.s2}}>Every signal the bot generated and what became of it — buys, sells (exits), approvals, and failures. Updates the moment the bot acts, independent of broker sync.</div>
-        {loadingActivity&&!activity?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>:
-         !activity||activity.length===0?<div style={{fontFamily:FP,fontSize:12,color:T.muted,textAlign:"center",padding:`${T.s4} 0`}}>No bot activity yet. Actions appear here as soon as the bot generates or fills a signal.</div>:
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,marginBottom:T.s2}}>Every signal the bot generated and what became of it — buys, sells (exits), approvals, and failures. Updates the moment the bot acts, independent of broker sync.</div>
+        {loadingActivity&&!activity?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading…</div>:
+         !activity||activity.length===0?<div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,textAlign:"center",padding:`${T.s4} 0`}}>No bot activity yet. Actions appear here as soon as the bot generates or fills a signal.</div>:
          <div style={{display:"flex",flexDirection:"column"}}>
           {activity.map((a,i)=>{const m=labelFor(a);const when=a.executed_at||a.created_at;const sl=stratLabel(a.strategy_id);return(
             <div key={a.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s2} 0`,borderTop:i===0?"none":`1px solid ${T.border}`,fontVariantNumeric:"tabular-nums"}}>
               <div style={{display:"flex",gap:T.s2,alignItems:"baseline",minWidth:170}}>
-                <span style={{fontFamily:FM,fontSize:12,fontWeight:600,color:a.side==="buy"?T.gain:T.loss}}>{(a.side||"").toUpperCase()}</span>
-                <span style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi}}>{a.qty} {a.ticker}</span>
-                {sl&&<span style={{fontFamily:FM,fontSize:9,color:T.muted}}>· {sl}</span>}
+                <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:a.side==="buy"?T.gain:T.loss}}>{(a.side||"").toUpperCase()}</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:T.textHi}}>{a.qty} {a.ticker}</span>
+                {sl&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>· {sl}</span>}
               </div>
               <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
-                <span style={{fontFamily:FM,fontSize:11,color:T.muted}}>~${Number(a.suggested_price||0).toFixed(2)}</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>~${Number(a.suggested_price||0).toFixed(2)}</span>
                 <Tag label={m.label} color={m.color}/>
-                <span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{when?new Date(when).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"—"}</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{when?new Date(when).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"—"}</span>
               </div>
-              {m.label==="FAILED"&&a.error_msg&&<div style={{flexBasis:"100%",fontFamily:FM,fontSize:10,color:T.loss}}>{a.error_msg}</div>}
+              {m.label==="FAILED"&&a.error_msg&&<div style={{flexBasis:"100%",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss}}>{a.error_msg}</div>}
             </div>);})}
          </div>}
       </CollapsibleTile>;
@@ -6621,7 +6653,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
 
     {/* Strategy Progress — one card per enabled strategy, target is always a goal */}
     {showStrat&&strategies.some(s=>s.enabled)&&<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGY PROGRESS</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGY PROGRESS</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(260px, 100%), 1fr))",gap:T.s3}}>
         {strategies.filter(s=>s.enabled).map(s=><StrategyProgressCard key={s.id} strat={s}/>)}
       </div>
@@ -6635,22 +6667,22 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       const pos=net>=0;
       return<CollapsibleTile accent={pos?T.gain:T.loss} title="REALIZED P&L · CLOSED TRADES" subtitle="Net realized gains from the bot's closed round-trips" storageKey="bot_pnl">
         <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
-          <button onClick={loadLedger} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>Refresh</button>
+          <button onClick={loadLedger} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>Refresh</button>
         </div>
         <div style={{display:"flex",gap:T.s6,flexWrap:"wrap",alignItems:"baseline"}}>
           <div>
-            <div style={{fontFamily:FU,fontSize:30,fontWeight:700,color:fc(net),letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{`${pos?"+":"−"}${f$(net,0)}`}</div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",marginTop:2}}>NET REALIZED</div>
+            <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:fc(net),letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{`${pos?"+":"−"}${f$(net,0)}`}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginTop:2}}>NET REALIZED</div>
           </div>
-          <div style={{display:"flex",gap:T.s4,fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>
+          <div style={{display:"flex",gap:T.s4,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>
             <span><span style={{color:T.textHi,fontWeight:600}}>{ledger.closed_count}</span> closed</span>
             <span><span style={{color:T.gain,fontWeight:600}}>{ledger.wins}</span>W · <span style={{color:T.loss,fontWeight:600}}>{ledger.losses}</span>L</span>
             {ledger.win_rate!=null&&<span><span style={{color:T.textHi,fontWeight:600}}>{ledger.win_rate}%</span> win rate</span>}
           </div>
         </div>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5}}>Realized from filled buy→sell round-trips (average-cost basis on signal fill price — approximate, no lot-level basis from the broker). Open positions are tracked separately above.</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5}}>Realized from filled buy→sell round-trips (average-cost basis on signal fill price — approximate, no lot-level basis from the broker). Open positions are tracked separately above.</div>
         <div style={{display:"flex",flexDirection:"column"}}>
-          {ledger.trades.slice(0,8).map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s2} 0`,borderTop:i===0?"none":`1px solid ${T.border}`,fontFamily:FM,fontSize:11,fontVariantNumeric:"tabular-nums"}}>
+          {ledger.trades.slice(0,8).map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s2} 0`,borderTop:i===0?"none":`1px solid ${T.border}`,fontFamily:FM,fontSize:"var(--fs-xs)",fontVariantNumeric:"tabular-nums"}}>
             <div style={{display:"flex",gap:T.s2,alignItems:"center",minWidth:160}}>
               <span style={{fontWeight:600,color:T.textHi}}>{t.ticker}</span>
               <span style={{color:T.muted}}>{t.qty} sh · {f$(t.entry)}→{f$(t.exit)}</span>
@@ -6658,10 +6690,10 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             <div style={{display:"flex",gap:T.s3,alignItems:"center"}}>
               <span style={{color:fc(t.realized),fontWeight:600}}>{`${t.realized>=0?"+":"−"}${f$(t.realized,0)}`}</span>
               <span style={{color:fc(t.realized)}}>({t.realized>=0?"+":""}{t.realized_pct}%)</span>
-              <span style={{color:T.muted,fontSize:10}}>{t.closed_at?new Date(t.closed_at).toLocaleDateString():"—"}</span>
+              <span style={{color:T.muted,fontSize:"var(--fs-2xs)"}}>{t.closed_at?new Date(t.closed_at).toLocaleDateString():"—"}</span>
             </div>
           </div>)}
-          {ledger.trades.length>8&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,paddingTop:T.s2}}>+{ledger.trades.length-8} more closed trade{ledger.trades.length-8===1?"":"s"}</div>}
+          {ledger.trades.length>8&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,paddingTop:T.s2}}>+{ledger.trades.length-8} more closed trade{ledger.trades.length-8===1?"":"s"}</div>}
         </div>
       </CollapsibleTile>;
     })()}
@@ -6669,11 +6701,11 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     {/* Strategy List */}
     {showStrat&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGIES ({strategies.length})</div>
-        <button onClick={loadStrategies} style={{fontFamily:FM,fontSize:10,color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingStrats?"Loading…":"Refresh"}</button>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGIES ({strategies.length})</div>
+        <button onClick={loadStrategies} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingStrats?"Loading…":"Refresh"}</button>
       </div>
-      {loadingStrats&&!strategies.length?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>:
-       strategies.length===0?<div style={{fontFamily:FP,fontSize:12,color:T.muted,textAlign:"center",padding:`${T.s5} 0`}}>No strategies configured yet. Use the builder above to create your first one.</div>:
+      {loadingStrats&&!strategies.length?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading…</div>:
+       strategies.length===0?<div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,textAlign:"center",padding:`${T.s5} 0`}}>No strategies configured yet. Use the builder above to create your first one.</div>:
        strategies.map(s=>{
         const lyr=layerOf(s);
         const cands=Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[];
@@ -6681,12 +6713,12 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         return<div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
         <div style={{minWidth:200}}>
           <div style={{display:"flex",gap:T.s2,alignItems:"center",marginBottom:4}}>
-            <span style={{fontFamily:FM,fontSize:13,fontWeight:600,color:T.textHi}}>{uniLabel}</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi}}>{uniLabel}</span>
             <Tag label={LAYER_META[lyr].label.toUpperCase()} color={LAYER_META[lyr].color}/>
             {s.strategy_type==="dca"&&<Tag label="DCA" color={T.gain}/>}
             {!s.enabled&&<Tag label="PAUSED" color={T.muted}/>}
           </div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}{`$${Number(s.capital_allocated).toLocaleString()} · `}{s.strategy_type==="dca"?`DCA · every ${Number(s.params?.dca_cadence_days)||7}d · holds (no auto-sell)`:`Target: ${s.profit_target_pct}% · Stop: ${s.stop_loss_pct}%`}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}{`$${Number(s.capital_allocated).toLocaleString()} · `}{s.strategy_type==="dca"?`DCA · every ${Number(s.params?.dca_cadence_days)||7}d · holds (no auto-sell)`:`Target: ${s.profit_target_pct}% · Stop: ${s.stop_loss_pct}%`}</div>
         </div>
         <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
           {/* Layer selector — switching opens the acknowledgment gate */}
@@ -6694,33 +6726,33 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             {LAYERS.map(k=>{const on=lyr===k;return(
               <button key={k} onClick={()=>requestLayer(s,k)} title={LAYER_META[k].blurb} style={{
                 padding:`5px ${T.s2}`,border:"none",cursor:"pointer",
-                fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
+                fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",
                 background:on?`${LAYER_META[k].color}1a`:"transparent",
                 color:on?LAYER_META[k].color:T.muted,
               }}>{LAYER_META[k].label.toUpperCase()}</button>
             );})}
           </div>
-          <button onClick={()=>openEdit(s)} className="btn-ghost" style={{fontSize:10,padding:`5px ${T.s2}`}}>Edit</button>
-          <button onClick={()=>toggleStrategy(s.id,s.enabled)} className="btn-ghost" style={{fontSize:10,padding:`5px ${T.s2}`}}>{s.enabled?"Pause":"Resume"}</button>
-          <button onClick={()=>deleteStrategy(s.id)} style={{fontFamily:FM,fontSize:10,padding:`5px ${T.s2}`,borderRadius:T.rSm,border:`1px solid ${T.loss}40`,background:"transparent",color:T.loss,cursor:"pointer"}}>Delete</button>
+          <button onClick={()=>openEdit(s)} className="btn-ghost" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s2}`}}>Edit</button>
+          <button onClick={()=>toggleStrategy(s.id,s.enabled)} className="btn-ghost" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s2}`}}>{s.enabled?"Pause":"Resume"}</button>
+          <button onClick={()=>deleteStrategy(s.id)} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",padding:`5px ${T.s2}`,borderRadius:T.rSm,border:`1px solid ${T.loss}40`,background:"transparent",color:T.loss,cursor:"pointer"}}>Delete</button>
         </div>
       </div>;})}
     </BentoTile>}
 
     {showStrat&&fullAutoEnabled&&<BentoTile accent={T.loss}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FULL-AUTO — PER-ACCOUNT OPT-IN</div>
-      <p style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,margin:`0 0 ${T.s3}`}}>Autonomous execution runs <strong>only</strong> on accounts you turn on here. Each defaults to off. A full-mode strategy on an account that's off will still generate signals but never auto-execute.</p>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FULL-AUTO — PER-ACCOUNT OPT-IN</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.6,margin:`0 0 ${T.s3}`}}>Autonomous execution runs <strong>only</strong> on accounts you turn on here. Each defaults to off. A full-mode strategy on an account that's off will still generate signals but never auto-execute.</p>
       {snapAccounts.length===0
-        ?<div style={{fontFamily:FM,fontSize:11,color:T.muted}}>No connected accounts.</div>
+        ?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>No connected accounts.</div>
         :snapAccounts.map(a=>{const id=a.accountId||a.id;const on=!!faAccounts[id];return(
           <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
             <div>
-              <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.textHi}}>{a.brokerage||a.name||"Account"}</div>
-              <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>{a.accountName||id}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:T.textHi}}>{a.brokerage||a.name||"Account"}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{a.accountName||id}</div>
             </div>
             <button onClick={()=>toggleFaAccount(id,!on)} style={{
               padding:`5px ${T.s3}`,borderRadius:999,cursor:"pointer",
-              fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.08em",
+              fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.08em",
               border:`1px solid ${on?T.loss:T.border}`,
               background:on?`${T.loss}18`:"transparent",
               color:on?T.loss:T.muted,
@@ -6737,22 +6769,22 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s3}}>
             <Icon name={m.icon} size={22} color={m.color}/>
             <div>
-              <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SWITCH EXECUTION LAYER</div>
-              <div style={{fontFamily:FU,fontSize:20,fontWeight:700,color:m.color,letterSpacing:"-0.02em"}}>{m.label}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SWITCH EXECUTION LAYER</div>
+              <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:m.color,letterSpacing:"-0.02em"}}>{m.label}</div>
             </div>
           </div>
-          <p style={{fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.65,margin:`0 0 ${T.s3}`}}>{m.blurb}</p>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.6,marginBottom:T.s4}}>
+          <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.65,margin:`0 0 ${T.s3}`}}>{m.blurb}</p>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.6,marginBottom:T.s4}}>
             Switching <span style={{color:T.textHi,fontWeight:600}}>{layerOf(layerModal.strat)===layerModal.target?m.label:LAYER_META[layerOf(layerModal.strat)].label}</span> → <span style={{color:m.color,fontWeight:600}}>{m.label}</span> for <span style={{color:T.textHi,fontWeight:600}}>{(Array.isArray(layerModal.strat.params?.universe_tickers)&&layerModal.strat.params.universe_tickers[0])||layerModal.strat.ticker}</span>. Stop-loss, max-drawdown, the daily cap, and the Sharia gate stay enforced on every layer.
             {layerModal.target==="full"&&<span style={{display:"block",marginTop:T.s2,color:T.loss}}>Full-auto also requires the per-account AUTO ON toggle (off by default) before anything executes on its own.</span>}
           </div>
-          <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer",marginBottom:T.s4}}>
+          <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text,cursor:"pointer",marginBottom:T.s4}}>
             <input type="checkbox" checked={layerAck} onChange={e=>setLayerAck(e.target.checked)} style={{marginTop:2}}/>
             I understand what <strong style={{color:m.color}}>&nbsp;{m.label}&nbsp;</strong> means and accept how trades will be executed under it.
           </label>
           <div style={{display:"flex",gap:T.s3,justifyContent:"flex-end"}}>
-            <button onClick={()=>{setLayerModal(null);setLayerAck(false);}} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
-            <button onClick={confirmLayer} disabled={!layerAck} className="btn-primary" style={{fontSize:11,opacity:layerAck?1:0.5}}>Set {m.label}</button>
+            <button onClick={()=>{setLayerModal(null);setLayerAck(false);}} className="btn-ghost" style={{fontSize:"var(--fs-xs)"}}>Cancel</button>
+            <button onClick={confirmLayer} disabled={!layerAck} className="btn-primary" style={{fontSize:"var(--fs-xs)",opacity:layerAck?1:0.5}}>Set {m.label}</button>
           </div>
         </div>
       </div>);})()}
@@ -6763,38 +6795,38 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       const isFull=layerOf(editStrat)==="full"&&editStrat.enabled;
       const set=(k,v)=>setEditForm(f=>({...f,[k]:v}));
       const num=(label,k,suffix)=><label style={{display:"block"}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>{label}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>{label}</div>
         <div style={{position:"relative"}}>
           <input type="number" value={editForm[k]} onChange={e=>set(k,e.target.value)} className="field" style={{width:"100%",fontVariantNumeric:"tabular-nums"}}/>
-          {suffix&&<span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:11,color:T.muted,pointerEvents:"none"}}>{suffix}</span>}
+          {suffix&&<span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,pointerEvents:"none"}}>{suffix}</span>}
         </div>
       </label>;
       return(
       <div onClick={()=>{if(!editBusy){setEditStrat(null);setEditForm(null);setEditAck(false);}}} style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:T.s4,background:"rgba(12,11,10,0.55)"}}>
         <div className="glass-strong" onClick={e=>e.stopPropagation()} style={{maxWidth:560,width:"100%",borderRadius:T.rLg,border:`1px solid ${T.blue}40`,padding:T.s6,maxHeight:"calc(var(--mz-vh) * 0.90)",overflowY:"auto"}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:4}}>EDIT STRATEGY</div>
-          <div style={{fontFamily:FU,fontSize:20,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s4}}>{(Array.isArray(editStrat.params?.universe_tickers)&&editStrat.params.universe_tickers[0])||editStrat.ticker}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:4}}>EDIT STRATEGY</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s4}}>{(Array.isArray(editStrat.params?.universe_tickers)&&editStrat.params.universe_tickers[0])||editStrat.ticker}</div>
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s3,marginBottom:T.s3}}>
             <label style={{display:"block"}}>
-              <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>PRIMARY TICKER</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>PRIMARY TICKER</div>
               <input value={editForm.ticker} onChange={e=>set("ticker",e.target.value.toUpperCase())} className="field" style={{width:"100%"}}/>
             </label>
             <label style={{display:"block"}}>
-              <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>STRATEGY TYPE</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>STRATEGY TYPE</div>
               <input value={editForm.strategy_type} onChange={e=>set("strategy_type",e.target.value)} className="field" style={{width:"100%"}}/>
             </label>
           </div>
 
           <label style={{display:"block",marginBottom:T.s3}}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>SCREEN UNIVERSE (comma-separated tickers — blank = single ticker above)</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>SCREEN UNIVERSE (comma-separated tickers — blank = single ticker above)</div>
             <input value={editForm.universe_tickers} onChange={e=>set("universe_tickers",e.target.value)} placeholder="e.g. SPUS, HLAL, UMMA" className="field" style={{width:"100%",fontFamily:FM}}/>
           </label>
 
           <label style={{display:"block",marginBottom:T.s3}}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>BROKERAGE ACCOUNT</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:4}}>BROKERAGE ACCOUNT</div>
             {snapAccounts.length===0
-              ?<div style={{fontFamily:FM,fontSize:11,color:T.loss}}>No brokerage connected.</div>
+              ?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>No brokerage connected.</div>
               :<select value={editForm.account_id} onChange={e=>set("account_id",e.target.value)} className="field" style={{width:"100%"}}>
                 {!snapAccounts.find(a=>acctId(a)===editForm.account_id)&&<option value={editForm.account_id}>Unmatched ({editForm.account_id||"none"}) — pick one</option>}
                 {snapAccounts.map(a=>{const id=acctId(a);return<option key={id} value={id}>{(a.brokerage||a.name||"Account")}{a.accountName?` — ${a.accountName}`:""}{a.balance!=null?` (${kf(a.balance)})`:""}</option>;})}
@@ -6810,17 +6842,17 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             {num("MAX TRADES / DAY","max_trades_per_day","")}
           </div>
 
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.6,marginBottom:T.s3}}>Stop-loss, max-drawdown, the daily cap, and the Sharia gate stay enforced on every layer. The stop-loss can be tightened but never removed.</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.6,marginBottom:T.s3}}>Stop-loss, max-drawdown, the daily cap, and the Sharia gate stay enforced on every layer. The stop-loss can be tightened but never removed.</div>
 
-          {isFull&&<label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:11,color:T.text,cursor:"pointer",marginBottom:T.s3}}>
+          {isFull&&<label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text,cursor:"pointer",marginBottom:T.s3}}>
             <input type="checkbox" checked={editAck} onChange={e=>setEditAck(e.target.checked)} style={{marginTop:2}}/>
             This is a live FULL-AUTO strategy. I understand these changes take effect on the next automated run.
           </label>}
 
-          {editErr&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginBottom:T.s3}}>{editErr}</div>}
+          {editErr&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,marginBottom:T.s3}}>{editErr}</div>}
           <div style={{display:"flex",gap:T.s3,justifyContent:"flex-end"}}>
-            <button onClick={()=>{setEditStrat(null);setEditForm(null);setEditAck(false);}} disabled={editBusy} className="btn-ghost" style={{fontSize:11}}>Cancel</button>
-            <button onClick={saveEdit} disabled={editBusy||(isFull&&!editAck)} className="btn-primary" style={{fontSize:11,opacity:(editBusy||(isFull&&!editAck))?0.5:1}}>{editBusy?"Saving…":"Save Changes"}</button>
+            <button onClick={()=>{setEditStrat(null);setEditForm(null);setEditAck(false);}} disabled={editBusy} className="btn-ghost" style={{fontSize:"var(--fs-xs)"}}>Cancel</button>
+            <button onClick={saveEdit} disabled={editBusy||(isFull&&!editAck)} className="btn-primary" style={{fontSize:"var(--fs-xs)",opacity:(editBusy||(isFull&&!editAck))?0.5:1}}>{editBusy?"Saving…":"Save Changes"}</button>
           </div>
         </div>
       </div>);})()}
@@ -6845,27 +6877,27 @@ function TradeConnectionsPanel({onConnectTrade}){
   return<BentoTile>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
       <div style={{maxWidth:600}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BROKERAGE TRADING SUPPORT</div>
-        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BROKERAGE TRADING SUPPORT</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.55}}>
           For Mizan to place orders, connect your brokerage <strong style={{color:T.text}}>with trade permission</strong>. A read-only (data) connection shows balances and holdings but <strong style={{color:T.text}}>cannot trade</strong> — reconnect and choose “Connect for trading.” What each broker allows differs; see the details below.
         </p>
       </div>
       {onConnectTrade&&<button onClick={onConnectTrade} className="btn-ghost" style={{flexShrink:0}}>Reconnect for trading</button>}
     </div>
-    <button onClick={()=>setOpen(o=>!o)} style={{marginTop:T.s3,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",color:T.blue}}>
+    <button onClick={()=>setOpen(o=>!o)} style={{marginTop:T.s3,background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.06em",color:T.blue}}>
       {open?"Hide broker details ▲":"Show broker details ▾"}
     </button>
     {open&&<div style={{marginTop:T.s3,paddingTop:T.s3,borderTop:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:T.s3}}>
       {CAPS.map(b=>(
         <div key={b.name} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s3}}>
           <div style={{minWidth:0}}>
-            <div style={{fontFamily:FM,fontSize:12,fontWeight:600,color:T.text}}>{b.name}</div>
-            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.5}}>{b.note}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:T.text}}>{b.name}</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.5}}>{b.note}</div>
           </div>
           <div style={{flexShrink:0}}><Tag label={b.label} color={TIER[b.tier]}/></div>
         </div>
       ))}
-      <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.5,paddingTop:T.s2,borderTop:`1px dashed ${T.border}`}}>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.5,paddingTop:T.s2,borderTop:`1px dashed ${T.border}`}}>
         <strong style={{color:T.text}}>Custodial accounts</strong> (UGMA/UTMA) usually can’t be traded through the API even when funded — connect an individual brokerage account instead. Support depends on SnapTrade and each broker and can change.
       </div>
     </div>}
@@ -7059,13 +7091,13 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
       {/* ─── Order Ticket bento ────────────────────────── */}
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>AD-HOC MANUAL ORDER</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>AD-HOC MANUAL ORDER</div>
           <Tag label={venue==="alpaca"?"PAPER · ALPACA":"LIVE · SNAPTRADE"} color={venue==="alpaca"?T.gold:T.blue}/>
         </div>
-        <p style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.55,margin:0}}>One-off trade you place by hand. For automated trades, create a strategy in the <strong>Trading Bot</strong> tab — it screens a halal universe, picks the ticker, sizes it, and executes per your chosen layer.</p>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55,margin:0}}>One-off trade you place by hand. For automated trades, create a strategy in the <strong>Trading Bot</strong> tab — it screens a halal universe, picks the ticker, sizes it, and executes per your chosen layer.</p>
         <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
           {[["snaptrade","Live · SnapTrade"],["alpaca","Paper · Alpaca"]].map(([v,l])=><button key={v} onClick={()=>setVenue(v)} title={v==="alpaca"?"Paper trade against Alpaca's free sandbox — no real money":"Place a real order through your connected broker"} style={{
-            flex:1,padding:"8px 10px",fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"-0.005em",
+            flex:1,padding:"8px 10px",fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"-0.005em",
             border:"none",cursor:"pointer",borderRadius:T.rSm,
             background:venue===v?(v==="alpaca"?`${T.gold}22`:`${T.blue}22`):"transparent",
             color:venue===v?(v==="alpaca"?T.gold:T.blue):T.muted,
@@ -7074,7 +7106,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         </div>
         <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
           {["buy","sell"].map(s=><button key={s} onClick={()=>setSide(s)} style={{
-            flex:1,padding:"10px",fontFamily:FP,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
+            flex:1,padding:"10px",fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,letterSpacing:"-0.005em",
             textTransform:"capitalize",border:"none",cursor:"pointer",borderRadius:T.rSm,
             background:side===s?(s==="buy"?T.gain:T.loss):"transparent",
             color:side===s?"#fff":T.muted,
@@ -7084,20 +7116,20 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         </div>
         {venue==="snaptrade"
           ?<div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>ACCOUNT</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>ACCOUNT</div>
             <select value={acctId} onChange={e=>setAcctId(e.target.value)} className="field">
               {accounts.length===0?<option value="">No accounts connected</option>:accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName} ({kf(a.balance||0)})</option>)}
             </select>
           </div>
-          :<div style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>
+          :<div style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
             <span style={{color:T.gold,fontWeight:600,letterSpacing:"0.06em"}}>PAPER MODE</span> — order routes to your Alpaca paper account (no real money). Halal-only: haram tickers blocked server-side.
           </div>}
         {/* Symbol + live quote for whatever ticker is typed */}
         <div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>SYMBOL</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>SYMBOL</div>
           <input type="text" value={sym} onChange={e=>setSym(e.target.value.toUpperCase())}
-            className="field" style={{fontSize:16,fontWeight:600,color:T.blue,letterSpacing:"-0.01em"}}/>
-          <div style={{marginTop:6,fontFamily:FM,fontSize:11,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            className="field" style={{fontSize:"var(--fs-xl)",fontWeight:600,color:T.blue,letterSpacing:"-0.01em"}}/>
+          <div style={{marginTop:6,fontFamily:FM,fontSize:"var(--fs-xs)",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             {quoteBusy&&!quote
               ?<span style={{color:T.muted}}>Fetching live price…</span>
               :quote
@@ -7105,35 +7137,35 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
                   <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{f$(quote.price)}</span>
                   {quote.pct!=null&&<span style={{color:fc(quote.pct),fontVariantNumeric:"tabular-nums"}}>{fp(quote.pct)}</span>}
                   <span style={{color:T.gain,letterSpacing:"0.12em",fontWeight:600}}>● LIVE</span>
-                  {otype!=="market"&&<button onClick={()=>setLpx(String(quote.price))} style={{fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",color:T.blue,background:`${T.blue}14`,border:`1px solid ${T.blue}30`,borderRadius:T.rSm,padding:"2px 7px",cursor:"pointer"}}>USE →</button>}
+                  {otype!=="market"&&<button onClick={()=>setLpx(String(quote.price))} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",color:T.blue,background:`${T.blue}14`,border:`1px solid ${T.blue}30`,borderRadius:T.rSm,padding:"2px 7px",cursor:"pointer"}}>USE →</button>}
                 </>
                 :<span style={{color:T.muted}}>No live price for {sym||"—"}</span>}
           </div>
         </div>
         <div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>QUANTITY</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>QUANTITY</div>
           <input type="number" value={qty} onChange={e=>setQty(e.target.value)}
-            className="field" style={{fontSize:14,fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}/>
+            className="field" style={{fontSize:"var(--fs-lg)",fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}/>
         </div>
         {/* Limit price only applies to limit orders — hidden for market. */}
         {otype!=="market"&&<div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>LIMIT PRICE</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>LIMIT PRICE</div>
           <input type="number" value={lpx} onChange={e=>setLpx(e.target.value)}
-            className="field" style={{fontSize:14,fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}/>
+            className="field" style={{fontSize:"var(--fs-lg)",fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}/>
         </div>}
         <div style={{background:T.surface,borderRadius:T.rMd,padding:`${T.s3} ${T.s4}`,border:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
-          <span style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.04em"}}>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,letterSpacing:"0.04em"}}>
             Estimated Total <span style={{opacity:0.7}}>· {otype==="market"?(quote?"@ live price":"@ market"):"@ limit"}</span>
           </span>
-          <span style={{fontFamily:FU,fontSize:16,fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{estPx>0?f$(estTotal):"—"}</span>
+          <span style={{fontFamily:FU,fontSize:"var(--fs-xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{estPx>0?f$(estTotal):"—"}</span>
         </div>
         <div style={{background:`linear-gradient(135deg, ${T.gain}12, transparent 70%), ${T.surface}`,border:`1px solid ${T.gain}28`,borderRadius:T.rMd,padding:`${T.s2} ${T.s3}`}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>● SHARIA PRE-CHECK</div>
-          <div style={{fontFamily:FP,fontSize:12,color:T.text,letterSpacing:"-0.005em"}}>{sym} — screening against AAOIFI criteria</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>● SHARIA PRE-CHECK</div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,letterSpacing:"-0.005em"}}>{sym} — screening against AAOIFI criteria</div>
         </div>
         <button onClick={submit} disabled={orderBusy||(venue==="snaptrade"&&!acctId)} style={{
           padding:`12px ${T.s4}`,borderRadius:T.rMd,
-          fontFamily:FP,fontSize:13,fontWeight:600,letterSpacing:"-0.005em",
+          fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,letterSpacing:"-0.005em",
           border:"none",cursor:orderBusy||(venue==="snaptrade"&&!acctId)?"not-allowed":"pointer",
           background:done?`${T.gain}22`:orderBusy?T.dim:`linear-gradient(135deg, ${side==="buy"?T.gain:T.loss}, ${side==="buy"?"#0A8A65":"#D85555"})`,
           color:done?T.gain:orderBusy?T.muted:"#fff",
@@ -7142,12 +7174,12 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         }}>
           {done?<span style={{display:"inline-flex",alignItems:"center",gap:6}}>Order Placed<Icon name="check" size={13}/></span>:orderBusy?"Loading…":venue==="alpaca"?`Place Paper ${side==="buy"?"Buy":"Sell"} ${sym}`:`Preview ${side==="buy"?"Buy":"Sell"} ${sym}`}
         </button>
-        {orderErr&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.loss,whiteSpace:"pre-wrap",lineHeight:1.4}}>{ICON_NO}{orderErr}</div>}
+        {orderErr&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,whiteSpace:"pre-wrap",lineHeight:1.4}}>{ICON_NO}{orderErr}</div>}
       </BentoTile>
 
       {/* ─── Order Types card grid ─────────────────────── */}
       <BentoTile>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ORDER TYPES <span style={{color:T.blue}}>· click to select</span></div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ORDER TYPES <span style={{color:T.blue}}>· click to select</span></div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:T.s2}}>
           {ORDERS.map(([nm,desc,ok])=>{
             const selectable=ok&&!!OTYPE_BY_NAME[nm];
@@ -7168,15 +7200,15 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
                 background:ok?`${T.gain}22`:`${T.loss}22`,
                 border:`1px solid ${ok?T.gain:T.loss}40`,
                 display:"flex",alignItems:"center",justifyContent:"center",
-                fontFamily:FM,fontSize:10,color:ok?T.gain:T.loss,fontWeight:700,
+                fontFamily:FM,fontSize:"var(--fs-2xs)",color:ok?T.gain:T.loss,fontWeight:700,
               }}>{ok?<Icon name="check" size={12}/>:<Icon name="close" size={12}/>}</div>
               <div style={{flex:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-                  <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:ok?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{nm}</span>
-                  {active&&<span style={{fontFamily:FM,fontSize:8,fontWeight:700,letterSpacing:"0.14em",color:T.gain,background:`${T.gain}1e`,border:`1px solid ${T.gain}40`,borderRadius:T.rSm,padding:"1px 5px"}}>SELECTED</span>}
-                  {selectable&&!active&&<span style={{fontFamily:FM,fontSize:8,fontWeight:600,letterSpacing:"0.1em",color:T.blue}}>SELECT</span>}
+                  <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:ok?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{nm}</span>
+                  {active&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:700,letterSpacing:"0.14em",color:T.gain,background:`${T.gain}1e`,border:`1px solid ${T.gain}40`,borderRadius:T.rSm,padding:"1px 5px"}}>SELECTED</span>}
+                  {selectable&&!active&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.1em",color:T.blue}}>SELECT</span>}
                 </div>
-                <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em",marginTop:T.s1}}>{desc}</div>
+                <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em",marginTop:T.s1}}>{desc}</div>
               </div>
             </div>;
           })}
@@ -7315,25 +7347,25 @@ Activity rows on file: ${activities.length}.`;
           width:36,height:36,borderRadius:T.rMd,
           background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
           display:"flex",alignItems:"center",justifyContent:"center",
-          fontFamily:FU,fontSize:16,fontWeight:700,color:"#fff",letterSpacing:"-0.02em",
+          fontFamily:FU,fontSize:"var(--fs-xl)",fontWeight:700,color:"#fff",letterSpacing:"-0.02em",
           boxShadow:`0 4px 14px ${T.blue}55`,
         }}>M</div>
         <div>
-          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>Mīzan Assistant</div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:2}}>Sharia-aware · powered by Claude</div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>Mīzan Assistant</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:2}}>Sharia-aware · powered by Claude</div>
         </div>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:T.s4,fontFamily:FM,fontSize:11,color:T.muted,flexWrap:"wrap"}}>
+      <div style={{display:"flex",alignItems:"center",gap:T.s4,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,flexWrap:"wrap"}}>
         <span style={{display:"inline-flex",alignItems:"center",gap:T.s1}}>
           <LiveDot on={totalNW>0} pulse={false}/>
           Context: <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{accounts.length}</span> account{accounts.length===1?"":"s"} · <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{totalPos}</span> position{totalPos===1?"":"s"} · <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{kf(totalNW)}</span>
         </span>
-        {msgs.length>0&&<button onClick={clearChat} className="btn-ghost" style={{fontSize:10,padding:`4px ${T.s3}`}}>Clear</button>}
+        {msgs.length>0&&<button onClick={clearChat} className="btn-ghost" style={{fontSize:"var(--fs-2xs)",padding:`4px ${T.s3}`}}>Clear</button>}
       </div>
     </div>
 
     {/* Persistent advice disclaimer — always visible, not just on the empty state */}
-    <div style={{fontFamily:FM,fontSize:10,color:T.dim,letterSpacing:"0.03em",lineHeight:1.5,padding:`0 ${T.s1}`}}>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,letterSpacing:"0.03em",lineHeight:1.5,padding:`0 ${T.s1}`}}>
       Educational information only — not investment advice. MĪZAN is not a registered investment adviser. Verify decisions with a licensed professional and a qualified scholar.
     </div>
 
@@ -7348,8 +7380,8 @@ Activity rows on file: ${activities.length}.`;
       <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:`${T.s6} ${T.s6}`,display:"flex",flexDirection:"column",gap:T.s4}}>
         {msgs.length===0&&<div style={{margin:"auto 0",display:"flex",flexDirection:"column",gap:T.s5}}>
           <div style={{textAlign:"center"}}>
-            <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s2}}>How can I help with your portfolio?</div>
-            <div style={{fontFamily:FP,fontSize:14,color:T.muted,maxWidth:480,margin:"0 auto",lineHeight:1.55}}>
+            <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",marginBottom:T.s2}}>How can I help with your portfolio?</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",color:T.muted,maxWidth:480,margin:"0 auto",lineHeight:1.55}}>
               The advisor has your real account context — balances, top positions, Sharia compliance, contributions, dividends, and activity. Ask anything, or pick one of the suggestions below.
             </div>
           </div>
@@ -7361,7 +7393,7 @@ Activity rows on file: ${activities.length}.`;
               border:`1px solid ${T.border}`,
               borderLeft:`3px solid ${p.color}`,
               borderRadius:T.rMd,
-              fontFamily:FP,fontSize:13,color:T.text,cursor:busy?"not-allowed":"pointer",
+              fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,cursor:busy?"not-allowed":"pointer",
               lineHeight:1.5,letterSpacing:"-0.005em",
               transition:"transform 0.15s, border-color 0.15s, box-shadow 0.2s",
               display:"flex",flexDirection:"column",gap:T.s1,
@@ -7373,14 +7405,14 @@ Activity rows on file: ${activities.length}.`;
                   width:22,height:22,borderRadius:T.rSm,
                   background:`${p.color}18`,color:p.color,
                   display:"flex",alignItems:"center",justifyContent:"center",
-                  fontFamily:FM,fontSize:12,fontWeight:700,
+                  fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:700,
                 }}>{ICONS[p.icon]?<Icon name={p.icon} size={13} color={p.color}/>:p.icon}</span>
-                <span style={{fontFamily:FM,fontSize:9,color:p.color,letterSpacing:"0.16em",fontWeight:600,textTransform:"uppercase"}}>{p.cat}</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:p.color,letterSpacing:"0.16em",fontWeight:600,textTransform:"uppercase"}}>{p.cat}</span>
               </div>
               <span style={{color:T.textHi,fontWeight:500}}>{p.q}</span>
             </button>)}
           </div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.dim,textAlign:"center",letterSpacing:"0.04em"}}>Not financial advice. Always consult a licensed professional + qualified scholar.</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,textAlign:"center",letterSpacing:"0.04em"}}>Not financial advice. Always consult a licensed professional + qualified scholar.</div>
         </div>}
 
         {msgs.map((m,i)=>{
@@ -7390,7 +7422,7 @@ Activity rows on file: ${activities.length}.`;
               width:32,height:32,borderRadius:T.rMd,flexShrink:0,
               background:isErr?`${T.loss}22`:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontFamily:FP,fontSize:13,fontWeight:700,color:isErr?T.loss:"#fff",letterSpacing:"-0.02em",
+              fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:700,color:isErr?T.loss:"#fff",letterSpacing:"-0.02em",
               boxShadow:isErr?"none":`0 2px 8px ${T.blue}40`,
             }}>{isErr?"!":"M"}</div>}
             <div style={{
@@ -7400,7 +7432,7 @@ Activity rows on file: ${activities.length}.`;
               background:isUser?`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`:isErr?T.lossBg:T.surface,
               border:isUser?"none":`1px solid ${isErr?T.loss+"40":T.border}`,
               color:isUser?"#fff":isErr?T.loss:T.text,
-              fontFamily:FP,fontSize:14,lineHeight:1.6,letterSpacing:"-0.005em",
+              fontFamily:FP,fontSize:"var(--fs-lg)",lineHeight:1.6,letterSpacing:"-0.005em",
               whiteSpace:"pre-wrap",wordBreak:"break-word",
               boxShadow:isUser?`0 4px 14px ${T.blue}40`:"none",
               position:"relative",
@@ -7411,7 +7443,7 @@ Activity rows on file: ${activities.length}.`;
                 padding:`2px ${T.s2}`,borderRadius:T.rSm,
                 background:T.card,border:`1px solid ${T.border}`,
                 color:T.muted,cursor:"pointer",
-                fontFamily:FM,fontSize:9,fontWeight:600,letterSpacing:"0.06em",
+                fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",
                 opacity:0,transition:"opacity 0.15s",
               }}
               onMouseEnter={e=>e.currentTarget.style.opacity="1"}
@@ -7421,13 +7453,13 @@ Activity rows on file: ${activities.length}.`;
               width:32,height:32,borderRadius:T.rMd,flexShrink:0,
               background:T.surface,border:`1px solid ${T.border}`,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontFamily:FP,fontSize:13,fontWeight:600,color:T.text,
+              fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.text,
             }}>Y</div>}
           </div>;
         })}
 
         {busy&&<div style={{display:"flex",gap:T.s3,alignItems:"center"}}>
-          <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FP,fontSize:13,fontWeight:700,color:"#fff"}}>M</div>
+          <div style={{width:32,height:32,borderRadius:T.rMd,flexShrink:0,background:`linear-gradient(135deg, ${T.blue}, ${T.blueDim})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:700,color:"#fff"}}>M</div>
           <div style={{display:"flex",gap:T.s1,padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rLg}}>
             {[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:T.muted,animation:`blink 1.4s infinite`,animationDelay:`${i*0.15}s`}}/>)}
           </div>
@@ -7438,7 +7470,7 @@ Activity rows on file: ${activities.length}.`;
         borderTop:`1px solid ${tokenNotice.kind==="err"?T.loss+"40":T.gold+"40"}`,
         padding:`${T.s2} ${T.s4}`,
         background:tokenNotice.kind==="err"?T.lossBg:`${T.gold}10`,
-        fontFamily:FM,fontSize:11,
+        fontFamily:FM,fontSize:"var(--fs-xs)",
         color:tokenNotice.kind==="err"?T.loss:T.gold,
         display:"flex",alignItems:"center",gap:T.s2,letterSpacing:"0.01em",
       }}>
@@ -7447,7 +7479,7 @@ Activity rows on file: ${activities.length}.`;
       </div>}
       <form data-tour="advisor" onSubmit={e=>{e.preventDefault();send();}} style={{borderTop:"1px solid var(--mz-glass-border)",padding:T.s3,display:"flex",gap:T.s2,background:"var(--mz-glass)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)"}}>
         <input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask about your portfolio…" disabled={busy}
-          className="field" style={{flex:1,fontFamily:FP,fontSize:14,padding:`10px ${T.s4}`}}/>
+          className="field" style={{flex:1,fontFamily:FP,fontSize:"var(--fs-lg)",padding:`10px ${T.s4}`}}/>
         <button type="submit" disabled={busy||!input.trim()} className="btn-primary" style={{padding:`10px ${T.s5}`}}>{busy?"…":"Send"}</button>
       </form>
     </BentoTile>
@@ -7491,25 +7523,25 @@ function ManualAssets({demoMode=false}={}){
       <BentoTile style={{
         background:`radial-gradient(circle at 0% 0%, ${T.blue}15, transparent 55%), ${T.card}`,
       }}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>MANUAL ASSETS TOTAL</div>
-        <div style={{fontFamily:FU,fontSize:34,fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{kf(total)}</div>
-        <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{assets.length} entr{assets.length===1?"y":"ies"}</div>
-        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>MANUAL ASSETS TOTAL</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-5xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{kf(total)}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,marginTop:T.s2}}>{assets.length} entr{assets.length===1?"y":"ies"}</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:`${T.s4} 0 0`,lineHeight:1.55,maxWidth:560}}>
           Track assets your brokerage can't see — physical gold, real estate equity, private business stake, vehicles, collectibles. Toggle Zakat-eligibility per asset.
         </p>
       </BentoTile>
       <BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKATABLE SHARE</div>
-        <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(zakatable)}</div>
-        <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.gold,marginTop:T.s2}}>Adds {kf(zakatable*0.025)} to Zakat</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>ZAKATABLE SHARE</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",fontVariantNumeric:"tabular-nums"}}>{kf(zakatable)}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:500,color:T.gold,marginTop:T.s2}}>Adds {kf(zakatable*0.025)} to Zakat</div>
       </BentoTile>
     </div>
 
     {/* ─── Add asset form ─────────────────────────── */}
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,gap:T.s2,flexWrap:"wrap"}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ADD AN ASSET</div>
-        {demoMode&&<span style={{fontFamily:FM,fontSize:10,color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ADD AN ASSET</div>
+        {demoMode&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.14em",fontWeight:600,padding:`2px ${T.s2}`,borderRadius:T.rSm,background:`${T.blue}14`,border:`1px solid ${T.blue}30`}}>DEMO — READ ONLY</span>}
       </div>
       <form onSubmit={add} className="mz-form-row" style={{display:"grid",gridTemplateColumns:"150px 1fr 140px auto auto",gap:T.s2,alignItems:"center",opacity:demoMode?0.55:1,pointerEvents:demoMode?"none":undefined}}>
         <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="field" style={{cursor:"pointer"}} disabled={demoMode}>
@@ -7517,7 +7549,7 @@ function ManualAssets({demoMode=false}={}){
         </select>
         <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Description (e.g. Wedding gold, Primary home equity)" className="field" disabled={demoMode}/>
         <input type="number" value={form.value} onChange={e=>setForm({...form,value:e.target.value})} placeholder="Value $" className="field" style={{fontVariantNumeric:"tabular-nums"}} disabled={demoMode}/>
-        <label style={{fontFamily:FM,fontSize:11,fontWeight:500,color:T.muted,display:"flex",alignItems:"center",gap:T.s1,cursor:"pointer",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>
+        <label style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,color:T.muted,display:"flex",alignItems:"center",gap:T.s1,cursor:"pointer",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>
           <input type="checkbox" checked={form.zakatable} onChange={e=>setForm({...form,zakatable:e.target.checked})} style={{accentColor:T.gold,width:14,height:14}} disabled={demoMode}/>
           Zakat
         </label>
@@ -7530,18 +7562,18 @@ function ManualAssets({demoMode=false}={}){
       ?<BentoTile style={{padding:0,overflow:"hidden"}}>
         <Tbl cols={[
           {l:"Type",r_:r=><Tag label={r.type} color={r.type==="Gold"||r.type==="Silver"?T.gold:r.type.includes("Real")?T.blue:r.type==="Business Equity"?T.gain:T.muted}/>},
-          {l:"Name",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>},
-          {l:"Value",r:true,r_:r=><span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(r.value)}</span>},
+          {l:"Name",r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em"}}>{r.name}</span>},
+          {l:"Value",r:true,r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{f$(r.value)}</span>},
           {l:"Zakat",r_:r=><Tag label={r.zakatable?"Included":"Excluded"} color={r.zakatable?T.gold:T.muted}/>},
-          {l:"Added",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.added}</span>},
+          {l:"Added",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.added}</span>},
           {l:"",r_:r=>demoMode
-            ?<span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>—</span>
-            :<button onClick={()=>remove(r.id)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:11}}><Icon name="close" size={12}/></button>},
+            ?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.04em"}}>—</span>
+            :<button onClick={()=>remove(r.id)} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}30`,color:T.loss,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-xs)"}}><Icon name="close" size={12}/></button>},
         ]} rows={assets}/>
       </BentoTile>
       :<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
-        <div style={{fontFamily:FP,fontSize:14,fontWeight:500,color:T.muted}}>No manual assets yet.</div>
-        <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:T.s1}}>Add gold, real estate, or business equity above to include them in net-worth + Zakat math.</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:500,color:T.muted}}>No manual assets yet.</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,marginTop:T.s1}}>Add gold, real estate, or business equity above to include them in net-worth + Zakat math.</div>
       </BentoTile>}
   </div>;
 }
@@ -7639,8 +7671,8 @@ function CSVImporter({onImport,onDedupe,onRetag}){
   return<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:T.rLg,padding:`${T.s4} ${T.s5}`,marginTop:T.s4,boxShadow:"var(--sh-sm)"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
       <div>
-        <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,marginBottom:T.s1,letterSpacing:"-0.01em"}}>CSV Import — Historical Backfill</div>
-        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:480}}>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,marginBottom:T.s1,letterSpacing:"-0.01em"}}>CSV Import — Historical Backfill</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.55,maxWidth:480}}>
           SnapTrade only backfills 1–2 years for some brokers. Export your full activity CSV from Fidelity / Robinhood / Coinbase and import it here for complete YTD + lifetime contribution numbers.
         </p>
       </div>
@@ -7655,7 +7687,7 @@ function CSVImporter({onImport,onDedupe,onRetag}){
         {onRetag&&<button onClick={handleRetag} disabled={retagBusy} title="Re-tag imports with the correct broker by matching against SnapTrade trades" className="btn-ghost">{retagBusy?"Retagging…":"Fix broker tags"}</button>}
       </div>
     </div>
-    {status&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,whiteSpace:"pre-wrap",lineHeight:1.5}}>{status.ok?ICON_OK:ICON_NO}{status.msg}</div>}
+    {status&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,whiteSpace:"pre-wrap",lineHeight:1.5}}>{status.ok?ICON_OK:ICON_NO}{status.msg}</div>}
   </div>;
 }
 
@@ -7723,8 +7755,8 @@ function SecurityPanel(){
   const verified=factors.filter(f=>f.status==="verified");
   if(!isSupabaseConfigured){
     return<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"24px 28px"}}>
-      <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>SECURITY</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6}}>Multi-factor authentication requires Supabase Auth. Configure VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY to enable.</p>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>SECURITY</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.6}}>Multi-factor authentication requires Supabase Auth. Configure VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY to enable.</p>
     </div>;
   }
 
@@ -7732,8 +7764,8 @@ function SecurityPanel(){
     <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"22px 24px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,marginBottom:10}}>
         <div>
-          <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>TWO-FACTOR AUTHENTICATION</div>
-          <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>TWO-FACTOR AUTHENTICATION</div>
+          <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
             Add a TOTP authenticator (1Password, Authy, Google Authenticator) so a stolen password isn't enough to sign in.
           </p>
         </div>
@@ -7744,46 +7776,46 @@ function SecurityPanel(){
         </div>
       </div>
 
-      {loading&&<div style={{fontFamily:FM,fontSize:11,color:T.muted,padding:"6px 0"}}>Loading…</div>}
+      {loading&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,padding:"6px 0"}}>Loading…</div>}
 
       {!loading&&!enrolling&&verified.length===0&&<div style={{marginTop:8}}>
-        <button onClick={startEnroll} disabled={busy} style={{padding:"9px 18px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",background:T.blue,border:"none",color:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"Working…":"Enable 2FA"}</button>
+        <button onClick={startEnroll} disabled={busy} style={{padding:"9px 18px",borderRadius:8,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.06em",background:T.blue,border:"none",color:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"Working…":"Enable 2FA"}</button>
       </div>}
 
       {!loading&&!enrolling&&verified.length>0&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
         {verified.map(f=><div key={f.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 14px"}}>
           <div>
-            <div style={{fontFamily:FM,fontSize:12,color:T.textHi}}>{f.friendly_name||"Authenticator"}</div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>Enrolled {f.created_at?new Date(f.created_at).toLocaleDateString():""}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.textHi}}>{f.friendly_name||"Authenticator"}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2}}>Enrolled {f.created_at?new Date(f.created_at).toLocaleDateString():""}</div>
           </div>
-          <button onClick={()=>disableMfa(f.id)} disabled={busy} style={{padding:"6px 12px",borderRadius:6,fontFamily:FM,fontSize:10,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.loss}40`,color:T.loss,cursor:busy?"not-allowed":"pointer"}}>Disable</button>
+          <button onClick={()=>disableMfa(f.id)} disabled={busy} style={{padding:"6px 12px",borderRadius:6,fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.loss}40`,color:T.loss,cursor:busy?"not-allowed":"pointer"}}>Disable</button>
         </div>)}
       </div>}
 
       {enrolling&&<div style={{marginTop:14,padding:14,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10}}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>STEP 1 — SCAN QR</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",marginBottom:10}}>STEP 1 — SCAN QR</div>
         {enrolling.qr&&<div style={{display:"flex",justifyContent:"center",marginBottom:10}}>
           <img src={enrolling.qr} alt="2FA QR code" style={{width:180,height:180,background:"#fff",padding:8,borderRadius:8}}/>
         </div>}
-        {enrolling.secret&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,textAlign:"center",marginBottom:12}}>
+        {enrolling.secret&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,textAlign:"center",marginBottom:12}}>
           Can't scan? Enter this secret manually:<br/>
-          <span style={{fontFamily:FM,fontSize:11,color:T.text,letterSpacing:"0.06em"}}>{enrolling.secret}</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text,letterSpacing:"0.06em"}}>{enrolling.secret}</span>
         </div>}
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>STEP 2 — VERIFY</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",marginBottom:8}}>STEP 2 — VERIFY</div>
         <input
           type="text" inputMode="numeric" maxLength={6}
           placeholder="6-digit code"
           value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))}
-          style={{width:"100%",padding:"10px 12px",background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontFamily:FM,fontSize:16,color:T.text,letterSpacing:"0.3em",textAlign:"center",outline:"none",boxSizing:"border-box"}}
+          style={{width:"100%",padding:"10px 12px",background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontFamily:FM,fontSize:"var(--fs-xl)",color:T.text,letterSpacing:"0.3em",textAlign:"center",outline:"none",boxSizing:"border-box"}}
         />
         <div style={{display:"flex",gap:8,marginTop:10}}>
-          <button onClick={confirmEnroll} disabled={busy} style={{flex:1,padding:"9px 14px",borderRadius:8,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",background:busy?T.dim:T.blue,border:"none",color:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"Verifying…":"Confirm"}</button>
-          <button onClick={cancelEnroll} disabled={busy} style={{padding:"9px 14px",borderRadius:8,fontFamily:FM,fontSize:11,letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:busy?"not-allowed":"pointer"}}>Cancel</button>
+          <button onClick={confirmEnroll} disabled={busy} style={{flex:1,padding:"9px 14px",borderRadius:8,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.06em",background:busy?T.dim:T.blue,border:"none",color:"#fff",cursor:busy?"not-allowed":"pointer"}}>{busy?"Verifying…":"Confirm"}</button>
+          <button onClick={cancelEnroll} disabled={busy} style={{padding:"9px 14px",borderRadius:8,fontFamily:FM,fontSize:"var(--fs-xs)",letterSpacing:"0.06em",background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:busy?"not-allowed":"pointer"}}>Cancel</button>
         </div>
       </div>}
 
-      {error&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:8,fontFamily:FM,fontSize:11,background:T.lossBg,border:`1px solid ${T.loss}30`,color:T.loss}}>{error}</div>}
-      {info&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:8,fontFamily:FM,fontSize:11,background:T.gainBg,border:`1px solid ${T.gain}30`,color:T.gain}}>{info}</div>}
+      {error&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:8,fontFamily:FM,fontSize:"var(--fs-xs)",background:T.lossBg,border:`1px solid ${T.loss}30`,color:T.loss}}>{error}</div>}
+      {info&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:8,fontFamily:FM,fontSize:"var(--fs-xs)",background:T.gainBg,border:`1px solid ${T.gain}30`,color:T.gain}}>{info}</div>}
     </div>
 
     <SessionsPanel/>
@@ -7865,21 +7897,21 @@ function SessionsPanel(){
   return<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"22px 24px",marginTop:T.s4}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,marginBottom:T.s3,flexWrap:"wrap"}}>
       <div>
-        <div style={{fontFamily:FM,fontSize:11,color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>ACTIVE SESSIONS</div>
-        <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.blue,letterSpacing:"0.16em",fontWeight:600,marginBottom:6}}>ACTIVE SESSIONS</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.6,maxWidth:520}}>
           Every device currently signed into MIZAN with your account. Revoke any that you don't recognize.
         </p>
       </div>
       {otherCount>0&&<button onClick={revokeAllOthers} disabled={busy} className="btn-danger">Sign out all others</button>}
     </div>
 
-    {toast&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain}}>{ICON_OK}{toast}</div>}
-    {err&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
+    {toast&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.gain}}>{ICON_OK}{toast}</div>}
+    {err&&<div style={{marginBottom:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>{ICON_NO}{err}</div>}
 
     {loading
-      ?<div style={{fontFamily:FM,fontSize:11,color:T.muted,padding:`${T.s3} 0`}}>Loading…</div>
+      ?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,padding:`${T.s3} 0`}}>Loading…</div>
       :sessions.length===0
-        ?<div style={{fontFamily:FP,fontSize:13,color:T.muted,padding:`${T.s3} 0`}}>No active sessions found.</div>
+        ?<div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,padding:`${T.s3} 0`}}>No active sessions found.</div>
         :<div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {sessions.map(s=>{
             const ua=parseUA(s.user_agent);
@@ -7888,13 +7920,13 @@ function SessionsPanel(){
               background:T.surface,border:`1px solid ${s.current?T.gain+"40":T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`,
             }}>
               <div style={{display:"flex",alignItems:"center",gap:T.s3,minWidth:0,flex:1}}>
-                <span style={{fontSize:24,color:s.current?T.gain:T.muted,lineHeight:1}}>{deviceIcon(ua.device)}</span>
+                <span style={{fontSize:"var(--fs-3xl)",color:s.current?T.gain:T.muted,lineHeight:1}}>{deviceIcon(ua.device)}</span>
                 <div style={{minWidth:0}}>
-                  <div style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+                  <div style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.005em",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
                     {ua.browser} · {ua.os}
                     {s.current&&<Tag label="CURRENT" color={T.gain}/>}
                   </div>
-                  <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2,letterSpacing:"0.02em"}}>
+                  <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2,letterSpacing:"0.02em"}}>
                     {s.ip?`IP ${s.ip} · `:""}signed in {fmtDate(s.created_at)}{s.last_seen_at&&s.last_seen_at!==s.created_at?` · seen ${fmtDate(s.last_seen_at)}`:""}
                   </div>
                 </div>
@@ -7903,7 +7935,7 @@ function SessionsPanel(){
                 onClick={()=>revoke(s.id)}
                 disabled={busy}
                 title="Revoke this session"
-                style={{padding:`6px ${T.s3}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:busy?"not-allowed":"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em"}}
+                style={{padding:`6px ${T.s3}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:busy?"not-allowed":"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em"}}
                 onMouseEnter={e=>{e.currentTarget.style.color=T.loss;e.currentTarget.style.borderColor=T.loss+"60";}}
                 onMouseLeave={e=>{e.currentTarget.style.color=T.muted;e.currentTarget.style.borderColor=T.border;}}
               >REVOKE</button>}
@@ -7919,8 +7951,8 @@ function SessionsPanel(){
 // Governance is stated honestly: methodology is AAOIFI-aligned; named scholar
 // certification is in progress (do NOT fabricate a board here).
 function ShariaMethodology(){
-  const EB={fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2};
-  const P={fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.6,letterSpacing:"-0.005em",margin:0};
+  const EB={fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2};
+  const P={fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.6,letterSpacing:"-0.005em",margin:0};
   const excluded=["Conventional banks & financial services","Insurance (conventional)","Mortgage & consumer finance","Alcohol & breweries","Tobacco","Gambling & casinos","Weapons & defense","Pork products","Adult entertainment"];
   const review=["Hotels, resorts & leisure","Media & entertainment","Restaurants","Broadcasting"];
   const ratios=[
@@ -7929,7 +7961,7 @@ function ShariaMethodology(){
     {t:"Accounts receivable / market cap",lim:"< 49%",d:"Limits illiquid / credit exposure."},
     {t:"Non-permissible income / revenue",lim:"< 5%",d:"Impure income must be purified."},
   ];
-  const chip=(label,color)=><span key={label} style={{fontFamily:FM,fontSize:11,fontWeight:600,color,background:`${color}14`,border:`1px solid ${color}33`,borderRadius:999,padding:`4px ${T.s3}`}}>{label}</span>;
+  const chip=(label,color)=><span key={label} style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color,background:`${color}14`,border:`1px solid ${color}33`,borderRadius:999,padding:`4px ${T.s3}`}}>{label}</span>;
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     {/* Intro */}
     <BentoTile accent={T.gold}>
@@ -7943,7 +7975,7 @@ function ShariaMethodology(){
         <div style={EB}>LAYER 1 · BUSINESS ACTIVITY</div>
         <p style={{...P,marginBottom:T.s3}}>A company is excluded if its core business is impermissible — regardless of its financials:</p>
         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:T.s3}}>{excluded.map(x=>chip(x,T.loss))}</div>
-        <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:T.s2}}>FLAGGED FOR REVIEW (mixed / case-by-case)</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",fontWeight:600,marginBottom:T.s2}}>FLAGGED FOR REVIEW (mixed / case-by-case)</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{review.map(x=>chip(x,T.gold))}</div>
       </BentoTile>
       <BentoTile accent={T.gain}>
@@ -7951,10 +7983,10 @@ function ShariaMethodology(){
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {ratios.map(r=><div key={r.t} style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:T.s2}}>
-              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.t}</span>
-              <span style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.gain,flexShrink:0}}>{r.lim}</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{r.t}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:T.gain,flexShrink:0}}>{r.lim}</span>
             </div>
-            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.45,marginTop:2}}>{r.d}</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.45,marginTop:2}}>{r.d}</div>
           </div>)}
         </div>
       </BentoTile>
@@ -7963,7 +7995,7 @@ function ShariaMethodology(){
     {/* Verdict logic */}
     <BentoTile>
       <div style={EB}>HOW THE VERDICT IS DECIDED</div>
-      <div style={{display:"flex",flexDirection:"column",gap:T.s2,fontFamily:FP,fontSize:13,color:T.text,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s2,fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.55,letterSpacing:"-0.005em"}}>
         <div><span style={{color:T.loss,fontWeight:600}}>Prohibited sector</span> → <strong>Non-Compliant</strong> immediately; ratios aren’t evaluated.</div>
         <div>Otherwise the holding is tested against all <strong>{Object.keys(STANDARDS).length} standards</strong>: <span style={{color:T.gain,fontWeight:600}}>≥5 pass → Halal</span>, <span style={{color:T.loss,fontWeight:600}}>≥4 fail → Non-Compliant</span>, anything in between → <span style={{color:T.gold,fontWeight:600}}>Review</span>.</div>
         <div>Open any holding’s <strong>“Why →”</strong> in the Screener to see the exact ratios, thresholds, and per-standard result.</div>
@@ -7976,10 +8008,10 @@ function ShariaMethodology(){
       <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
         {Object.entries(STANDARDS).map(([k,s])=><div key={k} style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${k==="AAOIFI"?T.gold:T.border}`,borderRadius:T.rMd}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s1,flexWrap:"wrap",gap:T.s1}}>
-            <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{s.name}{k==="AAOIFI"&&<span style={{fontFamily:FM,fontSize:9,color:T.gold,marginLeft:T.s2,letterSpacing:"0.1em"}}>DEFAULT</span>}</span>
-            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
+            <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{s.name}{k==="AAOIFI"&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,marginLeft:T.s2,letterSpacing:"0.1em"}}>DEFAULT</span>}</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
           </div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
             {s.denominator==="totalAssets"?"vs total assets":"vs market cap"} · Debt &lt; {s.debtMax}% · Cash &lt; {s.cashMax}% · A/R &lt; {s.recvMax}% · Non-perm &lt; {s.nonPermMax}%
           </div>
         </div>)}
@@ -7990,7 +8022,7 @@ function ShariaMethodology(){
     {/* Data transparency */}
     <BentoTile>
       <div style={EB}>DATA & TRANSPARENCY</div>
-      <div style={{display:"flex",flexDirection:"column",gap:T.s2,fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s2,fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>
         <div><strong style={{color:T.text}}>Source:</strong> Finnhub fundamentals today; the engine swaps to <strong style={{color:T.text}}>Zoya</strong> when provisioned — adding a direct compliance verdict and the non-permissible-income test.</div>
         <div><strong style={{color:T.text}}>Honest limit:</strong> Finnhub’s free tier has no revenue-segment data, so the non-permissible-income test isn’t separately evaluated there — the sector screen carries it (shown as “not evaluated” in the Screener).</div>
         <div><strong style={{color:T.text}}>Freshness:</strong> verdicts cache once per day. Total debt is used as a close proxy for interest-bearing debt.</div>
@@ -8003,13 +8035,13 @@ function ShariaMethodology(){
       <div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
         <p style={P}>MĪZAN’s methodology is aligned to <strong style={{color:T.text}}>AAOIFI Shariah Standard No. 21</strong>. Screening is an <strong style={{color:T.text}}>informational research tool</strong> — it is not a fatwa, not investment advice, and MĪZAN is not a registered investment adviser.</p>
         <p style={P}>A named, AAOIFI-credentialed Sharia advisory board is being established and will be published here. Until then, treat verdicts as a starting point and confirm decisions with a qualified scholar.</p>
-        <div style={{padding:`${T.s3} ${T.s4}`,background:`${T.blue}0F`,border:`1px solid ${T.blue}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:12,color:T.text,lineHeight:1.55}}>
+        <div style={{padding:`${T.s3} ${T.s4}`,background:`${T.blue}0F`,border:`1px solid ${T.blue}30`,borderRadius:T.rMd,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,lineHeight:1.55}}>
           Are you an AAOIFI-certified scholar or advisor? We’re forming our Sharia supervisory board — use the in-app feedback button to reach us.
         </div>
       </div>
     </BentoTile>
 
-    <div style={{fontFamily:FM,fontSize:10,color:T.dim,lineHeight:1.5,letterSpacing:"0.02em",padding:`0 ${T.s1}`}}>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,lineHeight:1.5,letterSpacing:"0.02em",padding:`0 ${T.s1}`}}>
       Verdicts and ratios are estimates from public financial data against AAOIFI-aligned thresholds; they can differ from tools that use other standards or denominators. Always consult a qualified scholar for your situation.
     </div>
   </div>;
@@ -8075,16 +8107,16 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
             width:52,height:52,borderRadius:T.rLg,
             background:`linear-gradient(135deg, ${T.blue}, ${T.gold})`,
             display:"flex",alignItems:"center",justifyContent:"center",
-            fontFamily:FU,fontSize:22,fontWeight:700,color:"#fff",letterSpacing:"-0.025em",
+            fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:"#fff",letterSpacing:"-0.025em",
             boxShadow:`0 6px 18px ${T.blue}55`,
           }}>{(profileFirst||user?.email||"?")[0].toUpperCase()}</div>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s1,flexWrap:"wrap"}}>
-              <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>{isSupabaseConfigured?"SIGNED IN":"SINGLE-USER MODE"}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>{isSupabaseConfigured?"SIGNED IN":"SINGLE-USER MODE"}</span>
               {isRoot&&<Tag label="ROOT" color={T.gold}/>}
             </div>
-            <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.015em"}}>{profileName||user?.email||"local"}</div>
-            {profileName&&user?.email&&<div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:2}}>{user.email}</div>}
+            <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.015em"}}>{profileName||user?.email||"local"}</div>
+            {profileName&&user?.email&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:2}}>{user.email}</div>}
           </div>
         </div>
         {isSupabaseConfigured
@@ -8095,7 +8127,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
           </div>
           :<div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
             {settingsInstallEvt&&!settingsInstalled&&<button onClick={doSettingsInstall} className="btn-ghost" title="Install MĪZAN as a standalone app" style={{display:"inline-flex",alignItems:"center",gap:6}}><Icon name="download" size={13}/>Install App</button>}
-            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em"}}>Set VITE_SUPABASE_URL to enable accounts</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.08em"}}>Set VITE_SUPABASE_URL to enable accounts</span>
           </div>}
       </div>
     </BentoTile>
@@ -8128,8 +8160,8 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       <BentoTile>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>API KEYS · ADMIN</div>
-            <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>API KEYS · ADMIN</div>
+            <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
               Add keys in order. Finnhub activates real prices immediately. Keys save to localStorage — no re-entry needed. End-user accounts don't see this page.
             </p>
           </div>
@@ -8140,15 +8172,15 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       {APIS.map(api=><BentoTile key={api.id} accent={api.color}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
           <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{api.l}</span>
+            <span style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{api.l}</span>
             <Tag label={api.tier} color={api.color}/>
             <Tag label={api.cost} color={T.muted}/>
           </div>
-          <a href={`https://${api.url}`} target="_blank" rel="noreferrer" style={{fontFamily:FM,fontSize:10,fontWeight:600,color:api.color,textDecoration:"none",padding:`5px ${T.s3}`,border:`1px solid ${api.color}40`,borderRadius:T.rMd,letterSpacing:"0.08em",flexShrink:0,transition:"all 0.15s",background:`${api.color}10`}}>GET KEY ↗</a>
+          <a href={`https://${api.url}`} target="_blank" rel="noreferrer" style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,color:api.color,textDecoration:"none",padding:`5px ${T.s3}`,border:`1px solid ${api.color}40`,borderRadius:T.rMd,letterSpacing:"0.08em",flexShrink:0,transition:"all 0.15s",background:`${api.color}10`}}>GET KEY ↗</a>
         </div>
         {api.fields.length>0&&<div className="mz-grid-2" style={{display:"grid",gridTemplateColumns:api.fields.length>1?"1fr 1fr":"1fr",gap:T.s2}}>
           {api.fields.map(f=><div key={f.k}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{f.l}</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{f.l}</div>
             <div style={{position:"relative"}}>
               <input type="password" value={keys[f.k]||""} placeholder={f.ph}
                 onChange={e=>setKeys(k=>({...k,[f.k]:e.target.value}))}
@@ -8158,23 +8190,23 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
             </div>
           </div>)}
         </div>}
-        {api.serverOnly&&<div style={{marginTop:T.s2,display:"flex",alignItems:"center",gap:T.s2,padding:`${T.s2} ${T.s3}`,background:`${T.gain}0F`,border:`1px solid ${T.gain}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,color:T.gain,lineHeight:1.5}}>
+        {api.serverOnly&&<div style={{marginTop:T.s2,display:"flex",alignItems:"center",gap:T.s2,padding:`${T.s2} ${T.s3}`,background:`${T.gain}0F`,border:`1px solid ${T.gain}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.gain,lineHeight:1.5}}>
           <Icon name="check" size={12} style={{flexShrink:0}}/><span>Server-configured. Set <code style={{color:T.text,padding:"1px 5px",background:T.surface,borderRadius:4}}>{api.id==="anthropic"?"ANTHROPIC_KEY":"SNAPTRADE_CONSUMER_KEY"}</code> in env vars on the host. Never exposed to the browser.</span>
         </div>}
       </BentoTile>)}
 
       <BentoTile>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s4,flexWrap:"wrap",gap:T.s2}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>FEATURES ACTIVE</span>
-          <span style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{FEATURES.filter(f=>f.alwaysOn||f.req.every(r=>has(r))).length}<span style={{color:T.muted,fontWeight:400}}> / {FEATURES.length}</span></span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>FEATURES ACTIVE</span>
+          <span style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{FEATURES.filter(f=>f.alwaysOn||f.req.every(r=>has(r))).length}<span style={{color:T.muted,fontWeight:400}}> / {FEATURES.length}</span></span>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:T.s2}}>
           {FEATURES.map(f=>{
             const on=f.alwaysOn||f.req.every(r=>has(r));
             return<div key={f.f} style={{display:"flex",gap:T.s2,alignItems:"center",padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${on?T.gain+"30":T.border}`,borderRadius:T.rMd}}>
               <LiveDot on={on}/>
-              <span style={{fontFamily:FP,fontSize:12,color:on?T.text:T.muted,letterSpacing:"-0.005em"}}>{f.f}</span>
-              {f.note&&<span style={{fontFamily:FM,fontSize:10,color:T.muted,marginLeft:"auto"}}>{f.note}</span>}
+              <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:on?T.text:T.muted,letterSpacing:"-0.005em"}}>{f.f}</span>
+              {f.note&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginLeft:"auto"}}>{f.note}</span>}
             </div>;
           })}
         </div>
@@ -8187,8 +8219,8 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       <BentoTile>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BROKERAGE CONNECTIONS</div>
-            <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BROKERAGE CONNECTIONS</div>
+            <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
               Connect via SnapTrade OAuth. Credentials go directly to your broker — MĪZAN never sees your password.
             </p>
           </div>
@@ -8209,7 +8241,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
               {/* Broker blurbs ("Brokerage & retirement", "Commission-free")
                   removed 2026-08-18 on user feedback: people know what Fidelity
                   is, and the line cost a row of vertical space on every card. */}
-              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:conn?T.blue:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s2}}>{b.nm}</div>
+              <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:conn?T.blue:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s2}}>{b.nm}</div>
               <Tag label={conn?"Connected":"Not Connected"} color={conn?T.gain:T.muted}/>
             </div>;
           })}
@@ -8221,8 +8253,8 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       <BentoTile>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BANK CONNECTIONS</div>
-            <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BANK CONNECTIONS</div>
+            <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
               Linked via Plaid — read-only, your credentials never touch MĪZAN. Balances, transactions, budgets, and bills live in your Finances tab.
             </p>
           </div>
@@ -8237,12 +8269,12 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
               borderRadius:T.rMd,
               padding:`${T.s3} ${T.s4}`,
             }}>
-              <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{a.name||a.official_name||a.subtype||"Account"}</div>
-              <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:T.s2,letterSpacing:"0.04em",textTransform:"capitalize"}}>{(a.subtype||a.type||"bank")}{a.mask?` ·· ${a.mask}`:""}</div>
+              <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{a.name||a.official_name||a.subtype||"Account"}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:T.s2,letterSpacing:"0.04em",textTransform:"capitalize"}}>{(a.subtype||a.type||"bank")}{a.mask?` ·· ${a.mask}`:""}</div>
               <Tag label="Connected" color={T.gain}/>
             </div>)}
           </div>
-          :<div style={{marginTop:T.s4,padding:`${T.s6} ${T.s5}`,textAlign:"center",border:`1px dashed ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55}}>
+          :<div style={{marginTop:T.s4,padding:`${T.s6} ${T.s5}`,textAlign:"center",border:`1px dashed ${T.border}`,borderRadius:T.rMd,fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.55}}>
             No banks linked yet. Connect one to track checking, savings, and credit alongside your portfolio.
           </div>}
       </BentoTile>
@@ -8254,16 +8286,16 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
             <div style={{maxWidth:560}}>
               <div style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s2,flexWrap:"wrap"}}>
-                <span style={{fontFamily:FM,fontSize:10,color:on?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600}}>LIVE TRADING</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:on?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600}}>LIVE TRADING</span>
                 <Tag label={on?"Enabled":"Off"} color={on?T.gold:T.muted}/>
               </div>
-              <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55}}>
+              <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.55}}>
                 Enabling lets the trading bot place <strong style={{color:T.text}}>real orders</strong> in your brokerage. This requires reconnecting your brokerage with trade permission — a read-only connection cannot execute trades. You can turn this off at any time.
               </p>
             </div>
             <button onClick={()=>setTradePref(on?"declined":"enabled")} style={{
               padding:`8px ${T.s4}`,borderRadius:T.rMd,
-              fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",
+              fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.06em",
               background:on?`${T.gold}22`:"transparent",
               border:`1px solid ${on?T.gold+"50":T.border}`,
               color:on?T.gold:T.text,
@@ -8271,7 +8303,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
             }}>{on?"Turn off":"Enable trading"}</button>
           </div>
           {on&&<div style={{marginTop:T.s4,paddingTop:T.s4,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,flexWrap:"wrap"}}>
-            <span style={{fontFamily:FM,fontSize:11,color:T.muted,lineHeight:1.5}}>Reconnect a brokerage with trade permission to activate live orders.</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>Reconnect a brokerage with trade permission to activate live orders.</span>
             <button onClick={onConnectTrade} className="btn-primary" style={{flexShrink:0,background:`linear-gradient(135deg, ${T.gold}, ${T.gold}CC)`,boxShadow:`0 2px 10px ${T.gold}55`}}>+ Connect brokerage for trading</button>
           </div>}
         </BentoTile>;
@@ -8281,14 +8313,14 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
       <BentoTile accent={demoMode?T.gold:null} style={demoMode?{background:`linear-gradient(135deg, ${T.gold}0F, transparent 60%), ${T.card}`}:undefined}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s4,flexWrap:"wrap"}}>
           <div>
-            <div style={{fontFamily:FM,fontSize:10,color:demoMode?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DEMO MODE</div>
-            <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:demoMode?T.gold:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DEMO MODE</div>
+            <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:0,lineHeight:1.55,maxWidth:520}}>
               Replaces your live data with a fictional ~$435k halal portfolio across 6 accounts — useful for screenshots, sharing, or previewing MIZAN before connecting brokers.
             </p>
           </div>
           <button onClick={onToggleDemo} className="mz-tap" style={{
             padding:`8px ${T.s4}`,borderRadius:T.rMd,
-            fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",
+            fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.06em",
             background:demoMode?`${T.gold}22`:"transparent",
             border:`1px solid ${demoMode?T.gold+"50":T.border}`,
             color:demoMode?T.gold:T.text,
@@ -8379,23 +8411,23 @@ function AccountPanel({profileFirst="",profileLast="",onProfileName}){
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CURRENT EMAIL</div>
-      <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{user?.email||"—"}</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CURRENT EMAIL</div>
+      <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{user?.email||"—"}</div>
     </BentoTile>
 
     <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YOUR NAME</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:560}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>YOUR NAME</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:560}}>
         How you&rsquo;re addressed in Mīzan emails and support replies. Takes effect immediately — no confirmation email.
       </p>
       <form onSubmit={saveName} style={{display:"flex",flexDirection:"column",gap:T.s3,maxWidth:480}}>
         <div style={{display:"flex",gap:T.s3}}>
           <label style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:T.s1}}>
-            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>FIRST NAME</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>FIRST NAME</span>
             <input type="text" autoComplete="given-name" maxLength={60} value={first} onChange={e=>setFirst(e.target.value)} className="field" disabled={nameBusy}/>
           </label>
           <label style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:T.s1}}>
-            <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>LAST NAME</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>LAST NAME</span>
             <input type="text" autoComplete="family-name" maxLength={60} value={last} onChange={e=>setLast(e.target.value)} className="field" disabled={nameBusy}/>
           </label>
         </div>
@@ -8403,18 +8435,18 @@ function AccountPanel({profileFirst="",profileLast="",onProfileName}){
           {nameBusy?"Saving…":"Save name"}
         </button>
       </form>
-      {nameOk&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain,lineHeight:1.5}}>{ICON_OK}Name saved.</div>}
-      {nameErr&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss,lineHeight:1.5}}>{ICON_NO}{nameErr}</div>}
+      {nameOk&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.gain,lineHeight:1.5}}>{ICON_OK}Name saved.</div>}
+      {nameErr&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,lineHeight:1.5}}>{ICON_NO}{nameErr}</div>}
     </BentoTile>
 
     <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CHANGE EMAIL</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:560}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CHANGE EMAIL</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:560}}>
         Enter your new address and current password. Supabase will email a confirmation link to the new address — the change only takes effect after you click it.
       </p>
       <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:T.s3,maxWidth:480}}>
         <label style={{display:"flex",flexDirection:"column",gap:T.s1}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>NEW EMAIL</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>NEW EMAIL</span>
           <input
             type="email" autoComplete="email"
             value={newEmail} onChange={e=>setNewEmail(e.target.value)}
@@ -8424,7 +8456,7 @@ function AccountPanel({profileFirst="",profileLast="",onProfileName}){
           />
         </label>
         <label style={{display:"flex",flexDirection:"column",gap:T.s1}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>CURRENT PASSWORD</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>CURRENT PASSWORD</span>
           <input
             type="password" autoComplete="current-password"
             value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)}
@@ -8437,8 +8469,8 @@ function AccountPanel({profileFirst="",profileLast="",onProfileName}){
         </button>
       </form>
 
-      {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:11,color:T.gain,lineHeight:1.5}}>{ICON_OK}{ok}</div>}
-      {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:11,color:T.loss,lineHeight:1.5}}>{ICON_NO}{err}</div>}
+      {ok&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:T.gainBg,border:`1px solid ${T.gain}30`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.gain,lineHeight:1.5}}>{ICON_OK}{ok}</div>}
+      {err&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,background:`${T.loss}10`,border:`1px solid ${T.loss}40`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,lineHeight:1.5}}>{ICON_NO}{err}</div>}
     </BentoTile>
   </div>;
 }
@@ -8455,7 +8487,7 @@ function LegalDocsPanel(){
     {l:"Data Retention Policy",desc:"What we keep, how long, when it's deleted, vendor handling.",  href:"/legal/DATA_RETENTION_POLICY.pdf",  ext:true},
   ];
   return<CollapsibleTile title="LEGAL DOCUMENTS" subtitle="Privacy, terms, security & data policies" storageKey="settings_legal" defaultOpen={false}>
-    <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:600}}>
+    <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:`0 0 ${T.s4}`,lineHeight:1.55,maxWidth:600}}>
       Our public-facing policies. Always available without a login at the same URLs — Plaid, Supabase, and your auditors can reach them too.
     </p>
     <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
@@ -8470,10 +8502,10 @@ function LegalDocsPanel(){
         onMouseEnter={e=>{e.currentTarget.style.borderColor=T.borderHi;e.currentTarget.style.background=T.card;}}
         onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.surface;}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{d.l}</div>
-          <div style={{fontFamily:FP,fontSize:12,color:T.muted,marginTop:2,lineHeight:1.45}}>{d.desc}</div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{d.l}</div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,marginTop:2,lineHeight:1.45}}>{d.desc}</div>
         </div>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.08em",flexShrink:0}}>{d.ext?"PDF ↗":"OPEN ↗"}</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.08em",flexShrink:0}}>{d.ext?"PDF ↗":"OPEN ↗"}</span>
       </a>)}
     </div>
   </CollapsibleTile>;
@@ -8522,16 +8554,16 @@ function PrivacyPanel(){
 
   if(done){
     return<BentoTile style={{padding:`${T.s8} ${T.s5}`,textAlign:"center"}}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ACCOUNT DELETED</div>
-      <div style={{fontFamily:FU,fontSize:18,color:T.textHi,fontWeight:600,letterSpacing:"-0.01em",marginBottom:T.s2}}>Your account has been deleted.</div>
-      <div style={{fontFamily:FP,fontSize:13,color:T.muted}}>You'll be redirected in a moment.</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s3}}>ACCOUNT DELETED</div>
+      <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",color:T.textHi,fontWeight:600,letterSpacing:"-0.01em",marginBottom:T.s2}}>Your account has been deleted.</div>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>You'll be redirected in a moment.</div>
     </BentoTile>;
   }
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DOWNLOAD MY DATA</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DOWNLOAD MY DATA</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
         Exports a JSON file containing your profile, account settings, CSV imports, manual assets, donations, audit history, brokerage holdings, and bank accounts. The file is for your records — MIZAN never shares it.
       </p>
       <button onClick={downloadExport} disabled={exportBusy} className="btn-primary">
@@ -8540,15 +8572,15 @@ function PrivacyPanel(){
     </BentoTile>
 
     <BentoTile accent={T.loss} style={{background:`linear-gradient(135deg, ${T.loss}08, transparent 60%), ${T.card}`}}>
-      <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DELETE MY ACCOUNT</div>
-      <p style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>DELETE MY ACCOUNT</div>
+      <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:`0 0 ${T.s3}`,lineHeight:1.55,maxWidth:600}}>
         Permanently deletes everything — profile, account state, brokerage connections (via SnapTrade), bank links (via Plaid), and audit trail. This action cannot be undone.
       </p>
       <button onClick={()=>setShowModal(true)} className="btn-danger">Delete my account…</button>
     </BentoTile>
 
     {err&&<BentoTile style={{background:`${T.loss}10`,border:`1px solid ${T.loss}40`}}>
-      <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>{ICON_NO}{err}</div>
     </BentoTile>}
 
     {showModal&&<div style={{
@@ -8558,23 +8590,23 @@ function PrivacyPanel(){
       <div onClick={e=>e.stopPropagation()} style={{
         maxWidth:520,width:"100%",background:T.card,border:`1px solid ${T.loss}40`,borderRadius:T.rLg,padding:`${T.s6} ${T.s5}`,
       }}>
-        <div style={{fontFamily:FM,fontSize:10,color:T.loss,letterSpacing:"0.18em",fontWeight:700,marginBottom:T.s3}}>DELETE ACCOUNT — IRREVERSIBLE</div>
-        <p style={{fontFamily:FP,fontSize:14,color:T.text,margin:`0 0 ${T.s3}`,lineHeight:1.55}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.18em",fontWeight:700,marginBottom:T.s3}}>DELETE ACCOUNT — IRREVERSIBLE</div>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-lg)",color:T.text,margin:`0 0 ${T.s3}`,lineHeight:1.55}}>
           This will permanently remove:
         </p>
-        <ul style={{fontFamily:FP,fontSize:13,color:T.muted,margin:`0 0 ${T.s4} ${T.s4}`,padding:0,lineHeight:1.7}}>
+        <ul style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,margin:`0 0 ${T.s4} ${T.s4}`,padding:0,lineHeight:1.7}}>
           <li>Your profile, settings, and authentication credentials</li>
           <li>Every connected brokerage (via SnapTrade /snapTrade/deleteUser)</li>
           <li>Every linked bank (Plaid Items unlinked)</li>
           <li>CSV imports, manual assets, donations, watchlist, screening baselines</li>
           <li>All cached holdings and activity data</li>
         </ul>
-        <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.06em",marginBottom:T.s2}}>TYPE <span style={{color:T.loss,fontWeight:700}}>DELETE</span> TO CONFIRM</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,letterSpacing:"0.06em",marginBottom:T.s2}}>TYPE <span style={{color:T.loss,fontWeight:700}}>DELETE</span> TO CONFIRM</div>
         <input
           value={confirmText} onChange={e=>setConfirmText(e.target.value)}
           placeholder="DELETE"
           disabled={deleteBusy}
-          style={{width:"100%",padding:`${T.s3} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:14,color:T.text,letterSpacing:"0.15em",textAlign:"center",outline:"none",boxSizing:"border-box",marginBottom:T.s4}}
+          style={{width:"100%",padding:`${T.s3} ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-lg)",color:T.text,letterSpacing:"0.15em",textAlign:"center",outline:"none",boxSizing:"border-box",marginBottom:T.s4}}
           autoFocus
         />
         <div style={{display:"flex",gap:T.s2,justifyContent:"flex-end"}}>
@@ -8678,25 +8710,25 @@ function BroadcastPanel(){
   };
 
   const SEGMENTS=[["all","All",counts.all],["notConnected","Not connected",counts.notConnected],["connected","Connected",counts.connected],["custom","Custom",segment==="custom"?customSel.size:null]];
-  const lbl=t=><div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>{t}</div>;
-  const fieldStyle={fontFamily:FP,fontSize:13,width:"100%"};
+  const lbl=t=><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>{t}</div>;
+  const fieldStyle={fontFamily:FP,fontSize:"var(--fs-md)",width:"100%"};
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     {/* Compliance guardrail — one-way only */}
     <BentoTile style={{background:`${T.gain}0d`,border:`1px solid ${T.gain}33`}}>
-      <div style={{fontFamily:FP,fontSize:12,color:T.text,lineHeight:1.55}}><b style={{color:T.gain}}>One-way announcement.</b> Product news &amp; reminders only. Don&rsquo;t include personalized buy/sell/hold or suitability guidance — that stays behind the advisor policy.</div>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,lineHeight:1.55}}><b style={{color:T.gain}}>One-way announcement.</b> Product news &amp; reminders only. Don&rsquo;t include personalized buy/sell/hold or suitability guidance — that stays behind the advisor policy.</div>
     </BentoTile>
 
     {/* Recipients / segments */}
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
         {lbl("RECIPIENTS")}
-        <button onClick={loadAud} disabled={audBusy} className="btn-ghost" style={{fontSize:10}}>{audBusy?"Loading…":"Refresh"}</button>
+        <button onClick={loadAud} disabled={audBusy} className="btn-ghost" style={{fontSize:"var(--fs-2xs)"}}>{audBusy?"Loading…":"Refresh"}</button>
       </div>
-      {audErr&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginBottom:T.s2}}>{ICON_NO}{audErr}</div>}
+      {audErr&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,marginBottom:T.s2}}>{ICON_NO}{audErr}</div>}
       <div style={{display:"flex",gap:T.s2,flexWrap:"wrap",marginBottom:T.s3}}>
         {SEGMENTS.map(([k,l,n])=><button key={k} onClick={()=>setSegment(k)} style={{
-          fontFamily:FM,fontSize:11,letterSpacing:"0.02em",borderRadius:T.rSm,padding:`8px ${T.s3}`,cursor:"pointer",
+          fontFamily:FM,fontSize:"var(--fs-xs)",letterSpacing:"0.02em",borderRadius:T.rSm,padding:`8px ${T.s3}`,cursor:"pointer",
           background:segment===k?T.blue:T.surface,color:segment===k?"#fff":T.text,
           border:`1px solid ${segment===k?T.blue:T.border}`,
         }}>{l}{n!=null&&<span style={{opacity:0.7,marginLeft:5,fontVariantNumeric:"tabular-nums"}}>{n}</span>}</button>)}
@@ -8704,24 +8736,24 @@ function BroadcastPanel(){
       {segment==="custom"
         ?<div style={{maxHeight:220,overflowY:"auto",border:`1px solid ${T.border}`,borderRadius:T.rMd}}>
           {activeUsers.length===0
-            ?<div style={{padding:T.s4,fontFamily:FP,fontSize:12,color:T.muted,textAlign:"center"}}>{audBusy?"Loading users…":"No users."}</div>
+            ?<div style={{padding:T.s4,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,textAlign:"center"}}>{audBusy?"Loading users…":"No users."}</div>
             :activeUsers.map(u=><label key={u.id} style={{display:"flex",alignItems:"center",gap:T.s2,padding:`8px ${T.s3}`,borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
               <input type="checkbox" checked={customSel.has(u.id)} onChange={()=>toggleSel(u.id)} style={{accentColor:T.blue}}/>
-              <span style={{fontFamily:FP,fontSize:12,color:T.text,flex:1,minWidth:0}}>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,flex:1,minWidth:0}}>
                 {u.name
-                  ?<>{u.name}<span style={{fontFamily:FM,fontSize:10,color:T.muted,marginLeft:6}}>{u.email}</span></>
+                  ?<>{u.name}<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginLeft:6}}>{u.email}</span></>
                   :u.email}
               </span>
-              <span style={{fontFamily:FM,fontSize:10,color:u.connected?T.gain:T.muted,flexShrink:0}}>{u.connected?"connected":"not connected"}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:u.connected?T.gain:T.muted,flexShrink:0}}>{u.connected?"connected":"not connected"}</span>
             </label>)}
         </div>
         :<div style={{display:"flex",flexWrap:"wrap",gap:6}}>
           {recipients.length===0
-            ?<span style={{fontFamily:FP,fontSize:12,color:T.muted}}>{audBusy?"Loading…":"No users in this segment."}</span>
-            :recipients.slice(0,40).map(u=><span key={u.id} style={{fontFamily:FM,fontSize:11,color:T.blue,background:`${T.blue}12`,border:`1px solid ${T.blue}30`,borderRadius:999,padding:`4px ${T.s2}`}}>{u.email}</span>)}
-          {recipients.length>40&&<span style={{fontFamily:FM,fontSize:11,color:T.muted,alignSelf:"center"}}>+{recipients.length-40} more</span>}
+            ?<span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted}}>{audBusy?"Loading…":"No users in this segment."}</span>
+            :recipients.slice(0,40).map(u=><span key={u.id} style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.blue,background:`${T.blue}12`,border:`1px solid ${T.blue}30`,borderRadius:999,padding:`4px ${T.s2}`}}>{u.email}</span>)}
+          {recipients.length>40&&<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,alignSelf:"center"}}>+{recipients.length-40} more</span>}
         </div>}
-      <div style={{fontFamily:FM,fontSize:11,color:T.muted,marginTop:T.s3,fontVariantNumeric:"tabular-nums"}}>{recipients.length} recipient{recipients.length===1?"":"s"} · suspended users are always skipped</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s3,fontVariantNumeric:"tabular-nums"}}>{recipients.length} recipient{recipients.length===1?"":"s"} · suspended users are always skipped</div>
     </BentoTile>
 
     {/* Compose + preview */}
@@ -8729,36 +8761,36 @@ function BroadcastPanel(){
       <BentoTile>
         {lbl("COMPOSE")}
         <div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-          <div><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Subject</div><input className="field" style={fieldStyle} value={form.subject} onChange={e=>upd("subject",e.target.value)}/></div>
+          <div><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:4}}>Subject</div><input className="field" style={fieldStyle} value={form.subject} onChange={e=>upd("subject",e.target.value)}/></div>
           <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
-            <div style={{flex:1,minWidth:120}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Eyebrow</div><input className="field" style={fieldStyle} value={form.eyebrow} onChange={e=>upd("eyebrow",e.target.value)}/></div>
-            <div style={{flex:2,minWidth:160}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Title</div><input className="field" style={fieldStyle} value={form.title} onChange={e=>upd("title",e.target.value)}/></div>
+            <div style={{flex:1,minWidth:120}}><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:4}}>Eyebrow</div><input className="field" style={fieldStyle} value={form.eyebrow} onChange={e=>upd("eyebrow",e.target.value)}/></div>
+            <div style={{flex:2,minWidth:160}}><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:4}}>Title</div><input className="field" style={fieldStyle} value={form.title} onChange={e=>upd("title",e.target.value)}/></div>
           </div>
-          <div><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Message</div>
+          <div><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:4}}>Message</div>
             <textarea value={form.message} onChange={e=>upd("message",e.target.value)} rows={12} style={{...fieldStyle,resize:"vertical",lineHeight:1.55,padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.text}}/></div>
           <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
-            <div style={{flex:1,minWidth:140}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Button label</div><input className="field" style={fieldStyle} value={form.ctaLabel} onChange={e=>upd("ctaLabel",e.target.value)}/></div>
-            <div style={{flex:1,minWidth:140}}><div style={{fontFamily:FM,fontSize:10,color:T.muted,marginBottom:4}}>Button link</div><input className="field" style={fieldStyle} value={form.ctaUrl} onChange={e=>upd("ctaUrl",e.target.value)}/></div>
+            <div style={{flex:1,minWidth:140}}><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:4}}>Button label</div><input className="field" style={fieldStyle} value={form.ctaLabel} onChange={e=>upd("ctaLabel",e.target.value)}/></div>
+            <div style={{flex:1,minWidth:140}}><div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:4}}>Button link</div><input className="field" style={fieldStyle} value={form.ctaUrl} onChange={e=>upd("ctaUrl",e.target.value)}/></div>
           </div>
         </div>
       </BentoTile>
 
       <BentoTile style={{padding:0,overflow:"hidden"}}>
-        <div style={{padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`}}>{lbl("APPROXIMATE PREVIEW")}<div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:-4}}>Use “Send test to myself” for the exact branded email.</div></div>
+        <div style={{padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`}}>{lbl("APPROXIMATE PREVIEW")}<div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:-4}}>Use “Send test to myself” for the exact branded email.</div></div>
         <div style={{padding:T.s4,background:T.bg}}>
           <div style={{maxWidth:440,margin:"0 auto",background:"#faf8f4",border:"1px solid #e7e2d8",borderRadius:12,overflow:"hidden"}}>
             <div style={{height:3,background:"#1e4e8c"}}/>
             <div style={{padding:"18px 22px 0"}}>
-              <div style={{fontFamily:FU,fontWeight:600,fontSize:22,color:"#1c1b19",letterSpacing:"0.02em"}}>MĪZAN</div>
-              <div style={{fontFamily:"Georgia,serif",fontStyle:"italic",fontSize:11,color:"#87827a",marginTop:4}}>Balance your wealth. Honor your deen.</div>
+              <div style={{fontFamily:FU,fontWeight:600,fontSize:"var(--fs-3xl)",color:"#1c1b19",letterSpacing:"0.02em"}}>MĪZAN</div>
+              <div style={{fontFamily:"Georgia,serif",fontStyle:"italic",fontSize:"var(--fs-xs)",color:"#87827a",marginTop:4}}>Balance your wealth. Honor your deen.</div>
             </div>
             <div style={{padding:"16px 22px 0"}}>
-              {form.eyebrow&&<div style={{fontFamily:FM,fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:"#1e4e8c",fontWeight:600}}>{form.eyebrow}</div>}
-              {form.title&&<div style={{fontFamily:"Georgia,serif",fontWeight:600,fontSize:17,color:"#1c1b19",marginTop:6}}>{form.title}</div>}
+              {form.eyebrow&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.14em",textTransform:"uppercase",color:"#1e4e8c",fontWeight:600}}>{form.eyebrow}</div>}
+              {form.title&&<div style={{fontFamily:"Georgia,serif",fontWeight:600,fontSize:"var(--fs-xl)",color:"#1c1b19",marginTop:6}}>{form.title}</div>}
             </div>
-            <div style={{padding:"12px 22px 0",fontFamily:FP,fontSize:13,lineHeight:1.6,color:"#3a3733",whiteSpace:"pre-wrap"}}>{form.message}</div>
+            <div style={{padding:"12px 22px 0",fontFamily:FP,fontSize:"var(--fs-md)",lineHeight:1.6,color:"#3a3733",whiteSpace:"pre-wrap"}}>{form.message}</div>
             <div style={{padding:"18px 22px 24px"}}>
-              {form.ctaUrl&&<span style={{display:"inline-block",background:"#1e4e8c",color:"#fff",fontFamily:FP,fontWeight:600,fontSize:13,padding:"11px 18px",borderRadius:8}}>{form.ctaLabel||"Open Mizan"}</span>}
+              {form.ctaUrl&&<span style={{display:"inline-block",background:"#1e4e8c",color:"#fff",fontFamily:FP,fontWeight:600,fontSize:"var(--fs-md)",padding:"11px 18px",borderRadius:8}}>{form.ctaLabel||"Open Mizan"}</span>}
             </div>
           </div>
         </div>
@@ -8767,16 +8799,16 @@ function BroadcastPanel(){
 
     {/* Actions + result */}
     <BentoTile>
-      {err&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginBottom:T.s3}}>{ICON_NO}{err}</div>}
-      {result&&<div style={{fontFamily:FM,fontSize:12,color:result.failed?T.gold:T.gain,marginBottom:T.s3,lineHeight:1.6}}>
+      {err&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,marginBottom:T.s3}}>{ICON_NO}{err}</div>}
+      {result&&<div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:result.failed?T.gold:T.gain,marginBottom:T.s3,lineHeight:1.6}}>
         <Icon name="check" size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>
         {result.test?"Test sent to yourself. ":""}Sent {result.sent}{result.failed?` · ${result.failed} failed`:""}{result.skipped?` · ${result.skipped} skipped`:""}.
         {result.failed>0&&<div style={{color:T.muted,marginTop:4}}>{(result.results||[]).filter(x=>!x.ok).slice(0,5).map(x=>`${x.email}: ${x.err}`).join(" · ")}</div>}
       </div>}
       <div style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center"}}>
-        <button onClick={()=>send(true)} disabled={busy} className="btn-ghost" style={{fontSize:12}}>{busy?"Working…":"Send test to myself"}</button>
-        <button onClick={()=>send(false)} disabled={busy||recipients.length===0} className="btn-primary" style={{fontSize:12}}>{busy?"Sending…":`Send to ${recipients.length} recipient${recipients.length===1?"":"s"}`}</button>
-        <button onClick={()=>{setForm(BROADCAST_DEFAULTS);setResult(null);setErr(null);}} disabled={busy} className="btn-ghost" style={{fontSize:11,color:T.muted}}>Reset to reminder template</button>
+        <button onClick={()=>send(true)} disabled={busy} className="btn-ghost" style={{fontSize:"var(--fs-sm)"}}>{busy?"Working…":"Send test to myself"}</button>
+        <button onClick={()=>send(false)} disabled={busy||recipients.length===0} className="btn-primary" style={{fontSize:"var(--fs-sm)"}}>{busy?"Sending…":`Send to ${recipients.length} recipient${recipients.length===1?"":"s"}`}</button>
+        <button onClick={()=>{setForm(BROADCAST_DEFAULTS);setResult(null);setErr(null);}} disabled={busy} className="btn-ghost" style={{fontSize:"var(--fs-xs)",color:T.muted}}>Reset to reminder template</button>
       </div>
     </BentoTile>
   </div>;
@@ -8818,26 +8850,26 @@ function UserMessagesPanel(){
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
     <BentoTile>
-      <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>MESSAGES</div>
-      <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55}}>Questions, feedback, or an issue? Message the Mizan team directly — we'll reply right here, and email you when we do.</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>MESSAGES</div>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.55}}>Questions, feedback, or an issue? Message the Mizan team directly — we'll reply right here, and email you when we do.</div>
     </BentoTile>
     <BentoTile style={{padding:0,overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <div style={{padding:T.s4,minHeight:220,maxHeight:440,overflowY:"auto",display:"flex",flexDirection:"column",gap:T.s3}}>
         {msgs===null
-          ?<div style={{margin:"auto",fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>
+          ?<div style={{margin:"auto",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading…</div>
           :msgs.length===0
-          ?<div style={{margin:"auto",textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted,maxWidth:280}}>No messages yet. Say hello or ask a question — we're here to help.</div>
+          ?<div style={{margin:"auto",textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,maxWidth:280}}>No messages yet. Say hello or ask a question — we're here to help.</div>
           :msgs.map(m=>{const mine=m.sender==="user";return<div key={m.id} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
             <div style={{maxWidth:"78%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:3}}>
-              <div style={{fontFamily:FP,fontSize:13.5,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",padding:`9px ${T.s3}`,borderRadius:12,background:mine?T.blue:T.surface,color:mine?"#fff":T.text,border:mine?"none":`1px solid ${T.border}`,borderBottomRightRadius:mine?3:12,borderBottomLeftRadius:mine?12:3}}>{m.body}</div>
-              <div style={{fontFamily:FM,fontSize:9.5,color:T.muted}}>{mine?"You":"Mizan"} · {fmtTime(m.created_at)}</div>
+              <div style={{fontFamily:FP,fontSize:"var(--fs-md)",lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",padding:`9px ${T.s3}`,borderRadius:12,background:mine?T.blue:T.surface,color:mine?"#fff":T.text,border:mine?"none":`1px solid ${T.border}`,borderBottomRightRadius:mine?3:12,borderBottomLeftRadius:mine?12:3}}>{m.body}</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{mine?"You":"Mizan"} · {fmtTime(m.created_at)}</div>
             </div></div>;})}
         <div ref={endRef}/>
       </div>
-      {err&&<div style={{padding:`0 ${T.s4} ${T.s2}`,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
+      {err&&<div style={{padding:`0 ${T.s4} ${T.s2}`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>{ICON_NO}{err}</div>}
       <div style={{borderTop:`1px solid ${T.border}`,padding:T.s3,display:"flex",gap:T.s2,alignItems:"flex-end"}}>
-        <textarea value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();send();}}} placeholder="Write a message…  (⌘/Ctrl + Enter to send)" rows={2} style={{flex:1,fontFamily:FP,fontSize:13,lineHeight:1.5,resize:"none",padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.text,outline:"none"}}/>
-        <button onClick={send} disabled={busy||!draft.trim()} className="btn-primary" style={{fontSize:12,whiteSpace:"nowrap",alignSelf:"stretch"}}>{busy?"Sending…":"Send"}</button>
+        <textarea value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();send();}}} placeholder="Write a message…  (⌘/Ctrl + Enter to send)" rows={2} style={{flex:1,fontFamily:FP,fontSize:"var(--fs-md)",lineHeight:1.5,resize:"none",padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.text,outline:"none"}}/>
+        <button onClick={send} disabled={busy||!draft.trim()} className="btn-primary" style={{fontSize:"var(--fs-sm)",whiteSpace:"nowrap",alignSelf:"stretch"}}>{busy?"Sending…":"Send"}</button>
       </div>
     </BentoTile>
   </div>;
@@ -8890,45 +8922,45 @@ function AdminMessagesPanel(){
     <div style={{display:"grid",gridTemplateColumns:"minmax(180px,240px) 1fr",minHeight:420}}>
       <div style={{borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column"}}>
         <div style={{padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>THREADS</span>
-          <button onClick={loadThreads} className="btn-ghost" style={{fontSize:9}}>Refresh</button>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>THREADS</span>
+          <button onClick={loadThreads} className="btn-ghost" style={{fontSize:"var(--fs-2xs)"}}>Refresh</button>
         </div>
         <div style={{overflowY:"auto",flex:1}}>
-          {threads===null?<div style={{padding:T.s4,fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>
-            :threads.length===0?<div style={{padding:T.s4,fontFamily:FP,fontSize:12,color:T.muted}}>No messages yet.</div>
+          {threads===null?<div style={{padding:T.s4,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading…</div>
+            :threads.length===0?<div style={{padding:T.s4,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted}}>No messages yet.</div>
             :threads.map(t=><button key={t.user_id} onClick={()=>openThread(t)} style={{display:"block",width:"100%",textAlign:"left",padding:`${T.s3} ${T.s4}`,border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer",background:active?.user_id===t.user_id?`${T.blue}12`:"transparent"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2}}>
-                <span style={{fontFamily:FP,fontSize:12.5,color:T.text,fontWeight:t.unread?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name||t.email||t.user_id.slice(0,8)}</span>
-                {t.unread>0&&<span style={{fontFamily:FM,fontSize:9,color:"#fff",background:T.loss,borderRadius:999,padding:"1px 6px",flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{t.unread}</span>}
+                <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,fontWeight:t.unread?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name||t.email||t.user_id.slice(0,8)}</span>
+                {t.unread>0&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:"#fff",background:T.loss,borderRadius:999,padding:"1px 6px",flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{t.unread}</span>}
               </div>
-              {t.name&&t.email&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.email}</div>}
-              <div style={{fontFamily:FP,fontSize:11,color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.lastSender==="admin"?"You: ":""}{t.lastBody}</div>
+              {t.name&&t.email&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.email}</div>}
+              <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.lastSender==="admin"?"You: ":""}{t.lastBody}</div>
             </button>)}
         </div>
       </div>
       <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
-        {!active?<div style={{margin:"auto",fontFamily:FP,fontSize:13,color:T.muted}}>Select a thread to view.</div>
+        {!active?<div style={{margin:"auto",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>Select a thread to view.</div>
           :<>
             <div style={{padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`,overflow:"hidden"}}>
-              <div style={{fontFamily:FP,fontSize:13,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active.name||active.email||active.user_id}</div>
-              {active.name&&active.email&&<div style={{fontFamily:FM,fontSize:10.5,color:T.muted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active.email}</div>}
+              <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active.name||active.email||active.user_id}</div>
+              {active.name&&active.email&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active.email}</div>}
             </div>
             <div style={{flex:1,padding:T.s4,overflowY:"auto",maxHeight:340,display:"flex",flexDirection:"column",gap:T.s3}}>
-              {msgs===null?<div style={{margin:"auto",fontFamily:FM,fontSize:11,color:T.muted}}>Loading…</div>
+              {msgs===null?<div style={{margin:"auto",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading…</div>
                 :msgs.map(m=>{const mine=m.sender==="admin";return<div key={m.id} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
                   <div style={{maxWidth:"78%",display:"flex",flexDirection:"column",alignItems:mine?"flex-end":"flex-start",gap:3}}>
-                    <div style={{fontFamily:FP,fontSize:13.5,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",padding:`9px ${T.s3}`,borderRadius:12,background:mine?T.blue:T.surface,color:mine?"#fff":T.text,border:mine?"none":`1px solid ${T.border}`}}>{m.body}</div>
-                    <div style={{fontFamily:FM,fontSize:9.5,color:T.muted}}>{mine?"You":"User"} · {fmtTime(m.created_at)}</div>
+                    <div style={{fontFamily:FP,fontSize:"var(--fs-md)",lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",padding:`9px ${T.s3}`,borderRadius:12,background:mine?T.blue:T.surface,color:mine?"#fff":T.text,border:mine?"none":`1px solid ${T.border}`}}>{m.body}</div>
+                    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{mine?"You":"User"} · {fmtTime(m.created_at)}</div>
                   </div></div>;})}
               <div ref={endRef}/>
             </div>
-            {err&&<div style={{padding:`0 ${T.s4} ${T.s2}`,fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>}
+            {err&&<div style={{padding:`0 ${T.s4} ${T.s2}`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>{ICON_NO}{err}</div>}
             <div style={{borderTop:`1px solid ${T.border}`,padding:T.s3,display:"flex",flexDirection:"column",gap:T.s2}}>
               <div style={{display:"flex",gap:T.s2,alignItems:"flex-end"}}>
-                <textarea value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();reply();}}} placeholder="Reply…  (⌘/Ctrl + Enter)" rows={2} style={{flex:1,fontFamily:FP,fontSize:13,lineHeight:1.5,resize:"none",padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.text,outline:"none"}}/>
-                <button onClick={reply} disabled={busy||!draft.trim()} className="btn-primary" style={{fontSize:12,alignSelf:"stretch"}}>{busy?"…":"Reply"}</button>
+                <textarea value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();reply();}}} placeholder="Reply…  (⌘/Ctrl + Enter)" rows={2} style={{flex:1,fontFamily:FP,fontSize:"var(--fs-md)",lineHeight:1.5,resize:"none",padding:T.s3,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.text,outline:"none"}}/>
+                <button onClick={reply} disabled={busy||!draft.trim()} className="btn-primary" style={{fontSize:"var(--fs-sm)",alignSelf:"stretch"}}>{busy?"…":"Reply"}</button>
               </div>
-              <div style={{fontFamily:FM,fontSize:9.5,color:T.muted,letterSpacing:"0.02em"}}>Support &amp; feedback only — no personalized buy/sell/hold or suitability guidance here.</div>
+              <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.02em"}}>Support &amp; feedback only — no personalized buy/sell/hold or suitability guidance here.</div>
             </div>
           </>}
       </div>
@@ -8976,18 +9008,18 @@ function BacklogPanel(){
         width:"100%",display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap",
         padding:`${T.s3} ${T.s4}`,background:"transparent",border:"none",cursor:"pointer",textAlign:"left",
       }}>
-        <span aria-hidden="true" style={{color:isOpen?tone:T.muted,fontSize:11,lineHeight:1,flexShrink:0,
+        <span aria-hidden="true" style={{color:isOpen?tone:T.muted,fontSize:"var(--fs-xs)",lineHeight:1,flexShrink:0,
           display:"inline-block",transform:isOpen?"rotate(90deg)":"none",transition:"transform 0.18s"}}>▸</span>
-        <span style={{fontFamily:FM,fontSize:12,fontWeight:700,color:tone,letterSpacing:"0.08em"}}>{b.key}</span>
-        <span style={{fontFamily:FP,fontSize:13,color:T.textHi,fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{b.title}</span>
-        <span style={{marginLeft:"auto",fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums",flexShrink:0}}>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:700,color:tone,letterSpacing:"0.08em"}}>{b.key}</span>
+        <span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.textHi,fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{b.title}</span>
+        <span style={{marginLeft:"auto",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,fontVariantNumeric:"tabular-nums",flexShrink:0}}>
           {b.archive?`${b.total} archived`:`${b.open} open / ${b.total}`}
         </span>
       </button>
       {isOpen&&<div style={{display:"flex",flexWrap:"wrap",gap:6,padding:`0 ${T.s4} ${T.s3}`}}>
         {b.items.map(it=><span key={it.id} title={it.title} style={{
           display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",
-          fontFamily:FM,fontSize:10,letterSpacing:"0.03em",
+          fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.03em",
           color:it.done?T.muted:T.text,
           background:it.done?"transparent":`${tone}10`,
           border:`1px solid ${it.done?T.border:`${tone}33`}`,
@@ -9005,12 +9037,12 @@ function BacklogPanel(){
     <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>{visible.map(renderBucket)}</div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s3,flexWrap:"wrap",marginTop:T.s3}}>
       <button onClick={toggleArchive} aria-pressed={showArchive} style={{
-        fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",
+        fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",
         padding:`5px ${T.s3}`,borderRadius:999,cursor:"pointer",
         background:showArchive?`${T.slate}1A`:"transparent",
         border:`1px solid ${showArchive?T.slate:T.border}`,color:showArchive?T.text:T.muted,
       }}>{showArchive?"Hide":"Show"} archived · {archivedItems}</button>
-      <span style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,flex:1,minWidth:220}}>
+      <span style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5,flex:1,minWidth:220}}>
         Done-state comes from each item&rsquo;s heading or its <strong style={{color:T.text,fontWeight:600}}>Status</strong> line, so anything finished without either updated still reads as open — the consolidated block at the top of BACKLOG.md is the authority. Hover a chip for its full title.
       </span>
     </div>
@@ -9165,26 +9197,26 @@ function AdminPanel(){
         ["SYNCS TODAY",         stats?.syncs_today ?? "—"],
         ["AI QUERIES TODAY",    stats?.ai_queries_today ?? "—"],
       ].map(([l,v])=><BentoTile key={l}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>{l}</div>
-        <div style={{fontFamily:FU,fontSize:24,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{v.toLocaleString?.()||v}</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>{l}</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums"}}>{v.toLocaleString?.()||v}</div>
       </BentoTile>)}
     </div>
 
     {/* ─── DB / Cron health ──────────────────────── */}
     {dbStatus&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SCHEMA + CRON</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SCHEMA + CRON</span>
         <Tag label={dbStatus.ok?"All migrations applied":"Migrations missing"} color={dbStatus.ok?T.gain:T.loss}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s3}}>
         {(dbStatus.migrations||[]).map(m=><div key={m.migration} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
-          <div style={{fontFamily:FM,fontSize:11,color:T.text,marginBottom:T.s1}}>{m.migration}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text,marginBottom:T.s1}}>{m.migration}</div>
           <Tag label={m.complete?"OK":"Missing"} color={m.complete?T.gain:T.loss}/>
         </div>)}
         {Object.entries(dbStatus.cron||{}).map(([action,row])=><div key={action} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
-          <div style={{fontFamily:FM,fontSize:11,color:T.text,marginBottom:T.s1}}>{action}</div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>Last: {fmtDate(row?.created_at)}</div>
-          {row?.metadata&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{Object.entries(row.metadata).map(([k,v])=>`${k}=${v}`).join(", ")}</div>}
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text,marginBottom:T.s1}}>{action}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>Last: {fmtDate(row?.created_at)}</div>
+          {row?.metadata&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2}}>{Object.entries(row.metadata).map(([k,v])=>`${k}=${v}`).join(", ")}</div>}
         </div>)}
       </div>
     </BentoTile>}
@@ -9192,8 +9224,8 @@ function AdminPanel(){
     {/* ─── Activation funnel ─────────────────────── */}
     {stats?.funnel&&<BentoTile accent={T.blue}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ACTIVATION FUNNEL</span>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{stats.funnel.nudges_sent} nudge{stats.funnel.nudges_sent===1?"":"s"} sent</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>ACTIVATION FUNNEL</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{stats.funnel.nudges_sent} nudge{stats.funnel.nudges_sent===1?"":"s"} sent</span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:T.s3}}>
         {[
@@ -9201,9 +9233,9 @@ function AdminPanel(){
           ["CONNECTED",  stats.funnel.connected, `${stats.funnel.connect_rate}% of signups`, stats.funnel.connect_rate>=50?T.gain:T.gold],
           ["RETURNED",   stats.funnel.returned,  `${stats.funnel.return_rate}% came back`,   stats.funnel.return_rate>=50?T.gain:T.gold],
         ].map(([l,v,sub,color])=><div key={l} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
-          <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>{l}</div>
-          <div style={{fontFamily:FU,fontSize:26,fontWeight:700,color,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",lineHeight:1}}>{v}</div>
-          {sub&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:4}}>{sub}</div>}
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>{l}</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color,letterSpacing:"-0.02em",fontVariantNumeric:"tabular-nums",lineHeight:1}}>{v}</div>
+          {sub&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:4}}>{sub}</div>}
         </div>)}
       </div>
       {/* Acquisition sources (BACKLOG G2). Recorded first-touch at the very
@@ -9211,23 +9243,23 @@ function AdminPanel(){
           person who browsed for a week before signing up still attributes to
           whatever originally brought them in. */}
       {stats.funnel.sources?.length>0&&<div style={{marginTop:T.s4}}>
-        <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>WHERE THEY CAME FROM</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>WHERE THEY CAME FROM</div>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {stats.funnel.sources.map(s=>{
             const unknown=s.source==="unattributed";
             return<div key={s.source} style={{display:"flex",alignItems:"center",gap:T.s3}}>
-              <span style={{fontFamily:FM,fontSize:11,color:unknown?T.muted:T.text,minWidth:104,fontStyle:unknown?"italic":"normal"}}>{s.source}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:unknown?T.muted:T.text,minWidth:104,fontStyle:unknown?"italic":"normal"}}>{s.source}</span>
               {/* Bar is proportional, so a dominant source reads at a glance
                   without needing to compare numbers. */}
               <span style={{flex:1,height:6,background:T.dim,borderRadius:3,overflow:"hidden",minWidth:40}}>
                 <span style={{display:"block",height:"100%",width:`${Math.max(2,s.pct)}%`,background:unknown?T.slate:T.blue,borderRadius:3}}/>
               </span>
-              <span style={{fontFamily:FM,fontSize:11,color:unknown?T.muted:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:56,textAlign:"right"}}>{s.count} · {s.pct}%</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:unknown?T.muted:T.textHi,fontVariantNumeric:"tabular-nums",minWidth:56,textAlign:"right"}}>{s.count} · {s.pct}%</span>
             </div>;
           })}
         </div>
       </div>}
-      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
         Connecting an account is what predicts retention — every user who linked one came back, and every user who didn't, didn't. The daily activation cron emails anyone 1–45 days old who still hasn't connected, once each — skipping anyone who signed in within the last 7 days, since they're engaged rather than lapsed.
         {stats.funnel.sources?.some(s=>s.source==="unattributed")&&" Anyone who signed up before source tracking shipped shows as unattributed — that can't be backfilled, only grown past."}
       </div>
@@ -9250,19 +9282,19 @@ function AdminPanel(){
     {/* ─── Config + credentials ──────────────────── */}
     {dbStatus?.config&&Object.keys(dbStatus.config).length>0&&<BentoTile accent={Object.values(dbStatus.config).every(c=>c.healthy)?undefined:T.loss}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>CONFIG &amp; CREDENTIALS</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>CONFIG &amp; CREDENTIALS</span>
         <Tag label={Object.values(dbStatus.config).every(c=>c.healthy)?"All good":"Action needed"} color={Object.values(dbStatus.config).every(c=>c.healthy)?T.gain:T.loss}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:T.s3}}>
         {Object.entries(dbStatus.config).map(([key,c])=><div key={key} style={{background:T.surface,border:`1px solid ${c.healthy?T.border:T.loss+"55"}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s2,marginBottom:T.s1}}>
-            <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{c.label||key}</span>
+            <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{c.label||key}</span>
             <Tag label={c.healthy?"OK":c.severity==="critical"?"CRITICAL":"BROKEN"} color={c.healthy?T.gain:T.loss}/>
           </div>
-          <div style={{fontFamily:FM,fontSize:10,color:c.healthy?T.muted:T.loss,marginTop:4,lineHeight:1.45}}>{c.healthy?c.detail:c.reason}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:c.healthy?T.muted:T.loss,marginTop:4,lineHeight:1.45}}>{c.healthy?c.detail:c.reason}</div>
         </div>)}
       </div>
-      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
         Checked live here and once a day by the cleanup cron, which emails you when one breaks. These aren&apos;t code bugs, so nothing else catches them — a sender domain drifting off the verified list silently 403&apos;d every email for days, and an empty Anthropic balance took the Assistant down while every variable still looked set.
       </div>
     </BentoTile>}
@@ -9270,22 +9302,22 @@ function AdminPanel(){
     {/* ─── Upstream data feeds ───────────────────── */}
     {dbStatus?.feeds&&Object.keys(dbStatus.feeds).length>0&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>UPSTREAM DATA FEEDS</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>UPSTREAM DATA FEEDS</span>
         <Tag label={Object.values(dbStatus.feeds).every(f=>f.healthy)?"All healthy":"Feed down"} color={Object.values(dbStatus.feeds).every(f=>f.healthy)?T.gain:T.loss}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:T.s3}}>
         {Object.entries(dbStatus.feeds).map(([key,f])=><div key={key} style={{background:T.surface,border:`1px solid ${f.healthy?T.border:T.loss+"55"}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s2,marginBottom:T.s1}}>
-            <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{f.label||key}</span>
+            <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{f.label||key}</span>
             <Tag label={f.healthy?"OK":"DOWN"} color={f.healthy?T.gain:T.loss}/>
           </div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted}}>{key}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{key}</div>
           {f.healthy
-            ?f.source&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:4}}>via {f.source}</div>
-            :<div style={{fontFamily:FM,fontSize:10,color:T.loss,marginTop:4,lineHeight:1.45}}>{f.reason}</div>}
+            ?f.source&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:4}}>via {f.source}</div>
+            :<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,marginTop:4,lineHeight:1.45}}>{f.reason}</div>}
         </div>)}
       </div>
-      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5,marginTop:T.s3}}>
         Probed live on load. The daily cleanup cron re-checks these and emails an alert when one goes down — a feed dying quietly is how the Zakat nisab silently went stale.
       </div>
     </BentoTile>}
@@ -9293,8 +9325,8 @@ function AdminPanel(){
     {/* ─── Maintenance · Cron Jobs ───────────────── */}
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>MAINTENANCE · CRON JOBS</span>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.06em"}}>{busy?"Loading status…":"Run a job on demand"}</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>MAINTENANCE · CRON JOBS</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em"}}>{busy?"Loading status…":"Run a job on demand"}</span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(260px, 100%), 1fr))",gap:T.s3}}>
         {CRON_JOBS.map(([job,label])=>{
@@ -9304,8 +9336,8 @@ function AdminPanel(){
           return<div key={job} style={{background:T.surface,border:`1px solid ${run.status==="error"?T.loss+"40":run.status==="ok"?T.gain+"40":T.border}`,borderRadius:T.rMd,padding:`${T.s3} ${T.s3}`,display:"flex",flexDirection:"column",gap:T.s2}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:T.s2}}>
               <div>
-                <div style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{label}</div>
-                <div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:2}}>{job}</div>
+                <div style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{label}</div>
+                <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2}}>{job}</div>
               </div>
               <button onClick={()=>runCron(job)} disabled={running} style={{
                 padding:`4px ${T.s3}`,borderRadius:T.rSm,
@@ -9313,15 +9345,15 @@ function AdminPanel(){
                 border:`1px solid ${running?T.border:T.blue+"40"}`,
                 color:running?T.muted:T.blue,
                 cursor:running?"default":"pointer",opacity:running?0.6:1,
-                fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",flexShrink:0,
+                fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em",flexShrink:0,
               }}>{running?"Running…":"Run now"}</button>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap",minHeight:18}}>
-              {run.status==="ok"&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontFamily:FM,fontSize:10,color:T.gain,fontVariantNumeric:"tabular-nums"}}><Icon name="check" size={11}/>HTTP {run.code}</span>}
-              {run.status==="error"&&<span style={{fontFamily:FM,fontSize:10,color:T.loss,lineHeight:1.4}}>{ICON_NO}{run.msg}</span>}
+              {run.status==="ok"&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,fontVariantNumeric:"tabular-nums"}}><Icon name="check" size={11}/>HTTP {run.code}</span>}
+              {run.status==="error"&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,lineHeight:1.4}}>{ICON_NO}{run.msg}</span>}
               {!run.status&&(last?.created_at
-                ?<span style={{fontFamily:FM,fontSize:10,color:T.muted,fontVariantNumeric:"tabular-nums"}}>Last run {fmtDate(last.created_at)}{Number.isFinite(last.hours_ago)?` · ${last.hours_ago}h ago`:""}</span>
-                :<span style={{fontFamily:FM,fontSize:10,color:T.dim}}>No recent run recorded</span>)}
+                ?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>Last run {fmtDate(last.created_at)}{Number.isFinite(last.hours_ago)?` · ${last.hours_ago}h ago`:""}</span>
+                :<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim}}>No recent run recorded</span>)}
             </div>
           </div>;
         })}
@@ -9331,74 +9363,74 @@ function AdminPanel(){
     {/* ─── Security · Encryption at rest ─────────── */}
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SECURITY · ENCRYPTION AT REST</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>SECURITY · ENCRYPTION AT REST</span>
         <button onClick={runEncBackfill} disabled={encRun?.status==="running"} style={{
           padding:`4px ${T.s3}`,borderRadius:T.rSm,
           background:encRun?.status==="running"?"transparent":`${T.blue}14`,
           border:`1px solid ${encRun?.status==="running"?T.border:T.blue+"40"}`,
           color:encRun?.status==="running"?T.muted:T.blue,
           cursor:encRun?.status==="running"?"default":"pointer",opacity:encRun?.status==="running"?0.6:1,
-          fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",flexShrink:0,
+          fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em",flexShrink:0,
         }}>{encRun?.status==="running"?"Encrypting…":"Encrypt stored secrets"}</button>
       </div>
-      <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5}}>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
         One-time backfill: encrypts existing brokerage secrets + stored API keys at rest (AES-256-GCM), leaving plaintext intact until verified. Idempotent — safe to re-run. Requires ENCRYPTION_KEY to be set.
       </div>
-      {encRun?.status==="ok"&&<div style={{fontFamily:FM,fontSize:11,color:T.gain,marginTop:T.s2,fontVariantNumeric:"tabular-nums"}}>
+      {encRun?.status==="ok"&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.gain,marginTop:T.s2,fontVariantNumeric:"tabular-nums"}}>
         <Icon name="check" size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>
         Done — brokerage {encRun.result?.snaptrade?.migrated||0} encrypted / {encRun.result?.snaptrade?.skipped||0} skipped{encRun.result?.snaptrade?.errors?` / ${encRun.result.snaptrade.errors} errors`:""} · keys {encRun.result?.keys?.migrated||0} encrypted{encRun.result?.keys?.errors?` / ${encRun.result.keys.errors} errors`:""}
       </div>}
-      {encRun?.status==="error"&&<div style={{fontFamily:FM,fontSize:11,color:T.loss,marginTop:T.s2}}>{ICON_NO}{encRun.msg}</div>}
+      {encRun?.status==="error"&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,marginTop:T.s2}}>{ICON_NO}{encRun.msg}</div>}
     </BentoTile>
 
     {/* ─── Sub-tabs ──────────────────────────────── */}
     <TabBar tabs={[["users","Users"],["broadcast","Broadcast"],["messages","Messages"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
 
     {err&&<BentoTile style={{background:`${T.loss}10`,border:`1px solid ${T.loss}40`}}>
-      <div style={{fontFamily:FM,fontSize:11,color:T.loss}}>{ICON_NO}{err}</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>{ICON_NO}{err}</div>
     </BentoTile>}
 
     {tab==="users"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>USERS · {users.length}</span>
-        <button onClick={load} disabled={busy} className="btn-ghost" style={{fontSize:10}}>{busy?"Loading…":"Refresh"}</button>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>USERS · {users.length}</span>
+        <button onClick={load} disabled={busy} className="btn-ghost" style={{fontSize:"var(--fs-2xs)"}}>{busy?"Loading…":"Refresh"}</button>
       </div>
       <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:T.s2}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>INVITE A USER</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>INVITE A USER</span>
         <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
-          <input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invite();}} placeholder="name@example.com" type="email" className="field" style={{flex:1,minWidth:200,fontSize:13}}/>
-          <button onClick={invite} disabled={inviteBusy} className="btn-primary" style={{fontSize:11,whiteSpace:"nowrap"}}>{inviteBusy?"Sending…":"Send branded invite"}</button>
+          <input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invite();}} placeholder="name@example.com" type="email" className="field" style={{flex:1,minWidth:200,fontSize:"var(--fs-md)"}}/>
+          <button onClick={invite} disabled={inviteBusy} className="btn-primary" style={{fontSize:"var(--fs-xs)",whiteSpace:"nowrap"}}>{inviteBusy?"Sending…":"Send branded invite"}</button>
         </div>
-        {inviteMsg&&<div style={{fontFamily:FM,fontSize:11,color:inviteMsg.ok?T.gain:T.loss}}>{inviteMsg.ok?<Icon name="check" size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>:ICON_NO}{inviteMsg.msg}</div>}
-        <div style={{fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.5}}>Sends a Mīzan-branded invite from alerts@mizan.exchange — not Supabase's default. (Deliverability needs the DMARC DNS record; see setup notes.)</div>
+        {inviteMsg&&<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:inviteMsg.ok?T.gain:T.loss}}>{inviteMsg.ok?<Icon name="check" size={12} style={{display:"inline-block",verticalAlign:"-2px",marginRight:5}}/>:ICON_NO}{inviteMsg.msg}</div>}
+        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>Sends a Mīzan-branded invite from alerts@mizan.exchange — not Supabase's default. (Deliverability needs the DMARC DNS record; see setup notes.)</div>
       </div>
       {users.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No users yet.</div>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>No users yet.</div>
         :<Tbl cols={[
           {l:"Name",r_:r=>r.name
-            ?<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,whiteSpace:"nowrap"}}>{r.name}</span>
-            :<span style={{fontFamily:FM,fontSize:10.5,color:T.gold,letterSpacing:"0.06em"}}>NOT SET</span>},
-          {l:"Email",r_:r=><span style={{fontFamily:FP,fontSize:13,color:T.text}}>{r.email}</span>},
-          {l:"Joined",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.created_at)}</span>},
-          {l:"Last sign-in",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.last_sign_in)}</span>},
+            ?<span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,whiteSpace:"nowrap"}}>{r.name}</span>
+            :<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.06em"}}>NOT SET</span>},
+          {l:"Email",r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text}}>{r.email}</span>},
+          {l:"Joined",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{fmtDate(r.created_at)}</span>},
+          {l:"Last sign-in",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{fmtDate(r.last_sign_in)}</span>},
           {l:"Connected",r_:r=>{
-            if(r.connected==null)return<span style={{fontFamily:FM,fontSize:10,color:T.dim}}>—</span>;
+            if(r.connected==null)return<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim}}>—</span>;
             const parts=[r.brokerage>0?`${r.brokerage} broker${r.brokerage===1?"":"s"}`:null,r.bank?"bank":null].filter(Boolean);
             return r.connected
-              ?<span style={{fontFamily:FM,fontSize:10.5,color:T.gain,letterSpacing:"0.04em"}}>{parts.join(" · ")||"YES"}</span>
-              :<span style={{fontFamily:FM,fontSize:10.5,color:T.gold,letterSpacing:"0.06em"}}>NOTHING</span>;
+              ?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.04em"}}>{parts.join(" · ")||"YES"}</span>
+              :<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.06em"}}>NOTHING</span>;
           }},
           {l:"Activation",r_:r=>{
-            if(!r.activation_state)return<span style={{fontFamily:FM,fontSize:10,color:T.dim}}>—</span>;
+            if(!r.activation_state)return<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim}}>—</span>;
             const c=r.activation_state==="connected"?T.gain:r.activation_state==="eligible"?T.blue:r.activation_state==="sent"?T.slate:T.muted;
             return<span title={r.activation_note||""} style={{display:"inline-flex",flexDirection:"column",gap:2}}>
-              <span style={{fontFamily:FM,fontSize:10.5,color:c,letterSpacing:"0.06em",textTransform:"uppercase"}}>{r.activation_state}</span>
-              {r.nudged_at&&<span style={{fontFamily:FM,fontSize:9.5,color:T.muted}}>{fmtDate(r.nudged_at)}</span>}
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:c,letterSpacing:"0.06em",textTransform:"uppercase"}}>{r.activation_state}</span>
+              {r.nudged_at&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{fmtDate(r.nudged_at)}</span>}
             </span>;
           }},
           {l:"Status",r_:r=><Tag label={r.suspended?"Suspended":r.is_root?"Root":"Active"} color={r.suspended?T.loss:r.is_root?T.gold:T.gain}/>},
           {l:"",r:true,r_:r=><div style={{display:"flex",gap:T.s1,justifyContent:"flex-end",alignItems:"center"}}>
-            {nudgeRun[r.id]?.status==="error"&&<span title={nudgeRun[r.id].msg} style={{fontFamily:FM,fontSize:9.5,color:T.loss,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nudgeRun[r.id].msg}</span>}
+            {nudgeRun[r.id]?.status==="error"&&<span title={nudgeRun[r.id].msg} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nudgeRun[r.id].msg}</span>}
             {r.connected===false&&!r.suspended&&<button onClick={()=>nudge(r)} disabled={nudgeRun[r.id]?.status==="running"}
               title={r.nudged_at?`Already nudged ${fmtDate(r.nudged_at)} — sends again`:r.activation_note||"Send the activation email now"}
               style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,
@@ -9406,12 +9438,12 @@ function AdminPanel(){
                 border:`1px solid ${nudgeRun[r.id]?.status==="ok"?T.gain+"40":T.blue+"40"}`,
                 color:nudgeRun[r.id]?.status==="ok"?T.gain:T.blue,
                 cursor:nudgeRun[r.id]?.status==="running"?"default":"pointer",opacity:nudgeRun[r.id]?.status==="running"?0.6:1,
-                fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em",whiteSpace:"nowrap"}}>
+                fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em",whiteSpace:"nowrap"}}>
               {nudgeRun[r.id]?.status==="running"?"SENDING…":nudgeRun[r.id]?.status==="ok"?"SENT":r.nudged_at?"NUDGE AGAIN":"NUDGE"}
             </button>}
             {r.suspended
-              ?<button onClick={()=>suspend(r.id,"unsuspend")} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:`${T.gain}18`,border:`1px solid ${T.gain}40`,color:T.gain,cursor:"pointer",fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em"}}>UNSUSPEND</button>
-              :<button onClick={()=>suspend(r.id,"suspend")} disabled={r.is_root} title={r.is_root?"Cannot suspend a root account":""} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}40`,color:T.loss,cursor:r.is_root?"not-allowed":"pointer",opacity:r.is_root?0.4:1,fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.04em"}}>SUSPEND</button>}
+              ?<button onClick={()=>suspend(r.id,"unsuspend")} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:`${T.gain}18`,border:`1px solid ${T.gain}40`,color:T.gain,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em"}}>UNSUSPEND</button>
+              :<button onClick={()=>suspend(r.id,"suspend")} disabled={r.is_root} title={r.is_root?"Cannot suspend a root account":""} style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.loss}40`,color:T.loss,cursor:r.is_root?"not-allowed":"pointer",opacity:r.is_root?0.4:1,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em"}}>SUSPEND</button>}
           </div>},
         ]} rows={users}/>}
     </BentoTile>}
@@ -9422,23 +9454,23 @@ function AdminPanel(){
 
     {tab==="audit"&&<BentoTile style={{padding:0,overflow:"hidden"}}>
       <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>AUDIT LOG · {auditTotal.toLocaleString()} total · showing {auditOffset+1}-{Math.min(auditOffset+PAGE,auditTotal)}</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>AUDIT LOG · {auditTotal.toLocaleString()} total · showing {auditOffset+1}-{Math.min(auditOffset+PAGE,auditTotal)}</span>
         <div style={{display:"flex",gap:T.s2}}>
-          <button onClick={()=>setAuditOffset(Math.max(0,auditOffset-PAGE))} disabled={busy||auditOffset===0} className="btn-ghost" style={{fontSize:10}}>← Prev</button>
-          <button onClick={()=>setAuditOffset(auditOffset+PAGE)} disabled={busy||auditOffset+PAGE>=auditTotal} className="btn-ghost" style={{fontSize:10}}>Next →</button>
+          <button onClick={()=>setAuditOffset(Math.max(0,auditOffset-PAGE))} disabled={busy||auditOffset===0} className="btn-ghost" style={{fontSize:"var(--fs-2xs)"}}>← Prev</button>
+          <button onClick={()=>setAuditOffset(auditOffset+PAGE)} disabled={busy||auditOffset+PAGE>=auditTotal} className="btn-ghost" style={{fontSize:"var(--fs-2xs)"}}>Next →</button>
         </div>
       </div>
       {auditRows.length===0
-        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:13,color:T.muted}}>No audit entries.</div>
+        ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted}}>No audit entries.</div>
         :<Tbl cols={[
-          {l:"When",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,whiteSpace:"nowrap"}}>{fmtDate(r.created_at)}</span>},
-          {l:"User",r_:r=><span style={{fontFamily:FP,fontSize:11,color:T.text}} title={r.email||""}>{r.name||r.email||(r.user_id?r.user_id.slice(0,8)+"…":"—")}</span>},
-          {l:"Action",r_:r=><span style={{fontFamily:FP,fontSize:12,color:T.text,fontWeight:500}}>{r.action}</span>},
-          {l:"Target",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{r.target||"—"}</span>},
-          {l:"IP",r_:r=><span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{r.ip||"—"}</span>},
+          {l:"When",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,whiteSpace:"nowrap"}}>{fmtDate(r.created_at)}</span>},
+          {l:"User",r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.text}} title={r.email||""}>{r.name||r.email||(r.user_id?r.user_id.slice(0,8)+"…":"—")}</span>},
+          {l:"Action",r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,fontWeight:500}}>{r.action}</span>},
+          {l:"Target",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{r.target||"—"}</span>},
+          {l:"IP",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{r.ip||"—"}</span>},
           {l:"Metadata",r_:r=>r.metadata&&Object.keys(r.metadata).length>0
-            ?<span style={{fontFamily:FM,fontSize:10,color:T.muted}}>{Object.entries(r.metadata).slice(0,3).map(([k,v])=>`${k}=${String(v).slice(0,30)}`).join(" · ")}</span>
-            :<span style={{fontFamily:FM,fontSize:10,color:T.dim}}>—</span>},
+            ?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{Object.entries(r.metadata).slice(0,3).map(([k,v])=>`${k}=${String(v).slice(0,30)}`).join(" · ")}</span>
+            :<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim}}>—</span>},
         ]} rows={auditRows}/>}
     </BentoTile>}
   </div>;
@@ -9591,20 +9623,20 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
         <div style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,
           display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
-            <div style={{fontFamily:FM,fontSize:12,fontWeight:500,color:T.textHi}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:500,color:T.textHi}}>
               {step==="iframe" ? `Connecting ${sel?.nm}…`
                : step==="done" ? "Account Connected"
                : step==="error" ? "Connection Failed"
                : "Connect Account"}
             </div>
-            <div style={{fontFamily:FP,fontSize:11,color:isTrade?T.gold:T.muted,marginTop:2}}>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:isTrade?T.gold:T.muted,marginTop:2}}>
               {isTrade ? "Trade-enabled connection — the bot may place real orders"
                : step==="iframe" ? "Your credentials go directly to your broker"
                : "Powered by SnapTrade OAuth"}
             </div>
           </div>
           <button onClick={()=>{setStep("select");setUrl("");onClose?.();}}
-            style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:18,lineHeight:1}}><Icon name="close" size={16}/></button>
+            style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:"var(--fs-2xl)",lineHeight:1}}><Icon name="close" size={16}/></button>
         </div>
 
         {/* Loading */}
@@ -9614,7 +9646,7 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
             <div style={{width:32,height:32,borderRadius:"50%",
               border:`2px solid ${T.blue}`,borderTopColor:"transparent",
               animation:"spin 0.8s linear infinite"}}/>
-            <div style={{fontFamily:FM,fontSize:12,color:T.muted}}>Generating secure login link…</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted}}>Generating secure login link…</div>
           </div>
         )}
 
@@ -9622,27 +9654,27 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
         {step==="noserver" && (
           <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
             justifyContent:"center",padding:40,gap:14,textAlign:"center"}}>
-            <div style={{fontFamily:FM,fontSize:13,color:T.loss}}>Backend Server Not Running</div>
-            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.7,maxWidth:360}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-md)",color:T.loss}}>Backend Server Not Running</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.7,maxWidth:360}}>
               SnapTrade needs a signed link from your backend.<br/>
               Open a second terminal in your <code style={{color:T.blue,fontFamily:FM}}>mizan-app</code> folder and run:
             </div>
             <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,
-              padding:"11px 20px",fontFamily:FM,fontSize:13,color:T.textHi,letterSpacing:"0.04em"}}>
+              padding:"11px 20px",fontFamily:FM,fontSize:"var(--fs-md)",color:T.textHi,letterSpacing:"0.04em"}}>
               node server.js
             </div>
-            <div style={{fontFamily:FP,fontSize:11,color:T.muted}}>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted}}>
               Keep it running alongside <code style={{fontFamily:FM}}>npm run dev</code>
             </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>sel&&connect(sel)}
                 style={{padding:"7px 16px",borderRadius:6,background:`${T.blue}18`,
-                  border:`1px solid ${T.blue}`,color:T.blue,fontFamily:FM,fontSize:10,cursor:"pointer"}}>
+                  border:`1px solid ${T.blue}`,color:T.blue,fontFamily:FM,fontSize:"var(--fs-2xs)",cursor:"pointer"}}>
                 Try Again
               </button>
               <button onClick={()=>setStep("select")}
                 style={{padding:"7px 16px",borderRadius:6,background:"transparent",
-                  border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:10,cursor:"pointer"}}>
+                  border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:"var(--fs-2xs)",cursor:"pointer"}}>
                 Back
               </button>
             </div>
@@ -9653,14 +9685,14 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
         {step==="nokeys" && (
           <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
             justifyContent:"center",padding:40,gap:12,textAlign:"center"}}>
-            <div style={{fontFamily:FM,fontSize:13,color:T.loss}}>SnapTrade Client ID Required</div>
-            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.7,maxWidth:300}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-md)",color:T.loss}}>SnapTrade Client ID Required</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.7,maxWidth:300}}>
               Add your SnapTrade Client ID in Settings → API Keys.<br/>
               Sign up free at snaptrade.com/developers.
             </div>
             <button onClick={()=>setStep("select")}
               style={{padding:"7px 16px",borderRadius:6,background:"transparent",
-                border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:10,cursor:"pointer"}}>
+                border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:"var(--fs-2xs)",cursor:"pointer"}}>
               Back
             </button>
           </div>
@@ -9676,12 +9708,12 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
               allow="clipboard-read; clipboard-write"/>
             <div style={{padding:"8px 16px",borderTop:`1px solid ${T.border}`,
               display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-              <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.06em"}}>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em"}}>
                 YOUR PASSWORD NEVER TOUCHES MĪZAN
               </span>
               <button onClick={()=>{setStep("select");setUrl("");}}
                 style={{padding:"4px 10px",borderRadius:6,background:"transparent",
-                  border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:9,cursor:"pointer"}}>
+                  border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:"var(--fs-2xs)",cursor:"pointer"}}>
                 Cancel
               </button>
             </div>
@@ -9695,16 +9727,16 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
             <div style={{width:44,height:44,borderRadius:"50%",background:T.gainBg,
               border:`1px solid ${T.gain}`,display:"flex",alignItems:"center",
               justifyContent:"center",color:T.gain}}><Icon name="check" size={22} color={T.gain}/></div>
-            <div style={{fontFamily:FM,fontSize:13,color:T.gain}}>{sel?.nm} Connected</div>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-md)",color:T.gain}}>{sel?.nm} Connected</div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setStep("select")}
                 style={{padding:"7px 16px",borderRadius:6,background:"transparent",
-                  border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:10,cursor:"pointer"}}>
+                  border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:"var(--fs-2xs)",cursor:"pointer"}}>
                 Connect Another
               </button>
               <button onClick={()=>{setStep("select");setUrl("");onClose?.();}}
                 style={{padding:"7px 16px",borderRadius:6,background:T.blue,
-                  border:"none",color:"#fff",fontFamily:FM,fontSize:10,cursor:"pointer"}}>
+                  border:"none",color:"#fff",fontFamily:FM,fontSize:"var(--fs-2xs)",cursor:"pointer"}}>
                 Done
               </button>
             </div>
@@ -9715,26 +9747,26 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
         {step==="error" && (
           <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
             justifyContent:"center",padding:40,gap:12,textAlign:"center"}}>
-            <div style={{fontFamily:FM,fontSize:13,color:T.loss}}>Connection Failed</div>
-            <div style={{fontFamily:FP,fontSize:12,color:T.muted,lineHeight:1.6,maxWidth:340}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-md)",color:T.loss}}>Connection Failed</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.6,maxWidth:340}}>
               We couldn't set up your broker connection right now. This is usually temporary — please try again.
               If it keeps happening, contact support.
             </div>
             {errMsg && (
               <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,
-                padding:"8px 12px",fontFamily:FM,fontSize:10,color:T.muted,maxWidth:340,wordBreak:"break-word"}}>
+                padding:"8px 12px",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,maxWidth:340,wordBreak:"break-word"}}>
                 {errMsg}
               </div>
             )}
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>sel&&connect(sel)}
                 style={{padding:"7px 14px",borderRadius:6,background:`${T.blue}18`,
-                  border:`1px solid ${T.blue}`,color:T.blue,fontFamily:FM,fontSize:10,cursor:"pointer"}}>
+                  border:`1px solid ${T.blue}`,color:T.blue,fontFamily:FM,fontSize:"var(--fs-2xs)",cursor:"pointer"}}>
                 Try Again
               </button>
               <button onClick={()=>setStep("select")}
                 style={{padding:"7px 14px",borderRadius:6,background:"transparent",
-                  border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:10,cursor:"pointer"}}>
+                  border:`1px solid ${T.border}`,color:T.muted,fontFamily:FM,fontSize:"var(--fs-2xs)",cursor:"pointer"}}>
                 Back
               </button>
             </div>
@@ -9747,11 +9779,11 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
             <div style={{padding:"10px 14px 0",flexShrink:0}}>
               <input value={search} onChange={e=>setSearch(e.target.value)}
                 placeholder={`Search ${allBrokerages.length||0} brokerages…`}
-                style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px 12px",fontFamily:FM,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box"}}/>
+                style={{width:"100%",background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px 12px",fontFamily:FM,fontSize:"var(--fs-sm)",color:T.text,outline:"none",boxSizing:"border-box"}}/>
             </div>
             <div style={{overflowY:"auto",flex:1,padding:14,
               display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}} className="mz-grid-2">
-              {mergedBrokers.length===0&&<div style={{gridColumn:"1 / -1",fontFamily:FM,fontSize:11,color:T.muted,textAlign:"center",padding:24}}>
+              {mergedBrokers.length===0&&<div style={{gridColumn:"1 / -1",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,textAlign:"center",padding:24}}>
                 {allBrokerages.length===0?"Loading SnapTrade brokerages…":"No brokerages match your search."}
               </div>}
               {mergedBrokers.map(b => {
@@ -9767,7 +9799,7 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
                     borderRadius:12,padding:"11px 13px",opacity:tradeBlocked?0.72:1}}>
                     <div style={{display:"flex",justifyContent:"space-between",
                       alignItems:"flex-start",marginBottom:4,gap:6}}>
-                      <span style={{fontFamily:FM,fontSize:12,fontWeight:500,
+                      <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:500,
                         color:c ? T.blue : T.textHi}}>{b.nm}</span>
                       {tradeBlocked ? <Tag label="Read-only" color={T.slate}/> : b.mine && <Tag label="Mine" color={T.blue}/>}
                     </div>
@@ -9775,13 +9807,13 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
                         load-bearing — it is the difference between "this will
                         trade" and "this will not". The generic blurb was the
                         part users said they did not need. */}
-                    {tradeBlocked&&<div style={{fontFamily:FM,fontSize:9,color:T.muted,marginBottom:9}}>
+                    {tradeBlocked&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:9}}>
                       SnapTrade can't place trades on this broker — connect it read-only from Settings.
                     </div>}
                     <div style={{display:"flex",gap:5}}>
                       {tradeBlocked ? (
                         <div title="This broker does not support trading through SnapTrade — only read-only data access."
-                          style={{flex:1,padding:"5px",borderRadius:6,fontFamily:FM,fontSize:9,
+                          style={{flex:1,padding:"5px",borderRadius:6,fontFamily:FM,fontSize:"var(--fs-2xs)",
                             fontWeight:500,letterSpacing:"0.06em",textAlign:"center",
                             border:`1px solid ${T.border}`,textTransform:"uppercase",
                             background:"transparent",color:T.muted}}>
@@ -9789,7 +9821,7 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
                         </div>
                       ) : (
                       <button onClick={()=>!c&&connect(b)}
-                        style={{flex:1,padding:"5px",borderRadius:6,fontFamily:FM,fontSize:9,
+                        style={{flex:1,padding:"5px",borderRadius:6,fontFamily:FM,fontSize:"var(--fs-2xs)",
                           fontWeight:500,letterSpacing:"0.06em",
                           cursor:c?"default":"pointer",border:"none",textTransform:"uppercase",
                           background:c ? `${T.gain}15` : `${T.blue}20`,
@@ -9801,7 +9833,7 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
                         <button onClick={()=>drop(b.id)}
                           style={{padding:"5px 8px",borderRadius:6,background:"transparent",
                             border:`1px solid ${T.loss}28`,color:T.loss,
-                            cursor:"pointer",fontFamily:FM,fontSize:9}}><Icon name="close" size={12}/></button>
+                            cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)"}}><Icon name="close" size={12}/></button>
                       )}
                     </div>
                   </div>
@@ -9809,7 +9841,7 @@ function ConnectModal({onClose,snapId,onConnected,connectionType="read"}){
               })}
             </div>
             <div style={{padding:"9px 16px",borderTop:`1px solid ${T.border}`,flexShrink:0,
-              fontFamily:FP,fontSize:11,color:T.muted,lineHeight:1.6}}>
+              fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.6}}>
               Your brokerage password never touches MĪZAN. SnapTrade uses the same OAuth as "Sign in with Google."
             </div>
           </>
@@ -10498,16 +10530,16 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     }}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s4}}>
         <div>
-          <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s2}}>BANK NET POSITION
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s2}}>BANK NET POSITION
             {loading&&<span style={{marginLeft:T.s2,color:T.blue}}>● Syncing…</span>}
           </div>
-          <div style={{fontFamily:FU,fontSize:42,fontWeight:700,color:totalBank>=0?T.textHi:T.loss,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(totalBank))}</div>
-          <div style={{fontFamily:FM,fontSize:12,color:T.muted,marginTop:T.s2}}>{institutions.length} institution{institutions.length===1?"":"s"} · {accounts.length} account{accounts.length===1?"":"s"}</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-6xl)",fontWeight:700,color:totalBank>=0?T.textHi:T.loss,letterSpacing:"-0.03em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(totalBank))}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,marginTop:T.s2}}>{institutions.length} institution{institutions.length===1?"":"s"} · {accounts.length} account{accounts.length===1?"":"s"}</div>
         </div>
         <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
           {institutions.length>0&&!demoMode&&<button onClick={syncTransactions} disabled={syncBusy}
             title="Pull the latest transactions from Plaid (cursor-based diff sync)"
-            style={{padding:`12px ${T.s4}`,fontSize:12,fontFamily:FM,fontWeight:600,letterSpacing:"0.04em",
+            style={{padding:`12px ${T.s4}`,fontSize:"var(--fs-sm)",fontFamily:FM,fontWeight:600,letterSpacing:"0.04em",
               borderRadius:T.rMd,cursor:syncBusy?"wait":"pointer",
               background:syncBusy?"transparent":`${T.blue}14`,
               border:`1px solid ${T.blue}40`,color:T.blue}}>
@@ -10516,23 +10548,23 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
           {institutions.length>0&&!demoMode&&<button
             onClick={()=>downloadCSVFromEndpoint("/api/export/transactions.csv",`mizan-transactions-${new Date().toISOString().slice(0,10)}.csv`)}
             title="Download every Plaid transaction on file as CSV"
-            style={{padding:`12px ${T.s4}`,fontSize:12,fontFamily:FM,fontWeight:600,letterSpacing:"0.04em",
+            style={{padding:`12px ${T.s4}`,fontSize:"var(--fs-sm)",fontFamily:FM,fontWeight:600,letterSpacing:"0.04em",
               borderRadius:T.rMd,cursor:"pointer",
               background:"transparent",
               border:`1px solid ${T.border}`,color:T.muted}}>
             ↓ Export CSV
           </button>}
-          <button onClick={startLink} disabled={busy||demoMode} title={demoMode?"Disable demo mode in Settings to connect a real bank":undefined} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:13}}>{busy?"Working…":demoMode?"+ Connect Bank (demo)":"+ Connect Bank"}</button>
+          <button onClick={startLink} disabled={busy||demoMode} title={demoMode?"Disable demo mode in Settings to connect a real bank":undefined} className="btn-primary" style={{padding:`12px ${T.s5}`,fontSize:"var(--fs-md)"}}>{busy?"Working…":demoMode?"+ Connect Bank (demo)":"+ Connect Bank"}</button>
         </div>
       </div>
-      {syncMsg&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:syncMsg.ok?T.gainBg:T.lossBg,border:`1px solid ${(syncMsg.ok?T.gain:T.loss)+"30"}`,color:syncMsg.ok?T.gain:T.loss}}>
+      {syncMsg&&<div style={{marginTop:T.s3,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-sm)",background:syncMsg.ok?T.gainBg:T.lossBg,border:`1px solid ${(syncMsg.ok?T.gain:T.loss)+"30"}`,color:syncMsg.ok?T.gain:T.loss}}>
         {syncMsg.ok?ICON_OK:ICON_NO}{syncMsg.msg}
       </div>}
-      {status&&<div style={{marginTop:T.s4,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,display:"flex",alignItems:"center",gap:T.s3,flexWrap:"wrap"}}>
+      {status&&<div style={{marginTop:T.s4,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-sm)",background:status.ok?T.gainBg:T.lossBg,border:`1px solid ${(status.ok?T.gain:T.loss)+"30"}`,color:status.ok?T.gain:T.loss,display:"flex",alignItems:"center",gap:T.s3,flexWrap:"wrap"}}>
         <span style={{flex:"1 1 auto"}}>{status.ok?ICON_OK:ICON_NO}{status.msg}</span>
         {(status.code==="MFA_ENROLLMENT_REQUIRED"||status.code==="MFA_VERIFICATION_REQUIRED")&&onNav&&
           <button onClick={()=>onNav("settings")}
-            style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.loss}`,background:"transparent",color:T.loss,fontFamily:FM,fontSize:11,fontWeight:600,cursor:"pointer",letterSpacing:"0.04em"}}>
+            style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.loss}`,background:"transparent",color:T.loss,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,cursor:"pointer",letterSpacing:"0.04em"}}>
             {status.code==="MFA_ENROLLMENT_REQUIRED"?"Enable 2FA":"Verify 2FA"}
           </button>
         }
@@ -10541,8 +10573,8 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
 
     {/* ─── INSTITUTIONS + ACCOUNTS ─────────────────── */}
     {institutions.length===0&&!loading?<BentoTile style={{padding:`${T.s10} ${T.s5}`,textAlign:"center",borderStyle:"dashed"}}>
-      <div style={{fontFamily:FU,fontSize:18,fontWeight:600,color:T.textHi,marginBottom:T.s2,letterSpacing:"-0.01em"}}>No banks linked yet</div>
-      <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,maxWidth:520,margin:"0 auto"}}>
+      <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:600,color:T.textHi,marginBottom:T.s2,letterSpacing:"-0.01em"}}>No banks linked yet</div>
+      <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.55,maxWidth:520,margin:"0 auto"}}>
         Connect a bank to track checking, savings, and credit balances alongside your brokerage portfolio. Powered by Plaid — read-only, your credentials never touch our servers.
       </div>
     </BentoTile>:null}
@@ -10551,10 +10583,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const needsReauth=itemsNeedingReauth.some(r=>r.item_id===inst.item_id);
       return<BentoTile key={inst.item_id||inst.inst} accent={T.blue}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3,flexWrap:"wrap",gap:T.s2}}>
-        <div style={{fontFamily:FU,fontSize:16,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{inst.inst}</div>
+        <div style={{fontFamily:FU,fontSize:"var(--fs-xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em"}}>{inst.inst}</div>
         <div style={{display:"flex",gap:T.s2}}>
-          <button onClick={()=>startUpdateMode(inst.item_id,inst.inst)} disabled={busy} className="btn-ghost" style={{fontSize:10}} title="Re-authenticate with the bank if a session expired or a password changed">Re-authorize</button>
-          <button onClick={()=>removeItem(inst.item_id,inst.inst)} disabled={busy} className="btn-danger" style={{fontSize:10}}>Disconnect</button>
+          <button onClick={()=>startUpdateMode(inst.item_id,inst.inst)} disabled={busy} className="btn-ghost" style={{fontSize:"var(--fs-2xs)"}} title="Re-authenticate with the bank if a session expired or a password changed">Re-authorize</button>
+          <button onClick={()=>removeItem(inst.item_id,inst.inst)} disabled={busy} className="btn-danger" style={{fontSize:"var(--fs-2xs)"}}>Disconnect</button>
         </div>
       </div>
       {needsReauth&&<div style={{
@@ -10564,7 +10596,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         border:`1px solid ${T.gold}`,
         borderRadius:T.rMd,
         fontFamily:FU,
-        fontSize:12,
+        fontSize:"var(--fs-sm)",
         color:T.textHi,
         display:"flex",
         alignItems:"center",
@@ -10588,8 +10620,8 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             borderRadius:T.rMd,
             position:"relative",
           }}>
-            <div style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{(a.subtype||a.type||"").toUpperCase()}{a.mask?` · ····${a.mask}`:""}</div>
-            {isInv&&<div style={{position:"absolute",top:T.s2,right:T.s2,fontFamily:FM,fontSize:8,color:T.gold,letterSpacing:"0.1em",fontWeight:600,padding:`1px ${T.s1}`,border:`1px solid ${T.gold}40`,borderRadius:T.rSm}}>INVESTMENT</div>}
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{(a.subtype||a.type||"").toUpperCase()}{a.mask?` · ····${a.mask}`:""}</div>
+            {isInv&&<div style={{position:"absolute",top:T.s2,right:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.1em",fontWeight:600,padding:`1px ${T.s1}`,border:`1px solid ${T.gold}40`,borderRadius:T.rSm}}>INVESTMENT</div>}
             {/* Display name — nickname wins when set, broker default
                 becomes the smaller subtitle so users can still tell which
                 physical account this is. */}
@@ -10599,14 +10631,14 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
                 defaultName={a.name||a.official_name||"Account"}
                 nickname={nicknames?.[a.account_id]||""}
                 onSetNickname={onSetNickname}
-                primaryStyle={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.account_id]?600:400}}
-                pencilStyle={{fontSize:13}}
+                primaryStyle={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em",fontWeight:nicknames?.[a.account_id]?600:400}}
+                pencilStyle={{fontSize:"var(--fs-md)"}}
               />
-              {nicknames?.[a.account_id]&&<div style={{fontSize:10,color:T.muted,marginTop:2,fontFamily:FM}}>{a.name||a.official_name||"Account"}</div>}
+              {nicknames?.[a.account_id]&&<div style={{fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2,fontFamily:FM}}>{a.name||a.official_name||"Account"}</div>}
             </div>
-            <div style={{fontFamily:FU,fontSize:18,fontWeight:700,color:isLiability?T.loss:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{isLiability?"−":""}{mask(fmtUSD(a.current_bal))}</div>
-            {a.available_bal!=null&&a.available_bal!==a.current_bal&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(a.available_bal))} available</div>}
-            {isInv&&<div style={{fontFamily:FM,fontSize:10,color:T.muted,marginTop:T.s1,lineHeight:1.4}}>Excluded from Bank Net Position — counted as brokerage on Overview / Portfolio.</div>}
+            <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:isLiability?T.loss:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{isLiability?"−":""}{mask(fmtUSD(a.current_bal))}</div>
+            {a.available_bal!=null&&a.available_bal!==a.current_bal&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s1,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(a.available_bal))} available</div>}
+            {isInv&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s1,lineHeight:1.4}}>Excluded from Bank Net Position — counted as brokerage on Overview / Portfolio.</div>}
           </div>;
         })}
       </div>
@@ -10635,12 +10667,12 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             const pct=monthTotal>0?(s.total/monthTotal)*100:0;
             const barPct=(s.total/(entries[0]?.total||1))*100;
             return<div key={s.cat} style={{display:"grid",gridTemplateColumns:"minmax(130px,1.4fr) 1fr 90px 52px",gap:T.s3,alignItems:"center"}}>
-              <span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{fmtCat(s.cat)}</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em"}}>{fmtCat(s.cat)}</span>
               <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${barPct}%`,background:`linear-gradient(90deg, ${T.blue}, ${T.blueDim})`,borderRadius:2}}/>
               </div>
-              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(s.total))}</span>
-              <span style={{fontFamily:FM,fontSize:11,color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(s.total))}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
             </div>;
           })}
         </div>
@@ -10659,18 +10691,18 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             const pct=outTotal>0?(e.total/outTotal)*100:0;
             const barPct=(e.total/(outEntries[0]?.total||1))*100;
             return<div key={e.cat} style={{display:"grid",gridTemplateColumns:"minmax(160px,1.6fr) 1fr 90px 52px",gap:T.s3,alignItems:"center"}}>
-              <span style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{CAT_LABEL[e.cat]||e.cat.replace(/_/g," ")}</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em"}}>{CAT_LABEL[e.cat]||e.cat.replace(/_/g," ")}</span>
               <div style={{height:8,background:T.dim,borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:`${barPct}%`,background:`linear-gradient(90deg,${T.loss}88,${T.loss}44)`,borderRadius:2}}/>
               </div>
-              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(e.total))}</span>
-              <span style={{fontFamily:FM,fontSize:11,color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(e.total))}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{pct.toFixed(0)}%</span>
             </div>;
           })}
         </div>
         {incomeTotal>0&&<div style={{marginTop:T.s4,paddingTop:T.s3,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontFamily:FM,fontSize:10,color:T.gain,letterSpacing:"0.14em",fontWeight:600}}>INCOME & INFLOWS THIS MONTH</span>
-          <span style={{fontFamily:FP,fontSize:14,fontWeight:700,color:T.gain,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(incomeTotal))}</span>
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.14em",fontWeight:600}}>INCOME & INFLOWS THIS MONTH</span>
+          <span style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:700,color:T.gain,fontVariantNumeric:"tabular-nums"}}>{mask(fmtUSD(incomeTotal))}</span>
         </div>}
       </CollapsibleTile>;
     })()}
@@ -10761,25 +10793,25 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const active=rows.filter(r=>r.active);
       const inactive=rows.filter(r=>!r.active);
       const totalMonthly=active.reduce((s,r)=>s+r.estMonthly,0);
-      return<CollapsibleTile accent={T.gold} title="RECURRING SUBSCRIPTIONS" subtitle={`${active.length} active · ${mask(fmtUSD(totalMonthly))}/mo`} storageKey="fin_subs" right={usingPlaid?<span style={{fontFamily:FM,fontSize:9,color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>:null}>
+      return<CollapsibleTile accent={T.gold} title="RECURRING SUBSCRIPTIONS" subtitle={`${active.length} active · ${mask(fmtUSD(totalMonthly))}/mo`} storageKey="fin_subs" right={usingPlaid?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>:null}>
         <div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
             {l:"Merchant",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-              <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{r.merchant}</span>
-              {r.usage&&<span title="Usage-based / metered billing — the monthly figure is a run-rate, not a fixed price" style={{fontFamily:FM,fontSize:9,color:T.violet,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.violet}55`,borderRadius:T.rSm,background:`${T.violet}14`}}>USAGE</span>}
-              {!r.active&&<span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.border}`,borderRadius:T.rSm}}>INACTIVE</span>}
-              {r.edited&&<span title="You've edited this subscription — your values override what was detected" style={{fontFamily:FM,fontSize:9,color:T.blue,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.blue}55`,borderRadius:T.rSm,background:`${T.blue}12`}}>EDITED</span>}
+              <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:r.active?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{r.merchant}</span>
+              {r.usage&&<span title="Usage-based / metered billing — the monthly figure is a run-rate, not a fixed price" style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.violet,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.violet}55`,borderRadius:T.rSm,background:`${T.violet}14`}}>USAGE</span>}
+              {!r.active&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.border}`,borderRadius:T.rSm}}>INACTIVE</span>}
+              {r.edited&&<span title="You've edited this subscription — your values override what was detected" style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.1em",padding:"1px 5px",border:`1px solid ${T.blue}55`,borderRadius:T.rSm,background:`${T.blue}12`}}>EDITED</span>}
             </div>},
-            {l:"Cadence",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,textTransform:"capitalize"}}>{r.cadence}</span>},
-            {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:12,fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"avg ":""}{mask(fmtUSD(r.avgPerCharge))}</span>},
-            {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"~":""}{mask(fmtUSD(r.estMonthly))}</span>},
-            {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{fmtDate(r.lastDate)}</span>},
+            {l:"Cadence",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,textTransform:"capitalize"}}>{r.cadence}</span>},
+            {l:"Per charge",r:true,r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:500,color:r.active?T.textHi:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"avg ":""}{mask(fmtUSD(r.avgPerCharge))}</span>},
+            {l:"Est. / mo",r:true,r_:r=><span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:r.active?T.gold:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.usage?"~":""}{mask(fmtUSD(r.estMonthly))}</span>},
+            {l:"Last charge",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{fmtDate(r.lastDate)}</span>},
             // Never editable in demo mode — an edit there would persist a
             // demo-merchant override into the user's real synced state.
             {l:"",r:true,r_:r=>demoMode?null:<button
               onClick={()=>setEditSub({key:r._key,name:r.merchant,estMonthly:r.estMonthly,active:r.active,detected:r._detected||{merchant:r.merchant,estMonthly:r.estMonthly,active:r.active}})}
               title={`Edit ${r.merchant}`}
-              style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:9.5,fontWeight:600,letterSpacing:"0.08em",whiteSpace:"nowrap"}}
+              style={{padding:`3px ${T.s2}`,borderRadius:T.rSm,background:"transparent",border:`1px solid ${T.border}`,color:T.muted,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.08em",whiteSpace:"nowrap"}}
             >EDIT</button>},
           ]} rows={[...active,...inactive].slice(0,50)}/>
         </div>
@@ -10817,12 +10849,12 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         writeSubOverrides(next);
         close();
       };
-      const field={width:"100%",padding:`9px ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.textHi,fontFamily:FP,fontSize:14,outline:"none"};
-      const label={fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2,display:"block"};
+      const field={width:"100%",padding:`9px ${T.s3}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,color:T.textHi,fontFamily:FP,fontSize:"var(--fs-lg)",outline:"none"};
+      const label={fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2,display:"block"};
       return<div onClick={close} style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.55)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",display:"flex",alignItems:"center",justifyContent:"center",padding:T.s4}}>
         <div onClick={e=>e.stopPropagation()} role="dialog" aria-label="Edit subscription" style={{width:"min(420px, 100%)",background:"var(--mz-glass-strong)",backdropFilter:"blur(40px) saturate(180%)",WebkitBackdropFilter:"blur(40px) saturate(180%)",border:"1px solid var(--mz-glass-border)",borderRadius:16,boxShadow:"var(--mz-glass-shadow-lg)",padding:`${T.s6} ${T.s6} ${T.s5}`,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>
-          <div style={{fontFamily:FM,fontSize:9.5,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>EDIT SUBSCRIPTION</div>
-          <div style={{fontFamily:FU,fontSize:20,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s5}}>{detected.merchant||editSub.name}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>EDIT SUBSCRIPTION</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.02em",marginBottom:T.s5}}>{detected.merchant||editSub.name}</div>
 
           <label style={label} htmlFor="sub-name">NAME</label>
           <input id="sub-name" style={{...field,marginBottom:T.s4}} value={editSub.name} maxLength={60}
@@ -10841,21 +10873,21 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               const on=editSub.active===v;
               return<button key={l} onClick={()=>setEditSub(s=>({...s,active:v}))} aria-pressed={on} style={{
                 flex:1,padding:`9px ${T.s3}`,borderRadius:T.rMd,cursor:"pointer",
-                fontFamily:FM,fontSize:10.5,fontWeight:600,letterSpacing:"0.1em",
+                fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.1em",
                 background:on?(v?`${T.gain}18`:`${T.blue}14`):"transparent",
                 border:`1px solid ${on?(v?T.gain:T.blue)+"66":T.border}`,
                 color:on?(v?T.gain:T.blue):T.muted,
               }}>{l}</button>;
             })}
           </div>
-          <div style={{fontFamily:FP,fontSize:11.5,color:T.muted,lineHeight:1.55,marginBottom:T.s5}}>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55,marginBottom:T.s5}}>
             Inactive subscriptions stay listed but are excluded from your monthly total. Your edits override what Plaid detected and persist across syncs and devices.
           </div>
 
           <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap"}}>
-            <button onClick={save} disabled={!valid} className="btn-primary" style={{flex:1,fontSize:13,padding:`10px ${T.s4}`,opacity:valid?1:0.5,cursor:valid?"pointer":"not-allowed"}}>Save</button>
-            {subOverrides[editSub.key]&&<button onClick={reset} className="btn-ghost" style={{fontSize:11.5,padding:`10px ${T.s3}`,whiteSpace:"nowrap"}}>Reset</button>}
-            <button onClick={close} className="btn-ghost" style={{fontSize:11.5,padding:`10px ${T.s3}`}}>Cancel</button>
+            <button onClick={save} disabled={!valid} className="btn-primary" style={{flex:1,fontSize:"var(--fs-md)",padding:`10px ${T.s4}`,opacity:valid?1:0.5,cursor:valid?"pointer":"not-allowed"}}>Save</button>
+            {subOverrides[editSub.key]&&<button onClick={reset} className="btn-ghost" style={{fontSize:"var(--fs-xs)",padding:`10px ${T.s3}`,whiteSpace:"nowrap"}}>Reset</button>}
+            <button onClick={close} className="btn-ghost" style={{fontSize:"var(--fs-xs)",padding:`10px ${T.s3}`}}>Cancel</button>
           </div>
         </div>
       </div>;
@@ -10876,7 +10908,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       // the Finances tab (Tag-component look but selectable).
       const chip=(label,active,onClick)=>(<button key={label} onClick={onClick} style={{
         padding:`4px ${T.s3}`,borderRadius:999,
-        fontFamily:FM,fontSize:10,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
+        fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
         color:active?T.textHi:T.muted,
         background:active?`${T.blue}22`:"transparent",
         border:`1px solid ${active?`${T.blue}55`:T.border}`,
@@ -10884,7 +10916,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       }}>{label}</button>);
       const acctLabel=a=>(nicknames?.[a.account_id]||a.name);
       return<BentoTile style={{padding:0,overflow:"hidden"}}>
-        <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>RECENT TRANSACTIONS · {bankTxns.length} entries</div>
+        <div style={{padding:`${T.s4} ${T.s5}`,borderBottom:`1px solid ${T.border}`,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>RECENT TRANSACTIONS · {bankTxns.length} entries</div>
         {/* Controls row — search + filters. Wraps responsively. */}
         <div style={{padding:`${T.s3} ${T.s5}`,borderBottom:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:T.s3}}>
           <div style={{display:"flex",flexWrap:"wrap",gap:T.s3,alignItems:"center"}}>
@@ -10897,7 +10929,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
                 flex:"1 1 240px",minWidth:200,
                 padding:`8px ${T.s3}`,
                 background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,
-                color:T.textHi,fontFamily:FP,fontSize:13,letterSpacing:"-0.005em",
+                color:T.textHi,fontFamily:FP,fontSize:"var(--fs-md)",letterSpacing:"-0.005em",
                 outline:"none",
               }}
             />
@@ -10907,7 +10939,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               style={{
                 padding:`8px ${T.s3}`,
                 background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,
-                color:T.text,fontFamily:FP,fontSize:13,letterSpacing:"-0.005em",
+                color:T.text,fontFamily:FP,fontSize:"var(--fs-md)",letterSpacing:"-0.005em",
                 outline:"none",cursor:"pointer",
               }}
             >
@@ -10916,13 +10948,13 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             </select>
           </div>
           <div style={{display:"flex",flexWrap:"wrap",gap:T.s2,alignItems:"center"}}>
-            <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",marginRight:T.s1}}>Type</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",marginRight:T.s1}}>Type</span>
             {chip("All",     txnType==="all",     ()=>setTxnType("all"))}
             {chip("Outflow", txnType==="outflow", ()=>setTxnType("outflow"))}
             {chip("Inflow",  txnType==="inflow",  ()=>setTxnType("inflow"))}
             {chip("Pending", txnType==="pending", ()=>setTxnType("pending"))}
             <span style={{flex:"0 0 1px",alignSelf:"stretch",background:T.border,margin:`0 ${T.s2}`}}/>
-            <span style={{fontFamily:FM,fontSize:9,color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",marginRight:T.s1}}>Range</span>
+            <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",textTransform:"uppercase",marginRight:T.s1}}>Range</span>
             {chip("30d", txnRange==="30d", ()=>setTxnRange("30d"))}
             {chip("90d", txnRange==="90d", ()=>setTxnRange("90d"))}
             {chip("YTD", txnRange==="ytd", ()=>setTxnRange("ytd"))}
@@ -10930,10 +10962,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
           </div>
         </div>
         <Tbl cols={[
-          {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:11,color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.date}</span>},
+          {l:"Date",r_:r=><span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{r.date}</span>},
           {l:"Merchant",r_:r=><div>
-            <div style={{fontFamily:FP,fontSize:13,color:T.text,letterSpacing:"-0.005em"}}>{r.merchant_name||r.name||"—"}</div>
-            {r.pending&&<div style={{fontFamily:FM,fontSize:9,color:T.gold,letterSpacing:"0.06em",marginTop:2}}>● PENDING</div>}
+            <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,letterSpacing:"-0.005em"}}>{r.merchant_name||r.name||"—"}</div>
+            {r.pending&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.06em",marginTop:2}}>● PENDING</div>}
           </div>},
           {l:"Category",r_:r=>{
             const c=r.personal_finance_category?.primary||r.category?.[0]||"";
@@ -10948,25 +10980,25 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             const label=nick
               ? (a?.mask?`${nick} ····${a.mask}`:nick)
               : (a?`${a.name} ····${a.mask}`:r.institution_name||"—");
-            return<span style={{fontFamily:FM,fontSize:11,color:T.muted}}>{label}</span>;
+            return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{label}</span>;
           }},
-          {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{mask(fmtUSD(Math.abs(r.amount)))}</span>;}},
+          {l:"Amount",r:true,r_:r=>{const out=r.amount>0;return<span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:out?T.loss:T.gain,letterSpacing:"-0.005em",fontVariantNumeric:"tabular-nums"}}>{out?"−":"+"}{mask(fmtUSD(Math.abs(r.amount)))}</span>;}},
         ]} rows={visibleTxns}/>
         {/* Footer: counter + Load more. Empty state when filters wipe results. */}
         {filteredTxns.length===0?(
-          <div style={{padding:`${T.s5} ${T.s4}`,fontFamily:FM,fontSize:11,color:T.muted,textAlign:"center",borderTop:`1px solid ${T.border}`}}>
+          <div style={{padding:`${T.s5} ${T.s4}`,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,textAlign:"center",borderTop:`1px solid ${T.border}`}}>
             No transactions match the current filters.
           </div>
         ):(
           <div style={{padding:`${T.s3} ${T.s4}`,display:"flex",flexDirection:"column",alignItems:"center",gap:T.s2,borderTop:`1px solid ${T.border}`}}>
-            <div style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.06em",textAlign:"center"}}>
+            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em",textAlign:"center"}}>
               Showing {visibleTxns.length} of {filteredTxns.length} filtered · {bankTxns.length} total
             </div>
             {filteredTxns.length>visibleTxns.length&&(
               <button onClick={()=>setTxnLimit(n=>n+LOAD_MORE)} style={{
                 padding:`6px ${T.s4}`,borderRadius:T.rMd,
                 background:T.surface,border:`1px solid ${T.borderHi}`,
-                color:T.textHi,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
+                color:T.textHi,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
                 cursor:"pointer",transition:"background 0.12s",
               }}>Load more</button>
             )}
@@ -11024,29 +11056,29 @@ function NameNudge({skips,onSaved,onSkip}){
     border:"1px solid var(--mz-glass-border)",borderRadius:14,boxShadow:"var(--mz-glass-shadow-lg)",
     padding:`${T.s5} ${T.s5} ${T.s4}`,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)",
   }}>
-    <div style={{fontFamily:FM,fontSize:9.5,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>ONE QUICK THING</div>
-    <div style={{fontFamily:FU,fontSize:17,fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",marginBottom:T.s2}}>What should we call you?</div>
-    <p style={{fontFamily:FP,fontSize:12.5,color:T.muted,lineHeight:1.55,margin:`0 0 ${T.s4}`}}>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>ONE QUICK THING</div>
+    <div style={{fontFamily:FU,fontSize:"var(--fs-xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",marginBottom:T.s2}}>What should we call you?</div>
+    <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.55,margin:`0 0 ${T.s4}`}}>
       We only have your email on file. Add your name so support replies aren&rsquo;t addressed to an inbox.
     </p>
     <div style={{display:"flex",gap:T.s2,marginBottom:T.s3}}>
       <label style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:T.s1}}>
-        <span style={{fontFamily:FM,fontSize:9.5,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>FIRST</span>
-        <input value={first} onChange={e=>setFirst(e.target.value)} className="field" style={{fontSize:13}} autoComplete="given-name" maxLength={60} disabled={busy}/>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>FIRST</span>
+        <input value={first} onChange={e=>setFirst(e.target.value)} className="field" style={{fontSize:"var(--fs-md)"}} autoComplete="given-name" maxLength={60} disabled={busy}/>
       </label>
       <label style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:T.s1}}>
-        <span style={{fontFamily:FM,fontSize:9.5,color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>LAST</span>
-        <input value={last} onChange={e=>setLast(e.target.value)} className="field" style={{fontSize:13}} autoComplete="family-name" maxLength={60} disabled={busy}/>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:500}}>LAST</span>
+        <input value={last} onChange={e=>setLast(e.target.value)} className="field" style={{fontSize:"var(--fs-md)"}} autoComplete="family-name" maxLength={60} disabled={busy}/>
       </label>
     </div>
-    {err&&<div style={{marginBottom:T.s2,fontFamily:FM,fontSize:10.5,color:T.loss,lineHeight:1.45}}>{ICON_NO}{err}</div>}
+    {err&&<div style={{marginBottom:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,lineHeight:1.45}}>{ICON_NO}{err}</div>}
     <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
-      <button type="submit" disabled={!valid||busy} className="btn-primary" style={{flex:1,fontSize:12.5,padding:`9px ${T.s4}`}}>
+      <button type="submit" disabled={!valid||busy} className="btn-primary" style={{flex:1,fontSize:"var(--fs-sm)",padding:`9px ${T.s4}`}}>
         {busy?"Saving…":"Save"}
       </button>
-      {canSkip&&<button type="button" onClick={()=>onSkip?.()} disabled={busy} className="btn-ghost" style={{fontSize:11.5,padding:`9px ${T.s3}`,whiteSpace:"nowrap"}}>Not now</button>}
+      {canSkip&&<button type="button" onClick={()=>onSkip?.()} disabled={busy} className="btn-ghost" style={{fontSize:"var(--fs-xs)",padding:`9px ${T.s3}`,whiteSpace:"nowrap"}}>Not now</button>}
     </div>
-    <div style={{fontFamily:FM,fontSize:10,color:T.muted,textAlign:"center",marginTop:T.s3,lineHeight:1.5,letterSpacing:"0.04em"}}>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,textAlign:"center",marginTop:T.s3,lineHeight:1.5,letterSpacing:"0.04em"}}>
       {canSkip
         ?`You can skip this ${left} more time${left===1?"":"s"}.`
         :"Please add your name to continue using Mīzan fully."}
@@ -11067,14 +11099,14 @@ function TourNudge({onStart,onDismiss}){
     border:"1px solid var(--mz-glass-border)",borderRadius:14,boxShadow:"var(--mz-glass-shadow-lg)",
     padding:`${T.s5} ${T.s5} ${T.s4}`,animation:"glassFadeUp 0.22s cubic-bezier(.34,1.56,.64,1)",
   }}>
-    <div style={{fontFamily:FM,fontSize:9.5,color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>NEW HERE?</div>
-    <div style={{fontFamily:FU,fontSize:17,fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",marginBottom:T.s2}}>Take a 60-second tour</div>
-    <p style={{fontFamily:FP,fontSize:12.5,color:T.muted,lineHeight:1.55,margin:`0 0 ${T.s4}`}}>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.2em",fontWeight:600,marginBottom:T.s2}}>NEW HERE?</div>
+    <div style={{fontFamily:FU,fontSize:"var(--fs-xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",marginBottom:T.s2}}>Take a 60-second tour</div>
+    <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.55,margin:`0 0 ${T.s4}`}}>
       A quick guided lap through every tab &mdash; with sample data or your own account.
     </p>
     <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
-      <button onClick={onStart} className="btn-primary" style={{flex:1,fontSize:12.5,padding:`9px ${T.s4}`}}>Take tour</button>
-      <button onClick={onDismiss} className="btn-ghost" style={{fontSize:11.5,padding:`9px ${T.s3}`,whiteSpace:"nowrap"}}>Not now</button>
+      <button onClick={onStart} className="btn-primary" style={{flex:1,fontSize:"var(--fs-sm)",padding:`9px ${T.s4}`}}>Take tour</button>
+      <button onClick={onDismiss} className="btn-ghost" style={{fontSize:"var(--fs-xs)",padding:`9px ${T.s3}`,whiteSpace:"nowrap"}}>Not now</button>
     </div>
   </div>;
 }
@@ -11107,10 +11139,10 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
   const StepWelcome=<>
     <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:T.s3,marginBottom:T.s5}}>
       <img src={resolvedTheme==="dark"?"/mark-light.png":"/mark.png"} alt="" width={56} height={56} style={{display:"block"}}/>
-      <span style={{fontFamily:FU,fontSize:38,fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>MĪZAN</span>
+      <span style={{fontFamily:FU,fontSize:"var(--fs-5xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.02em"}}>MĪZAN</span>
     </div>
-    <div style={{fontFamily:FU,fontSize:30,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.15,maxWidth:560,margin:`0 auto ${T.s3}`}}>Your Halal Financial Terminal</div>
-    <div style={{fontFamily:FU,fontSize:15,color:T.muted,lineHeight:1.6,maxWidth:560,margin:`0 auto ${T.s6}`,letterSpacing:"-0.005em"}}>
+    <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.15,maxWidth:560,margin:`0 auto ${T.s3}`}}>Your Halal Financial Terminal</div>
+    <div style={{fontFamily:FU,fontSize:"var(--fs-lg)",color:T.muted,lineHeight:1.6,maxWidth:560,margin:`0 auto ${T.s6}`,letterSpacing:"-0.005em"}}>
       Brokerages, banking, and Zakat — unified and Sharia-screened, in one place.
     </div>
     <div style={{display:"flex",flexDirection:"column",gap:T.s2,maxWidth:480,margin:"0 auto",textAlign:"left"}}>
@@ -11119,8 +11151,8 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
         {accent:T.gold,t:"Sharia-screened",d:"Every position screened against AAOIFI + 6 other frameworks. Automatic Zakat + purification math."},
         {accent:T.gain,t:"Banking & spending",d:"Link your bank via Plaid to see balances, transactions, budgets, and bills right next to your portfolio — one complete picture."},
       ].map(b=><div key={b.t} style={{padding:`${T.s3} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${b.accent}`,borderRadius:T.rMd}}>
-        <div style={{fontFamily:FP,fontSize:14,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.t}</div>
-        <div style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{b.d}</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>{b.t}</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em"}}>{b.d}</div>
       </div>)}
     </div>
   </>;
@@ -11138,8 +11170,8 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
     }catch(err){setCsvStatus({ok:false,msg:err.message||"Import failed"});}
   };
   const StepImport=<>
-    <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Bring in your past activity</div>
-    <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+    <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>Bring in your past activity</div>
+    <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
       SnapTrade only backfills 1–2 years. Drop a Fidelity / Robinhood / Coinbase CSV here for your complete history. Drag in or click to choose.
     </div>
     <input ref={csvRef} type="file" accept=".csv,text/csv" onChange={e=>handleCsv(e.target.files?.[0])} style={{display:"none"}}/>
@@ -11158,17 +11190,17 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
       }}
       onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blue;e.currentTarget.style.background=`${T.blue}10`;}}
       onMouseLeave={e=>{e.currentTarget.style.borderColor=T.borderHi;e.currentTarget.style.background=T.surface;}}>
-      <div style={{fontFamily:FU,fontSize:16,fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>Drop a CSV here</div>
-      <div style={{fontFamily:FM,fontSize:11,color:T.muted,letterSpacing:"0.04em"}}>or click to browse</div>
+      <div style={{fontFamily:FU,fontSize:"var(--fs-xl)",fontWeight:600,color:T.textHi,letterSpacing:"-0.01em",marginBottom:T.s1}}>Drop a CSV here</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,letterSpacing:"0.04em"}}>or click to browse</div>
     </div>
     <div style={{display:"flex",gap:T.s2,justifyContent:"center",marginBottom:T.s3}}>
-      <select value={csvBroker} onChange={e=>setCsvBroker(e.target.value)} className="field" style={{width:"auto",fontSize:12,cursor:"pointer"}}>
+      <select value={csvBroker} onChange={e=>setCsvBroker(e.target.value)} className="field" style={{width:"auto",fontSize:"var(--fs-sm)",cursor:"pointer"}}>
         <option>Fidelity</option><option>Robinhood</option><option>Coinbase</option>
         <option>Schwab</option><option>Vanguard</option><option>Other</option>
       </select>
-      <span style={{fontFamily:FM,fontSize:10,color:T.muted,alignSelf:"center"}}>auto-detected if your CSV is recognizable</span>
+      <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,alignSelf:"center"}}>auto-detected if your CSV is recognizable</span>
     </div>
-    {csvStatus&&<div style={{maxWidth:520,margin:"0 auto",padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:12,background:csvStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(csvStatus.ok?T.gain:T.loss)+"30"}`,color:csvStatus.ok?T.gain:T.loss}}>{csvStatus.ok?ICON_OK:ICON_NO}{csvStatus.msg}</div>}
+    {csvStatus&&<div style={{maxWidth:520,margin:"0 auto",padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-sm)",background:csvStatus.ok?T.gainBg:T.lossBg,border:`1px solid ${(csvStatus.ok?T.gain:T.loss)+"30"}`,color:csvStatus.ok?T.gain:T.loss}}>{csvStatus.ok?ICON_OK:ICON_NO}{csvStatus.msg}</div>}
   </>;
 
   // ───── Final step — Tour complete ──────────
@@ -11181,24 +11213,24 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
     {n:"Settings",   d:"Brokers, 2FA, manual assets, documents, demo mode."},
   ];
   const StepDone=<>
-    <div style={{fontFamily:FU,fontSize:28,fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>You're set</div>
-    <div style={{fontFamily:FP,fontSize:14,color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
+    <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.025em",lineHeight:1.2,marginBottom:T.s2}}>You're set</div>
+    <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",color:T.muted,lineHeight:1.55,maxWidth:520,margin:`0 auto ${T.s5}`}}>
       Six tabs. Everything connects. Here's the lay of the land:
     </div>
     <div style={{maxWidth:600,margin:"0 auto",display:"flex",flexDirection:"column",gap:T.s2,textAlign:"left"}}>
-      {navItems.map((it,i)=><div key={it.n} style={{
+      {navItems.map((it,i)=><div key={it.n} className="mz-onboard-row" style={{
         display:"grid",gridTemplateColumns:"auto 130px 1fr",gap:T.s3,alignItems:"baseline",
         padding:`${T.s2} ${T.s3}`,
         background:T.surface,
         border:`1px solid ${T.border}`,
         borderRadius:T.rMd,
       }}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.14em",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{String(i+1).padStart(2,"0")}</span>
-        <span style={{fontFamily:FP,fontSize:13,fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{it.n}</span>
-        <span style={{fontFamily:FP,fontSize:13,color:T.muted,lineHeight:1.5,letterSpacing:"-0.005em"}}>{it.d}</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{String(i+1).padStart(2,"0")}</span>
+        <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,letterSpacing:"-0.005em"}}>{it.n}</span>
+        <span style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.muted,lineHeight:1.5,letterSpacing:"-0.005em"}}>{it.d}</span>
       </div>)}
     </div>
-    <div style={{fontFamily:FM,fontSize:10,color:T.dim,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:520,margin:`${T.s5} auto 0`}}>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:520,margin:`${T.s5} auto 0`}}>
       MĪZAN provides Sharia screening, Zakat, and educational tools — not investment advice, and not a registered investment adviser. Compliance verdicts and Zakat figures are estimates; confirm important decisions with a qualified scholar and a licensed professional.
     </div>
   </>;
@@ -11214,18 +11246,27 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
   const onSkip=()=>{if(step===LAST)return finish();setStep(step+1);};
   const canSkip=step!==0&&step!==LAST;
 
-  return<div style={{
+  return<div className="mz-onboard-overlay" style={{
     position:"fixed",inset:0,zIndex:1000,
     background:"rgba(0,0,0,0.65)",
     backdropFilter:"blur(28px) saturate(160%)",
     WebkitBackdropFilter:"blur(28px) saturate(160%)",
-    display:"flex",alignItems:"center",justifyContent:"center",
-    padding:T.s5,
+    // A fixed, centred flex container with NO overflow clipped its own content
+    // at BOTH ends once the step was taller than the screen — the top was
+    // unreachable even by scrolling, which is the classic flexbox-centring
+    // trap. Reported from Safari on a real iPhone: a new user could not read
+    // past the tab list or reach the button to finish. `flex-start` + `margin:
+    // auto` on the card keeps it centred when there is room and lets it scroll
+    // when there is not; overflowY does the actual rescuing.
+    display:"flex",alignItems:"flex-start",justifyContent:"center",
+    overflowY:"auto",
+    WebkitOverflowScrolling:"touch",
+    padding:`calc(${T.s5} + env(safe-area-inset-top,0px)) ${T.s4} calc(${T.s5} + env(safe-area-inset-bottom,0px))`,
     opacity:mounted?1:0,
     transition:"opacity 0.25s",
   }}>
     <div style={{
-      width:"100%",maxWidth:720,
+      width:"100%",maxWidth:720,margin:"auto 0",
       background:`radial-gradient(circle at 0% 0%, ${T.blue}12, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gold}08, transparent 50%), var(--mz-glass-strong)`,
       backdropFilter:"blur(40px) saturate(180%)",
       WebkitBackdropFilter:"blur(40px) saturate(180%)",
@@ -11258,7 +11299,7 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
       </div>
 
       {/* Step content — keyed for slide animation */}
-      <div style={{
+      <div className="mz-onboard-step" style={{
         textAlign:"center",
         minHeight:380,
         animation:dir!==0?`onbSlide${dir>0?"R":"L"} 0.32s cubic-bezier(.34,1.56,.64,1)`:"none",
@@ -11275,8 +11316,8 @@ function OnboardingFlow({onConnect,onImportCSV,onComplete,snapAccountsLen,onNav,
           style={{opacity:step===0?0.4:1,cursor:step===0?"not-allowed":"pointer"}}
         >← Back</button>
         <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
-          {canSkip&&<button onClick={onSkip} className="btn-ghost" style={{fontSize:11,padding:`6px ${T.s3}`}}>Skip</button>}
-          <button onClick={onCta} className="btn-primary" style={{fontSize:13,padding:`10px ${T.s5}`}}>{ctaLabel}</button>
+          {canSkip&&<button onClick={onSkip} className="btn-ghost" style={{fontSize:"var(--fs-xs)",padding:`6px ${T.s3}`}}>Skip</button>}
+          <button onClick={onCta} className="btn-primary" style={{fontSize:"var(--fs-md)",padding:`10px ${T.s5}`}}>{ctaLabel}</button>
         </div>
       </div>
 
@@ -11367,7 +11408,7 @@ function NotificationBell({items=[],onMarkAllRead,onMarkRead,onClear,onNav}){
         border:`1px solid ${unread>0?T.blue+"40":T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}>
       <Icon name="bell" size={14}/>
       {unread>0&&<span style={{position:"absolute",top:-5,right:-5,minWidth:15,height:15,padding:"0 4px",
-        background:T.loss,color:"#fff",borderRadius:999,fontFamily:FM,fontSize:9,fontWeight:700,
+        background:T.loss,color:"#fff",borderRadius:999,fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:700,
         display:"flex",alignItems:"center",justifyContent:"center",fontVariantNumeric:"tabular-nums"}}>
         {unread>9?"9+":unread}</span>}
     </button>
@@ -11377,17 +11418,17 @@ function NotificationBell({items=[],onMarkAllRead,onMarkRead,onClear,onNav}){
       border:`1px solid ${T.border}`,borderRadius:T.rMd,boxShadow:"var(--sh-lg, 0 12px 32px rgba(0,0,0,0.18))",zIndex:200,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s2,
         padding:`${T.s3} ${T.s4}`,borderBottom:`1px solid ${T.border}`}}>
-        <span style={{fontFamily:FM,fontSize:10,color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>NOTIFICATIONS</span>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>NOTIFICATIONS</span>
         <div style={{display:"flex",gap:T.s2}}>
-          {unread>0&&<button onClick={onMarkAllRead} style={{fontFamily:FM,fontSize:9.5,color:T.blue,background:"none",border:"none",cursor:"pointer",letterSpacing:"0.04em",padding:0}}>MARK ALL READ</button>}
-          {items.length>0&&<button onClick={onClear} style={{fontFamily:FM,fontSize:9.5,color:T.muted,background:"none",border:"none",cursor:"pointer",letterSpacing:"0.04em",padding:0}}>CLEAR</button>}
+          {unread>0&&<button onClick={onMarkAllRead} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"none",border:"none",cursor:"pointer",letterSpacing:"0.04em",padding:0}}>MARK ALL READ</button>}
+          {items.length>0&&<button onClick={onClear} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,background:"none",border:"none",cursor:"pointer",letterSpacing:"0.04em",padding:0}}>CLEAR</button>}
         </div>
       </div>
 
       {items.length===0
         ?<div style={{padding:`${T.s8} ${T.s5}`,textAlign:"center"}}>
-          <div style={{fontFamily:FP,fontSize:13,color:T.text,marginBottom:4}}>Nothing yet</div>
-          <div style={{fontFamily:FP,fontSize:11.5,color:T.muted,lineHeight:1.5}}>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,marginBottom:4}}>Nothing yet</div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
             You&apos;ll hear from Mīzan when a holding&apos;s compliance changes, a dividend lands, or a price alert is crossed.
           </div>
         </div>
@@ -11399,10 +11440,10 @@ function NotificationBell({items=[],onMarkAllRead,onMarkRead,onClear,onNav}){
               borderBottom:`1px solid ${T.border}`,cursor:n.nav?"pointer":"default"}}>
             <div style={{display:"flex",alignItems:"baseline",gap:T.s2,marginBottom:2}}>
               {!n.read&&<span style={{width:6,height:6,borderRadius:999,background:tint(n.kind),flexShrink:0,transform:"translateY(-1px)"}}/>}
-              <span style={{fontFamily:FP,fontSize:12.5,fontWeight:n.read?500:700,color:T.textHi,letterSpacing:"-0.01em",flex:1}}>{n.title}</span>
-              <span style={{fontFamily:FM,fontSize:9,color:T.muted,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{relativeTime(n.ts)}</span>
+              <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",fontWeight:n.read?500:700,color:T.textHi,letterSpacing:"-0.01em",flex:1}}>{n.title}</span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{relativeTime(n.ts)}</span>
             </div>
-            {n.body&&<div style={{fontFamily:FP,fontSize:11.5,color:T.muted,lineHeight:1.45,paddingLeft:n.read?0:14}}>{n.body}</div>}
+            {n.body&&<div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.45,paddingLeft:n.read?0:14}}>{n.body}</div>}
           </button>)}
         </div>}
     </div>}
@@ -11504,7 +11545,15 @@ export default function Mizan(){
   // Non-root users can never navigate to Trade. Every entry point (nav bar,
   // command palette, keyboard, deep link) funnels through setNav, so this one
   // guard hides the whole surface. The server also 403s /api/bot/* for them.
-  const setNav=v=>{const t=(v==="trade"&&!isAdmin)?"overview":v;setNavState(t);try{localStorage.setItem("mizan_nav",t);}catch{}};
+  const setNav=v=>{
+    const t=(v==="trade"&&!isAdmin)?"overview":v;
+    setNavState(t);
+    try{localStorage.setItem("mizan_nav",t);}catch{}
+    // Every entry point (dock, Cmd+K, keyboard, ?tab= deep link) funnels
+    // through setNav — the same reason the Trade guard lives here — so one
+    // call covers them all. Counter only; see src/lib/navUsage.js.
+    recordNavView(t);
+  };
 
   // Command palette state (Cmd+K). The hook listens for the global
   // keystroke and toggles open. Commands are built below from setNav
@@ -12836,18 +12885,18 @@ export default function Mizan(){
         /* Disable lift on touch devices — no hover intent */
         .bento-tile:hover{transform:none;}
       }
-      .btn-primary{background:linear-gradient(135deg,${T.blue},${T.blueDim});color:#faf8f4;border:none;font-family:${FM};font-size:11px;font-weight:600;letter-spacing:0.04em;padding:8px 16px;border-radius:var(--r-md);cursor:pointer;box-shadow:0 2px 10px ${T.blue}40;transition:transform 0.15s,box-shadow 0.2s;}
+      .btn-primary{background:linear-gradient(135deg,${T.blue},${T.blueDim});color:#faf8f4;border:none;font-family:${FM};font-size:var(--fs-xs);font-weight:600;letter-spacing:0.04em;padding:8px 16px;border-radius:var(--r-md);cursor:pointer;box-shadow:0 2px 10px ${T.blue}40;transition:transform 0.15s,box-shadow 0.2s;}
       .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 14px ${T.blue}66;}
       .btn-primary:active:not(:disabled){transform:translateY(0);box-shadow:0 1px 6px ${T.blue}40;}
       .btn-primary:disabled{opacity:0.55;cursor:not-allowed;box-shadow:none;}
-      .btn-ghost{background:transparent;color:${T.text};border:1px solid ${T.border};font-family:${FM};font-size:11px;font-weight:500;letter-spacing:0.04em;padding:7px 14px;border-radius:var(--r-md);cursor:pointer;transition:border-color 0.15s,background 0.15s,color 0.15s;}
+      .btn-ghost{background:transparent;color:${T.text};border:1px solid ${T.border};font-family:${FM};font-size:var(--fs-xs);font-weight:500;letter-spacing:0.04em;padding:7px 14px;border-radius:var(--r-md);cursor:pointer;transition:border-color 0.15s,background 0.15s,color 0.15s;}
       .btn-ghost:hover:not(:disabled){border-color:${T.borderHi};background:${T.surface};color:${T.textHi};}
-      .btn-danger{background:transparent;color:${T.loss};border:1px solid ${T.loss}40;font-family:${FM};font-size:11px;font-weight:500;letter-spacing:0.04em;padding:7px 14px;border-radius:var(--r-md);cursor:pointer;transition:all 0.15s;}
+      .btn-danger{background:transparent;color:${T.loss};border:1px solid ${T.loss}40;font-family:${FM};font-size:var(--fs-xs);font-weight:500;letter-spacing:0.04em;padding:7px 14px;border-radius:var(--r-md);cursor:pointer;transition:all 0.15s;}
       .btn-danger:hover:not(:disabled){background:${T.loss}10;border-color:${T.loss}80;}
       /* Guided tour — visible keyboard focus, scoped so it never restyles the rest of the app */
       .mz-tour-root :focus-visible{outline:2px solid ${T.blue};outline-offset:2px;border-radius:8px;}
       .mz-tour-root [tabindex="-1"]:focus{outline:none;}
-      .field{background:${T.surface};border:1px solid ${T.border};border-radius:var(--r-md);padding:9px 12px;font-family:${FM};font-size:12px;color:${T.text};outline:none;width:100%;box-sizing:border-box;transition:border-color 0.15s,box-shadow 0.15s;}
+      .field{background:${T.surface};border:1px solid ${T.border};border-radius:var(--r-md);padding:9px 12px;font-family:${FM};font-size:var(--fs-sm);color:${T.text};outline:none;width:100%;box-sizing:border-box;transition:border-color 0.15s,box-shadow 0.15s;}
       .field:focus{border-color:${T.blue};box-shadow:0 0 0 3px ${T.blue}22;}
 
       /* TabBar — keep horizontal scrolling but hide the scrollbar so it
@@ -12881,7 +12930,7 @@ export default function Mizan(){
         .mz-tabbar-wrap::after { opacity: 1; }
         .mz-tabbar > button {
           padding: 11px 16px !important;
-          font-size: 13px !important;
+          font-size:var(--fs-md) !important;
           min-height: 40px;
         }
       }
@@ -12905,12 +12954,11 @@ export default function Mizan(){
         .mz-grid-2{grid-template-columns:1fr!important;}
         .mz-form-row{grid-template-columns:1fr!important;}
         .mz-dock{padding:4px!important;gap:2px!important;max-width:calc(100vw - 16px)!important;overflow-x:auto!important;border-radius:14px!important;bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;left:8px!important;right:8px!important;transform:none!important;justify-content:space-around;}
-        .mz-dock button{padding:8px 6px!important;font-size:10px!important;border-radius:10px!important;flex:1;letter-spacing:0.02em!important;min-height:44px;}
+        .mz-dock button{padding:8px 6px!important;font-size:var(--fs-2xs)!important;border-radius:10px!important;flex:1;letter-spacing:0.02em!important;min-height:44px;}
         .mz-status{padding:0 12px!important;gap:8px!important;}
-        .mz-status-mid{display:none!important;}
         .mz-status-right{gap:4px!important;}
-        .mz-status-right button{padding:5px 8px!important;font-size:9px!important;min-height:40px;}
-        .mz-status-sync{padding:6px 10px!important;font-size:10px!important;}
+        .mz-status-right button{padding:5px 8px!important;font-size:var(--fs-2xs)!important;min-height:40px;}
+        .mz-status-sync{padding:6px 10px!important;font-size:var(--fs-2xs)!important;}
         .mz-page-content{padding-bottom:calc(130px + env(safe-area-inset-bottom,0px))!important;}
       }
 
@@ -12956,7 +13004,12 @@ export default function Mizan(){
         .mz-tabbar > button{min-height:44px!important;}
       }
       @media(max-width:640px){
-        /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
+        /* Prevent iOS auto-zoom on input focus. This is the ONE size in the
+           app that must stay a hard 16px rather than a fluid token: it is a
+           browser BEHAVIOUR threshold, not a typographic choice. Safari zooms
+           the page whenever a focused field computes under 16px, and a rem
+           token would drop below that the moment a reader lowers their OS text
+           size — silently reintroducing the exact bug this rule prevents. */
         .field{font-size:16px!important;}
         input,select,textarea{font-size:16px!important;}
       }
@@ -13003,6 +13056,37 @@ export default function Mizan(){
       /* The 23px range chips get their 44px tap region from .mz-tap above —
          growing the chips themselves would turn a range selector into a wall. */
 
+      /* ── Onboarding on a phone ───────────────────────────────── */
+      /* The step's 380px floor is most of an iPhone SE's 568px viewport before
+         any content exists, which is what pushed the tab list off both ends. */
+      @media (max-width: 600px){
+        .mz-onboard-step{min-height:0!important;}
+      }
+      @media (max-height: 700px){
+        .mz-onboard-step{min-height:0!important;}
+      }
+
+      /* ── Onboarding tab list ─────────────────────────────────── */
+      /* Three columns (number / 130px title / description) leaves about 156px
+         for the description on a 390px phone, so every row wrapped to six or
+         seven lines and the "You're set" screen became an endless scroll. It
+         was reported from Safari on a real iPhone — the E2E suite never caught
+         it because e2e/support/app.js seeds mizan_onboarded:"1" to skip
+         onboarding, so this screen had never once been rendered by a test.
+         Below 600px the description drops to its own full-width line. */
+      @media (max-width: 600px){
+        .mz-onboard-row{grid-template-columns:auto 1fr!important;row-gap:2px;}
+        .mz-onboard-row > :nth-child(3){grid-column:1 / -1;}
+      }
+
+      /* The clock / market / freshness strip needs roughly 1010px of header
+         before the row fits. It used to hide only below 600px, so everything
+         from ~601px to ~1010px overflowed — iPad portrait (768px) included.
+         Measured by sweeping widths rather than guessed. */
+      @media (max-width: 1023px){
+        .mz-status-mid{display:none!important;}
+      }
+
       /* ── Header: stop the actions sliding under the wordmark ─── */
       /* The action group is flex-shrink:1 with min-width:0, so on a phone it
          was squeezed NARROWER than its own contents. Combined with
@@ -13024,12 +13108,20 @@ export default function Mizan(){
          for. The DEMO toggle is the redundant one here: the Overview empty
          state carries a "Try Demo Mode" CTA and Settings has the full tile, so
          it yields the space rather than the sync button losing it. */
-      @media (max-width: 400px){
+      @media (max-width: 460px){
         .mz-status-demo{display:none!important;}
+      }
+      /* The broker force-refresh only exists once accounts are connected, so it
+         never appeared in the empty state the header guard was written against
+         — it pushed the header 17px past a 320px viewport the moment real data
+         arrived, and only the fluid-type pass made that visible. It is a
+         power-user action; Sync All covers the same ground on a narrow screen. */
+      @media (max-width: 360px){
+        .mz-status-force{display:none!important;}
       }
       /* Label swap for the header actions. Default: full label only. */
       .mz-lbl-short{display:none;}
-      @media (max-width: 400px){
+      @media (max-width: 460px){
         .mz-lbl-full{display:none;}
         .mz-lbl-short{display:inline;}
       }
@@ -13046,7 +13138,14 @@ export default function Mizan(){
         .mz-dock-tour{display:none!important;}
       }
       @media (max-width: 374px){
-        .mz-dock button{padding:8px 3px!important;font-size:9px!important;}
+        .mz-dock button{padding:8px 3px!important;font-size:var(--fs-2xs)!important;}
+      }
+      /* At 320px the dock ran 14px over once its labels moved up to the 11px
+         readability floor. Padding is the lever, not the font — shrinking the
+         type back below the floor would undo the entire point of the scale. */
+      @media (max-width: 335px){
+        .mz-dock{padding:3px!important;gap:0!important;}
+        .mz-dock button{padding:8px 1px!important;letter-spacing:0!important;}
       }
 
       /* ── Landscape phones / short viewports ──────────────────── */
@@ -13081,21 +13180,21 @@ export default function Mizan(){
     <header className="mz-status glass" style={{minHeight:"calc(48px + env(safe-area-inset-top, 0px))",padding:`env(safe-area-inset-top, 0px) ${T.s5} 0`,borderBottom:`1px solid var(--mz-glass-border)`,display:"flex",alignItems:"center",gap:T.s4,position:"sticky",top:0,zIndex:100}}>
       <div className="mz-brand" style={{display:"flex",alignItems:"center",gap:T.s2,flexShrink:0}}>
         <img src={resolvedTheme==="dark"?"/mark-light.png":"/mark.png"} alt="" width={18} height={18} style={{display:"block",flexShrink:0}}/>
-        <span style={{fontFamily:FU,fontSize:15,fontWeight:700,color:T.textHi,letterSpacing:"0.04em"}}>MĪZAN</span>
-        <span className="mz-brand-badge" style={{fontFamily:FM,fontSize:8,fontWeight:600,color:T.blue,letterSpacing:"0.18em",background:`${T.blue}18`,border:`1px solid ${T.blue}30`,padding:"3px 7px",borderRadius:999}}>HALAL</span>
+        <span style={{fontFamily:FU,fontSize:"var(--fs-lg)",fontWeight:700,color:T.textHi,letterSpacing:"0.04em"}}>MĪZAN</span>
+        <span className="mz-brand-badge" style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,color:T.blue,letterSpacing:"0.18em",background:`${T.blue}18`,border:`1px solid ${T.blue}30`,padding:"3px 7px",borderRadius:999}}>HALAL</span>
       </div>
 
       {/* Center: live status — clock, market, data freshness */}
-      <div className="mz-status-mid" style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:14,fontFamily:FM,fontSize:10}}>
+      <div className="mz-status-mid" style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:14,fontFamily:FM,fontSize:"var(--fs-2xs)"}}>
         <div style={{display:"flex",alignItems:"center",gap:6}} title={`Local ${nyc.localDisplay} · NYC ${nyc.wd} ${nyc.time} ET · Market ${nyc.status}${nyc.countdown?` · ${nyc.nextEvent} in ${nyc.countdown}`:""}`}>
           <LiveDot on={hr>=4&&hr<20} pulse={hr>=9.5&&hr<16}/>
-          <span style={{color:T.muted,fontSize:9}}>{nyc.wd}</span>
+          <span style={{color:T.muted,fontSize:"var(--fs-2xs)"}}>{nyc.wd}</span>
           <span style={{color:T.text,letterSpacing:"0.04em",fontVariantNumeric:"tabular-nums"}}>{nyc.localDisplay}</span>
           <span style={{color:T.dim}}>/</span>
           <span style={{color:T.text,letterSpacing:"0.04em",fontVariantNumeric:"tabular-nums"}}>{nyc.time} ET</span>
           <span style={{color:T.muted}}>·</span>
           <span style={{color:sessionColor,fontWeight:500}}>{sessionLabel}</span>
-          {nyc.countdown&&<span style={{color:T.muted,fontSize:9}}>· {nyc.nextEvent} {nyc.countdown}</span>}
+          {nyc.countdown&&<span style={{color:T.muted,fontSize:"var(--fs-2xs)"}}>· {nyc.nextEvent} {nyc.countdown}</span>}
         </div>
         <span style={{color:T.dim}}>|</span>
         <span style={{color:isLive?T.gain:T.muted,fontVariantNumeric:"tabular-nums"}}>{fetching?"Syncing…":isLive?`${live.length} live`:"No live data"}</span>
@@ -13118,8 +13217,8 @@ export default function Mizan(){
           onClear={()=>writeNotifications([])}
           onNav={setNav}/>
         <button onClick={cycleTheme} title={`Theme: ${themeMode} (resolved: ${resolvedTheme}).`} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",color:T.muted,padding:"5px 9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",minWidth:30,lineHeight:1}}><Icon name={(themeMode==="auto"?resolvedTheme:themeMode)==="dark"?"moon":"sun"} size={14}/></button>
-        {(!hasRealData||demoMode)&&<button onClick={toggleDemo} className="mz-status-demo" title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:9,color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
-        <button onClick={()=>setAuto(v=>!v)} title={`Auto-sync ${auto?"on":"off"}`} style={{fontFamily:FM,fontSize:9,color:auto?T.gain:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:auto?`${T.gain}14`:"transparent",border:`1px solid ${auto?T.gain+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{auto?"AUTO":"AUTO"}</button>
+        {(!hasRealData||demoMode)&&<button onClick={toggleDemo} className="mz-status-demo" title="Toggle demo data (fictional 8-figure book)" style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:demoMode?T.gold:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:demoMode?`${T.gold}14`:"transparent",border:`1px solid ${demoMode?T.gold+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>DEMO</button>}
+        <button onClick={()=>setAuto(v=>!v)} title={`Auto-sync ${auto?"on":"off"}`} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:auto?T.gain:T.muted,padding:"5px 10px",letterSpacing:"0.06em",background:auto?`${T.gain}14`:"transparent",border:`1px solid ${auto?T.gain+"40":T.border}`,borderRadius:8,cursor:"pointer"}}>{auto?"AUTO":"AUTO"}</button>
         {/* Two labels, one shown at a time (see .mz-lbl-* in THEME_CSS): the
             full wording everywhere there is room, a glyph on narrow phones
             where the full label pushed Sync All off the screen edge. The
@@ -13134,14 +13233,14 @@ export default function Mizan(){
           const disabled=forceBusy||cooling||fetching;
           const label=forceBusy?"⟳…":cooling?`⟳ ${mins}m`:"⟳ Force";
           const title=cooling?`Broker refresh on cooldown — try again in ${mins} min`:"Push a refresh signal to SnapTrade so balances + activity catch up to what your brokerage shows.";
-          return<button onClick={forceRefresh} disabled={disabled} title={title} style={{fontFamily:FM,fontSize:11,fontWeight:500,letterSpacing:"0.04em",padding:`7px ${T.s3}`,borderRadius:T.rMd,border:`1px solid ${cooling?T.border:T.gold+"40"}`,background:cooling?"transparent":`${T.gold}14`,color:disabled?T.muted:T.gold,cursor:disabled?"not-allowed":"pointer",transition:"all 0.15s"}}>{label}</button>;
+          return<button onClick={forceRefresh} disabled={disabled} title={title} className="mz-status-force" style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,letterSpacing:"0.04em",padding:`7px ${T.s3}`,borderRadius:T.rMd,border:`1px solid ${cooling?T.border:T.gold+"40"}`,background:cooling?"transparent":`${T.gold}14`,color:disabled?T.muted:T.gold,cursor:disabled?"not-allowed":"pointer",transition:"all 0.15s"}}>{label}</button>;
         })()}
-        {installEvt&&!isInstalled&&<button onClick={doInstall} className="btn-ghost mz-hide-sm" title="Install MĪZAN as an app on this device" style={{display:"inline-flex",alignItems:"center",gap:5,fontFamily:FM,fontSize:9,letterSpacing:"0.06em"}}><Icon name="download" size={11}/>Install</button>}
+        {installEvt&&!isInstalled&&<button onClick={doInstall} className="btn-ghost mz-hide-sm" title="Install MĪZAN as an app on this device" style={{display:"inline-flex",alignItems:"center",gap:5,fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.06em"}}><Icon name="download" size={11}/>Install</button>}
         <button onClick={sync} disabled={fetching} className="btn-primary mz-status-sync" aria-label="Sync all accounts">
           {fetching?"Syncing…":<><span className="mz-lbl-full">Sync All</span><span className="mz-lbl-short">Sync</span></>}
         </button>
       </div>
-      {forceMsg&&<div style={{position:"absolute",top:"calc(env(safe-area-inset-top, 0px) + 50px)",right:T.s3,background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:11,boxShadow:"var(--mz-glass-shadow)",zIndex:101,maxWidth:340,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>{forceMsg.msg}</div>}
+      {forceMsg&&<div style={{position:"absolute",top:"calc(env(safe-area-inset-top, 0px) + 50px)",right:T.s3,background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",boxShadow:"var(--mz-glass-shadow)",zIndex:101,maxWidth:340,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>{forceMsg.msg}</div>}
     </header>
 
     {/* Pull-to-refresh indicator — appears above status bar when dragging down from top */}
@@ -13150,7 +13249,7 @@ export default function Mizan(){
       left:"50%",transform:"translateX(-50%)",zIndex:95,
       background:"var(--mz-glass)",backdropFilter:"blur(16px) saturate(160%)",WebkitBackdropFilter:"blur(16px) saturate(160%)",
       border:"1px solid var(--mz-glass-border)",borderRadius:999,
-      padding:"6px 16px",fontFamily:FM,fontSize:11,color:ptrReady?T.blue:T.muted,
+      padding:"6px 16px",fontFamily:FM,fontSize:"var(--fs-xs)",color:ptrReady?T.blue:T.muted,
       boxShadow:"var(--mz-glass-shadow)",whiteSpace:"nowrap",pointerEvents:"none",
       transition:"color 0.15s",
     }}>{ptrReady?"↑ Release to refresh":"↓ Pull to refresh"}</div>}
@@ -13189,10 +13288,10 @@ export default function Mizan(){
     }}>
       <Icon name="arrowUp" size={18} color={T.blue}/>
       <div style={{flex:1}}>
-        <div style={{fontFamily:FM,fontSize:11,fontWeight:600,color:T.textHi,marginBottom:2}}>Install MĪZAN</div>
-        <div style={{fontFamily:FP,fontSize:11,color:T.muted}}>Tap Share → "Add to Home Screen"</div>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color:T.textHi,marginBottom:2}}>Install MĪZAN</div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted}}>Tap Share → "Add to Home Screen"</div>
       </div>
-      <button onClick={dismissIosHint} style={{background:"transparent",border:"none",color:T.muted,cursor:"pointer",fontSize:16,padding:T.s2,minHeight:44,minWidth:44,display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="close" size={16}/></button>
+      <button onClick={dismissIosHint} style={{background:"transparent",border:"none",color:T.muted,cursor:"pointer",fontSize:"var(--fs-xl)",padding:T.s2,minHeight:44,minWidth:44,display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="close" size={16}/></button>
     </div>}
 
     {/* DOCK — Mac-style floating nav at the bottom. Glass surface, rounded
@@ -13217,7 +13316,7 @@ export default function Mizan(){
           border:"none",
           borderRadius:999,
           color:active?"#fff":T.text,
-          fontFamily:FP,fontSize:12,fontWeight:active?600:500,
+          fontFamily:FP,fontSize:"var(--fs-sm)",fontWeight:active?600:500,
           letterSpacing:"-0.005em",
           cursor:"pointer",
           transition:"all 0.18s cubic-bezier(.34,1.56,.64,1)",
@@ -13229,7 +13328,7 @@ export default function Mizan(){
         width:36,height:36,padding:0,marginLeft:T.s1,flexShrink:0,
         display:"flex",alignItems:"center",justifyContent:"center",
         background:"transparent",border:"1px solid var(--mz-glass-border)",borderRadius:999,
-        color:T.text,fontFamily:FM,fontSize:14,fontWeight:600,cursor:"pointer",
+        color:T.text,fontFamily:FM,fontSize:"var(--fs-lg)",fontWeight:600,cursor:"pointer",
         transition:"all 0.18s cubic-bezier(.34,1.56,.64,1)",
       }}>?</button>
     </nav>
