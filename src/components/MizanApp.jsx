@@ -13187,7 +13187,14 @@ export default function Mizan(){
 
     {/* TOP BAR */}
     {/* STATUS BAR — slim, glanceable, single row. Brand left, info middle, actions right. */}
-    <header className="mz-status glass" style={{minHeight:"calc(48px + env(safe-area-inset-top, 0px))",padding:`env(safe-area-inset-top, 0px) ${T.s5} 0`,borderBottom:`1px solid var(--mz-glass-border)`,display:"flex",alignItems:"center",gap:T.s4,position:"sticky",top:0,zIndex:100}}>
+    <header className="mz-status glass" style={{minHeight:"calc(48px + env(safe-area-inset-top, 0px))",padding:`env(safe-area-inset-top, 0px) ${T.s5} 0`,borderBottom:`1px solid var(--mz-glass-border)`,display:"flex",alignItems:"center",gap:T.s4,position:"sticky",top:0,zIndex:100,
+      // The header is the one bar that must never exceed the viewport. During
+      // first paint — before React measures and the width-keyed rules settle —
+      // its children render at intrinsic width and the row reached 348px in a
+      // 320px viewport. html{overflow-x:clip} hid it, so nothing surfaced it
+      // for months except the smoke guard. Clipping HERE keeps the transient
+      // state correct instead of merely invisible.
+      maxWidth:"100%",overflow:"hidden"}}>
       <div className="mz-brand" style={{display:"flex",alignItems:"center",gap:T.s2,flexShrink:0}}>
         <img src={resolvedTheme==="dark"?"/mark-light.png":"/mark.png"} alt="" width={18} height={18} style={{display:"block",flexShrink:0}}/>
         <span style={{fontFamily:FU,fontSize:"var(--fs-lg)",fontWeight:700,color:T.textHi,letterSpacing:"0.04em"}}>MĪZAN</span>
@@ -13219,7 +13226,15 @@ export default function Mizan(){
       </div>
 
       {/* Right: compact action toggles + sync */}
-      <div className="mz-status-right" style={{display:"flex",alignItems:"center",gap:6,flexShrink:1,minWidth:0,justifyContent:"flex-end"}}>
+      {/* maxWidth:100% + overflow:hidden bound this group during the FIRST
+          PAINT. Before React has measured and the media queries settle, the
+          full-width labels render at their natural size and the header briefly
+          reaches 348px inside a 320px viewport. `overflow-x:clip` on html hides
+          that from the user, which is exactly why it went unnoticed — but it is
+          a real 28px overflow for ~100ms, and it is what the smoke guard was
+          catching. Bounding the box makes the transient state correct rather
+          than merely invisible. */}
+      <div className="mz-status-right" style={{display:"flex",alignItems:"center",gap:6,flexShrink:1,minWidth:0,maxWidth:"100%",overflow:"hidden",justifyContent:"flex-end"}}>
         <NotificationBell
           items={notifications}
           onMarkAllRead={()=>writeNotifications(markAllRead(notifications))}

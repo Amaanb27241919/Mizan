@@ -21,7 +21,8 @@
     "gen:backlog": "node scripts/gen-backlog-summary.mjs",
     "gen:splash": "node scripts/generate-ios-splash.mjs",
     "check:splash": "node scripts/generate-ios-splash.mjs --check",
-    "gen:screenshots": "node scripts/generate-pwa-screenshots.mjs"
+    "gen:screenshots": "node scripts/generate-pwa-screenshots.mjs",
+    "gen:legal-pdfs": "node scripts/generate-legal-pdfs.mjs"
   },
   "dependencies": {
     "@playwright/test": "^1.61.0",

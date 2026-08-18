@@ -1,8 +1,9 @@
 import LegalLayout from "./LegalLayout.jsx";
+import { legalUpdatedLabel } from "../lib/legal.js";
 
 export default function Privacy() {
   return (
-    <LegalLayout title="Privacy Policy" updated="May 12, 2026">
+    <LegalLayout title="Privacy Policy" updated={legalUpdatedLabel()}>
       <p className="mz-lead">
         MĪZAN ("we", "us", "the service") is a personal finance dashboard that
         helps you view your bank accounts, brokerage holdings, transactions,
@@ -38,9 +39,10 @@ export default function Privacy() {
         <li>An access token (stored server-side only, never sent to your browser).</li>
         <li>Account metadata: institution name, account name, masked number,
             type, subtype, current and available balances, currency.</li>
-        <li>Recent transactions (merchant, amount, date, category).
-            Transactions are fetched live each session and are not stored in our
-            database.</li>
+        <li>Recent transactions (merchant, amount, date, category). These{" "}
+            <strong>are stored</strong> in our database so your spending
+            history, budgets and recurring-payment detection survive between
+            sessions.</li>
         <li>Recurring-transaction detection (subscriptions and recurring bills).</li>
       </ul>
       <p>
@@ -70,6 +72,16 @@ export default function Privacy() {
         actions (login, MFA changes, bank connect/disconnect, session revoke),
         and unhandled error events (via Sentry, with personally identifying
         information scrubbed).
+      </p>
+
+      <h3>2.6 Product usage counts</h3>
+      <p>
+        We keep a running count of how many times you open each part of the
+        app (for example "Zakat" or "Screener"), so we can see which features
+        are worth keeping and which are not. This is a <strong>counter, not an
+        activity log</strong>: we store a number per section, not a timeline,
+        so it cannot show when you used MĪZAN or in what order. It contains no
+        financial information of any kind, and no IP address or device details.
       </p>
 
       <h2>3. How we use your data</h2>
@@ -104,7 +116,14 @@ export default function Privacy() {
         <li><strong>SnapTrade</strong> — brokerage aggregation. See
             <a href="https://snaptrade.com/legal" target="_blank" rel="noreferrer"> SnapTrade's privacy notice</a>.</li>
         <li><strong>Sentry</strong> — error monitoring, with PII scrubbing.</li>
-        <li><strong>Resend</strong> — transactional security email.</li>
+        <li><strong>Resend</strong> — transactional and account email.</li>
+        <li><strong>Anthropic</strong> — powers the AI Assistant. When you send
+            the Assistant a message, the relevant parts of your portfolio (such
+            as holdings, cost basis and screening verdicts) are sent to
+            Anthropic's API so it can answer about your own data. It is used to
+            explain your information, never to make investment recommendations.
+            If you never open the Assistant, nothing is sent. See{" "}
+            <a href="https://www.anthropic.com/legal/privacy">Anthropic's privacy policy</a>.</li>
       </ul>
       <p>
         We do not share your data with advertisers, data brokers, or any
@@ -117,8 +136,13 @@ export default function Privacy() {
       <ul>
         <li>Account credentials, profile data, and connected-institution
             metadata are retained for as long as your MĪZAN account exists.</li>
-        <li>Plaid transactions are <strong>not stored</strong>. They are fetched
-            live each session via <code>/transactions/sync</code>.</li>
+        <li>Bank transactions retrieved through Plaid <strong>are stored</strong>
+            in our database and kept for as long as the institution stays
+            connected to your account. They are synced incrementally via
+            <code>/transactions/sync</code> so that budgets, spending history
+            and recurring-payment detection work across sessions.</li>
+        <li>Product usage counts are kept for as long as your account exists
+            and are deleted with it.</li>
         <li>Audit log entries are retained for at least 12 months for
             security and compliance review.</li>
         <li>If you disconnect an institution, we call Plaid's

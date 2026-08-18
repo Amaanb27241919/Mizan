@@ -412,6 +412,16 @@ Helper classes (all no-ops on a mouse):
 
 Two traps that make defects here invisible: `html{overflow-x:clip}` means over-wide content is **silently clipped, never scrollable** (no scrollbar to notice), and flex parents can report honest non-overlapping rects while their *children* paint on top of each other. Both must be measured, not eyeballed. `e2e/responsive.spec.js` guards all of it across login + every tab + every sub-tab; `playwright.config.js` sets `hasTouch: true`, which is **what makes Chromium report `pointer:coarse`** — without it the touch rules never evaluate and the suite passes by not testing them.
 
+### Legal documents (added 2026-08-18)
+**The web page is the source of truth. The PDF is a rendering of it.** They used to be maintained separately and drifted — see the audit doc for what that cost.
+
+- `/privacy` and `/terms` are React pages (`src/components/Privacy.jsx`, `Terms.jsx`). **Edit these.**
+- `legal/*.pdf` + `public/legal/*.pdf` for Privacy and Terms are **generated, never hand-edited**: `npm run build && npx vite preview --port 4173 --strictPort &` then `npm run gen:legal-pdfs`. Both copies are written together, since they must not diverge.
+- Security / Access Controls / Data Retention are PDF-only with no web equivalent — the generator deliberately skips them rather than emitting blanks.
+- The "last updated" date comes from **`LEGAL_LAST_UPDATED` in `src/lib/legal.js`**, which the pages render *and* the review reminder reads. Don't hardcode a date into a page; two dates that can disagree eventually do.
+- **Quarterly review** (90 days) runs inside the daily `/api/cron/cleanup` sweep via `checkLegalReview()` and emails the owner when overdue. It rides the daily cron because the Vercel plan allows only daily schedules, and because a reminder derived from the document's own date can't drift from it.
+- `src/test/legal.test.js` asserts the claims that can be checked mechanically. **When a feature changes what data is collected, stored or sent to a third party, update the policy in the same commit** — the 2026-08-18 review found the policy claiming transactions weren't stored while 2,039 rows sat in the database, and omitting Anthropic while the Assistant sent holdings to it. Both were features shipping after the policy was written.
+
 ### Type scale — fluid, and in rem (added 2026-08-18)
 **Never write a bare px font size.** Use the `--fs-*` tokens in THEME_CSS (`--fs-2xs` … `--fs-6xl`); all 1,260 call sites were migrated off px. Each is a `clamp()` interpolating between a 320px and a 1440px viewport, so type is in tune at every width instead of jumping at breakpoints.
 

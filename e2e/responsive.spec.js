@@ -131,6 +131,15 @@ test.describe("responsive — portrait phones", () => {
       await signedIn(page);
       await page.goto("/");
       await appReady(page);
+      // Re-apply the viewport AFTER navigation. Resizing before goto() leaves
+      // the media queries evaluated against the previous size for this loop's
+      // second and later iterations — the dock measured 14-16px type instead
+      // of the 11px floor and reported up to 89px of phantom overflow. The app
+      // was fine; the harness was measuring a stale layout. Reproduced by
+      // hand at 320x568 (0px direct, 41px inside the loop) before changing
+      // anything, so this is a test fix and not a masked regression.
+      await page.setViewportSize({ width: w, height: h });
+      await page.waitForTimeout(150);
       const over = await page.evaluate(() => {
         const d = document.querySelector(".mz-dock");
         return d ? d.scrollWidth - d.clientWidth : 0;
