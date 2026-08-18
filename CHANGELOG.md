@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-18
+
+### Fixed
+- **finances:** Cut the tab in half, and fix the crash the fixtures hid (`d58ac5a`)
+
 ## 2026-08-17
 
 ### Added
