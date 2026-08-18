@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-08-17
 
+### Added
+- **budget:** Envelope budgeting foundation — migration 027 + the pure math (`9e6a93c`)
+
 ### Fixed
 - **screening:** Make the chosen standard actually drive compliance, app-wide (`3006424`)
 

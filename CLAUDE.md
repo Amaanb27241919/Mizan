@@ -57,7 +57,17 @@ src/components/Goals.jsx       — Goals tab (extracted). Savings goals + DEBT P
 src/components/PerformancePanel.jsx — Overview "RETURN & RISK" panel: money-weighted return
                                  (XIRR), realized/unrealized P&L split, risk metrics. Pure math
                                  in src/lib/performance.js.
-src/components/Budgeting.jsx   — Budget tab (extracted component)
+src/components/Budgeting.jsx   — ENVELOPE (zero-based) budget, mounted in Finances as a
+                                 CollapsibleTile. Math lives in src/lib/envelope.js (pure,
+                                 ported from actualbudget/actual). Stores ONLY user intent
+                                 (budgeted, carryover); leftover / overspend / To-Budget are
+                                 all DERIVED, so nothing can drift. Tables: budget_entries +
+                                 budget_months (migration 027) — the flat `budgets` table and
+                                 /api/budgets are SUPERSEDED (0 rows, never had a UI).
+                                 ⚠️ Envelope balances are PATH-DEPENDENT: always compute from
+                                 the first budgeted month, never a mid-history window, or you
+                                 get a plausible wrong balance. /api/budget returns the whole
+                                 history for exactly this reason.
 src/components/BillsCalendar.jsx — Bills calendar
 src/components/ConnectionHealth.jsx — Account connection status
 src/components/ComingSoon.jsx  — Coming soon placeholder
@@ -247,6 +257,9 @@ scripts/generate-ios-splash.mjs      — iOS launch images + their <link> tags; 
 023_email_digest.sql           — (note: TWO files share the 023 prefix — dca + email_digest)
 024_etf_holdings_cache.sql     — service-role-only holdings cache for the ETF Overlap Analyzer
 025_messages.sql               — in-app two-way support thread (user↔operator); service-role writes, RLS select-own. Powers Settings → Messages + Admin → Messages
+027_envelope_budgeting.sql     — budget_entries + budget_months. Envelope budgeting with
+                                 rollover; CHECK pins `month` to the 1st so one month can never
+                                 split into two buckets. Supersedes 013_budgets.sql.
 026_user_names.sql             — profiles.first_name + last_name (nullable) + handle_new_user trigger now copies them from auth metadata. Signup collects the name; every pre-026 account gets the `NameNudge` — a GENTLE bottom-right toast on Overview only (owner call: never a blocking modal), skippable 3× then skip-less. Skip count = synced TRACKED_KEY `mizan_name_prompt_skips`, so it's per-user not per-device. Writes go through POST /api/user/profile (service role — profiles has no user UPDATE policy, and one would expose is_root/suspended on the same row)
 ```
 

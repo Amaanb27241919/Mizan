@@ -14,6 +14,7 @@ import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHist
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
+import Budgeting from "./Budgeting.jsx";
 // Generated from BACKLOG.md at build time — headings only (~15KB), never the
 // 176KB markdown. See scripts/gen-backlog-summary.mjs.
 import BACKLOG from "../generated/backlog.json";
@@ -10562,6 +10563,16 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     })}
 
     {/* ─── SPENDING BY CATEGORY ─────────────────── */}
+    {/* ── BUDGET ──────────────────────────────────────────────
+        Envelope (zero-based) budgeting. Mounted 2026-08-18 — this component
+        existed as 429 lines of dead code that was never imported, so no user
+        has ever been able to budget in Mizan despite the table, the API and
+        the UI all being present. Collapsible like its neighbours so the
+        Finances tab stays short while the feature stays discoverable. */}
+    <CollapsibleTile flat title="BUDGET" subtitle="Give every dollar a job — envelope budgeting with rollover" storageKey="fin_budget" defaultOpen>
+      <Budgeting txns={txns} demoMode={demoMode} bankLinked={accounts.length>0}/>
+    </CollapsibleTile>
+
     {spendingByCategory.entries.length>0&&(()=>{
       const{entries,monthTotal}=spendingByCategory;
       const now=new Date();

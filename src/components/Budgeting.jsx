@@ -1,18 +1,26 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiFetch } from "../lib/apiFetch.js";
+import {
+  monthKey, prevMonth, nextMonth, spentByCategory, computeSeries,
+  ISLAMIC_CATEGORY_PRESETS,
+} from "../lib/envelope.js";
 
-/* ─── BUDGETING ──────────────────────────────────────────
- * Per-category monthly spending caps with actual-vs-budget
- * progress bars. Mirrors the visual language of MizanApp's
- * "SPENDING BY CATEGORY" tile but adds editable limits and
- * percentage tracking.
+/* ─── ENVELOPE BUDGET ────────────────────────────────────
+ * Zero-based budgeting: you can only assign money you actually have, and
+ * every dollar gets a job. Ported from actualbudget/actual's model — see
+ * src/lib/envelope.js for the math, which is pure and separately tested.
  *
- * Tokens are an inline subset of MizanApp's `T` and font
- * stacks — kept here to avoid coupling this file to
- * MizanApp.jsx and the circular-import risk that comes with
- * importing from a 6000-line module. (Same pattern Skeleton.jsx
- * uses.) When MizanApp eventually exports T/FM/FU, swap to the
- * import.
+ * This component is deliberately thin: it fetches, renders, and writes single
+ * fields. Every number on screen is DERIVED by envelope.js from (budgeted,
+ * carryover, transactions) — nothing computed here, nothing stored twice.
+ *
+ * HISTORY: the previous version of this file was a flat per-category cap with
+ * no month dimension, and it was never mounted anywhere — 429 lines of dead
+ * code that made CLAUDE.md's "Budget tab" claim false. It is replaced, not
+ * extended, because rollover cannot be bolted onto a schema with no months.
+ *
+ * Tokens are an inline subset of MizanApp's `T`, kept local to avoid a
+ * circular import with the 13k-line monolith (same pattern as CommandPalette).
  * ──────────────────────────────────────────────────────── */
 
 const TT = {
@@ -24,111 +32,66 @@ const TT = {
   textHi:   "var(--mz-textHi)",
   muted:    "var(--mz-muted)",
   dim:      "var(--mz-dim)",
-  gain:     "#117a52",  // jade — under budget, healthy
-  gold:     "#b8842a",  // amber — approaching cap
-  loss:     "#b23a3d",  // rust — over cap
-  blue:     "#1e4e8c",  // gold — primary accent
-  rSm:      "var(--r-sm)",
-  rMd:      "var(--r-md)",
-  rLg:      "var(--r-lg)",
-  s1:       "var(--s-1)",
-  s2:       "var(--s-2)",
-  s3:       "var(--s-3)",
-  s4:       "var(--s-4)",
-  s5:       "var(--s-5)",
-  s6:       "var(--s-6)",
-  shadow:   "var(--mz-shadow)",
+  gain:     "#117a52",  // jade — funded / under budget
+  gold:     "#b8842a",  // amber — approaching the cap
+  loss:     "#b23a3d",  // rust — overspent
+  blue:     "#1e4e8c",  // navy — primary accent
+  rSm: "var(--r-sm)", rMd: "var(--r-md)", rLg: "var(--r-lg)",
+  s1: "var(--s-1)", s2: "var(--s-2)", s3: "var(--s-3)",
+  s4: "var(--s-4)", s5: "var(--s-5)", s6: "var(--s-6)",
 };
 const FP = "'IBM Plex Sans',system-ui,-apple-system,BlinkMacSystemFont,sans-serif";
 const FM = "'IBM Plex Mono','JetBrains Mono','Menlo','Monaco',monospace";
-const FU = FP;
+const FU = "'Fraunces',Georgia,serif";
 
-const fmtUSD = v => `$${(+v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtUSD = v =>
+  `${v < 0 ? "−" : ""}$${Math.abs(+v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const monthLabel = m => {
+  const d = new Date(`${m}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? m
+    : d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+};
 
-// Pick the progress-bar color based on actual / limit ratio. Mirrors
-// the three semantic tokens already used elsewhere in MizanApp.
-function progressColor(pct) {
-  if (pct > 100) return TT.loss;
-  if (pct >= 80) return TT.gold;
-  return TT.gain;
-}
-
-// Inline BentoTile clone — same shape as MizanApp's, kept local to
-// avoid the circular import. If MizanApp exports BentoTile later,
-// swap to the import.
 function Tile({ children, accent, style }) {
   return (
-    <div
-      className="bento-tile"
-      style={{
-        background: TT.card,
-        border: `1px solid ${TT.border}`,
-        borderTop: accent ? `2px solid ${accent}` : `1px solid ${TT.border}`,
-        borderLeft: accent ? `1px solid ${accent}30` : `1px solid ${TT.border}`,
-        borderRadius: TT.rLg,
-        padding: `${TT.s5} ${TT.s5}`,
-        boxShadow: "var(--sh-md)",
-        position: "relative",
-        overflow: "hidden",
-        transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, border-color 0.2s",
-        ...(style || {}),
-      }}
-    >
+    <div style={{
+      position: "relative", background: "var(--mz-tile-fill, var(--mz-card))",
+      border: `1px solid ${TT.border}`, borderRadius: TT.rLg,
+      padding: TT.s5, overflow: "hidden", ...style,
+    }}>
+      {accent && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: accent }} />}
       {children}
     </div>
   );
 }
 
-export default function Budgeting({ txns = [], demoMode = false }) {
-  const [budgets, setBudgets] = useState([]);   // [{category, monthly_limit, currency}]
+export default function Budgeting({ txns = [], demoMode = false, bankLinked = false }) {
+  const [month, setMonth] = useState(() => monthKey(new Date()));
+  const [entries, setEntries] = useState([]);      // [{month, category, budgeted, carryover}]
+  const [months, setMonths] = useState([]);        // [{month, manual_income}]
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [saving, setSaving] = useState("");        // category currently being written
   const [adding, setAdding] = useState(false);
   const [newCat, setNewCat] = useState("");
-  const [newLimit, setNewLimit] = useState("");
 
-  // ── Load budgets on mount ────────────────────────────
+  // ── Load the WHOLE history, not just this month ──────────
+  // Envelope balances are path-dependent: each month's leftover feeds the next.
+  // Fetching only the visible month would compute a plausible WRONG balance.
   useEffect(() => {
+    if (demoMode) { setLoading(false); return; }
     let cancelled = false;
     (async () => {
-      // In demo mode we don't hit the API — start with a small
-      // suggested fixture so the UI still has something to render.
-      if (demoMode) {
-        setBudgets([
-          { category: "FOOD_AND_DRINK",  monthly_limit: 400, currency: "USD" },
-          { category: "TRANSPORTATION",  monthly_limit: 200, currency: "USD" },
-          { category: "ENTERTAINMENT",   monthly_limit: 150, currency: "USD" },
-        ]);
-        setLoading(false);
-        return;
-      }
+      setLoading(true); setErr("");
       try {
-        // apiFetch returns a Response; parse JSON explicitly. Earlier draft
-        // treated `r` as already-parsed and silently set an empty list.
-        const r = await apiFetch("/api/budgets");
+        const r = await apiFetch("/api/budget");
+        const d = await r.json().catch(() => ({}));
         if (cancelled) return;
-        if (!r.ok) {
-          // 503 + hint:"MIGRATION_PENDING" → table not provisioned yet.
-          if (r.status === 503) {
-            const body = await r.json().catch(() => ({}));
-            if (body?.hint === "MIGRATION_PENDING") {
-              setErr({ pending: true, migration: body.migration || "013_budgets.sql" });
-              setBudgets([]);
-              return;
-            }
-          }
-          if (r.status === 401) { setBudgets([]); return; }
-          throw new Error(`HTTP ${r.status}`);
-        }
-        const json = await r.json();
-        const list = Array.isArray(json?.budgets) ? json.budgets : [];
-        setBudgets(list.map(b => ({
-          category:      b.category,
-          monthly_limit: Number(b.monthly_limit) || 0,
-          currency:      b.currency || "USD",
-        })));
-      } catch (e) {
-        if (!cancelled) setErr(e?.message || "Failed to load budgets");
+        if (!r.ok) { setErr(d?.error || "Couldn't load your budget."); return; }
+        setEntries(Array.isArray(d.entries) ? d.entries : []);
+        setMonths(Array.isArray(d.months) ? d.months : []);
+      } catch {
+        if (!cancelled) setErr("Couldn't reach the server. Your budget is safe — try again.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -136,294 +99,293 @@ export default function Budgeting({ txns = [], demoMode = false }) {
     return () => { cancelled = true; };
   }, [demoMode]);
 
-  // ── Spent-this-month per category ────────────────────
-  // Sum outflows (amount > 0) whose date is in the current calendar
-  // month AND whose Plaid personal_finance_category.primary matches.
-  const spentByCat = useMemo(() => {
-    const firstOfMonth = new Date();
-    firstOfMonth.setDate(1);
-    firstOfMonth.setHours(0, 0, 0, 0);
-    const monthStart = firstOfMonth.toISOString().slice(0, 10);
+  // ── Derive everything ────────────────────────────────────
+  const allMonths = useMemo(() => {
+    const set = new Set([...entries.map(e => e.month), ...months.map(m => m.month), month]);
+    return [...set].filter(Boolean).sort();
+  }, [entries, months, month]);
+
+  const byMonth = useMemo(() => {
     const out = {};
-    for (const t of (txns || [])) {
-      if (!t || typeof t.amount !== "number" || t.amount <= 0) continue;
-      if (!t.date || t.date < monthStart) continue;
-      const cat = t.personal_finance_category?.primary;
-      if (!cat) continue;
-      out[cat] = (out[cat] || 0) + t.amount;
+    for (const m of allMonths) {
+      out[m] = {
+        entries: Object.fromEntries(
+          entries.filter(e => e.month === m).map(e => [e.category, { budgeted: e.budgeted, carryover: e.carryover }]),
+        ),
+        spent: spentByCategory(txns, m),
+      };
     }
     return out;
-  }, [txns]);
+  }, [allMonths, entries, txns]);
 
-  // ── Categories the user could add a cap to (present this month
-  //    in txns but not yet budgeted). Sorted by spend desc so the
-  //    biggest line items surface first. ─────────────────────────
-  const addableCats = useMemo(() => {
-    const budgeted = new Set(budgets.map(b => b.category));
-    return Object.entries(spentByCat)
-      .filter(([cat]) => !budgeted.has(cat))
-      .sort((a, b) => b[1] - a[1])
-      .map(([cat]) => cat);
-  }, [spentByCat, budgets]);
-
-  // ── Totals for the top tile ──────────────────────────
-  const totals = useMemo(() => {
-    let spent = 0;
-    let budgeted = 0;
-    for (const b of budgets) {
-      spent += spentByCat[b.category] || 0;
-      budgeted += b.monthly_limit;
+  // Income per month. Manual entry wins when present — it is the fallback for
+  // the majority of users who have no bank linked. Otherwise derive from
+  // inflow transactions (negative outflow convention means inflow is < 0 in
+  // Plaid terms, so we sum the raw positive credits).
+  const incomeByMonth = useMemo(() => {
+    const manual = Object.fromEntries(months.filter(m => m.manual_income !== null).map(m => [m.month, m.manual_income]));
+    const out = {};
+    for (const m of allMonths) {
+      if (manual[m] !== undefined) { out[m] = manual[m]; continue; }
+      const next = nextMonth(m);
+      out[m] = txns.reduce((s, t) => {
+        const d = String(t?.date || "").slice(0, 10);
+        if (!d || d < m || d >= next) return s;
+        const amt = Number(t.amount) || 0;
+        return amt < 0 ? s + Math.abs(amt) : s;   // Plaid: credit is negative
+      }, 0);
     }
-    return { spent, budgeted, count: budgets.length };
-  }, [budgets, spentByCat]);
+    return out;
+  }, [months, allMonths, txns]);
 
-  // ── Persist a single budget. limit <= 0 / null deletes the row.
-  const saveBudget = useCallback(async (category, limit) => {
-    const numeric = limit === "" || limit === null || limit === undefined ? null : Number(limit);
-    const isDelete = !Number.isFinite(numeric) || numeric <= 0;
+  const series = useMemo(
+    () => computeSeries(allMonths, byMonth, incomeByMonth),
+    [allMonths, byMonth, incomeByMonth],
+  );
+  const current = series[month] || { leftover: {}, toBudget: 0, income: 0, totalBudgeted: 0, overspent: 0 };
+  const manualForMonth = months.find(m => m.month === month)?.manual_income ?? null;
 
-    // Optimistic local update first.
-    setBudgets(prev => {
-      if (isDelete) return prev.filter(b => b.category !== category);
-      const existing = prev.find(b => b.category === category);
-      if (existing) {
-        return prev.map(b => b.category === category ? { ...b, monthly_limit: numeric } : b);
-      }
-      return [...prev, { category, monthly_limit: numeric, currency: "USD" }];
+  const rows = useMemo(() => {
+    const cats = new Set([
+      ...Object.keys(byMonth[month]?.entries || {}),
+      ...Object.keys(byMonth[month]?.spent || {}),
+    ]);
+    return [...cats].sort().map(c => ({
+      category: c,
+      budgeted: byMonth[month]?.entries?.[c]?.budgeted ?? 0,
+      carryover: !!byMonth[month]?.entries?.[c]?.carryover,
+      spent: byMonth[month]?.spent?.[c] ?? 0,     // negative
+      leftover: current.leftover?.[c] ?? 0,
+    }));
+  }, [byMonth, month, current]);
+
+  // ── Writes ───────────────────────────────────────────────
+  const saveEntry = useCallback(async (category, patch) => {
+    const existing = entries.find(e => e.month === month && e.category === category);
+    const body = {
+      month, category,
+      budgeted: patch.budgeted ?? existing?.budgeted ?? 0,
+      carryover: patch.carryover ?? existing?.carryover ?? false,
+    };
+    // Optimistic: the user is typing, and a round-trip per keystroke would feel
+    // broken. Rolled back below if the write fails.
+    const snapshot = entries;
+    setEntries(prev => {
+      const rest = prev.filter(e => !(e.month === month && e.category === category));
+      return [...rest, { ...body }];
     });
-
-    if (demoMode) return;
+    setSaving(category);
     try {
-      await apiFetch("/api/budgets", {
-        method: "PUT",
-        body: JSON.stringify({ category, monthly_limit: isDelete ? null : numeric }),
-        headers: { "Content-Type": "application/json" },
+      const r = await apiFetch("/api/budget/entry", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
-    } catch (e) {
-      setErr(e?.message || "Failed to save budget");
-    }
-  }, [demoMode]);
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setEntries(snapshot);
+        setErr(d?.error || "That change didn't save.");
+      } else { setErr(""); }
+    } catch {
+      setEntries(snapshot);
+      setErr("That change didn't save — you're offline.");
+    } finally { setSaving(""); }
+  }, [entries, month]);
 
-  // ── Add-category flow ────────────────────────────────
-  const submitAdd = useCallback(async () => {
-    const cat = newCat.trim();
-    const lim = Number(newLimit);
-    if (!cat || !Number.isFinite(lim) || lim <= 0) return;
-    await saveBudget(cat, lim);
-    setNewCat("");
-    setNewLimit("");
-    setAdding(false);
-  }, [newCat, newLimit, saveBudget]);
+  const saveIncome = useCallback(async (value) => {
+    const manual_income = value === "" ? null : Number(value);
+    const snapshot = months;
+    setMonths(prev => [...prev.filter(m => m.month !== month), { month, manual_income }]);
+    try {
+      const r = await apiFetch("/api/budget/month", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, manual_income }),
+      });
+      if (!r.ok) { setMonths(snapshot); setErr("Income didn't save."); }
+    } catch { setMonths(snapshot); setErr("Income didn't save — you're offline."); }
+  }, [months, month]);
 
-  // ── Render ───────────────────────────────────────────
+  const addCategory = useCallback(async (category, carryover = false) => {
+    const name = (category || "").trim();
+    if (!name) return;
+    setAdding(false); setNewCat("");
+    await saveEntry(name, { budgeted: 0, carryover });
+  }, [saveEntry]);
+
+  // ── Render ───────────────────────────────────────────────
   if (loading) {
+    return <Tile><div style={{ fontFamily: FM, fontSize: 12, color: TT.muted }}>Loading your budget…</div></Tile>;
+  }
+
+  if (demoMode) {
     return (
-      <Tile>
-        <div style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.16em", fontWeight: 600 }}>
-          BUDGETS · LOADING…
+      <Tile accent={TT.gold}>
+        <div style={{ fontFamily: FM, fontSize: 10, color: TT.gold, letterSpacing: "0.16em", fontWeight: 600, marginBottom: TT.s2 }}>BUDGET</div>
+        <div style={{ fontFamily: FP, fontSize: 13, color: TT.muted, lineHeight: 1.55 }}>
+          Budgets are tied to your own accounts, so they're hidden in demo mode. Turn demo off to set one up.
         </div>
       </Tile>
     );
   }
 
-  const sortedBudgets = [...budgets].sort((a, b) => a.category.localeCompare(b.category));
+  const toBudget = current.toBudget;
+  const toBudgetColor = current.overAssigned ? TT.loss : current.isBalanced ? TT.gain : TT.blue;
+  const presetsToOffer = ISLAMIC_CATEGORY_PRESETS.filter(
+    p => !rows.some(r => r.category.toLowerCase() === p.category.toLowerCase()),
+  );
 
   return (
-    <Tile>
-      {/* Header tile */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: TT.s4, flexWrap: "wrap", gap: TT.s2 }}>
-        <span style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.16em", fontWeight: 600 }}>
-          BUDGETS · {totals.count} {totals.count === 1 ? "category" : "categories"} · {fmtUSD(totals.spent)} spent / {fmtUSD(totals.budgeted)} budgeted this month
-        </span>
-        {!adding && addableCats.length > 0 && (
-          <button
-            type="button"
-            onClick={() => { setAdding(true); setNewCat(addableCats[0] || ""); setNewLimit(""); }}
-            style={{
-              fontFamily: FM, fontSize: 11, color: TT.textHi, letterSpacing: "0.06em",
-              padding: `${TT.s2} ${TT.s3}`, borderRadius: TT.rSm,
-              background: "transparent", border: `1px solid ${TT.borderHi}`,
-              cursor: "pointer", fontWeight: 600,
-            }}
-          >
-            + Add category
-          </button>
-        )}
-      </div>
-
-      {err && err.pending ? (
-        <div style={{
-          fontFamily: FU, fontSize: 12, color: TT.gold,
-          padding: TT.s3, marginBottom: TT.s3,
-          background: `${TT.gold}12`, border: `1px solid ${TT.gold}40`, borderRadius: TT.rMd,
-          lineHeight: 1.5,
-        }}>
-          <strong style={{ fontFamily: FM, fontSize: 10, letterSpacing: "0.16em", color: TT.gold, display: "block", marginBottom: TT.s1 }}>SETUP PENDING</strong>
-          Budgets table not provisioned yet. Apply <code style={{ fontFamily: FM, background: `${TT.gold}22`, padding: "1px 6px", borderRadius: 3 }}>{err.migration}</code> in the Supabase SQL editor and refresh.
-        </div>
-      ) : err && (
-        <div style={{ fontFamily: FM, fontSize: 11, color: TT.loss, marginBottom: TT.s3 }}>
-          {typeof err === "string" ? err : (err.message || "Failed to load budgets")}
-        </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: TT.s4 }}>
+      {err && (
+        <div role="alert" style={{
+          fontFamily: FM, fontSize: 11, color: TT.loss, background: `${TT.loss}12`,
+          border: `1px solid ${TT.loss}40`, borderRadius: TT.rMd, padding: `${TT.s2} ${TT.s3}`,
+        }}>{err}</div>
       )}
 
-      {/* Inline picker for adding a new budget */}
-      {adding && (
-        <div style={{
-          display: "grid", gridTemplateColumns: "1fr 120px auto auto", gap: TT.s2,
-          alignItems: "center", marginBottom: TT.s4,
-          padding: TT.s3, borderRadius: TT.rMd, background: TT.surface, border: `1px solid ${TT.border}`,
-        }}>
-          <select
-            value={newCat}
-            onChange={e => setNewCat(e.target.value)}
-            style={{
-              fontFamily: FU, fontSize: 13, color: TT.text,
-              padding: `${TT.s2} ${TT.s3}`, borderRadius: TT.rSm,
-              background: TT.card, border: `1px solid ${TT.border}`,
-            }}
-          >
-            {addableCats.length === 0 && <option value="">No categories available</option>}
-            {addableCats.map(c => (
-              <option key={c} value={c}>{c.replace(/_/g, " ")}</option>
-            ))}
-          </select>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="Monthly cap"
-            value={newLimit}
-            onChange={e => setNewLimit(e.target.value)}
-            style={{
-              fontFamily: FM, fontSize: 13, color: TT.text,
-              padding: `${TT.s2} ${TT.s3}`, borderRadius: TT.rSm,
-              background: TT.card, border: `1px solid ${TT.border}`,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          />
-          <button
-            type="button"
-            onClick={submitAdd}
-            disabled={!newCat || !Number.isFinite(Number(newLimit)) || Number(newLimit) <= 0}
-            style={{
-              fontFamily: FM, fontSize: 11, color: "#FFFFFF", letterSpacing: "0.06em",
-              padding: `${TT.s2} ${TT.s4}`, borderRadius: TT.rSm,
-              background: TT.blue, border: `1px solid ${TT.blue}`,
-              cursor: "pointer", fontWeight: 600,
-              opacity: (!newCat || !Number.isFinite(Number(newLimit)) || Number(newLimit) <= 0) ? 0.5 : 1,
-            }}
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={() => { setAdding(false); setNewCat(""); setNewLimit(""); }}
-            style={{
-              fontFamily: FM, fontSize: 11, color: TT.muted, letterSpacing: "0.06em",
-              padding: `${TT.s2} ${TT.s3}`, borderRadius: TT.rSm,
-              background: "transparent", border: `1px solid ${TT.border}`,
-              cursor: "pointer", fontWeight: 600,
-            }}
-          >
-            Cancel
+      {/* ── To Budget: the whole point of zero-based ── */}
+      <Tile accent={toBudgetColor}>
+        <div className="mz-ctrl-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: TT.s3, flexWrap: "wrap", marginBottom: TT.s3 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: TT.s2 }}>
+            <button className="mz-tap" onClick={() => setMonth(prevMonth(month))} aria-label="Previous month"
+              style={{ background: "transparent", border: `1px solid ${TT.border}`, borderRadius: TT.rSm, color: TT.text, cursor: "pointer", padding: `4px ${TT.s3}`, fontFamily: FM }}>‹</button>
+            <span style={{ fontFamily: FM, fontSize: 11, color: TT.textHi, letterSpacing: "0.08em", minWidth: 120, textAlign: "center" }}>
+              {monthLabel(month)}
+            </span>
+            <button className="mz-tap" onClick={() => setMonth(nextMonth(month))} aria-label="Next month"
+              style={{ background: "transparent", border: `1px solid ${TT.border}`, borderRadius: TT.rSm, color: TT.text, cursor: "pointer", padding: `4px ${TT.s3}`, fontFamily: FM }}>›</button>
+          </div>
+          <div style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.16em", fontWeight: 600 }}>TO BUDGET</div>
+        </div>
+
+        <div style={{ fontFamily: FU, fontSize: 34, fontWeight: 700, color: toBudgetColor, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>
+          {fmtUSD(toBudget)}
+        </div>
+        <div style={{ fontFamily: FM, fontSize: 11, color: TT.muted, marginTop: TT.s1, lineHeight: 1.5 }}>
+          {current.overAssigned
+            ? "You've assigned more than you have. Take it back from a category."
+            : current.isBalanced
+              ? "Every dollar has a job."
+              : "Still to assign — give it a job."}
+          {current.overspent < 0 && (
+            <> <span style={{ color: TT.loss }}>· {fmtUSD(current.overspent)} covering last month's overspend</span></>
+          )}
+        </div>
+
+        {/* Manual income — the path for users with no linked bank. */}
+        <div style={{ marginTop: TT.s4, display: "flex", alignItems: "center", gap: TT.s2, flexWrap: "wrap" }}>
+          <label htmlFor="mz-manual-income" style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.1em" }}>
+            INCOME THIS MONTH
+          </label>
+          <input id="mz-manual-income" type="number" inputMode="decimal" min="0" step="0.01"
+            className="field" style={{ width: 140 }}
+            placeholder={bankLinked ? "auto from bank" : "e.g. 4500"}
+            defaultValue={manualForMonth ?? ""}
+            onBlur={e => saveIncome(e.target.value)}
+            aria-label="Income this month" />
+          {manualForMonth === null && bankLinked && (
+            <span style={{ fontFamily: FM, fontSize: 10, color: TT.muted }}>
+              using {fmtUSD(current.income)} from your linked accounts
+            </span>
+          )}
+          {!bankLinked && manualForMonth === null && (
+            <span style={{ fontFamily: FM, fontSize: 10, color: TT.gold }}>
+              No bank linked — enter what you earned to start budgeting
+            </span>
+          )}
+        </div>
+      </Tile>
+
+      {/* ── Categories ── */}
+      <Tile>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: TT.s3, marginBottom: TT.s3, flexWrap: "wrap" }}>
+          <div style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.16em", fontWeight: 600 }}>
+            CATEGORIES · {rows.length}
+          </div>
+          <button className="mz-tap btn-ghost" onClick={() => setAdding(a => !a)}>
+            {adding ? "Cancel" : "+ Add category"}
           </button>
         </div>
-      )}
 
-      {/* Per-category rows */}
-      {sortedBudgets.length === 0 && !adding && (
-        <div style={{ fontFamily: FM, fontSize: 12, color: TT.muted, padding: `${TT.s4} 0` }}>
-          No budgets yet.{addableCats.length > 0 ? " Click + Add category to set your first cap." : ""}
-        </div>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: TT.s3 }}>
-        {sortedBudgets.map(b => {
-          const spent = spentByCat[b.category] || 0;
-          const limit = b.monthly_limit;
-          const pct = limit > 0 ? (spent / limit) * 100 : 0;
-          const barPct = Math.min(pct, 100);
-          const color = progressColor(pct);
-
-          return (
-            <div key={b.category} style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(140px, 180px) 1fr 180px 100px 32px",
-              gap: TT.s3,
-              alignItems: "center",
-            }}>
-              <span style={{ fontFamily: FU, fontSize: 13, color: TT.text, letterSpacing: "-0.005em" }}>
-                {b.category.replace(/_/g, " ")}
-              </span>
-
-              <div style={{ height: 8, background: TT.dim, borderRadius: 2, overflow: "hidden" }}>
-                <div style={{
-                  height: "100%",
-                  width: `${barPct}%`,
-                  background: color,
-                  borderRadius: 2,
-                  transition: "width 0.24s ease-out, background 0.24s",
-                }} />
-              </div>
-
-              <span style={{
-                fontFamily: FM, fontSize: 12, color: TT.textHi, fontWeight: 500,
-                fontVariantNumeric: "tabular-nums", textAlign: "right",
-              }}>
-                {fmtUSD(spent)}
-                <span style={{ color: TT.muted, fontWeight: 400 }}> / </span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  defaultValue={limit}
-                  aria-label={`${b.category.replace(/_/g, " ")} monthly limit`}
-                  onBlur={e => {
-                    const v = e.target.value;
-                    const n = Number(v);
-                    if (v === "" || !Number.isFinite(n) || n <= 0) {
-                      saveBudget(b.category, null);
-                    } else if (n !== limit) {
-                      saveBudget(b.category, n);
-                    }
-                  }}
-                  onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                  style={{
-                    width: 80,
-                    fontFamily: FM, fontSize: 12, color: TT.textHi, fontWeight: 500,
-                    padding: `${TT.s1} ${TT.s2}`, borderRadius: TT.rSm,
-                    background: TT.surface, border: `1px solid ${TT.border}`,
-                    fontVariantNumeric: "tabular-nums",
-                    textAlign: "right",
-                  }}
-                />
-              </span>
-
-              <span style={{
-                fontFamily: FU, fontSize: 13, fontWeight: 600,
-                color, fontVariantNumeric: "tabular-nums", textAlign: "right",
-              }}>
-                {pct.toFixed(0)}%
-              </span>
-
-              <button
-                type="button"
-                onClick={() => saveBudget(b.category, null)}
-                title="Remove this budget"
-                aria-label={`Remove ${b.category.replace(/_/g, " ")} budget`}
-                style={{
-                  fontFamily: FM, fontSize: 14, color: TT.muted,
-                  background: "transparent", border: "none", cursor: "pointer",
-                  lineHeight: 1, padding: 0,
-                }}
-              >
-                ×
-              </button>
+        {adding && (
+          <div style={{ marginBottom: TT.s4, padding: TT.s3, background: TT.surface, border: `1px solid ${TT.border}`, borderRadius: TT.rMd }}>
+            <div className="mz-ctrl-row" style={{ display: "flex", gap: TT.s2, flexWrap: "wrap", marginBottom: presetsToOffer.length ? TT.s3 : 0 }}>
+              <input className="field" style={{ flex: 1, minWidth: 0 }} value={newCat}
+                onChange={e => setNewCat(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addCategory(newCat); }}
+                placeholder="Category name" aria-label="New category name" />
+              <button className="mz-tap btn-primary" onClick={() => addCategory(newCat)}>Add</button>
             </div>
-          );
-        })}
-      </div>
-    </Tile>
+            {presetsToOffer.length > 0 && (
+              <>
+                <div style={{ fontFamily: FM, fontSize: 10, color: TT.muted, letterSpacing: "0.1em", marginBottom: TT.s2 }}>
+                  SUGGESTED
+                </div>
+                <div className="mz-chip-row" style={{ display: "flex", gap: TT.s2, flexWrap: "wrap" }}>
+                  {presetsToOffer.map(p => (
+                    <button key={p.category} title={p.hint} onClick={() => addCategory(p.category, p.carryover)}
+                      style={{
+                        fontFamily: FM, fontSize: 11, padding: `5px ${TT.s3}`, borderRadius: 999,
+                        background: "transparent", border: `1px solid ${TT.border}`, color: TT.text, cursor: "pointer",
+                      }}>+ {p.category}</button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {rows.length === 0 ? (
+          <div style={{ fontFamily: FP, fontSize: 13, color: TT.muted, lineHeight: 1.55, padding: `${TT.s4} 0` }}>
+            No categories yet. Add one above — or start with Sadaqah, Zakat and Halal Food.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: TT.s2 }}>
+            {rows.map(r => {
+              const over = r.leftover < 0;
+              return (
+                <div key={r.category} style={{
+                  display: "grid", gridTemplateColumns: "1fr auto auto", gap: TT.s3, alignItems: "center",
+                  padding: `${TT.s2} ${TT.s3}`, background: TT.surface,
+                  border: `1px solid ${over ? `${TT.loss}40` : TT.border}`, borderRadius: TT.rMd,
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: FP, fontSize: 13, color: TT.textHi, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {r.category}
+                    </div>
+                    <div style={{ fontFamily: FM, fontSize: 10, color: TT.muted, marginTop: 2 }}>
+                      spent {fmtUSD(Math.abs(r.spent))} ·{" "}
+                      <span style={{ color: over ? TT.loss : TT.gain }}>
+                        {over ? "over by " : "left "}{fmtUSD(Math.abs(r.leftover))}
+                      </span>
+                    </div>
+                  </div>
+                  <input type="number" inputMode="decimal" min="0" step="0.01" className="field"
+                    style={{ width: 104, textAlign: "right" }}
+                    defaultValue={r.budgeted || ""}
+                    onBlur={e => {
+                      const v = e.target.value === "" ? 0 : Number(e.target.value);
+                      if (v !== r.budgeted) saveEntry(r.category, { budgeted: v });
+                    }}
+                    aria-label={`Budget for ${r.category}`} />
+                  <button className="mz-tap"
+                    onClick={() => saveEntry(r.category, { carryover: !r.carryover })}
+                    title={r.carryover
+                      ? "Overspending stays with this category next month"
+                      : "Overspending is taken from next month's To Budget"}
+                    aria-pressed={r.carryover}
+                    style={{
+                      fontFamily: FM, fontSize: 9, letterSpacing: "0.06em", padding: `4px ${TT.s2}`,
+                      borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
+                      background: r.carryover ? `${TT.blue}18` : "transparent",
+                      border: `1px solid ${r.carryover ? TT.blue : TT.border}`,
+                      color: r.carryover ? TT.blue : TT.muted,
+                      opacity: saving === r.category ? 0.5 : 1,
+                    }}>ROLL {r.carryover ? "ON" : "OFF"}</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Tile>
+    </div>
   );
 }
