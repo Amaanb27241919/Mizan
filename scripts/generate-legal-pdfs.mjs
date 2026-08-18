@@ -16,10 +16,12 @@
  * src/test/legal.test.js, which assert against the JSX, transitively cover the
  * PDF as well.
  *
- * Only Privacy and Terms are generated here: those are the two that exist as
- * web pages. Security / Access Controls / Data Retention are PDF-only documents
- * with no web equivalent and are left alone — regenerating them from nothing
- * would produce blank files.
+ * All five legal documents are generated here. Security, Data Retention and
+ * Access Controls were PDF-only until 2026-08-18; converting them revealed the
+ * same drift as the Privacy Policy — a stale host, the false "transactions are
+ * not stored" claim, a missing Anthropic vendor entry, and a retention schedule
+ * listing a `sessions` table that does not exist while omitting fourteen that
+ * do. Generating from the pages is what stops that recurring.
  */
 import { chromium } from "@playwright/test";
 import fs from "node:fs";
@@ -30,8 +32,11 @@ const OUT_PUBLIC = path.resolve("public/legal");
 const OUT_REPO   = path.resolve("legal");
 
 const DOCS = [
-  { route: "/privacy", file: "PRIVACY_POLICY.pdf" },
-  { route: "/terms",   file: "TERMS_OF_SERVICE.pdf" },
+  { route: "/privacy",         file: "PRIVACY_POLICY.pdf" },
+  { route: "/terms",           file: "TERMS_OF_SERVICE.pdf" },
+  { route: "/security",        file: "SECURITY_POLICY.pdf" },
+  { route: "/data-retention",  file: "DATA_RETENTION_POLICY.pdf" },
+  { route: "/access-controls", file: "ACCESS_CONTROLS_POLICY.pdf" },
 ];
 
 async function requirePreview() {

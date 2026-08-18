@@ -4,6 +4,9 @@ import MizanApp from './components/MizanApp.jsx'
 import Login from './components/Login.jsx'
 import Privacy from './components/Privacy.jsx'
 import Terms from './components/Terms.jsx'
+import Security from './components/Security.jsx'
+import DataRetention from './components/DataRetention.jsx'
+import AccessControls from './components/AccessControls.jsx'
 import Contact from './components/Contact.jsx'
 import { AuthProvider, useAuth } from './lib/auth.jsx'
 import { hydrateUserState } from './lib/userState.js'
@@ -102,6 +105,12 @@ function publicLegalRoute() {
   if (p === '/privacy' || p === '/privacy-policy') return <Privacy />
   if (p === '/terms' || p === '/terms-of-service' || p === '/tos') return <Terms />
   if (p === '/contact' || p === '/contact-us') return <Contact />
+  // Converted from PDF-only 2026-08-18. The old /legal/*.pdf URLs still
+  // resolve to the generated files, so anything already linking to them
+  // (Plaid's compliance review, for one) keeps working.
+  if (p === '/security' || p === '/security-policy') return <Security />
+  if (p === '/data-retention' || p === '/retention') return <DataRetention />
+  if (p === '/access-controls' || p === '/access-control') return <AccessControls />
   return null
 }
 

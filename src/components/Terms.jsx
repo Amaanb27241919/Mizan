@@ -1,8 +1,9 @@
 import LegalLayout from "./LegalLayout.jsx";
+import { legalUpdatedLabel } from "../lib/legal.js";
 
 export default function Terms() {
   return (
-    <LegalLayout title="Terms of Service" updated="May 12, 2026">
+    <LegalLayout title="Terms of Service" updated={legalUpdatedLabel()}>
       <p className="mz-lead">
         These Terms of Service ("Terms") govern your use of MĪZAN
         (the "Service"). By creating an account or otherwise using the

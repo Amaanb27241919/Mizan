@@ -45,7 +45,7 @@ export function isLegalReviewDue(now = new Date(), iso = LEGAL_LAST_UPDATED) {
 export const LEGAL_DOCUMENTS = [
   { id: "privacy",   title: "Privacy Policy",         href: "/privacy", web: true },
   { id: "terms",     title: "Terms of Service",       href: "/terms",   web: true },
-  { id: "security",  title: "Security Policy",        href: "/legal/SECURITY_POLICY.pdf",         web: false },
-  { id: "retention", title: "Data Retention Policy",  href: "/legal/DATA_RETENTION_POLICY.pdf",   web: false },
-  { id: "access",    title: "Access Controls Policy", href: "/legal/ACCESS_CONTROLS_POLICY.pdf",  web: false },
+  { id: "security",  title: "Security Policy",        href: "/security",        web: true },
+  { id: "retention", title: "Data Retention Policy",  href: "/data-retention",  web: true },
+  { id: "access",    title: "Access Controls Policy", href: "/access-controls", web: true },
 ];

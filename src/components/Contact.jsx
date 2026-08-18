@@ -1,8 +1,9 @@
 import LegalLayout from "./LegalLayout.jsx";
+import { legalUpdatedLabel } from "../lib/legal.js";
 
 export default function Contact() {
   return (
-    <LegalLayout title="Contact" updated="May 14, 2026">
+    <LegalLayout title="Contact" updated={legalUpdatedLabel()}>
       <p className="mz-lead">
         MĪZAN is operated by Amaan Khan as an individual. Whether you have a
         product question, a privacy or data request, a security concern, or

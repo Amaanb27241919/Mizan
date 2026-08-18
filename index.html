@@ -112,6 +112,26 @@
          screen; `dvh` tracks the real one. */
       :root { --mz-vh: 100vh; }
       @supports (height: 100dvh) { :root { --mz-vh: 100dvh; } }
+      /* The fluid type tokens must exist at FIRST PAINT, not only once React
+         injects THEME_CSS. Until that <style> is parsed every
+         `font-size: var(--fs-*)` is invalid and the browser falls back to
+         16px, so the header rendered ~30% wider and briefly overflowed a
+         320px viewport. Keep these in sync with THEME_CSS in MizanApp.jsx —
+         they are the same scale, duplicated only so the very first frame is
+         correct. */
+      :root {
+        --fs-2xs: clamp(0.6875rem, 0.6696rem + 0.08929vw, 0.75rem);
+        --fs-xs:  clamp(0.7188rem, 0.692rem  + 0.1339vw,  0.8125rem);
+        --fs-sm:  clamp(0.75rem,   0.7143rem + 0.1786vw,  0.875rem);
+        --fs-md:  clamp(0.8125rem, 0.7768rem + 0.1786vw,  0.9375rem);
+        --fs-lg:  clamp(0.875rem,  0.8393rem + 0.1786vw,  1rem);
+        --fs-xl:  clamp(1rem,      0.9464rem + 0.2679vw,  1.188rem);
+        --fs-2xl: clamp(1.125rem,  1.054rem  + 0.3571vw,  1.375rem);
+        --fs-3xl: clamp(1.375rem,  1.304rem  + 0.3571vw,  1.625rem);
+        --fs-4xl: clamp(1.625rem,  1.518rem  + 0.5357vw,  2rem);
+        --fs-5xl: clamp(1.875rem,  1.696rem  + 0.8929vw,  2.5rem);
+        --fs-6xl: clamp(2.125rem,  1.804rem  + 1.607vw,   3.25rem);
+      }
       /* First-paint colors. These MUST track --mz-bg / --mz-textHi in
          MizanApp.jsx THEME_CSS — they are what the user stares at between the
          HTML arriving and React mounting. They used to be #07080E on #C8CCE4,

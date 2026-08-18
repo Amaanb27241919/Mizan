@@ -217,6 +217,52 @@ test.describe("responsive — portrait phones", () => {
   });
 });
 
+test.describe("popouts stay on screen", () => {
+  // Reported from Safari on a real iPhone, 2026-08-18: the notification panel
+  // opened OFF THE LEFT EDGE, words cut mid-syllable. Cause: it was
+  // `position:absolute; right:0`, which pins its RIGHT edge to the bell — and
+  // the bell sits on the LEFT of the header, so a 340px panel opened leftward
+  // to left:-205 in a 390px viewport. `html{overflow-x:clip}` meant no
+  // scrollbar ever hinted at it.
+  //
+  // Also covers the second way this broke: a popout is a descendant of the
+  // header, so ANY `overflow:hidden` on an ancestor clips it. One was added
+  // that same day to fix a first-paint overflow and clipped this panel to the
+  // 48px header — and the force-refresh toast with it.
+  const NOTIFS = JSON.stringify([
+    { id: "n1", kind: "sharia",   title: "Compliance change", body: "Check whether any of it needs review",       ts: Date.now() - 7_200_000, read: false },
+    { id: "n2", kind: "dividend", title: "Dividend received", body: "Check whether any of it needs purification", ts: Date.now() - 90_000_000, read: false },
+  ]);
+
+  for (const { w, h } of [{ w: 320, h: 720 }, { w: 390, h: 844 }]) {
+    test(`the notification panel opens fully on screen at ${w}px`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      await signedIn(page, { storage: { mizan_notifications: NOTIFS } });
+      await page.goto("/");
+      await appReady(page);
+      await page.setViewportSize({ width: w, height: h });
+      await page.waitForTimeout(300);
+
+      const bell = page.locator('.mz-status button[title*="otification"], .mz-status button[aria-label*="otification"]').first();
+      expect(await bell.count(), "no notification bell in the header").toBeGreaterThan(0);
+      await bell.click({ force: true });
+      await page.waitForTimeout(350);
+
+      const box = await page.evaluate(() => {
+        const el = document.querySelector(".glass-strong");
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, width: r.width, vw: window.innerWidth };
+      });
+      expect(box, "the panel did not open").not.toBeNull();
+      expect(box.left, `panel starts ${Math.round(box.left)}px off the left edge`).toBeGreaterThanOrEqual(-1);
+      expect(box.right, `panel runs ${Math.round(box.right - box.vw)}px past the right edge`).toBeLessThanOrEqual(box.vw + 1);
+      // Clipped to the header would leave it near-zero height.
+      expect(box.width, "panel has no usable width").toBeGreaterThan(180);
+    });
+  }
+});
+
 test.describe("information architecture", () => {
   // Pins the 2026-08-18 IA decision. Portfolio → Tools → Backtest was the app's
   // ONLY depth-3 branch, hidden behind a junk-drawer label that described none

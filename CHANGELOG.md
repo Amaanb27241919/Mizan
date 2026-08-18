@@ -16,6 +16,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **ia:** Goals → Plan, flatten Portfolio, and fix a real test race (`70fdea5`)
 
 ### Fixed
+- **legal:** Correct two false disclosures, single-source the PDFs, add a review clock (`7b62904`)
 - **finances:** Cut the tab in half, and fix the crash the fixtures hid (`d58ac5a`)
 
 ### Docs

@@ -11423,7 +11423,18 @@ function NotificationBell({items=[],onMarkAllRead,onMarkRead,onClear,onNav}){
         {unread>9?"9+":unread}</span>}
     </button>
 
-    {open&&<div className="glass-strong" style={{position:"absolute",top:"calc(100% + 8px)",right:0,width:"min(92vw,340px)",
+    {/* FIXED, not absolute, and anchored to the VIEWPORT rather than the bell.
+        With `position:absolute; right:0` the panel's right edge pinned to the
+        bell — which sits on the LEFT of the header — so a 340px panel opened
+        leftward and hung off the screen: measured left:-205 in a 390px
+        viewport, only 40% of it visible, words cut mid-syllable (reported from
+        Safari on a real iPhone, 2026-08-18).
+        Fixed positioning also means no ancestor's overflow can clip it, which
+        is the other way this broke. */}
+    {open&&<div className="glass-strong" style={{position:"fixed",
+      top:"calc(48px + env(safe-area-inset-top, 0px) + 8px)",
+      right:"max(8px, env(safe-area-inset-right, 0px))",
+      left:"auto",width:"min(calc(100vw - 16px),340px)",
       maxHeight:"min(calc(var(--mz-vh) * 0.70),460px)",display:"flex",flexDirection:"column",
       border:`1px solid ${T.border}`,borderRadius:T.rMd,boxShadow:"var(--sh-lg, 0 12px 32px rgba(0,0,0,0.18))",zIndex:200,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s2,
@@ -13188,13 +13199,13 @@ export default function Mizan(){
     {/* TOP BAR */}
     {/* STATUS BAR — slim, glanceable, single row. Brand left, info middle, actions right. */}
     <header className="mz-status glass" style={{minHeight:"calc(48px + env(safe-area-inset-top, 0px))",padding:`env(safe-area-inset-top, 0px) ${T.s5} 0`,borderBottom:`1px solid var(--mz-glass-border)`,display:"flex",alignItems:"center",gap:T.s4,position:"sticky",top:0,zIndex:100,
-      // The header is the one bar that must never exceed the viewport. During
-      // first paint — before React measures and the width-keyed rules settle —
-      // its children render at intrinsic width and the row reached 348px in a
-      // 320px viewport. html{overflow-x:clip} hid it, so nothing surfaced it
-      // for months except the smoke guard. Clipping HERE keeps the transient
-      // state correct instead of merely invisible.
-      maxWidth:"100%",overflow:"hidden"}}>
+      // NOTE: no `overflow:hidden` here, deliberately. It was added on
+      // 2026-08-18 to stop a first-paint overflow and it clipped the
+      // notification dropdown to the 48px header — plus the force-refresh
+      // toast, which renders 50px BELOW this bar. Bounding a container that
+      // owns popouts breaks the popouts. The overflow is fixed at its source
+      // instead (see .mz-status-right and the width-keyed rules).
+      maxWidth:"100%"}}>
       <div className="mz-brand" style={{display:"flex",alignItems:"center",gap:T.s2,flexShrink:0}}>
         <img src={resolvedTheme==="dark"?"/mark-light.png":"/mark.png"} alt="" width={18} height={18} style={{display:"block",flexShrink:0}}/>
         <span style={{fontFamily:FU,fontSize:"var(--fs-lg)",fontWeight:700,color:T.textHi,letterSpacing:"0.04em"}}>MĪZAN</span>
@@ -13234,7 +13245,7 @@ export default function Mizan(){
           a real 28px overflow for ~100ms, and it is what the smoke guard was
           catching. Bounding the box makes the transient state correct rather
           than merely invisible. */}
-      <div className="mz-status-right" style={{display:"flex",alignItems:"center",gap:6,flexShrink:1,minWidth:0,maxWidth:"100%",overflow:"hidden",justifyContent:"flex-end"}}>
+      <div className="mz-status-right" style={{display:"flex",alignItems:"center",gap:6,flexShrink:1,minWidth:0,maxWidth:"100%",justifyContent:"flex-end"}}>
         <NotificationBell
           items={notifications}
           onMarkAllRead={()=>writeNotifications(markAllRead(notifications))}
@@ -13262,7 +13273,9 @@ export default function Mizan(){
         })()}
         {installEvt&&!isInstalled&&<button onClick={doInstall} className="btn-ghost mz-hide-sm" title="Install MĪZAN as an app on this device" style={{display:"inline-flex",alignItems:"center",gap:5,fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.06em"}}><Icon name="download" size={11}/>Install</button>}
         <button onClick={sync} disabled={fetching} className="btn-primary mz-status-sync" aria-label="Sync all accounts">
-          {fetching?"Syncing…":<><span className="mz-lbl-full">Sync All</span><span className="mz-lbl-short">Sync</span></>}
+          {fetching
+            ?<><span className="mz-lbl-full">Syncing…</span><span className="mz-lbl-short">…</span></>
+            :<><span className="mz-lbl-full">Sync All</span><span className="mz-lbl-short">Sync</span></>}
         </button>
       </div>
       {forceMsg&&<div style={{position:"absolute",top:"calc(env(safe-area-inset-top, 0px) + 50px)",right:T.s3,background:"var(--mz-glass-strong)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",border:`1px solid ${forceMsg.ok?T.gain+"40":T.loss+"40"}`,color:forceMsg.ok?T.gain:T.loss,padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",boxShadow:"var(--mz-glass-shadow)",zIndex:101,maxWidth:340,animation:"glassFadeUp 0.2s cubic-bezier(.34,1.56,.64,1)"}}>{forceMsg.msg}</div>}

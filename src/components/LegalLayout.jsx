@@ -29,9 +29,9 @@ export default function LegalLayout({ title, updated, children }) {
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
             <a href="/contact">Contact</a>
-            <a href="/legal/SECURITY_POLICY.pdf" target="_blank" rel="noreferrer">Security</a>
-            <a href="/legal/ACCESS_CONTROLS_POLICY.pdf" target="_blank" rel="noreferrer">Access Controls</a>
-            <a href="/legal/DATA_RETENTION_POLICY.pdf" target="_blank" rel="noreferrer">Data Retention</a>
+            <a href="/security">Security</a>
+            <a href="/access-controls">Access Controls</a>
+            <a href="/data-retention">Data Retention</a>
           </span>
         </footer>
       </div>
@@ -162,6 +162,16 @@ const styles = `
 .mz-legal-footer a:hover {
   color: #1c1b19;
 }
+/* Policy tables (the retention schedule). Scroll the TABLE, never the page —
+   html{overflow-x:clip} would otherwise silently cut the last column off. */
+.mz-legal-main table { width: 100%; border-collapse: collapse; margin: 1.25rem 0; font-size: var(--fs-sm); }
+.mz-legal-main .mz-table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1.25rem 0; }
+.mz-legal-main th, .mz-legal-main td {
+  text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--mz-border); vertical-align: top;
+}
+.mz-legal-main th { font-weight: 600; color: var(--mz-textHi); white-space: nowrap; }
+.mz-legal-main td code { white-space: nowrap; }
+
 @media (max-width: 640px) {
   .mz-legal-header, .mz-legal-footer { padding: 16px 20px; }
   .mz-legal-main { padding: 36px 20px 60px; }
