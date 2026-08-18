@@ -45,6 +45,27 @@ const num = (v) => {
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /**
+ * A transaction's category, whatever shape it arrives in.
+ *
+ * Plaid does NOT give a plain string. `category` is an ARRAY (hierarchical,
+ * least-specific first) and the modern field is the object
+ * `personal_finance_category.primary`. MizanApp already normalises this the
+ * same way in half a dozen places; this mirrors it exactly.
+ *
+ * This function exists because assuming a string crashed the whole Finances tab
+ * the first time this module met real data — and the E2E suite did not catch it
+ * because the fixtures I wrote used strings. A fixture that does not match the
+ * shape production actually sends is not a test, it is an echo.
+ */
+export function categoryOf(t) {
+  const raw =
+    t?.personal_finance_category?.primary ??
+    (Array.isArray(t?.category) ? t.category[t.category.length - 1] : t?.category);
+  const s = typeof raw === "string" ? raw.trim() : "";
+  return s || "Uncategorized";
+}
+
+/**
  * Spend per category for one month, from transactions.
  * Returns NEGATIVE numbers for outflow, which is the sign `leftover` expects.
  *
@@ -63,7 +84,7 @@ export function spentByCategory(txns = [], month, opts = {}) {
     if (!includePending && t.pending) continue;
     const d = String(t.date || t.trade_date || "").slice(0, 10);
     if (!d || d < m || d >= next) continue;
-    const cat = (t.category || "Uncategorized").trim() || "Uncategorized";
+    const cat = categoryOf(t);
     // Plaid reports an outflow as a POSITIVE amount. Envelope math wants
     // outflow negative, so flip unless the caller says otherwise.
     const raw = num(t.amount);

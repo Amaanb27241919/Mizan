@@ -18,10 +18,16 @@ const BUDGET_FIXTURES = {
     ],
     months: [{ month: "2026-08-01", manual_income: 5000 }],
   },
+  // NOTE the shape: Plaid sends `category` as an ARRAY and the modern field as
+  // `personal_finance_category.primary`. An earlier version of this fixture
+  // used plain strings, which matched the code's assumption rather than
+  // production — so it passed while the real Finances tab crashed with
+  // "(t.category || 'Uncategorized').trim is not a function". Fixtures must
+  // mirror what the provider actually sends, or they only test themselves.
   "/api/plaid/transactions": {
     transactions: [
-      { date: "2026-08-04", amount: 150, category: "Halal Food", name: "Grocer" },
-      { date: "2026-08-09", amount: 90,  category: "Halal Food", name: "Grocer" },
+      { date: "2026-08-04", amount: 150, category: ["FOOD_AND_DRINK", "Halal Food"], name: "Grocer" },
+      { date: "2026-08-09", amount: 90,  personal_finance_category: { primary: "Halal Food" }, name: "Grocer" },
     ],
   },
 };
@@ -86,5 +92,31 @@ test.describe("envelope budget", () => {
     await appReady(page);
     await openFinances(page);
     await expect(page.getByText(/No bank linked/i)).toBeVisible();
+  });
+});
+
+test.describe("information density", () => {
+  test.skip(({ viewport }) => (viewport?.width ?? 0) > 500, "phone density only");
+
+  // Owner report: "there's too much info going on in the app." Measured at
+  // 390px: Finances was 11.4 screens / 808 words, more than double every other
+  // tab, and 79% of it was RECENT TRANSACTIONS rendering 50 rows inline — a
+  // desktop page size on a phone. Cut to 15 with a 50-row Load more.
+  test("the Finances tab opens without burying everything below the fold", async ({ page }) => {
+    await signedIn(page, { storage: { mizan_demo: "1" } });
+    await page.goto("/");
+    await appReady(page);
+    await page.locator('[data-tour="nav-finances"]').click({ force: true });
+    await page.waitForTimeout(1200);
+    const m = await page.evaluate(() => {
+      const main = document.querySelector("main");
+      return {
+        screens: main.scrollHeight / window.innerHeight,
+        rows: main.querySelectorAll("*").length,
+      };
+    });
+    // 11.4 before the fix, ~5.4 after. 8 leaves room for real data growth
+    // while still failing if the transaction list goes unbounded again.
+    expect(m.screens, `Finances is ${m.screens.toFixed(1)} phone-screens tall`).toBeLessThan(8);
   });
 });

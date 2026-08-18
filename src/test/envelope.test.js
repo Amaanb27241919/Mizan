@@ -7,6 +7,7 @@ import { describe, it, expect } from "vitest";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, leftoverByCategory,
   lastMonthOverspent, computeMonth, computeSeries, ISLAMIC_CATEGORY_PRESETS,
+  categoryOf,
 } from "../lib/envelope.js";
 
 describe("month keys", () => {
@@ -154,5 +155,39 @@ describe("Islamic category presets", () => {
     expect(byName["Hajj / Umrah"].carryover).toBe(true);
     // Ordinary monthly spending resets.
     expect(byName["Halal Food"].carryover).toBe(false);
+  });
+});
+
+describe("categoryOf — the shape Plaid actually sends", () => {
+  // Regression: assuming `category` was a string crashed the entire Finances
+  // tab ("(t.category || 'Uncategorized').trim is not a function"). The E2E
+  // suite missed it because the fixtures were hand-written with string
+  // categories — they matched my assumption, not production.
+  it("reads Plaid's ARRAY category, most specific last", () => {
+    expect(categoryOf({ category: ["FOOD_AND_DRINK", "Groceries"] })).toBe("Groceries");
+  });
+  it("prefers the modern personal_finance_category.primary", () => {
+    expect(categoryOf({
+      category: ["OLD", "Legacy"],
+      personal_finance_category: { primary: "FOOD_AND_DRINK" },
+    })).toBe("FOOD_AND_DRINK");
+  });
+  it("still accepts a plain string", () => {
+    expect(categoryOf({ category: "Halal Food" })).toBe("Halal Food");
+  });
+  it("never throws on junk, and never returns empty", () => {
+    for (const t of [null, undefined, {}, { category: [] }, { category: 42 }, { category: {} }]) {
+      expect(categoryOf(t)).toBe("Uncategorized");
+    }
+  });
+  it("buckets a real mixed batch without crashing", () => {
+    const txns = [
+      { date: "2026-08-04", amount: 150, category: ["FOOD_AND_DRINK", "Groceries"] },
+      { date: "2026-08-05", amount: 50, personal_finance_category: { primary: "FOOD_AND_DRINK" } },
+      { date: "2026-08-06", amount: 20 },
+    ];
+    expect(spentByCategory(txns, "2026-08-01")).toEqual({
+      Groceries: -150, FOOD_AND_DRINK: -50, Uncategorized: -20,
+    });
   });
 });

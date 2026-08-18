@@ -9949,7 +9949,15 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
   const[txnType,setTxnType]=useState("all"); // all | outflow | inflow | pending
   const[txnRange,setTxnRange]=useState("90d"); // 30d | 90d | ytd | all
   const[txnAccount,setTxnAccount]=useState("all"); // all | account_id
-  const PAGE_SIZE=50;
+  // Measured 2026-08-18: RECENT TRANSACTIONS was 7,633px on a 390px phone —
+  // 9.0 screens, 79% of the entire Finances tab, which came to 11.4 screens of
+  // scrolling. That is the "too much info" the owner reported. The list was
+  // already paged, but at 50 rows, which is a desktop number: on a phone it
+  // buries everything below it. 15 opens the tab at roughly a third the height
+  // and costs one tap to see more; LOAD_MORE stays generous so anyone actually
+  // hunting through history is not click-farming.
+  const PAGE_SIZE=15;
+  const LOAD_MORE=50;
   const[txnLimit,setTxnLimit]=useState(PAGE_SIZE);
   // Reset pagination whenever any filter input changes so users don't get
   // stuck on page 5 after narrowing the result set.
@@ -10955,7 +10963,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
               Showing {visibleTxns.length} of {filteredTxns.length} filtered · {bankTxns.length} total
             </div>
             {filteredTxns.length>visibleTxns.length&&(
-              <button onClick={()=>setTxnLimit(n=>n+PAGE_SIZE)} style={{
+              <button onClick={()=>setTxnLimit(n=>n+LOAD_MORE)} style={{
                 padding:`6px ${T.s4}`,borderRadius:T.rMd,
                 background:T.surface,border:`1px solid ${T.borderHi}`,
                 color:T.textHi,fontFamily:FM,fontSize:11,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
