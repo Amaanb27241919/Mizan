@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-17
+
+### Fixed
+- **screening:** Make the chosen standard actually drive compliance, app-wide (`3006424`)
+
 ## 2026-08-15
 
 ### Added
