@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-18
 
 ### Added
+- **legal:** Convert the last three policies to web pages, fix the notification popout (`8308dbc`)
 - **ui:** Fluid type scale across every surface — readable on any device (`a6f3ff2`)
 
 ### Changed

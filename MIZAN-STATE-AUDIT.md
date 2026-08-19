@@ -1,9 +1,15 @@
 # MĪZAN — State-of-App Audit
 
 > **Living document.** Re-run every few weeks to track drift between what's built and what's deployed.
-> Last audited: 2026-08-18 (updated) · All findings from direct file reads, no guessing.
+> Last audited: 2026-08-19 (updated) · All findings from direct file reads, no guessing.
 >
-> **2026-08-18c (legal documents — two false disclosures, now single-sourced and on a review clock)** — owner asked to recreate the Privacy Policy as a web page and set a monthly/quarterly update cadence. The page **already existed** at `/privacy`; the real finding was that neither copy was accurate.
+> **2026-08-19 (capture pass — verified state, and found the usage tracking could not answer its own question)** — owner asked to capture everything and save the documents. Verification, not transcription:
+> - **All five legal documents confirmed saved and consistent** — web page + `legal/` + `public/legal/` PDFs, SHA-matched pair-for-pair, all dated August 2026. Six public pages (`/privacy`, `/terms`, `/contact`, `/security`, `/data-retention`, `/access-controls`) render with **zero overflow at 320px**.
+> - **Migrations 027 + 028 confirmed live in prod:** 3 tables, 9 RLS policies, 2 RPCs. `plaid_transactions` now 2,046 rows — the figure the corrected Privacy Policy describes.
+> - **⚠️ `nav_usage` was recording only TOP-LEVEL tabs.** Querying the live table (11 rows, 7 destinations, 2 users) showed nothing but `overview`/`portfolio`/`settings`… — no `portfolio/backtest`, no `goals/zakat`. `recordNavView` had been wired into the top-level `setNav` only, and every sub-tab strip goes through `setSub`. **The feature could not answer the question it was built for** — "do Backtest and ETF Overlap earn their slots?" — because both are sub-tabs. Fixed centrally in `TabBar` via a `track` prefix rather than at each call site; all five strips now carry one. Verified live: `portfolio/backtest`, `portfolio/overlap`, `goals/zakat` now record. Guarded, and mutation-tested (reverting yields "only top-level paths recorded: portfolio").
+> - **Sample size caveat, stated because the number is tempting:** 20 views across 2 users is a working pipeline, **not evidence**. Nothing about which surfaces earn their place should be concluded until there are weeks of data from real users.
+>
+> > **2026-08-18c (legal documents — two false disclosures, now single-sourced and on a review clock)** — owner asked to recreate the Privacy Policy as a web page and set a monthly/quarterly update cadence. The page **already existed** at `/privacy`; the real finding was that neither copy was accurate.
 > **Verified against the live system rather than reformatted:**
 > - The policy stated bank transactions were **"not stored… fetched live each session"**. `plaid_transactions` holds **2,039 rows across 4 users spanning 2026-03-01 → today**. Corrected to state they are stored and for how long.
 > - The processor list omitted **Anthropic**, while `/api/advisor` sends holdings, cost basis and screening verdicts to `api.anthropic.com`. Added, with what actually leaves the app and a note that nothing is sent if the Assistant is never opened.

@@ -217,6 +217,32 @@ test.describe("responsive — portrait phones", () => {
   });
 });
 
+test.describe("usage counting reaches sub-tabs", () => {
+  // nav_usage was built to answer "do Backtest and ETF Overlap earn their
+  // slots?" — and both are SUB-tabs. recordNavView was wired only into the
+  // top-level setNav, so for its first day in production it recorded seven
+  // top-level paths and nothing else: the feature could not answer its own
+  // question. Caught by querying the live table rather than assuming.
+  test("records sub-tab destinations, not just top-level tabs", async ({ page }) => {
+    const posted = [];
+    await signedIn(page, { storage: { mizan_demo: "1" } });
+    await page.route("**/api/nav-usage", (route) => {
+      try { posted.push(JSON.parse(route.request().postData() || "{}").path); } catch { /* ignore */ }
+      return route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
+    });
+    await page.goto("/");
+    await appReady(page);
+    await page.locator('[data-tour="nav-portfolio"]').click({ force: true });
+    await page.waitForTimeout(400);
+    const sub = page.locator(".mz-tabbar > button", { hasText: /Backtest/ });
+    if (await sub.count()) { await sub.first().click({ force: true }); await page.waitForTimeout(400); }
+
+    expect(posted, "no usage recorded at all").not.toEqual([]);
+    expect(posted, "top-level tab not recorded").toContain("portfolio");
+    expect(posted.some((p) => p.includes("/")), `only top-level paths recorded: ${posted.join(", ")}`).toBe(true);
+  });
+});
+
 test.describe("popouts stay on screen", () => {
   // Reported from Safari on a real iPhone, 2026-08-18: the notification panel
   // opened OFF THE LEFT EDGE, words cut mid-syllable. Cause: it was

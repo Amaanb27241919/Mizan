@@ -1137,14 +1137,19 @@ function Tbl({cols,rows,onRow}){return<div style={{overflowX:"auto",WebkitOverfl
 
 // Tab bar — pill-style segmented control. Active pill gets a soft purple
 // halo. Scrolls horizontally on mobile via .mz-tabbar overflow handling.
-function TabBar({tabs,active,onChange,accent}){return<div className="mz-tabbar-wrap" style={{marginBottom:T.s5}}><div className="mz-tabbar" style={{
+// `track` is the nav prefix for usage counting, e.g. "portfolio" → records
+// "portfolio/backtest". Without it a strip is silently uncounted, which is how
+// sub-tabs went untracked at first — recordNavView was wired only into the
+// top-level setNav, so nav_usage could not answer the very question it was
+// built for ("does Backtest earn its slot?" — Backtest is a sub-tab).
+function TabBar({tabs,active,onChange,accent,track}){return<div className="mz-tabbar-wrap" style={{marginBottom:T.s5}}><div className="mz-tabbar" style={{
   display:"flex",gap:T.s1,padding:T.s1,
   background:"var(--mz-glass)",border:"1px solid var(--mz-glass-border)",borderRadius:T.rLg,
   boxShadow:"inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.14)",
   overflowX:"auto",WebkitOverflowScrolling:"touch",
 }}>{tabs.map(([id,l])=>{
   const on=active===id;const acc=accent||T.blue;
-  return<button key={id} data-tour={`tab-${id}`} onClick={()=>onChange(id)} style={{
+  return<button key={id} data-tour={`tab-${id}`} onClick={()=>{if(track)recordNavView(`${track}/${id}`);onChange(id);}} style={{
     padding:`8px ${T.s4}`,
     background:on?"var(--mz-glass-strong, rgba(13,19,17,0.91))":"transparent",
     backdropFilter:on?"blur(20px) saturate(160%)":undefined,
@@ -5259,7 +5264,7 @@ function Portfolio({live,snapAccounts=[],mapPosition,activities=[],botFills=[],d
         ["rebalance","Rebalance"],...(hasHoldings?[["tax","Tax"]]:[]),
         ["dividends","Dividends"],["backtest","Backtest"],["overlap","ETF Overlap"],
       ];
-      return<TabBar tabs={portfolioTabs} active={sub} onChange={setSub}/>;
+      return<TabBar tabs={portfolioTabs} active={sub} onChange={setSub} track="portfolio"/>;
     })()}
 
     {sub==="holdings"&&<>
@@ -7082,7 +7087,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     {/* Screener / Rebalance / Backtest are NOT duplicated here — they live in
         the Portfolio tab (one home each). Trade stays focused on the bot. */}
-    <TabBar tabs={[["signals","Signals"],["strategies","Strategies"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    <TabBar track="trade" tabs={[["signals","Signals"],["strategies","Strategies"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
     {/* Persistent reference: how brokerage connections map to trade features, and the
         reconnect-with-trade-permission requirement. Collapsed by default. */}
     <TradeConnectionsPanel onConnectTrade={onConnectTrade}/>
@@ -8143,6 +8148,7 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
     </BentoTile>
 
     <TabBar
+      track="settings"
       tabs={isRoot?[
         ["admin","Admin"],
         ["account","Account"],
@@ -9394,7 +9400,7 @@ function AdminPanel(){
     </BentoTile>
 
     {/* ─── Sub-tabs ──────────────────────────────── */}
-    <TabBar tabs={[["users","Users"],["broadcast","Broadcast"],["messages","Messages"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
+    <TabBar track="admin" tabs={[["users","Users"],["broadcast","Broadcast"],["messages","Messages"],["audit","Audit Log"]]} active={tab} onChange={setTab}/>
 
     {err&&<BentoTile style={{background:`${T.loss}10`,border:`1px solid ${T.loss}40`}}>
       <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>{ICON_NO}{err}</div>
@@ -9909,7 +9915,7 @@ function PlaidLinker({ usePlaidLinkHook, linkToken, onSuccess, onExit, shouldOpe
 function GoalsHub({snapAccounts=[],plaidAccounts=[],netWorthHistory=[],demoMode=false,currentNW=0,ytdContrib=0,bankBalance=0,onConnect}){
   const[sub,setSub]=useState("goals");
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    <TabBar tabs={[["goals","Goals"],["zakat","Zakat"],["sadaqah","Sadaqah"],["fire","Retirement / FIRE"]]} active={sub} onChange={setSub}/>
+    <TabBar track="goals" tabs={[["goals","Goals"],["zakat","Zakat"],["sadaqah","Sadaqah"],["fire","Retirement / FIRE"]]} active={sub} onChange={setSub}/>
     {sub==="goals"&&<Goals snapAccounts={snapAccounts} plaidAccounts={plaidAccounts} netWorthHistory={netWorthHistory} demoMode={demoMode}/>}
     {sub==="zakat"&&<ZakatSadaqah view="zakat" accounts={snapAccounts} plaidAccounts={plaidAccounts} demoMode={demoMode} bankBalance={bankBalance} onConnect={onConnect}/>}
     {sub==="sadaqah"&&<ZakatSadaqah view="sadaqah" accounts={snapAccounts} plaidAccounts={plaidAccounts} demoMode={demoMode} bankBalance={bankBalance} onConnect={onConnect}/>}

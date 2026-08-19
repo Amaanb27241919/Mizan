@@ -436,6 +436,7 @@ They are in **rem, not px, and that is load-bearing**: a px clamp adapts to the 
 - The **"Plan"** tab's nav id is still `goals`. The label changed; the id must not — `localStorage.mizan_nav`, the `?tab=` deep link, the manifest shortcut, `nav_usage` paths and every `data-tour` hook are keyed on it.
 - **Portfolio is one flat strip of 9.** It used to end in "Tools", which revealed a second strip — the app's only depth-3 branch, behind a label describing none of its five unrelated contents. Do not reintroduce nesting; the strip scrolls with snap.
 - `nav_usage` (migration 028) counts destinations per user — **counters, not an event log**, so there is no timeline and nothing financial. Use it to answer whether Backtest / ETF Overlap earn their slots rather than deciding by taste.
+- **Every `<TabBar>` needs a `track` prefix** (`track="portfolio"` → records `portfolio/backtest`). Without it that strip is silently uncounted. This is not hypothetical: for its first day `recordNavView` was wired only into the top-level `setNav`, so sub-tabs recorded nothing and the feature could not answer its own question. `e2e/responsive.spec.js` guards it.
 
 ### PWA install surface (added 2026-08-15)
 `public/manifest.webmanifest` + the iOS meta block in `index.html`. Guarded by `src/test/pwaManifest.test.js` — read its failure messages before changing either file.
