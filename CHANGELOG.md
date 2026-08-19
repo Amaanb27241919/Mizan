@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Fixed
 - **usage:** Count sub-tabs too — the tracking could not answer its own question (`d9582a2`)
 
+### Docs
+- **backlog:** Triage sweep — close F2/F4/F7, correct F5 upward, re-verify F3 (`9e8ebce`)
+
 ## 2026-08-18
 
 ### Added

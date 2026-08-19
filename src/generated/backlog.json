@@ -186,7 +186,7 @@
         {
           "id": "N11",
           "title": "Envelope budget rollover + 'left to assign' pot (Track 2 #9)",
-          "done": false
+          "done": true
         },
         {
           "id": "N12",
@@ -261,11 +261,11 @@
         {
           "id": "N26",
           "title": "Compliance-tier gate for every new grounded-AI feature (owner-directed 2026-07-15)",
-          "done": false
+          "done": true
         }
       ],
       "archive": false,
-      "open": 26,
+      "open": 24,
       "total": 26
     },
     {

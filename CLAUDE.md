@@ -555,7 +555,7 @@ These are architectural commitments. Undoing them would break the app or violate
 - **Introduce TypeScript** — this is intentional JavaScript. Type safety comes from JSDoc and runtime validation.
 - **Add analytics/tracking code** — no event tracking without explicit user instruction.
 - **Change the CSP headers in vercel.json** — security configuration needs deliberate review.
-- **Remove the `{false && ...}` Order Ticket gate** — both gates (ComingSoon wrapper + false wrapper) must be removed together when order ticket is activated. Never remove just one.
+- **Order Ticket gating** — ⚠️ CORRECTED 2026-08-19: the `{false && ...}` wrapper described here **no longer exists** (0 occurrences in the file). The ticket now gates on `!isAdmin && <ComingSoon>` at `MizanApp.jsx:7098`, i.e. **it already renders live for admin users**. Do not go looking for a second gate to remove — there is one, and it is the admin check. Activating for everyone means changing that condition deliberately, not deleting a dead `false`.
 
 ---
 
@@ -628,7 +628,7 @@ These are documented constraints, not undiscovered issues:
 
 8. **Hawl tracking (Zakat)** — Hijri calendar integration and per-asset hawl start dates are NOT implemented. The Zakat calculator assumes you manage hawl tracking yourself.
 
-9. **Order Ticket is double-gated** — `{false && ...}` in JSX AND `<ComingSoon>` wrapper. Alpaca paper trading backend is deployed and functional. Both gates must be removed simultaneously to activate.
+9. **Order Ticket is admin-only, NOT double-gated** — corrected 2026-08-19. The old `{false && ...}` wrapper is gone; the only gate left is `!isAdmin` (`MizanApp.jsx:7098`), so the ticket is live for admins today. Alpaca paper trading backend is deployed and functional. Activating it for all users is a deliberate change to that condition.
 
 10. **Price chart granularity/history are Polygon-bound** — the holdings price chart (`PriceChart.jsx`) uses Polygon for OHLC because Finnhub's free tier has no `/stock/candle`. Polygon free tier = 5 req/min + ~2yr history, so the **5Y** timeframe is capped to what Polygon returns and intraday (**1D/1W**) depends on Polygon minute/hour bars. Bars cache 24h in `polygon_cache`. A symbol with no Polygon coverage (some crypto/OTC) renders the chart's **"No chart data"** empty state — intentional, not a bug.
 
