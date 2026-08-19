@@ -13,7 +13,7 @@
         {
           "id": "F2",
           "title": "Fix the lock-less /api/cron/bot-signals handler: duplicate-execution races (#3–#6)",
-          "done": false
+          "done": true
         },
         {
           "id": "F3",
@@ -23,7 +23,7 @@
         {
           "id": "F4",
           "title": "Day-weighted-average-capital % return (ROAI denominator) — Phase 2 correctness remainder",
-          "done": false
+          "done": true
         },
         {
           "id": "F5",
@@ -38,7 +38,7 @@
         {
           "id": "F7",
           "title": "Sharia screener reliability — Finnhub rate-limit handling",
-          "done": false
+          "done": true
         },
         {
           "id": "F8",
@@ -82,7 +82,7 @@
         }
       ],
       "archive": false,
-      "open": 11,
+      "open": 8,
       "total": 15
     },
     {
