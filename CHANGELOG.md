@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-21
+
+### Added
+- **notifications:** Tell users when a partner connection changes (`eb121ec`)
+
 ## 2026-08-20
 
 ### Added

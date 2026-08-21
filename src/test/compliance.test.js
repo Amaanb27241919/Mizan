@@ -128,3 +128,38 @@ describe("policy module", () => {
     }
   });
 });
+
+// ── The gerund-recommendation hole (found 2026-08-21) ──────────────────────
+//
+// The marketing site depicted the advisor saying "trimming toward your 25%
+// target would improve diversification" — a personalized sell recommendation
+// on a public page — and EVERY pattern missed it. `act-on-your-position`
+// requires the bare verb followed immediately by "your"; here the verb is a
+// gerund AND a word intervenes ("toward your"), so it slipped through twice.
+//
+// The distinction these tests protect: describing a portfolio is the product,
+// promising an improvement from an action is advice.
+describe("gerund recommendations with an intervening word", () => {
+  const FLAGGED = [
+    "Your technology exposure sits at 38%, so trimming toward your 25% target would improve diversification.",
+    "Adding to that fund would help your diversification.",
+    "Selling some of that position would reduce your concentration risk.",
+    "Rebalancing toward sukuk would lower your volatility.",
+  ];
+  it.each(FLAGGED)("flags: %s", (txt) => {
+    expect(scanForProhibited(txt).length).toBeGreaterThan(0);
+  });
+
+  // Facts about the user's own holdings are ACCOUNT_SERVICING and must stay
+  // sayable — a filter that eats these makes the advisor useless.
+  const ALLOWED = [
+    "Your allocation is 38% technology and 12% healthcare.",
+    "You hold ~$4,260 of NVDA across two accounts, about 1.6% of your equities.",
+    "Your zakatable wealth is above the silver nisab, so 2.5% is due. Purify the impure portion by donating it.",
+    "Holding your position for over a year changes the tax treatment of any gain.",
+    "NVDA passes AAOIFI screening: debt/assets of 8.3%, well below the 33% threshold.",
+  ];
+  it.each(ALLOWED)("stays clean: %s", (txt) => {
+    expect(scanForProhibited(txt)).toHaveLength(0);
+  });
+});
