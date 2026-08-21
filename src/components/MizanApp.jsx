@@ -6956,6 +6956,141 @@ function TradeConnectionsPanel({onConnectTrade}){
   </BentoTile>;
 }
 
+/**
+ * The tester's own Alpaca paper credentials.
+ *
+ * Lives here rather than Settings → API Keys for two reasons. That page is
+ * isRoot-only, so a beta tester could never reach it; and its Alpaca fields
+ * wrote to the `mizan_keys` blob in user_state, which is PLAINTEXT at rest and
+ * which the server never read for Alpaca anyway — a credential trap that did
+ * nothing. These go to /api/alpaca/keys, which verifies the pair against
+ * Alpaca, encrypts it (AES-256-GCM) and stores it in user_keys.
+ *
+ * The secret is write-only from here on: the server returns the last 4 of the
+ * key id and nothing else, ever.
+ */
+function AlpacaKeysPanel({onChanged}){
+  const[state,setState]=useState(null);      // {configured,source,last4,paper,encryption}
+  const[keyId,setKeyId]=useState("");
+  const[secret,setSecret]=useState("");
+  const[busy,setBusy]=useState(false);
+  const[err,setErr]=useState(null);
+  const[ok,setOk]=useState(null);
+  const[open,setOpen]=useState(false);
+
+  const load=async()=>{
+    try{
+      const r=await apiFetch("/api/alpaca/keys");
+      if(!r.ok)return;
+      setState(await r.json());
+    }catch{/* leave null — the panel just shows its idle state */}
+  };
+  useEffect(()=>{load();},[]);
+
+  const save=async()=>{
+    if(busy)return;
+    setErr(null);setOk(null);
+    if(!keyId.trim()||!secret.trim()){setErr("Both the key ID and the secret are required.");return;}
+    setBusy(true);
+    try{
+      const r=await apiFetch("/api/alpaca/keys",{
+        method:"PUT",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({keyId:keyId.trim(),secret:secret.trim()}),
+      });
+      const d=await r.json();
+      if(!r.ok||d.error){setErr(d.error||`HTTP ${r.status}`);return;}
+      // Never keep the secret in component state after a successful store.
+      setKeyId("");setSecret("");setOpen(false);
+      setOk("Verified with Alpaca and stored, encrypted.");
+      setTimeout(()=>setOk(null),5000);
+      await load();onChanged?.();
+    }catch(e){setErr(e?.message||"Could not save the credentials.");}
+    finally{setBusy(false);}
+  };
+
+  const remove=async()=>{
+    if(busy)return;
+    setBusy(true);setErr(null);
+    try{
+      const r=await apiFetch("/api/alpaca/keys",{method:"DELETE"});
+      const d=await r.json();
+      if(!r.ok||d.error){setErr(d.error||`HTTP ${r.status}`);return;}
+      await load();onChanged?.();
+    }catch(e){setErr(e?.message||"Could not remove the credentials.");}
+    finally{setBusy(false);}
+  };
+
+  const mine=state?.source==="user";
+  const lbl={fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.08em",fontWeight:600,display:"block",marginBottom:4};
+  const inp={width:"100%",boxSizing:"border-box",padding:`${T.s2} ${T.s3}`,borderRadius:T.rMd,border:`1px solid ${T.border}`,background:T.bg,color:T.textHi,fontFamily:FM,fontSize:"var(--fs-xs)"};
+
+  return(
+    <CollapsibleTile storageKey="alpaca_keys" title="PAPER ACCOUNT" subtitle={
+      state?.configured
+        ? (mine?`Your own Alpaca paper account · key ••••${state.last4||"????"}`:"Using the shared Mizan paper account")
+        : "No paper account connected"
+    } flat>
+      <div style={{display:"flex",flexDirection:"column",gap:T.s3,padding:T.s3}}>
+        <p style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.6,margin:0}}>
+          {mine
+            ? "Orders and positions here belong to your own Alpaca paper account. Nobody else can see or affect them."
+            : state?.configured
+              ? "You're on the shared Mizan paper account — every tester writes into the same blotter and shares its buying power. Connect your own free paper account below to get an isolated one."
+              : "Connect a free Alpaca paper account to place test orders. Paper only: no real money is reachable from Mizan."}
+        </p>
+
+        {state&&state.encryption===false&&(
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,lineHeight:1.6}}>
+            Server encryption is not configured, so credentials cannot be stored. Set <code>ENCRYPTION_KEY</code> first.
+          </div>
+        )}
+
+        {!open&&(
+          <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+            <button className="btn-ghost mz-tap" onClick={()=>setOpen(true)} disabled={state?.encryption===false} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em"}}>
+              {mine?"Replace keys":"Connect my paper account"}
+            </button>
+            {mine&&<button className="btn-ghost mz-tap" onClick={remove} disabled={busy} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em",color:T.loss,borderColor:`${T.loss}55`}}>
+              Remove
+            </button>}
+          </div>
+        )}
+
+        {open&&(
+          <div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+            <div>
+              <label style={lbl} htmlFor="alpaca-key-id">KEY ID</label>
+              <input id="alpaca-key-id" className="field" style={inp} value={keyId} onChange={e=>setKeyId(e.target.value)}
+                     autoComplete="off" spellCheck={false} placeholder="PK…"/>
+            </div>
+            <div>
+              <label style={lbl} htmlFor="alpaca-secret">SECRET</label>
+              {/* type=password so it isn't shoulder-surfed or captured by a
+                  screen recording; it is never rendered back after saving. */}
+              <input id="alpaca-secret" className="field" style={inp} type="password" value={secret} onChange={e=>setSecret(e.target.value)}
+                     autoComplete="off" spellCheck={false} placeholder="••••••••"/>
+            </div>
+            <p style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.6,margin:0}}>
+              Generate these at <strong>alpaca.markets → Paper Trading → API Keys</strong>. Mizan verifies the pair against Alpaca's paper API before storing it, so a live key pair is refused.
+            </p>
+            <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+              <button className="btn-primary mz-tap" onClick={save} disabled={busy} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em"}}>
+                {busy?"Verifying…":"Verify & save"}
+              </button>
+              <button className="btn-ghost mz-tap" onClick={()=>{setOpen(false);setKeyId("");setSecret("");setErr(null);}} disabled={busy} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.04em"}}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {err&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,lineHeight:1.6}}>{err}</div>}
+        {ok&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,lineHeight:1.6}}>{ok}</div>}
+      </div>
+    </CollapsibleTile>
+  );
+}
+
 function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOrderPlaced,activities=[],onNav,onConnectTrade,isAdmin=false,fullAutoEnabled=false,isRoot=false,consented=false,demoMode=false}){
   // Trade is the admin trading hub: bot Strategies + Signals, plus the analysis
   // tools (Screener / Rebalance / Backtest, reused from Portfolio) and an ad-hoc
@@ -7178,6 +7313,10 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
       action={onNav ? { label: "Open Assistant", onClick: () => onNav("advisor") } : null}
     />}
     {sub==="order"&&isAdmin&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
+    {/* Whose paper account this ticket acts on. Above the ticket deliberately:
+        a tester needs to know they're on the shared blotter BEFORE they place
+        an order, not after they can't find their fill. */}
+    {sub==="order"&&isAdmin&&venue==="alpaca"&&!demoMode&&<AlpacaKeysPanel/>}
     {sub==="order"&&isAdmin&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
       {/* ─── Order Ticket bento ────────────────────────── */}
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -8196,7 +8335,13 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
     {id:"finnhub",  l:"Finnhub",        tier:"Stage 1 — Real-time",   url:"finnhub.io",             cost:"Free",   color:T.gain,   fields:[{k:"finnhub",l:"API Key",ph:"xxxxxxxx..."}]},
     {id:"polygon",  l:"Polygon.io",     tier:"Stage 2 — Charts",      url:"polygon.io",              cost:"Free",   color:T.blue,   fields:[{k:"polygon",l:"API Key",ph:"xxxxxxxx..."}]},
     {id:"snaptrade",l:"SnapTrade",      tier:"Broker Connect (consumer key server-only)",url:"snaptrade.com/developers",cost:"Free sandbox",color:"#7C3AED",fields:[{k:"snapId",l:"Client ID",ph:"your-client-id"}]},
-    {id:"alpaca",   l:"Alpaca",         tier:"Stage 4 — Paper Trading",url:"alpaca.markets",         cost:"Free",   color:T.gold,   fields:[{k:"alpacaId",l:"Key ID",ph:"PKXX..."},{k:"alpacaSecret",l:"Secret",ph:"xxxx..."}]},
+    // Alpaca deliberately has NO fields here. It used to collect a Key ID +
+    // Secret into the `mizan_keys` blob in user_state — which is plaintext at
+    // rest, and which the server never read for Alpaca anyway, so pasting a
+    // trading credential here did nothing except store it in the clear.
+    // Paper credentials now live in Trade → Order Ticket, which verifies them
+    // against Alpaca and stores them AES-256-GCM encrypted (migration 029).
+    {id:"alpaca",   l:"Alpaca",         tier:"Stage 4 — Paper Trading",url:"alpaca.markets",         cost:"Free",   color:T.gold,   managedElsewhere:"Trade → Order Ticket", fields:[]},
   ];
 
   const FEATURES=[
@@ -8206,7 +8351,10 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
     {f:"Historical charts (Polygon)",req:["polygon"]},
     {f:"AI Assistant",              req:[],alwaysOn:true,note:"Server-configured"},
     {f:"Connect Fidelity/Robinhood",req:["snapId"],alwaysOn:false,note:"Consumer key server-side"},
-    {f:"Paper trading bot",         req:["alpacaId","alpacaSecret"]},
+    // Not driven by `keys` any more — paper credentials live server-side per
+    // user (migration 029). Marked always-on with a pointer rather than left
+    // reading "not ready" forever off two fields nothing writes.
+    {f:"Paper trading bot",         req:[],alwaysOn:true,note:"Per-user, in Trade"},
   ];
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -8307,6 +8455,9 @@ function Settings({apiKeys,setApiKeys,onConnect,onConnectTrade,isAdmin=false,onI
         </div>}
         {api.serverOnly&&<div style={{marginTop:T.s2,display:"flex",alignItems:"center",gap:T.s2,padding:`${T.s2} ${T.s3}`,background:`${T.gain}0F`,border:`1px solid ${T.gain}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.gain,lineHeight:1.5}}>
           <Icon name="check" size={12} style={{flexShrink:0}}/><span>Server-configured. Set <code style={{color:T.text,padding:"1px 5px",background:T.surface,borderRadius:4}}>{api.id==="anthropic"?"ANTHROPIC_KEY":"SNAPTRADE_CONSUMER_KEY"}</code> in env vars on the host. Never exposed to the browser.</span>
+        </div>}
+        {api.managedElsewhere&&<div style={{marginTop:T.s2,display:"flex",alignItems:"center",gap:T.s2,padding:`${T.s2} ${T.s3}`,background:`${T.blue}0F`,border:`1px solid ${T.blue}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.blue,lineHeight:1.5}}>
+          <Icon name="check" size={12} style={{flexShrink:0}}/><span>Managed in <strong>{api.managedElsewhere}</strong> — verified against Alpaca and stored encrypted, per user. Trading credentials are deliberately not entered on this page.</span>
         </div>}
       </BentoTile>)}
 

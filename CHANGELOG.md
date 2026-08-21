@@ -10,7 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-20
 
 ### Added
-- **trading:** One market clock, and extended-hours orders on the Alpaca path (`5c70ae1`)
+- **trading:** One market clock, and extended-hours orders on the Alpaca path (`ac75913`)
 - **screening:** Attribute the divestment list, and make it visible (`0c241cb`)
 
 ## 2026-08-19
