@@ -206,7 +206,7 @@
         {
           "id": "N15",
           "title": "Maintain the ethical/BDS curated exclusion list against an authoritative source",
-          "done": false
+          "done": true
         },
         {
           "id": "N16",
@@ -265,7 +265,7 @@
         }
       ],
       "archive": false,
-      "open": 24,
+      "open": 23,
       "total": 26
     },
     {

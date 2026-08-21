@@ -36,6 +36,7 @@ export const TRACKED_KEYS = [
   'mizan_name_prompt_skips',          // times the "add your name" nudge was skipped — synced so the 3 skips are per-user, not per-device
   'mizan_tour_seen',                  // "1" once the first-login guided-tour offer has been seen/dismissed — synced so the offer shows once per user, not per device
   'mizan_subscription_overrides',     // { [normalizedMerchant]: { name?, estMonthly?, active? } } — user edits to DERIVED recurring subscriptions (detection is re-run every load, so edits live here, keyed by the ORIGINAL merchant)
+  'mizan_ethical_overlay',            // "1" when the ethical/BDS overlay is on. Added 2026-08-20: the setter had always called persistUserState for this key, but an untracked key returns early, so the choice was silently per-device for the overlay's whole life
 ];
 
 // User-scoped *local caches* — not synced (regenerated on next sync), but

@@ -14,6 +14,7 @@ import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHist
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
+import { useEthicalOverlay, ethicalFlag } from "../lib/ethicalOverlay.js";
 import Budgeting from "./Budgeting.jsx";
 import { moneyWeightedReturn } from "../lib/performance.js";
 import { recordNavView } from "../lib/navUsage.js";
@@ -957,14 +958,17 @@ const ICON_NO=<Icon name="close" size={12} style={{display:"inline-block",vertic
 
 function LiveDot({on,pulse}){return<span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",flexShrink:0,background:on?T.gain:T.muted,boxShadow:on?`0 0 8px ${T.gain}80`:"none",animation:pulse?"blink 2s ease-in-out infinite":"none"}}/>;}
 
-function Tag({label,color}){
+// `title` is optional and forwarded to the DOM. A pill whose label is an
+// abbreviation ("BDS") is meaningless without one, and passing it to a Tag that
+// ignored it was a silent no-op.
+function Tag({label,color,title}){
   const c=color||T.muted;
-  return<span style={{
+  return<span title={title||undefined} style={{
     display:"inline-flex",alignItems:"center",gap:T.s1,
     padding:`2px ${T.s2}`,borderRadius:999,
     fontSize:"var(--fs-2xs)",fontFamily:FM,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",
     color:c,background:`${c}18`,border:`1px solid ${c}30`,
-    whiteSpace:"nowrap",
+    whiteSpace:"nowrap",cursor:title?"help":undefined,
   }}>{label}</span>;
 }
 
@@ -1522,6 +1526,7 @@ function NicknameEditor({accountId,defaultName,nickname,onSetNickname,
 /* ─── OVERVIEW ───────────────────────────────────────── */
 function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabledAccts=new Set(),onToggleAcct,onDisconnectAcct,mapPosition,metrics={},activities=[],netWorthHistory=[],onNav,onConnect,onToggleDemoFromBanner,bankBalance=0,nicknames={},onSetNickname,demoMode=false,pendingSignals=0}){
   const { hidden: valuesHidden, toggle: toggleHideValues, mask } = useHideValues();
+  const { ethical: ethicalOn } = useEthicalOverlay();
   const[range,setRange]=useState("1Y");
   // Rolling 24-hour intraday NAV buffer (client-captured on live ticks) —
   // powers the real-time 1D chart. localStorage-backed so it survives nav
@@ -1974,6 +1979,11 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   // Red only when you actually hold something non-compliant; green when ≥95%
   // confirmed halal; gold when the rest is merely pending review (not haram).
   const complianceColor = haramV>0 ? T.loss : halalPct==null ? T.muted : halalPct>=95 ? T.gain : T.gold;
+  // Ethical/BDS overlay: held names that a third-party divestment list flags.
+  // Deliberately kept OUT of halalPct and the allocation donut — the overlay is
+  // a separate lens, not a Sharia verdict, and folding it into the compliance
+  // percentage would silently restate one methodology as the other.
+  const bdsHeld = merged.filter(h=>ethicalFlag(h,ethicalOn));
   const fmtUSD=v=>`$${(+v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
   return<div className="bento" style={{display:"flex",flexDirection:"column",gap:T.s5}}>
@@ -2107,6 +2117,13 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CONFIRMED HALAL</div>
           <div style={{fontFamily:FU,fontSize:"var(--fs-4xl)",fontWeight:700,color:complianceColor,letterSpacing:"-0.03em",fontVariantNumeric:"tabular-nums"}}>{halalPct==null?"—":`${halalPct.toFixed(1)}%`}</div>
           <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s1}}>{merged.length===0?"No holdings to screen":<>{halalCount} of {merged.length} halal{reviewCount>0?` · ${reviewCount} review`:""}{haram.length>0?` · ${haram.length} non-compliant`:""}</>}</div>
+          {bdsHeld.length>0&&(
+            <button onClick={()=>onNav&&onNav("portfolio")}
+                    title={bdsHeld.map(h=>`${h.tk} — ${ethicalFlag(h,ethicalOn).reason}`).join("\n")}
+                    style={{marginTop:T.s2,display:"flex",alignItems:"center",gap:T.s1,width:"100%",textAlign:"left",background:`${T.loss}0D`,border:`1px solid ${T.loss}33`,borderRadius:T.rMd,padding:`${T.s1} ${T.s2}`,cursor:"pointer",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,fontWeight:600,letterSpacing:"0.04em",lineHeight:1.5}}>
+              {bdsHeld.length} on divestment list: {bdsHeld.map(h=>h.tk).join(", ")}
+            </button>
+          )}
         </BentoTile>
         {(totalCash>0||snapAccounts.length>0)&&<BentoTile>
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>CASH ON HAND</div>
@@ -2515,8 +2532,9 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
   // Ethical / BDS overlay — an optional layer ON TOP of the AAOIFI verdict that
   // flags divestment-target names. Off by default; the Sharia status is never
   // altered, only an extra exclusion is surfaced when the user opts in.
-  const[ethical,setEthical]=useState(()=>{try{return localStorage.getItem("mizan_ethical_overlay")==="1";}catch{return false;}});
-  const setEthicalPref=v=>{setEthical(v);try{localStorage.setItem("mizan_ethical_overlay",v?"1":"0");}catch{}persistUserState("mizan_ethical_overlay",v?"1":"0");};
+  // Shared via useEthicalOverlay so Overview and Holdings show the same flag —
+  // it used to be local state here, which made it a Screener-only feature.
+  const{ethical,setEthical:setEthicalPref}=useEthicalOverlay();
   // Cache freshness: most recent asOf date across all cached results.
   const today=new Date().toISOString().slice(0,10);
   const cachedDates=Object.values(results).map(r=>r.asOf).filter(Boolean);
@@ -2647,6 +2665,12 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
       :{status:h.sh_||"unknown"}};
   });
   const bdsExcluded=ethical?enriched.filter(h=>h._screen?.ethical?.excluded):[];
+  // Provenance for the overlay banner, read off the verdict itself rather than
+  // re-imported: lib/sharia.mjs touches process.env at module scope, so pulling
+  // it into the browser bundle would crash. The server already ships `sources`
+  // and `reconciled` on every ethical flag — same payload as the verdict, so
+  // the citation can never describe a different list than the one being applied.
+  const bdsMeta=(bdsExcluded[0]||enriched.find(h=>h._screen?.ethical))?._screen?.ethical||null;
   const byStatus={halal:[],review:[],haram:[],unknown:[]};
   enriched.forEach(h=>(byStatus[h._screen.status]||byStatus.unknown).push(h));
   const totalEquity=enriched.reduce((s,h)=>s+mv(h),0);
@@ -2866,7 +2890,11 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
     </div>
 
     {ethical&&<div style={{padding:`${T.s2} ${T.s4}`,background:`${T.loss}0D`,border:`1px solid ${T.loss}33`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55}}>
-      <span style={{color:T.loss,fontWeight:600}}>Ethical / BDS overlay ON</span> · {bdsExcluded.length} holding{bdsExcluded.length===1?"":"s"} flagged{bdsExcluded.length?`: ${bdsExcluded.map(h=>h.tk).join(", ")}`:""}. A curated divestment-target list layered on top of the Sharia verdict — it does not change the Sharia status.
+      <span style={{color:T.loss,fontWeight:600}}>Ethical / BDS overlay ON</span> · {bdsExcluded.length} holding{bdsExcluded.length===1?"":"s"} flagged{bdsExcluded.length?`: ${bdsExcluded.map(h=>h.tk).join(", ")}`:""}. A divestment-target list layered on top of the Sharia verdict — it does not change the Sharia status.
+      {bdsMeta?.sources?.length>0&&<div style={{marginTop:T.s1,opacity:0.85}}>
+        Mizan does not judge these companies. Each name is flagged because a third party published it — {bdsMeta.sources.map((s,i)=><span key={s.key||i}>{i>0?", ":""}<a href={s.url} target="_blank" rel="noopener noreferrer" style={{color:T.muted,textDecoration:"underline"}}>{s.name}</a></span>)}
+        {bdsMeta.reconciled?` · list reconciled ${bdsMeta.reconciled}`:""}. Hover a BDS pill for the specific listing.
+      </div>}
     </div>}
 
     <BentoTile style={{padding:0,overflow:"hidden"}}>
@@ -2877,7 +2905,7 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
         {l:"Debt/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.debtR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
         {l:"Cash/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.cashR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:v<33?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
         {l:"A/R/Cap",r:true,mobileHide:true,r_:r=>{const v=r._screen.recvR;if(v==null)return<span style={{color:T.muted}}>—</span>;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:v<49?T.gain:T.loss}}>{v.toFixed(1)}%</span>;}},
-        {l:"Status",r_:r=><span style={{display:"inline-flex",gap:4,alignItems:"center",flexWrap:"wrap"}}><Tag label={r._screen.status==="halal"?"Halal":r._screen.status==="haram"?"Non-Compliant":r._screen.status==="review"?"Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>{ethical&&r._screen.ethical?.excluded&&<Tag label="BDS" color={T.loss}/>}</span>},
+        {l:"Status",r_:r=><span style={{display:"inline-flex",gap:4,alignItems:"center",flexWrap:"wrap"}}><Tag label={r._screen.status==="halal"?"Halal":r._screen.status==="haram"?"Non-Compliant":r._screen.status==="review"?"Review":"…"} color={r._screen.status==="halal"?T.gain:r._screen.status==="haram"?T.loss:r._screen.status==="review"?T.gold:T.muted}/>{ethical&&r._screen.ethical?.excluded&&<Tag label="BDS" color={T.loss} title={r._screen.ethical.reason}/>}</span>},
         {l:"Pass / 7",r:true,mobileHide:true,r_:r=>{const bs=r._screen.byStandard;if(!bs)return<span style={{color:T.muted}}>—</span>;const pass=Object.values(bs).filter(s=>s.pass===true).length;return<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:pass>=6?T.gain:pass>=4?T.gold:T.loss}} title={Object.entries(bs).map(([k,v])=>`${STANDARDS[k]?.name||k}: ${v.pass===true?"pass":v.pass===false?"fail":"n/a"}`).join("\n")}>{pass}/{Object.keys(STANDARDS).length}</span>;}},
         {l:"Primary",mobileHide:true,r_:r=>{const v=r._screen.byStandard?.[primary];if(!v)return<span style={{color:T.muted}}>—</span>;return v.pass===true?<Icon name="check" size={14} color={T.gain}/>:v.pass===false?<Icon name="close" size={14} color={T.loss}/>:<span style={{color:T.muted}}>…</span>;}},
         {l:"Why",r_:r=><button onClick={()=>setDetail(r)} title="Why this verdict?" style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,color:T.blue,background:"transparent",border:`1px solid ${T.blue}40`,borderRadius:T.rMd,padding:`3px ${T.s2}`,cursor:"pointer",whiteSpace:"nowrap"}}>Why →</button>},
@@ -5052,6 +5080,10 @@ function HoldingExpanded({ tk, state, costBasis = null, trades = null }) {
 // Accordion holdings table — replaces the generic Tbl in the holdings section.
 // Clicking a row expands it to show earnings + news; clicking again collapses.
 function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp, activities = [] }) {
+  // Read the shared overlay rather than taking a prop: the flag has to agree
+  // with the Screener and Overview, and threading it through Portfolio would
+  // add an unstable prop to a component that already re-renders per row.
+  const { ethical } = useEthicalOverlay();
   const [openTk, setOpenTk] = useState(null);
   const [rowData, setRowData] = useState({});       // { [tk]: { news, earnings, loading } }
   const [earningsMap, setEarningsMap] = useState({}); // { [symbol]: nearest future entry }
@@ -5172,9 +5204,14 @@ function HoldingsTable({ filtered, valuesHidden, mask, f$, fp, fc, mv, gv, gp, a
                       <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: fc(gp(r)), marginTop: 1 }}>{valuesHidden ? "••" : fp(gp(r))}</div>
                     </div>
                   </td>
-                  {/* Sharia */}
+                  {/* Sharia — plus the ethical/BDS flag when the overlay is on.
+                      Two separate verdicts deliberately: the overlay never
+                      changes the Sharia status, it sits beside it. */}
                   <td style={tdBase(isOpen)}>
-                    <Tag label={r.sh_ === "halal" ? "Halal" : r.sh_ === "haram" ? "Non-Compliant" : "Review"} color={r.sh_ === "halal" ? T.gain : r.sh_ === "haram" ? T.loss : T.gold} />
+                    <span style={{ display: "inline-flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                      <Tag label={r.sh_ === "halal" ? "Halal" : r.sh_ === "haram" ? "Non-Compliant" : "Review"} color={r.sh_ === "halal" ? T.gain : r.sh_ === "haram" ? T.loss : T.gold} />
+                      {ethicalFlag(r, ethical) && <Tag label="BDS" color={T.loss} title={ethicalFlag(r, ethical).reason} />}
+                    </span>
                   </td>
                 </tr>
                 {isOpen && (

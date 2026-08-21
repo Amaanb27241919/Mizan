@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **usage:** Count sub-tabs too — the tracking could not answer its own question (`d9582a2`)
 
 ### Docs
+- Record the agent triage sweeps in the audit doc (`403aac6`)
 - **backlog:** Triage N/M/P — 2 done, 6 partial, and two doc defects corrected (`8738545`)
 - **backlog:** Triage sweep — close F2/F4/F7, correct F5 upward, re-verify F3 (`9e8ebce`)
 

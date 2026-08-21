@@ -126,6 +126,12 @@ src/lib/notifications.js       — Pure in-app notification store + detectors (a
                                  toast is an optional extra channel built from the same copy.
                                  A notification's `nav` MUST be in NAV_TARGETS (top-level tabs only);
                                  sub-tab names render a blank page. Tested: notifications.test.js.
+src/lib/ethicalOverlay.js      — Shared ethical/BDS overlay preference (useEthicalOverlay) +
+                                 ethicalFlag(holding, on). Mirrors useScreenStandard: localStorage
+                                 + a window event, so Screener, Holdings and Overview show the same
+                                 flag. It was Screener-local `useState` until 2026-08-20, which is
+                                 why `mapPosition` computed `h.bds_` for every holding and NOTHING
+                                 read it. Don't convert it back to component state. See §4.
 src/lib/userState.js           — localStorage ↔ Supabase state sync (mizan_debts is a TRACKED_KEY).
                                  `persistUserState` upserts the WHOLE value = last writer wins. For
                                  append-only keys use **`persistMergedUserState(key, mergeFn, local)`**,
@@ -321,6 +327,15 @@ Understanding these concepts is required to work on Mizan correctly. Financial e
 - **Comprehensive worksheet (2026-07-13)**: the Zakat tab is a full asset-by-asset worksheet mirroring the authoritative scholar calculators (DarusSalam Seminary, Sacred Learning). It has a **connected-account checklist** (like the Goals account picker) where the user ticks which brokerage/retirement/bank accounts count toward Zakat and unticks any they don't; plus manual rows for anything not connected: cash on hand, stocks/funds elsewhere, retirement, gold & silver, business assets/inventory, resale property, accounts receivable, loans receivable — minus short-term debts, long-term debt due, salaries owed. `Net zakatable = assets − liabilities`, ×2.5% once above nisab. Stored in `mizan_zakat_worksheet` (synced TRACKED_KEY; the picker's unticked ids live in `worksheet.excludedAccounts`); seeded once from existing manual assets. The **Overview ZAKAT DUE tile and the tab read the same worksheet + same picker selection** via `computeZakatWorksheet` (`src/lib/zakat.js`) and the shared `zakatConnectedAccounts()` / `zakatSelectedTotals()` helpers, so they never diverge. Credit/loan accounts are excluded from the picker (they're liabilities → the debt rows); investment-class accounts (brokerage + retirement + investments) get the factor, bank/depository counts as full-value cash.
 - **Tab layout (GoalsHub)**: the "Plan" nav tab has sub-tabs **Goals · Zakat · Sadaqah · Retirement/FIRE**. Zakat and Sadaqah were split (2026-07-13) — one `ZakatSadaqah` component driven by a `view="zakat"|"sadaqah"` prop, mounted twice by GoalsHub. Zakat view = hero + worksheet + methodology + purification; Sadaqah view = given/pledged tiles + charity log. Dividend Purification stays under Zakat (its "Mark Purified" still writes to the `mizan_sadaqah` log the Sadaqah tab reads).
 - **Default investment method is now `full` value** (was `longterm_30`), matching those scholar calculators which count shares AND vested retirement at full value. The 30% long-term rule is still available via the methodology toggle (opt-in, applies only to investment-class rows: brokerage + stocks + retirement). Cash, metals, receivables, business assets always count at full value.
+
+### Ethical / BDS overlay (shipped 2026-07-02, hardened 2026-08-20)
+An **optional, opt-in** layer that flags holdings named on third-party divestment lists. It is **not a Sharia ruling** and must never become one — it never touches `h.sh_`, never enters `halalPct`, and never enters the allocation donut. Folding it into the compliance number would restate one methodology as another.
+
+- **Attribution is the whole design.** `ETHICAL_EXCLUSIONS` in `lib/sharia.mjs` maps ticker → `{ sources[], activity }`, and `ETHICAL_SOURCES` carries each body's name/url/version. Every `reason` string reads "*activity* — listed by *body*". **Never reword an entry into Mizan's own voice, and never add a ticker without a citable listing.** A wrong ticker here is a false public claim about a real company — that is the only failure mode that actually matters, and `src/test/ethicalScreen.test.js` fails the build if any entry loses its attribution.
+- **Sources:** [UN OHCHR settlement-business database](https://www.ohchr.org/en/business/bhr-database) (Sept 2025 update — 158 enterprises, 11 countries) and [AFSC "Investigate"](https://investigate.afsc.org/). Neither is machine-readable, so **this cannot be crond.** Instead `ETHICAL_RECONCILED` + `ETHICAL_REVIEW_DAYS` (180) drive `checkEthicalListReview()` in the daily cleanup sweep, which emails the owner once it lapses — same pattern as `checkLegalReview`.
+- **Reconciling means removing, not just adding.** OHCHR dropped 15 enterprises in one pass for ceasing the listed activity. A name left on after it is de-listed is worse than a name missing.
+- **Deliberate omission:** OHCHR is majority Israeli-domiciled banks/telecoms/transport. Some have US listings, but unverified name→ticker mappings are omitted rather than guessed.
+- Surfacing: Screener (pill + attributed banner), Holdings (pill beside the Sharia tag), Overview (count on the CONFIRMED HALAL tile). Default **off**; the pref is `mizan_ethical_overlay`, a TRACKED_KEY. Guarded by `e2e/ethical-overlay.spec.js`, including the overlay-OFF direction.
 
 ### Dividend Purification
 - When a halal company earns a small portion of revenue from haram sources, the dividend is "impure" by that percentage.

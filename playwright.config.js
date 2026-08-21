@@ -23,7 +23,13 @@ import { defineConfig, devices } from "@playwright/test";
  * dev server, so what's tested is what ships — including the pre-paint theme
  * script in index.html, which only exists in the built HTML.
  */
-const PORT = 4173;
+// Overridable because `reuseExistingServer` is on locally: if ANY other process
+// already holds this port, Playwright silently adopts it and the whole suite
+// runs against a different application. That is not hypothetical — it happened
+// on 2026-08-20 and produced a page snapshot of an unrelated app, with the one
+// "expect no BDS pill" test still passing, because absence assertions pass on
+// any page that isn't yours. Set MIZAN_E2E_PORT to step around a collision.
+const PORT = Number(process.env.MIZAN_E2E_PORT) || 4173;
 
 export default defineConfig({
   testDir: "./e2e",
