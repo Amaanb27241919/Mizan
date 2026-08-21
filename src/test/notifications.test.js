@@ -9,7 +9,8 @@ import { describe, it, expect } from 'vitest'
 import {
   makeNotification, addNotifications, unreadCount, markAllRead, markRead,
   relativeTime, shariaChangeNotifications, dividendNotifications,
-  priceAlertNotifications, NOTIF_CAP, NOTIF_KINDS, NAV_TARGETS,
+  priceAlertNotifications, connectionNotifications, connectionBaseline,
+  NOTIF_CAP, NOTIF_KINDS, NAV_TARGETS,
 } from '../lib/notifications.js'
 
 // MizanApp renders tabs as {nav==="overview" && …}. An unrecognised nav value
@@ -185,5 +186,97 @@ describe('priceAlertNotifications', () => {
   it('keys on symbol+direction+target so one crossing notifies once', () => {
     const c = [{ symbol: 'SPUS', price: 42.5, target: 40, direction: 'above' }]
     expect(addNotifications(priceAlertNotifications(c), priceAlertNotifications(c))).toHaveLength(1)
+  })
+})
+
+// ── Partner connection changes (2026-08-21) ────────────────────────────────
+// SnapTrade brokerages and Plaid banks, fed by /api/connections/health.
+describe('connectionNotifications', () => {
+  const snap = (id, status = 'ok', institution = 'Fidelity') =>
+    ({ provider: 'snaptrade', item_id: id, institution, status })
+  const plaid = (id, status = 'ok', institution = 'Chase') =>
+    ({ provider: 'plaid', item_id: id, institution, status })
+
+  // THE important one. A null baseline means "never seeded" — a user who has
+  // had five accounts linked for months must not be greeted by five "connected"
+  // notifications the first time this ships.
+  it('says NOTHING on the first run, so existing connections are not announced', () => {
+    expect(connectionNotifications(null, [snap('a'), plaid('b'), snap('c')])).toEqual([])
+    expect(connectionNotifications(undefined, [snap('a')])).toEqual([])
+  })
+
+  it('announces a genuinely new connection', () => {
+    const n = connectionNotifications([], [snap('a')])
+    expect(n).toHaveLength(1)
+    expect(n[0].title).toBe('Fidelity connected')
+    expect(n[0].body).toMatch(/SnapTrade/)
+    expect(n[0].meta.event).toBe('added')
+  })
+
+  it('names the right partner for each provider', () => {
+    expect(connectionNotifications([], [plaid('b')])[0].body).toMatch(/Plaid/)
+    expect(connectionNotifications([], [snap('a')])[0].body).toMatch(/SnapTrade/)
+  })
+
+  it('flags a working connection that starts needing re-auth', () => {
+    const n = connectionNotifications([plaid('b', 'ok')], [plaid('b', 'reauth')])
+    expect(n).toHaveLength(1)
+    expect(n[0].title).toMatch(/needs reconnecting/)
+    expect(n[0].body).toMatch(/going stale/)
+  })
+
+  it('confirms a broken connection coming back', () => {
+    const n = connectionNotifications([plaid('b', 'reauth')], [plaid('b', 'ok')])
+    expect(n).toHaveLength(1)
+    expect(n[0].meta.event).toBe('restored')
+  })
+
+  it('notes a removed connection and why it matters', () => {
+    const n = connectionNotifications([snap('a')], [])
+    expect(n).toHaveLength(1)
+    expect(n[0].meta.event).toBe('removed')
+    expect(n[0].body).toMatch(/net worth/)
+  })
+
+  it('is silent when nothing changed', () => {
+    const items = [snap('a'), plaid('b')]
+    expect(connectionNotifications(items, items)).toEqual([])
+  })
+
+  // A connection that stays broken must not re-announce itself every sync —
+  // only the TRANSITION is detected, never the state.
+  it('does not re-fire while a connection simply stays broken', () => {
+    expect(connectionNotifications([plaid('b', 'reauth')], [plaid('b', 'reauth')])).toEqual([])
+  })
+
+  it('detects several independent changes in one pass', () => {
+    const before = [snap('a', 'ok'), plaid('b', 'ok'), snap('c', 'reauth')]
+    const after  = [snap('a', 'reauth'), snap('c', 'ok'), plaid('d', 'ok', 'Amex')]
+    const events = connectionNotifications(before, after).map(n => n.meta.event).sort()
+    expect(events).toEqual(['added', 'reauth', 'removed', 'restored'])
+  })
+
+  it('routes to a real top-level tab, never a blank page', () => {
+    const n = connectionNotifications([], [snap('a')])[0]
+    expect(NAV_TARGETS).toContain(n.nav)
+    expect(n.nav).toBe(NOTIF_KINDS.connection.nav)
+  })
+
+  it('dedupes within a day but notifies again on a later day', () => {
+    const a = connectionNotifications([], [snap('a')], '2026-08-21')
+    const b = connectionNotifications([], [snap('a')], '2026-08-21')
+    expect(addNotifications(a, b)).toHaveLength(1)
+    const c = connectionNotifications([], [snap('a')], '2026-09-04')
+    expect(addNotifications(a, c)).toHaveLength(2)
+  })
+
+  it('survives junk input rather than throwing at the bell', () => {
+    expect(() => connectionNotifications([], null)).not.toThrow()
+    expect(() => connectionNotifications('nope', 'nope')).not.toThrow()
+  })
+
+  it('connectionBaseline keeps only the compared fields', () => {
+    const b = connectionBaseline([{ ...snap('a'), last_sync_at: 'x', extra: 1 }])
+    expect(b).toEqual([{ provider: 'snaptrade', item_id: 'a', institution: 'Fidelity', status: 'ok' }])
   })
 })

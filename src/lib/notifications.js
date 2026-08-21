@@ -186,6 +186,95 @@ export function dividendNotifications(fresh = [], { max = 5 } = {}) {
   return out;
 }
 
+/**
+ * Changes to the user's OWN partner connections — SnapTrade brokerages and
+ * Plaid banks. Fed by /api/connections/health, whose items are
+ * `{ provider, item_id, institution, status }` with status "ok" | "reauth".
+ *
+ * Four transitions are worth a notification, and nothing else is:
+ *   added    — a new institution appears
+ *   reauth   — a working connection starts needing to be reconnected
+ *   restored — a broken connection starts working again
+ *   removed  — an institution disappears
+ *
+ * SEEDING IS LOAD-BEARING. Pass `baseline = null` on the very first run for a
+ * user, and this returns NOTHING — the caller then stores the current list as
+ * the baseline. Without that, every existing connection reads as brand new and
+ * a five-account user is greeted by five "connected" notifications for things
+ * they linked months ago. This is the exact trap the dividend detector fell
+ * into (see CLAUDE.md §2 notifications.js), so it is explicit in the signature
+ * rather than left to the caller to remember.
+ *
+ * Ids carry a day stamp so a genuine re-connection weeks later notifies again,
+ * while a connection flapping within one day produces at most one notification
+ * per transition. A connection that simply STAYS broken never re-fires, because
+ * only the transition is detected, not the state.
+ */
+export function connectionNotifications(baseline, current = [], day = new Date().toISOString().slice(0, 10)) {
+  // null/undefined baseline = never seeded. Say nothing; the caller seeds.
+  if (baseline == null) return [];
+
+  const list = (x) => (Array.isArray(x) ? x : []);
+  const key = (i) => `${i.provider}:${i.item_id}`;
+  const before = new Map(list(baseline).map((i) => [key(i), i]));
+  const after = new Map(list(current).map((i) => [key(i), i]));
+  const out = [];
+
+  const label = (i) => i.institution || (i.provider === "plaid" ? "Bank" : "Brokerage");
+  const via = (i) => (i.provider === "plaid" ? "Plaid" : "SnapTrade");
+
+  for (const [k, now] of after) {
+    const was = before.get(k);
+    if (!was) {
+      out.push(makeNotification({
+        id: `conn:added:${k}:${day}`,
+        kind: "connection",
+        title: `${label(now)} connected`,
+        body: `Linked via ${via(now)}. Balances and transactions will appear as they sync.`,
+        meta: { provider: now.provider, item_id: now.item_id, event: "added" },
+      }));
+      continue;
+    }
+    if (was.status !== "reauth" && now.status === "reauth") {
+      out.push(makeNotification({
+        id: `conn:reauth:${k}:${day}`,
+        kind: "connection",
+        title: `${label(now)} needs reconnecting`,
+        body: `${via(now)} can no longer reach this account, so its balances are going stale. Reconnect it in Settings → Connections.`,
+        meta: { provider: now.provider, item_id: now.item_id, event: "reauth" },
+      }));
+    } else if (was.status === "reauth" && now.status === "ok") {
+      out.push(makeNotification({
+        id: `conn:restored:${k}:${day}`,
+        kind: "connection",
+        title: `${label(now)} is reconnected`,
+        body: `${via(now)} is syncing this account again.`,
+        meta: { provider: now.provider, item_id: now.item_id, event: "restored" },
+      }));
+    }
+  }
+
+  for (const [k, was] of before) {
+    if (after.has(k)) continue;
+    out.push(makeNotification({
+      id: `conn:removed:${k}:${day}`,
+      kind: "connection",
+      title: `${label(was)} disconnected`,
+      body: `This ${via(was)} connection was removed. Its accounts no longer count toward your net worth.`,
+      meta: { provider: was.provider, item_id: was.item_id, event: "removed" },
+    }));
+  }
+
+  return out;
+}
+
+/** The baseline shape to store — only what the detector compares. */
+export function connectionBaseline(items = []) {
+  return (Array.isArray(items) ? items : []).map((i) => ({
+    provider: i.provider, item_id: i.item_id, institution: i.institution, status: i.status,
+  }));
+}
+
 /** Watchlist price targets crossed. Mirrors the alertAbove/alertBelow logic. */
 export function priceAlertNotifications(crossings = []) {
   return (Array.isArray(crossings) ? crossings : []).map(({ symbol, price, target, direction }) =>

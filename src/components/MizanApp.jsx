@@ -22,7 +22,8 @@ import { recordNavView } from "../lib/navUsage.js";
 // 176KB markdown. See scripts/gen-backlog-summary.mjs.
 import BACKLOG from "../generated/backlog.json";
 import { addNotifications, unreadCount, markAllRead, markRead, relativeTime,
-  shariaChangeNotifications, dividendNotifications, priceAlertNotifications } from "../lib/notifications.js";
+  shariaChangeNotifications, dividendNotifications, priceAlertNotifications,
+  connectionNotifications, connectionBaseline } from "../lib/notifications.js";
 import { useKeyboard, ShortcutHelp } from "../lib/useKeyboard.js";
 import { CommandPalette, useCommandPalette } from "./CommandPalette.jsx";
 import { Icon, ICONS } from "./Icon.jsx";
@@ -12761,6 +12762,44 @@ export default function Mizan(){
     }
     if(mutated)persistWatchlist(next);
   },[live,demoMode,pushNotifications]);
+
+  // ── Partner connection changes (SnapTrade / Plaid) ──────────────────────
+  // Polls /api/connections/health and diffs against a stored baseline, so the
+  // user hears when a bank starts needing re-auth instead of discovering it as
+  // a quietly stale balance.
+  //
+  // The FIRST run for a user seeds the baseline and emits nothing — see
+  // connectionNotifications(): a null baseline means "never seeded". Without
+  // that, everyone with existing connections gets a burst of "connected"
+  // notifications for accounts they linked months ago.
+  useEffect(()=>{
+    if(demoMode)return;
+    let cancelled=false;
+    const check=async()=>{
+      try{
+        const r=await apiFetch("/api/connections/health");
+        if(!r.ok||cancelled)return;
+        const json=await r.json();
+        const current=connectionBaseline(Array.isArray(json?.items)?json.items:[]);
+        // A transient empty result (server hiccup, cold start) would otherwise
+        // read as "every connection was removed" and fire a wave of false
+        // disconnection notices. Never diff an empty list against a non-empty
+        // baseline — there is no legitimate case where that is worth alerting.
+        let baseline=null;
+        try{baseline=JSON.parse(localStorage.getItem("mizan_connection_baseline")||"null");}catch{}
+        if(baseline&&baseline.length>0&&current.length===0)return;
+        const notes=connectionNotifications(baseline,current);
+        if(notes.length)pushNotifications(notes);
+        if(baseline===null||notes.length){
+          try{localStorage.setItem("mizan_connection_baseline",JSON.stringify(current));}catch{}
+          persistUserState("mizan_connection_baseline",current);
+        }
+      }catch{/* offline or unauthenticated — try again next tick */}
+    };
+    check();
+    const t=setInterval(check,5*60*1000);
+    return()=>{cancelled=true;clearInterval(t);};
+  },[demoMode,pushNotifications]);
 
   const disconnectAccount=useCallback(async(accountId,authorizationId,label)=>{
     if(demoMode){
