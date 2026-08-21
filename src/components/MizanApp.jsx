@@ -6984,6 +6984,36 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   const setVenue=v=>{setVenueState(v);try{localStorage.setItem("mizan_trade_venue",v);}catch{}};
   useEffect(()=>{if(!acctId&&accounts[0])setAcctId(accounts[0].accountId);},[accounts]);
 
+  // Market session, server-owned. The browser clock can be wrong, in the wrong
+  // zone, or lying, and "which session am I in" decides whether a market order
+  // is even legal — so it is never computed client-side. The server re-checks
+  // on the order path regardless, so this only drives what the user SEES.
+  const[session,setSession]=useState(null);
+  useEffect(()=>{
+    if(demoMode)return;
+    let cancelled=false;
+    const load=async()=>{
+      try{
+        const r=await apiFetch("/api/market/session");
+        if(!r.ok)return;
+        const d=await r.json();
+        if(!cancelled)setSession(d);
+      }catch{/* leave null — the ticket falls back to regular-hours behaviour */}
+    };
+    load();
+    // Sessions turn over on hard boundaries (09:30, 16:00). A minute of drift
+    // is invisible to a person but would let the ticket offer a market order
+    // ~30s after the close, so re-check often enough that the flip is prompt.
+    const t=setInterval(load,60000);
+    return()=>{cancelled=true;clearInterval(t);};
+  },[demoMode]);
+  const extendedSession=session?.extendedHours===true;
+  // Alpaca refuses anything but a limit order outside regular hours, so the
+  // ticket forces it rather than letting the user submit into a rejection.
+  useEffect(()=>{
+    if(venue==="alpaca"&&extendedSession&&otype!=="limit")setOtype("limit");
+  },[venue,extendedSession,otype]);
+
   // Pre-fill from a pending order stashed by the Rebalancer's "Copy to Order"
   // button. Read once, clear immediately so reloads don't keep re-filling.
   useEffect(()=>{
@@ -7039,6 +7069,10 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     setOrderBusy(true);
     try{
       if(venue==="alpaca"){
+        if(extendedSession&&!(+lpx>0)){
+          setOrderErr(`${session?.label||"Extended hours"} requires a limit price — a market order would be queued to the next session and filled at a price you haven't seen.`);
+          return;
+        }
         const r=await apiFetch("/api/alpaca/order",{
           method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({
@@ -7047,6 +7081,11 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
             side,
             type:otype==="limit"?"limit":otype==="stop"?"stop":otype==="stoplimit"?"stop_limit":"market",
             limitPrice:otype==="limit"||otype==="stoplimit"?+lpx:undefined,
+            // Opt-in, and only when the server says we're actually in a pre or
+            // after session. The server validates independently — this flag is
+            // a request, not an assertion.
+            extendedHours:extendedSession,
+            timeInForce:"day",
           }),
         });
         const d=await r.json();
@@ -7144,8 +7183,31 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>AD-HOC MANUAL ORDER</div>
-          <Tag label={venue==="alpaca"?"PAPER · ALPACA":"LIVE · SNAPTRADE"} color={venue==="alpaca"?T.gold:T.blue}/>
+          <span style={{display:"inline-flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+            <Tag label={venue==="alpaca"?"PAPER · ALPACA":"LIVE · SNAPTRADE"} color={venue==="alpaca"?T.gold:T.blue}/>
+            {session&&<Tag label={session.label}
+              color={session.session==="regular"?T.gain:session.tradeable?T.gold:T.slate}
+              title={session.tradeable
+                ?`US market session: ${session.label}. ${session.requiresLimit?"Limit orders only.":"All order types accepted."}`
+                :`US market closed (${session.reason}).`}/>}
+          </span>
         </div>
+        {/* Extended-hours notice. Stated as a constraint plus its reason, not a
+            warning triangle — the user is a tester who needs to know WHY the
+            type selector just locked itself to limit. */}
+        {venue==="alpaca"&&extendedSession&&(
+          <div style={{background:`${T.gold}0D`,border:`1px solid ${T.gold}33`,borderRadius:T.rMd,padding:`${T.s2} ${T.s3}`,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.6}}>
+            <span style={{color:T.gold,fontWeight:600}}>{session.label} session</span> — limit orders only, and the order expires at the end of today's session.
+            <div style={{marginTop:T.s1,opacity:0.9}}>
+              Extended-hours books are thin: fewer buyers and sellers, wider spreads, and prices that can move sharply away from the regular-session close. Set your limit deliberately.
+            </div>
+          </div>
+        )}
+        {venue==="alpaca"&&session&&!session.tradeable&&(
+          <div style={{background:`${T.slate}14`,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s2} ${T.s3}`,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.6}}>
+            <span style={{color:T.textHi,fontWeight:600}}>Market closed</span> ({session.reason.replace(/_/g," ")}). Orders are refused rather than queued — a queued order fills later at a price you never saw.
+          </div>
+        )}
         <p style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55,margin:0}}>One-off trade you place by hand. For automated trades, create a strategy in the <strong>Trading Bot</strong> tab — it screens a halal universe, picks the ticker, sizes it, and executes per your chosen layer.</p>
         <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
           {[["snaptrade","Live · SnapTrade"],["alpaca","Paper · Alpaca"]].map(([v,l])=><button key={v} onClick={()=>setVenue(v)} title={v==="alpaca"?"Paper trade against Alpaca's free sandbox — no real money":"Place a real order through your connected broker"} style={{
