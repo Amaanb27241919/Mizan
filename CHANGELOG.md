@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **notifications:** Tell users when a partner connection changes (`eb121ec`)
 
+### Fixed
+- **compliance:** Close a hole that let gerund recommendations through (`aa42d46`)
+
 ## 2026-08-20
 
 ### Added

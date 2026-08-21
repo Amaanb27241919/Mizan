@@ -12829,9 +12829,19 @@ export default function Mizan(){
       finnhub:      E.VITE_FINNHUB_KEY          || "",
       polygon:      E.VITE_POLYGON_KEY          || "",
       snapId:       E.VITE_SNAPTRADE_CLIENT_ID  || "",
-      alpacaId:     E.VITE_ALPACA_KEY_ID        || "",
-      alpacaSecret: E.VITE_ALPACA_SECRET        || "",
       // Sensitive — never read from import.meta.env. Server proxies these.
+      //
+      // Alpaca was HERE until 2026-08-21, reading VITE_ALPACA_KEY_ID and
+      // VITE_ALPACA_SECRET. Anything Vite sees with a VITE_ prefix is INLINED
+      // INTO THE PUBLIC BROWSER BUNDLE — so filling those in would have shipped
+      // a live trading credential to every visitor. Nothing had consumed them
+      // since the Settings fields were removed (migration 029 moved Alpaca
+      // credentials server-side, encrypted, per user), so this was dead code
+      // arming a trap: .env.local still carried both names, empty, inviting
+      // exactly the fill-in-the-blank that would have detonated it.
+      //
+      // The server reads the UNPREFIXED ALPACA_KEY_ID / ALPACA_SECRET. Never
+      // add a VITE_ prefix to a secret. src/test/alpacaKeys.test.js enforces it.
       anthropic:"", snapKey:"",
     };
     try{

@@ -112,6 +112,27 @@ describe('the plaintext trap stays removed', () => {
   it('points the user at the surface that stores them properly', () => {
     expect(app).toContain('managedElsewhere')
   })
+
+  // Vite INLINES anything prefixed VITE_ into the public browser bundle. The
+  // client used to read VITE_ALPACA_KEY_ID / VITE_ALPACA_SECRET into component
+  // state; nothing consumed them after migration 029 moved credentials
+  // server-side, but .env.local still carried both names sitting empty — so
+  // filling in the obvious blank would have shipped a live trading credential
+  // to every visitor. The server reads the UNPREFIXED names.
+  it('never reads an Alpaca credential through a VITE_ variable', () => {
+    const src = read('src/components/MizanApp.jsx')
+    // Ignore the comment that explains this rule; catch real references.
+    const code = src.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+    expect(code).not.toMatch(/VITE_ALPACA/)
+  })
+
+  it('no VITE_-prefixed Alpaca reference anywhere in src/', () => {
+    const files = ['src/components/MizanApp.jsx', 'src/lib/ethicalOverlay.js', 'src/lib/userState.js']
+    for (const f of files) {
+      const code = read(f).split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+      expect(code, f).not.toMatch(/VITE_ALPACA/)
+    }
+  })
 })
 
 describe('crypto round-trip for the stored shape', () => {
