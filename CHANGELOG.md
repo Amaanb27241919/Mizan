@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-25
+
+### Fixed
+- **chart:** Never render one timeframe's candles under another's label (`90fd92b`)
+
 ## 2026-08-21
 
 ### Added

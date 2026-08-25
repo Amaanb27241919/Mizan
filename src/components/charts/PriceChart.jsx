@@ -399,6 +399,20 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
         </tbody>
       </table>
 
+      {/* What window is actually on screen. A chart that rescales both axes to
+          fit can look near-identical across timeframes for a steadily-trending
+          symbol, so "the timeframe changed" was something the user had to take
+          on faith. Now the bar count and the real first/last dates are stated,
+          which is useful on its own and makes a stuck timeframe self-evident
+          rather than a thing to be reported and guessed at. */}
+      {status === "ready" && candles.length > 0 && (
+        <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.06em", fontVariantNumeric: "tabular-nums" }}>
+          {tfKey} · {candles.length} bars · {new Date(candles[0].time * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+          {" – "}
+          {new Date(candles[candles.length - 1].time * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+        </div>
+      )}
+
       <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: T.muted, letterSpacing: "0.1em" }}>
         MARKET DATA · POLYGON · MOVING AVERAGES ARE DATA, NOT SIGNALS
       </div>
