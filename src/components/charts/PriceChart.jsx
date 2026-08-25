@@ -49,6 +49,35 @@ const isoDaysAgo = (days) => {
 };
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
+/**
+ * Axis font size for lightweight-charts, as a NUMBER of pixels.
+ *
+ * This is NOT a CSS context. The chart draws to a canvas, so `layout.fontSize`
+ * is typed `number` and the library does arithmetic on it (`fontSize + 4` for
+ * scale spacing). Hand it the string "var(--fs-xs)" and that addition becomes
+ * string concatenation — "var(--fs-xs)4" — which poisons the layout maths.
+ *
+ * The fluid-type migration (a6f3ff2, 2026-08-18) rewrote this exact line from
+ * `fontSize: 11` to a token, because a blanket px→var() sweep cannot tell a CSS
+ * declaration from a canvas library option that happens to share a name.
+ *
+ * So resolve the token to real pixels instead of hardcoding: the chart stays in
+ * tune with the type scale, and the library gets the number it requires. Falls
+ * back to the original 11 if the probe cannot run (SSR, hidden document).
+ */
+function resolveAxisFontPx(fallback = 11) {
+  try {
+    const probe = document.createElement("span");
+    probe.style.cssText = "position:absolute;visibility:hidden;font-size:var(--fs-xs)";
+    document.body.appendChild(probe);
+    const px = parseFloat(getComputedStyle(probe).fontSize);
+    probe.remove();
+    return Number.isFinite(px) && px > 0 ? px : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // ── Neutral indicator math (client-side, pure) ──────────────────────────────
 function sma(candles, period) {
   const out = [];
@@ -124,7 +153,8 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
       const chart = LWC.createChart(el, {
         width: el.clientWidth || 600,
         height: CHART_HEIGHT,
-        layout: { background: { color: "transparent" }, textColor: c.muted, fontFamily: FM, fontSize:"var(--fs-xs)" },
+        // fontSize must be a NUMBER — canvas, not CSS. See resolveAxisFontPx.
+        layout: { background: { color: "transparent" }, textColor: c.muted, fontFamily: FM, fontSize: resolveAxisFontPx() },
         grid: { vertLines: { color: c.border }, horzLines: { color: c.border } },
         rightPriceScale: { borderColor: c.border },
         timeScale: { borderColor: c.border, timeVisible: isIntraday(tf.resolution), secondsVisible: false },

@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-08-25
 
+### Added
+- **chart:** State the window the chart is actually showing (`5952376`)
+
 ### Fixed
 - **chart:** Never render one timeframe's candles under another's label (`90fd92b`)
 
