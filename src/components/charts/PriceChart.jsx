@@ -190,14 +190,19 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
       });
       const r = await apiFetch(`/api/market/candles?${params.toString()}`);
       if (reqId !== reqIdRef.current) return;      // a newer request superseded this one
-      if (!r.ok) { setStatus("error"); return; }
+      // A failed request MUST drop the previous timeframe's candles. Returning
+      // here without touching `candles` left the old series on screen under the
+      // new timeframe's label — so a 401, a 400 or a network blip looked exactly
+      // like "the timeframe buttons do nothing", which is worse than an error:
+      // the user reads month-old daily bars as though they were today's.
+      if (!r.ok) { setCandles([]); setStatus("error"); return; }
       const data = await r.json().catch(() => ({}));
       if (reqId !== reqIdRef.current) return;
       const rows = Array.isArray(data.candles) ? data.candles : [];
       setCandles(rows);
       setStatus(rows.length ? "ready" : "empty");
     } catch {
-      if (reqId === reqIdRef.current) setStatus("error");
+      if (reqId === reqIdRef.current) { setCandles([]); setStatus("error"); }
     }
   }, [symbol, tf.resolution, tf.days]);
 
@@ -206,6 +211,18 @@ export default function PriceChart({ symbol, costBasis = null, trades = null }) 
     debounceRef.current = setTimeout(load, DEBOUNCE_MS);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [load]);
+
+  // Clear the rendered series the moment the timeframe or symbol changes,
+  // before the new data arrives. Belt-and-braces on top of the error handling
+  // above: whatever goes wrong downstream — a hung request, a superseded
+  // response, an exception between fetch and setState — the chart can never
+  // display one timeframe's candles while a different one is selected. Showing
+  // the wrong window under a confident label is the failure mode worth
+  // engineering out, not just handling.
+  useEffect(() => {
+    setCandles([]);
+    setStatus("loading");
+  }, [symbol, tf.resolution, tf.days]);
 
   // ── Push data into the series when candles or chart readiness change ─────
   useEffect(() => {

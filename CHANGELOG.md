@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **notifications:** Tell users when a partner connection changes (`eb121ec`)
 
 ### Fixed
+- **security:** Stop the client reading Alpaca credentials from VITE_ vars (`358b4c4`)
 - **compliance:** Close a hole that let gerund recommendations through (`aa42d46`)
 
 ## 2026-08-20
