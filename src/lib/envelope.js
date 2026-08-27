@@ -24,8 +24,15 @@
 
 /** First-of-month ISO date ("2026-08-01") for any Date or ISO-ish string. */
 export function monthKey(d = new Date()) {
-  const dt = typeof d === "string" ? new Date(d.length <= 7 ? `${d}-01T00:00:00Z` : d) : d;
-  if (Number.isNaN(dt?.getTime?.())) return null;
+  const dt = typeof d === "string" ? new Date(d.length <= 7 ? `${d}-01T00:00:00Z` : d)
+    : typeof d === "number" ? new Date(d)
+      : d;
+  // `Number.isNaN(undefined)` is FALSE — it matches only the actual NaN value,
+  // not "not a number". So the previous guard, `Number.isNaN(dt?.getTime?.())`,
+  // let a null straight through to getUTCFullYear() and threw. A default
+  // parameter does not help either: defaults fire on `undefined` only, so an
+  // explicit monthKey(null) skipped it. Check for a usable Date instead.
+  if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return null;
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }
 
@@ -224,3 +231,67 @@ export const ISLAMIC_CATEGORY_PRESETS = [
   { category: "Islamic School", carryover: false, hint: "Madrasah and tuition" },
   { category: "Qard Hasan",     carryover: true,  hint: "Interest-free lending to others" },
 ];
+
+/**
+ * How far through a month we are, 0–1.
+ *
+ * Day 1 of a 31-day month returns 1/31, not 0 — on the first day you have
+ * legitimately consumed a day's worth of the budget, and a 0 would make every
+ * projection infinite.
+ *
+ * Returns 1 for any month already past and 0 for a month not yet started, so
+ * callers get a sensible answer without special-casing the calendar.
+ */
+export function monthProgress(month, now = new Date()) {
+  const m = monthKey(month);
+  if (!m) return 1;
+  const start = Date.parse(`${m}T00:00:00Z`);
+  const end = Date.parse(`${nextMonth(m)}T00:00:00Z`);
+  const t = now instanceof Date ? now.getTime() : Date.parse(now);
+  if (!Number.isFinite(t)) return 1;
+  if (t >= end) return 1;
+  if (t < start) return 0;
+  const days = Math.round((end - start) / 86400000);
+  const dayIndex = Math.floor((t - start) / 86400000) + 1;  // 1-based
+  return Math.min(1, dayIndex / days);
+}
+
+/**
+ * Where a category stands — and, for the CURRENT month, where it is heading.
+ *
+ * The distinction this exists to make: 80% of a grocery budget spent on the 3rd
+ * is an emergency, and on the 28th it is fine. Colouring both the same — which
+ * is what a plain spent/budgeted ratio does — states something the data does
+ * not support. Copilot solved this years ago by colouring on PACE.
+ *
+ * States:
+ *   "over"       already spent more than budgeted. Certain, not a projection.
+ *   "over-pace"  still within budget, but the current rate lands over by month
+ *                end. Only ever returned for a month still in progress.
+ *   "under"      on track, or a finished month that came in under.
+ *   "unset"      nothing budgeted. Not a judgment — there is no target to miss.
+ *
+ * `projected` is the run-rate estimate (spend ÷ elapsed), returned so callers
+ * can say WHY a bar is amber rather than just colouring it.
+ */
+export function paceStatus({ spent = 0, budgeted = 0, month, now = new Date() } = {}) {
+  const spentAbs = Math.abs(num(spent));
+  const target = num(budgeted);
+  const elapsed = monthProgress(month, now);
+  const inProgress = elapsed > 0 && elapsed < 1;
+
+  if (!(target > 0)) {
+    return { state: spentAbs > 0 ? "unset" : "unset", pct: spentAbs > 0 ? 1 : 0, elapsed, projected: spentAbs };
+  }
+
+  const pct = Math.max(0, Math.min(1, spentAbs / target));
+  if (spentAbs > target) {
+    return { state: "over", pct: 1, elapsed, projected: spentAbs };
+  }
+  // Run-rate. Guard elapsed>0 so a not-yet-started month cannot divide by zero.
+  const projected = elapsed > 0 ? spentAbs / elapsed : spentAbs;
+  if (inProgress && projected > target) {
+    return { state: "over-pace", pct, elapsed, projected: round2(projected) };
+  }
+  return { state: "under", pct, elapsed, projected: round2(projected) };
+}

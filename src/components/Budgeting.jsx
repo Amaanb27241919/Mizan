@@ -3,7 +3,7 @@ import { apiFetch } from "../lib/apiFetch.js";
 import { useHideValues } from "../lib/useHideValues.js";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, computeSeries,
-  ISLAMIC_CATEGORY_PRESETS,
+  ISLAMIC_CATEGORY_PRESETS, paceStatus,
 } from "../lib/envelope.js";
 
 /* ─── ENVELOPE BUDGET ────────────────────────────────────
@@ -54,20 +54,29 @@ const monthLabel = m => {
 };
 
 /**
- * How much of an envelope is used, 0–1, plus the colour that says so.
+ * Where an envelope stands, as a bar the reader can scan without doing sums.
  *
- * The colour is the whole point of a budget at a glance: you should be able to
- * scan the column and know where you stand without reading a single number.
- * Amber starts at 80% because a category you have nearly emptied needs
- * attention before it is a problem, not after.
+ * Colour reflects PACE, not raw usage. 80% of a grocery budget spent on the 3rd
+ * is an emergency and the same 80% on the 28th is fine; a plain spent/budgeted
+ * ratio paints both amber and so states something the data does not support.
+ * The projection lives in envelope.js (paceStatus) where it is tested; this
+ * only maps a state to a token.
+ *
+ *   over       red     — already past the budget. A fact, not a forecast.
+ *   over-pace  amber   — inside the budget, but this rate lands over by month end.
+ *   under      green   — on track.
+ *   unset      dim     — nothing budgeted, so there is nothing to miss.
  */
-function usage(spentAbs, budgeted) {
-  if (!(budgeted > 0)) return { pct: spentAbs > 0 ? 1 : 0, color: spentAbs > 0 ? TT.loss : TT.dim, over: spentAbs > 0 };
-  const ratio = spentAbs / budgeted;
+const PACE_COLOR = { over: TT.loss, "over-pace": TT.gold, under: TT.gain, unset: TT.dim };
+
+function usage(spentAbs, budgeted, month, now) {
+  const p = paceStatus({ spent: spentAbs, budgeted, month, now });
   return {
-    pct: Math.max(0, Math.min(1, ratio)),
-    color: ratio > 1 ? TT.loss : ratio >= 0.8 ? TT.gold : TT.gain,
-    over: ratio > 1,
+    pct: p.pct,
+    color: PACE_COLOR[p.state] || TT.dim,
+    over: p.state === "over",
+    state: p.state,
+    projected: p.projected,
   };
 }
 
@@ -293,7 +302,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
   // Month-level usage: how much of what you ASSIGNED you have actually spent.
   // totalSpent is negative (outflow) — envelope.js's sign convention.
   const monthSpent = Math.abs(current.totalSpent || 0);
-  const monthUse = usage(monthSpent, current.totalBudgeted || 0);
+  const monthUse = usage(monthSpent, current.totalBudgeted || 0, month);
   const presetsToOffer = ISLAMIC_CATEGORY_PRESETS.filter(
     p => !rows.some(r => r.category.toLowerCase() === p.category.toLowerCase()),
   );
@@ -430,7 +439,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
           <div style={{ display: "flex", flexDirection: "column", gap: TT.s2 }}>
             {rows.map(r => {
               const spentAbs = Math.abs(r.spent);
-              const u = usage(spentAbs, r.budgeted);
+              const u = usage(spentAbs, r.budgeted, month);
               const over = r.leftover < 0;
               const isEditing = editing === r.category;
               return (
@@ -458,6 +467,12 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
                   <div className="mz-ctrl-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: TT.s2, marginTop: TT.s2, flexWrap: "wrap" }}>
                     <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, fontVariantNumeric: "tabular-nums" }}>
                       {mask(fmtUSD(spentAbs))} of {mask(fmtUSD(r.budgeted))}
+                      {/* An amber bar that will not say why is just an alarm.
+                          State the run-rate that produced it so the reader can
+                          disagree with the projection rather than only obey it. */}
+                      {u.state === "over-pace" && (
+                        <span style={{ color: TT.gold }}> · on pace for {mask(fmtUSD(u.projected))}</span>
+                      )}
                     </span>
                     <span style={{ display: "flex", gap: TT.s2, alignItems: "center" }}>
                       <button className="mz-tap"

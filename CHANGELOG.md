@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-26
+
+### Added
+- **finances:** Split the tab into five, and make the budget read as a budget (`1b815d0`)
+
 ## 2026-08-25
 
 ### Added

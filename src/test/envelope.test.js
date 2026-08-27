@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, leftoverByCategory,
+  monthProgress, paceStatus,
   lastMonthOverspent, computeMonth, computeSeries, ISLAMIC_CATEGORY_PRESETS,
   categoryOf,
 } from "../lib/envelope.js";
@@ -189,5 +190,86 @@ describe("categoryOf — the shape Plaid actually sends", () => {
     expect(spentByCategory(txns, "2026-08-01")).toEqual({
       Groceries: -150, FOOD_AND_DRINK: -50, Uncategorized: -20,
     });
+  });
+});
+
+// ── Pace ────────────────────────────────────────────────────────────────────
+// The distinction worth having: 80% of a grocery budget spent on the 3rd is an
+// emergency; the same 80% on the 28th is fine. A plain spent/budgeted ratio
+// colours both identically, which states something the data does not support.
+const AUG = "2026-08-01";
+const augDay = (d) => new Date(Date.UTC(2026, 7, d, 12));
+
+describe("monthProgress", () => {
+  it("counts day 1 as a day consumed, not zero", () => {
+    // A 0 would make every run-rate projection infinite on the 1st.
+    expect(monthProgress(AUG, augDay(1))).toBeCloseTo(1 / 31, 5);
+  });
+
+  it("reaches 1 by the last day", () => {
+    expect(monthProgress(AUG, augDay(31))).toBe(1);
+  });
+
+  it("is roughly half way at mid-month", () => {
+    expect(monthProgress(AUG, augDay(15))).toBeCloseTo(15 / 31, 5);
+  });
+
+  it("returns 1 for a month already past and 0 for one not yet started", () => {
+    expect(monthProgress("2026-01-01", augDay(15))).toBe(1);
+    expect(monthProgress("2026-12-01", augDay(15))).toBe(0);
+  });
+
+  it("survives junk rather than throwing at the render", () => {
+    expect(monthProgress(null, augDay(15))).toBe(1);
+    expect(monthProgress(AUG, "not-a-date")).toBe(1);
+  });
+});
+
+describe("paceStatus", () => {
+  it("flags the SAME spend differently early and late in the month", () => {
+    const early = paceStatus({ spent: 480, budgeted: 600, month: AUG, now: augDay(3) });
+    const late  = paceStatus({ spent: 480, budgeted: 600, month: AUG, now: augDay(28) });
+    expect(early.state).toBe("over-pace");
+    expect(late.state).toBe("under");
+    // Same numbers, opposite readings — this is the whole point.
+    expect(early.pct).toBeCloseTo(late.pct, 5);
+  });
+
+  it("calls actual overspend 'over', not a projection", () => {
+    const r = paceStatus({ spent: 700, budgeted: 600, month: AUG, now: augDay(15) });
+    expect(r.state).toBe("over");
+    expect(r.pct).toBe(1);
+    expect(r.projected).toBe(700);
+  });
+
+  it("never projects for a finished month — the result is already known", () => {
+    // A past month cannot be "on pace to go over"; it either did or it didn't.
+    expect(paceStatus({ spent: 100, budgeted: 600, month: "2026-01-01", now: augDay(15) }).state).toBe("under");
+    expect(paceStatus({ spent: 900, budgeted: 600, month: "2026-01-01", now: augDay(15) }).state).toBe("over");
+  });
+
+  it("reports the run-rate so a caller can explain the colour", () => {
+    // $300 spent with half the month gone projects to ~$600.
+    const r = paceStatus({ spent: 300, budgeted: 1000, month: AUG, now: augDay(15) });
+    expect(r.projected).toBeGreaterThan(590);
+    expect(r.projected).toBeLessThan(640);
+    expect(r.state).toBe("under");
+  });
+
+  it("passes no judgment when nothing is budgeted", () => {
+    // No target means nothing to miss — not a failure.
+    expect(paceStatus({ spent: 50, budgeted: 0, month: AUG, now: augDay(15) }).state).toBe("unset");
+    expect(paceStatus({ spent: 0, budgeted: 0, month: AUG, now: augDay(15) }).state).toBe("unset");
+  });
+
+  it("treats outflow sign-agnostically", () => {
+    // envelope.js stores spend as NEGATIVE; the UI passes absolute values.
+    const neg = paceStatus({ spent: -480, budgeted: 600, month: AUG, now: augDay(3) });
+    const pos = paceStatus({ spent: 480, budgeted: 600, month: AUG, now: augDay(3) });
+    expect(neg.state).toBe(pos.state);
+  });
+
+  it("does not divide by zero on a month that has not started", () => {
+    expect(() => paceStatus({ spent: 0, budgeted: 600, month: "2026-12-01", now: augDay(15) })).not.toThrow();
   });
 });
