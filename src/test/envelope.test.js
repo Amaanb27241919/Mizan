@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, leftoverByCategory,
-  monthProgress, paceStatus, suggestBudgets,
+  monthProgress, paceStatus, suggestBudgets, merchantKey,
   lastMonthOverspent, computeMonth, computeSeries, ISLAMIC_CATEGORY_PRESETS,
   categoryOf,
 } from "../lib/envelope.js";
@@ -346,5 +346,57 @@ describe("suggestBudgets", () => {
   it("survives junk without throwing", () => {
     expect(() => suggestBudgets(null, { asOf: AUG15 })).not.toThrow();
     expect(() => suggestBudgets([{}, null], { asOf: AUG15 })).not.toThrow();
+  });
+});
+
+// ── Category rules ──────────────────────────────────────────────────────────
+// Plaid's taxonomy is not the user's. Without a way to override it, a grocery
+// run filed as FOOD_AND_DRINK and a "Halal Food" envelope are two rows that can
+// never be merged — the gap you feel daily against Copilot and Origin.
+describe("category rules", () => {
+  const tj = { name: "POS TRADER JOES #0412 XX1234", category: ["FOOD_AND_DRINK"] };
+  const cafe = { name: "SOME CAFE", category: ["FOOD_AND_DRINK"] };
+
+  it("strips bank noise off a merchant to build a stable key", () => {
+    // Card digits, POS/ACH markers and punctuation all vary per transaction;
+    // a rule keyed on the raw string would match exactly once.
+    expect(merchantKey(tj)).toBe("TRADER JOES");
+    expect(merchantKey({ name: "ACH TRADER JOES 998877" })).toBe("TRADER JOES");
+  });
+
+  it("falls back to the provider when there are no rules", () => {
+    expect(categoryOf(tj)).toBe("FOOD_AND_DRINK");
+    expect(categoryOf({})).toBe("Uncategorized");
+  });
+
+  it("a CATEGORY rule remaps everything the provider filed there", () => {
+    const rules = { FOOD_AND_DRINK: "Halal Food" };
+    expect(categoryOf(tj, rules)).toBe("Halal Food");
+    expect(categoryOf(cafe, rules)).toBe("Halal Food");
+  });
+
+  it("a MERCHANT rule beats a category rule — the more specific wins", () => {
+    // Recategorising one shop must not be undone by a blanket rule on the
+    // category it happened to arrive in.
+    const rules = { FOOD_AND_DRINK: "Halal Food", "TRADER JOES": "Groceries" };
+    expect(categoryOf(tj, rules)).toBe("Groceries");
+    expect(categoryOf(cafe, rules)).toBe("Halal Food");
+  });
+
+  it("treats a self-mapping as a no-op rather than looping", () => {
+    expect(categoryOf(cafe, { FOOD_AND_DRINK: "FOOD_AND_DRINK" })).toBe("FOOD_AND_DRINK");
+  });
+
+  it("ignores junk rule values instead of rendering them", () => {
+    for (const bad of [{ FOOD_AND_DRINK: "" }, { FOOD_AND_DRINK: "   " }, { FOOD_AND_DRINK: null }, { FOOD_AND_DRINK: 7 }]) {
+      expect(categoryOf(cafe, bad)).toBe("FOOD_AND_DRINK");
+    }
+  });
+
+  it("routes spend to the remapped category, not the provider's", () => {
+    const txns = [{ date: "2026-08-04", amount: 80, name: "TRADER JOES", category: ["FOOD_AND_DRINK"] }];
+    const spent = spentByCategory(txns, "2026-08-01", { rules: { FOOD_AND_DRINK: "Halal Food" } });
+    expect(spent).toEqual({ "Halal Food": -80 });
+    expect(spent).not.toHaveProperty("FOOD_AND_DRINK");
   });
 });

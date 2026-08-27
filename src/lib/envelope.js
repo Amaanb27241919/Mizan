@@ -64,12 +64,55 @@ const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
  * because the fixtures I wrote used strings. A fixture that does not match the
  * shape production actually sends is not a test, it is an echo.
  */
-export function categoryOf(t) {
+export function categoryOf(t, rules = null) {
+  // A user rule beats the provider, always. Plaid decides categories today and
+  // the user cannot argue: a grocery run labelled FOOD_AND_DRINK stays there
+  // even if they think of it as Halal Food, so they end up with two rows and no
+  // way to merge them. Rules are keyed on the NORMALISED merchant, so fixing a
+  // category once fixes every transaction from that merchant — past and future
+  // — which is what Copilot and Origin both do and what people expect.
   const raw =
     t?.personal_finance_category?.primary ??
     (Array.isArray(t?.category) ? t.category[t.category.length - 1] : t?.category);
-  const s = typeof raw === "string" ? raw.trim() : "";
-  return s || "Uncategorized";
+  const provider = (typeof raw === "string" ? raw.trim() : "") || "Uncategorized";
+
+  if (rules) {
+    // MERCHANT rule first — the more specific of the two. Recategorising one
+    // shop should not be overridden by a blanket rule on the category it
+    // happened to arrive in.
+    const mKey = merchantKey(t);
+    const byMerchant = mKey && rules[mKey];
+    if (typeof byMerchant === "string" && byMerchant.trim()) return byMerchant.trim();
+
+    // CATEGORY rule — "everything Plaid files as FOOD_AND_DRINK is Halal Food".
+    // This is the one people actually hit: the provider's taxonomy is not
+    // theirs, and without it they get two rows they cannot merge.
+    const byCategory = rules[provider];
+    if (typeof byCategory === "string" && byCategory.trim() && byCategory.trim() !== provider) {
+      return byCategory.trim();
+    }
+  }
+  return provider;
+}
+
+/**
+ * The key a category rule is stored under: the merchant, stripped of the noise
+ * banks attach to it (card digits, ACH/POS/AUTOPAY markers, punctuation).
+ *
+ * Mirrors normalizeMerchant in src/lib/recurring.js deliberately rather than
+ * importing it — these two modules are independently pure and neither should
+ * acquire the other as a dependency for six lines of string handling. If the
+ * rules stop matching what the subscriptions panel detects, this is why.
+ */
+export function merchantKey(t) {
+  const name = t?.merchant_name || t?.name || t?.description || "";
+  return String(name)
+    .toUpperCase()
+    .replace(/\b(XX+\d*|\d{4,})\b/g, " ")
+    .replace(/\b(ACH|POS|PMT|PAYMENT|AUTOPAY|AUTO PAY|BILL|WEB|ONLINE|DEBIT|EPAY|E-?PAYMENT|RECURRING)\b/g, " ")
+    .replace(/[^A-Z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -81,7 +124,7 @@ export function categoryOf(t) {
  * @param {{includePending?:boolean, outflowIsPositive?:boolean}} [opts]
  */
 export function spentByCategory(txns = [], month, opts = {}) {
-  const { includePending = false, outflowIsPositive = true } = opts;
+  const { includePending = false, outflowIsPositive = true, rules = null } = opts;
   const m = monthKey(month);
   const out = {};
   if (!m) return out;
@@ -91,7 +134,7 @@ export function spentByCategory(txns = [], month, opts = {}) {
     if (!includePending && t.pending) continue;
     const d = String(t.date || t.trade_date || "").slice(0, 10);
     if (!d || d < m || d >= next) continue;
-    const cat = categoryOf(t);
+    const cat = categoryOf(t, rules);
     // Plaid reports an outflow as a POSITIVE amount. Envelope math wants
     // outflow negative, so flip unless the caller says otherwise.
     const raw = num(t.amount);

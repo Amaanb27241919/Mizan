@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiFetch } from "../lib/apiFetch.js";
 import { useHideValues } from "../lib/useHideValues.js";
+import { persistUserState } from "../lib/userState.js";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, computeSeries,
   ISLAMIC_CATEGORY_PRESETS, paceStatus, suggestBudgets,
@@ -135,6 +136,30 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
   const [editing, setEditing] = useState("");      // category whose amount is open for editing
   const [applying, setApplying] = useState(false); // seeding the budget from history
 
+  // Category rules: { [merchantKeyOrProviderCategory]: "Your Category" }.
+  // Plaid's taxonomy is not the user's, and until now its word was final — a
+  // grocery run filed FOOD_AND_DRINK and a "Halal Food" envelope were two rows
+  // that could never be merged. Synced (TRACKED_KEY) so a rule set on a laptop
+  // holds on a phone.
+  const [rules, setRules] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("mizan_category_rules") || "{}") || {}; }
+    catch { return {}; }
+  });
+  const saveRule = useCallback((from, to) => {
+    const key = String(from || "").trim();
+    const val = String(to || "").trim();
+    if (!key) return;
+    setRules(prev => {
+      const next = { ...prev };
+      // Mapping a category to itself (or clearing it) removes the rule rather
+      // than storing a no-op that later reads as an intentional choice.
+      if (!val || val === key) delete next[key]; else next[key] = val;
+      try { localStorage.setItem("mizan_category_rules", JSON.stringify(next)); } catch { /* quota */ }
+      persistUserState("mizan_category_rules", next);
+      return next;
+    });
+  }, []);
+
   // Budget figures are financial values and were the one surface that ignored
   // privacy mode — net worth and holdings masked, every envelope left on
   // screen. See CLAUDE.md §6: mask() belongs on every number a user can see.
@@ -177,7 +202,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
         entries: Object.fromEntries(
           entries.filter(e => e.month === m).map(e => [e.category, { budgeted: e.budgeted, carryover: e.carryover }]),
         ),
-        spent: spentByCategory(txns, m),
+        spent: spentByCategory(txns, m, { rules }),
       };
     }
     return out;
@@ -428,6 +453,12 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
 
       {/* ── Categories ── */}
       <Tile>
+        {/* Offers existing names when merging, so "Halal Food" and "halal food"
+            do not become two envelopes through a typo. */}
+        <datalist id="mz-existing-categories">
+          {rows.map(r => <option key={r.category} value={r.category} />)}
+          {ISLAMIC_CATEGORY_PRESETS.map(p => <option key={p.category} value={p.category} />)}
+        </datalist>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: TT.s3, marginBottom: TT.s3, flexWrap: "wrap" }}>
           <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.16em", fontWeight: 600 }}>
             CATEGORIES · {rows.length}
@@ -596,6 +627,31 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
                           typically {mask(fmtUSD(suggestion.categories[r.category]))}
                         </button>
                       )}
+                    </div>
+                  )}
+
+                  {/* Recategorise. Plaid's taxonomy is not the user's: a grocery
+                      run filed FOOD_AND_DRINK and a "Halal Food" envelope were
+                      two rows that could never be merged, which is the gap you
+                      feel daily against Copilot and Origin. Typing a name here
+                      remaps EVERY transaction the provider files under this
+                      category, past and future — the rule is stored, not the
+                      result, so re-syncing cannot undo it. */}
+                  {isEditing && (
+                    <div className="mz-ctrl-row" style={{ display: "flex", gap: TT.s2, alignItems: "center", marginTop: TT.s2, flexWrap: "wrap" }}>
+                      <label htmlFor={`mz-rule-${r.category}`} style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.1em" }}>
+                        SHOW AS
+                      </label>
+                      <input id={`mz-rule-${r.category}`} type="text" className="field"
+                        style={{ width: 180 }} placeholder={r.category}
+                        defaultValue={rules[r.category] || ""}
+                        list="mz-existing-categories"
+                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditing(""); }}
+                        onBlur={e => saveRule(r.category, e.target.value)}
+                        aria-label={`Show ${r.category} as a different category`} />
+                      <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted }}>
+                        {rules[r.category] ? "every transaction here is remapped" : "merge into another category"}
+                      </span>
                     </div>
                   )}
                 </div>

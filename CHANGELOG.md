@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-26
 
 ### Added
+- **budget:** Seed a starting budget from what you actually spent (`aae9728`)
 - **budget:** Colour the bars by pace, not by raw usage (`bcdc417`)
 - **finances:** Split the tab into five, and make the budget read as a budget (`1b815d0`)
 
