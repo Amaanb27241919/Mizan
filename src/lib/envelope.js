@@ -295,3 +295,88 @@ export function paceStatus({ spent = 0, budgeted = 0, month, now = new Date() } 
   }
   return { state: "under", pct, elapsed, projected: round2(projected) };
 }
+
+/** Round to the nearest `step`, so a suggestion reads as a decision not a measurement. */
+function roundTo(v, step) {
+  if (!(step > 0)) return round2(v);
+  return Math.round(num(v) / step) * step;
+}
+
+/**
+ * A starting budget, derived from what the user actually spent.
+ *
+ * The hardest step in budgeting is deciding the number, and every mainstream
+ * app deletes it: Copilot builds the initial budget from imported history,
+ * Origin's AI recommends from past income and spending, Monarch derives the
+ * flex number from previous averages. Mizan asked users to invent every figure
+ * from nothing, which is why a blank budget stays blank.
+ *
+ * MEAN, not median, over COMPLETE months, zero-padded. Each choice matters:
+ *  - Complete months only. The current month is partial, and including it drags
+ *    every suggestion down by however many days are left.
+ *  - Zero-padding. A category with spend in one month of three is a real
+ *    monthly average of a third of it — not "budget the whole one-off". Paired
+ *    with rollover, lumpy categories accumulate toward the occasional big month.
+ *  - Mean over median. The median of [300, 0, 0] is 0, which would silently
+ *    drop every irregular category. Mean keeps them, and rollover absorbs the
+ *    lumpiness that makes the mean imperfect.
+ *
+ * Returns `{ categories, income, monthsUsed }`. Empty when there is not a
+ * single complete month of history — a suggestion from no data is a guess
+ * wearing a suit.
+ */
+export function suggestBudgets(txns = [], { asOf = new Date(), lookbackMonths = 3, step = 5 } = {}) {
+  const current = monthKey(asOf);
+  const empty = { categories: {}, income: 0, monthsUsed: 0 };
+  if (!current) return empty;
+
+  // A default parameter fires on `undefined` only, so `suggestBudgets(null)`
+  // skipped `txns = []` and threw on .map — the same trap that hid in monthKey.
+  const list = Array.isArray(txns) ? txns : [];
+
+  // Earliest transaction decides how much history actually exists, so a
+  // two-week-old account is not averaged against three months of nothing.
+  const dates = list.map(t => String(t?.date || t?.trade_date || "").slice(0, 10)).filter(Boolean).sort();
+  if (dates.length === 0) return empty;
+  const firstMonth = monthKey(dates[0]);
+
+  const months = [];
+  let m = prevMonth(current);
+  for (let i = 0; i < lookbackMonths && m && m >= firstMonth; i++) {
+    months.push(m);
+    m = prevMonth(m);
+  }
+  if (months.length === 0) return empty;
+
+  const perCat = {};
+  let inflow = 0;
+  for (const mo of months) {
+    const spent = spentByCategory(list, mo);
+    for (const [cat, v] of Object.entries(spent)) {
+      // spentByCategory returns NEGATIVE for outflow and positive for a credit.
+      // Only outflow is spending: without this an income category is suggested
+      // as a budget line, so a salary becomes a $2,665/mo "envelope".
+      const outflow = num(v) < 0 ? Math.abs(num(v)) : 0;
+      (perCat[cat] ||= []).push(outflow);
+    }
+    const next = nextMonth(mo);
+    for (const t of list) {
+      const d = String(t?.date || "").slice(0, 10);
+      if (!d || d < mo || d >= next) continue;
+      const amt = num(t.amount);
+      if (amt < 0) inflow += Math.abs(amt);   // Plaid: a credit is negative
+    }
+  }
+
+  const categories = {};
+  for (const [cat, vals] of Object.entries(perCat)) {
+    const total = vals.reduce((s, v) => s + v, 0);
+    const suggested = roundTo(total / months.length, step);   // zero-padded by dividing by ALL months
+    if (suggested > 0) categories[cat] = suggested;
+  }
+  return {
+    categories,
+    income: roundTo(inflow / months.length, step),
+    monthsUsed: months.length,
+  };
+}

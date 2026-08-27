@@ -3,7 +3,7 @@ import { apiFetch } from "../lib/apiFetch.js";
 import { useHideValues } from "../lib/useHideValues.js";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, computeSeries,
-  ISLAMIC_CATEGORY_PRESETS, paceStatus,
+  ISLAMIC_CATEGORY_PRESETS, paceStatus, suggestBudgets,
 } from "../lib/envelope.js";
 
 /* ─── ENVELOPE BUDGET ────────────────────────────────────
@@ -133,6 +133,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
   const [adding, setAdding] = useState(false);
   const [newCat, setNewCat] = useState("");
   const [editing, setEditing] = useState("");      // category whose amount is open for editing
+  const [applying, setApplying] = useState(false); // seeding the budget from history
 
   // Budget figures are financial values and were the one surface that ignored
   // privacy mode — net worth and holdings masked, every envelope left on
@@ -230,6 +231,14 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
       || a.category.localeCompare(b.category));
   }, [byMonth, month, current]);
 
+  // A starting budget derived from what was actually spent. Deciding the
+  // number is the hardest step and Mizan was asking users to invent every one
+  // from nothing, which is why a blank budget stays blank. Copilot, Origin and
+  // Monarch all seed from history; this is that, computed client-side from the
+  // transactions the tab already has.
+  const suggestion = useMemo(() => suggestBudgets(txns, { asOf: new Date() }), [txns]);
+  const suggestedCount = Object.keys(suggestion.categories).length;
+
   // ── Writes ───────────────────────────────────────────────
   const saveEntry = useCallback(async (category, patch) => {
     const existing = entries.find(e => e.month === month && e.category === category);
@@ -273,6 +282,36 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
       if (!r.ok) { setMonths(snapshot); setErr("Income didn't save."); }
     } catch { setMonths(snapshot); setErr("Income didn't save — you're offline."); }
   }, [months, month]);
+
+  /**
+   * Write the suggested budget in one go.
+   *
+   * Sequential, not Promise.all: /api/budget/entry is a single-row PUT and a
+   * dozen parallel writes against one user's rows is a burst the server has no
+   * reason to absorb. This runs once, at setup, so the extra second is free.
+   *
+   * Deliberately does NOT overwrite a category the user has already budgeted —
+   * seeding is a starting point, never a correction of a decision they made.
+   */
+  const applySuggestion = useCallback(async () => {
+    setApplying(true); setErr("");
+    try {
+      const existing = new Set(
+        entries.filter(e => e.month === month && Number(e.budgeted) > 0).map(e => e.category),
+      );
+      for (const [category, budgeted] of Object.entries(suggestion.categories)) {
+        if (existing.has(category)) continue;
+        const preset = ISLAMIC_CATEGORY_PRESETS.find(p => p.category.toLowerCase() === category.toLowerCase());
+        await saveEntry(category, { budgeted, carryover: !!preset?.carryover });
+      }
+      // Only fill income if the user has not set one — same rule.
+      if (manualForMonth === null && suggestion.income > 0 && !bankLinked) {
+        await saveIncome(String(suggestion.income));
+      }
+    } finally {
+      setApplying(false);
+    }
+  }, [entries, month, suggestion, saveEntry, saveIncome, manualForMonth, bankLinked]);
 
   const addCategory = useCallback(async (category, carryover = false) => {
     const name = (category || "").trim();
@@ -398,6 +437,31 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
           </button>
         </div>
 
+        {/* Seed from history. Shown only while nothing is assigned this month —
+            once the user has made decisions, offering to fill the budget for
+            them is noise at best and a threat to their work at worst.
+            applySuggestion skips any category they have already set. */}
+        {suggestedCount > 0 && current.totalBudgeted === 0 && (
+          <div style={{
+            marginBottom: TT.s4, padding: TT.s4, borderRadius: TT.rMd,
+            background: `${TT.blue}0D`, border: `1px solid ${TT.blue}33`,
+          }}>
+            <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.blue, letterSpacing: "0.14em", fontWeight: 600, marginBottom: TT.s2 }}>
+              START FROM YOUR SPENDING
+            </div>
+            <p style={{ fontFamily: FP, fontSize:"var(--fs-sm)", color: TT.text, lineHeight: 1.6, margin: `0 0 ${TT.s3} 0` }}>
+              Deciding the numbers is the hard part. Based on the last{" "}
+              {suggestion.monthsUsed === 1 ? "month" : `${suggestion.monthsUsed} months`} of your
+              transactions, Mizan can set {suggestedCount} categor{suggestedCount === 1 ? "y" : "ies"} to
+              what you typically spend. Adjust anything afterwards — these are a starting point, not a verdict.
+            </p>
+            <button className="mz-tap btn-primary" onClick={applySuggestion} disabled={applying}
+              style={{ fontFamily: FM, fontSize:"var(--fs-xs)", fontWeight: 600, letterSpacing: "0.04em" }}>
+              {applying ? "Setting up…" : "Use my averages"}
+            </button>
+          </div>
+        )}
+
         {adding && (
           <div style={{ marginBottom: TT.s4, padding: TT.s3, background: TT.surface, border: `1px solid ${TT.border}`, borderRadius: TT.rMd }}>
             <div className="mz-ctrl-row" style={{ display: "flex", gap: TT.s2, flexWrap: "wrap", marginBottom: presetsToOffer.length ? TT.s3 : 0 }}>
@@ -515,6 +579,23 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
                           setEditing("");
                         }}
                         aria-label={`Budget for ${r.category}`} />
+                      {/* Origin surfaces the historical average while you set a
+                          target, which is the difference between choosing a
+                          number and guessing one. Only shown when there is real
+                          history behind it. */}
+                      {suggestion.categories[r.category] > 0 && (
+                        <button type="button"
+                          onMouseDown={e => e.preventDefault()}   /* keep focus so onBlur still commits */
+                          onClick={() => { saveEntry(r.category, { budgeted: suggestion.categories[r.category] }); setEditing(""); }}
+                          title={`Set to your ${suggestion.monthsUsed}-month average`}
+                          style={{
+                            fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.blue, background: "transparent",
+                            border: `1px solid ${TT.blue}44`, borderRadius: 999, padding: `3px ${TT.s2}`,
+                            cursor: "pointer", whiteSpace: "nowrap",
+                          }}>
+                          typically {mask(fmtUSD(suggestion.categories[r.category]))}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

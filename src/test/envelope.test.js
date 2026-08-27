@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, leftoverByCategory,
-  monthProgress, paceStatus,
+  monthProgress, paceStatus, suggestBudgets,
   lastMonthOverspent, computeMonth, computeSeries, ISLAMIC_CATEGORY_PRESETS,
   categoryOf,
 } from "../lib/envelope.js";
@@ -271,5 +271,80 @@ describe("paceStatus", () => {
 
   it("does not divide by zero on a month that has not started", () => {
     expect(() => paceStatus({ spent: 0, budgeted: 600, month: "2026-12-01", now: augDay(15) })).not.toThrow();
+  });
+});
+
+// ── Seeding a budget from history ───────────────────────────────────────────
+// Deciding the number is the hardest step, and every mainstream app deletes it
+// by reading your past spending. These pin the choices that make a suggestion
+// trustworthy rather than merely present.
+describe("suggestBudgets", () => {
+  const AUG15 = new Date("2026-08-15T12:00:00Z");
+  const HISTORY = [
+    { date: "2026-05-04", amount: 150, category: ["Halal Food"] },
+    { date: "2026-06-04", amount: 210, category: ["Halal Food"] },
+    { date: "2026-07-04", amount: 180, category: ["Halal Food"] },
+    { date: "2026-06-11", amount: 300, category: ["Travel"] },     // one month in three
+    { date: "2026-07-01", amount: -4000, category: ["INCOME"] },
+    { date: "2026-06-01", amount: -4000, category: ["INCOME"] },
+  ];
+
+  it("averages complete months", () => {
+    // (150 + 210 + 180) / 3 = 180
+    expect(suggestBudgets(HISTORY, { asOf: AUG15 }).categories["Halal Food"]).toBe(180);
+  });
+
+  it("IGNORES the current, partial month", () => {
+    // Including it would drag every suggestion down by the days not yet lived.
+    const withCurrent = [...HISTORY, { date: "2026-08-09", amount: 999, category: ["Halal Food"] }];
+    expect(suggestBudgets(withCurrent, { asOf: AUG15 }).categories["Halal Food"]).toBe(180);
+  });
+
+  it("zero-pads a category that only appears in some months", () => {
+    // $300 once in three months is $100/mo, not a $300 envelope. Rollover then
+    // accumulates toward the occasional big month.
+    expect(suggestBudgets(HISTORY, { asOf: AUG15 }).categories.Travel).toBe(100);
+  });
+
+  it("never suggests an income category as a spending envelope", () => {
+    // spentByCategory returns positive for a credit; treating that as spend
+    // turns a salary into a $2,665/mo budget line.
+    const { categories } = suggestBudgets(HISTORY, { asOf: AUG15 });
+    expect(categories).not.toHaveProperty("INCOME");
+    expect(Object.keys(categories).sort()).toEqual(["Halal Food", "Travel"]);
+  });
+
+  it("suggests income separately, from inflow", () => {
+    // 8000 over 3 months, rounded to the nearest 5.
+    expect(suggestBudgets(HISTORY, { asOf: AUG15 }).income).toBe(2665);
+  });
+
+  it("suggests nothing at all without a complete month of history", () => {
+    // A suggestion from no data is a guess wearing a suit.
+    expect(suggestBudgets([], { asOf: AUG15 })).toEqual({ categories: {}, income: 0, monthsUsed: 0 });
+    const brandNew = [{ date: "2026-08-02", amount: 50, category: ["Halal Food"] }];
+    expect(suggestBudgets(brandNew, { asOf: AUG15 }).monthsUsed).toBe(0);
+  });
+
+  it("only averages over months the account actually existed for", () => {
+    // Two months of history must not be divided by a three-month lookback.
+    const twoMonths = [
+      { date: "2026-06-04", amount: 200, category: ["Halal Food"] },
+      { date: "2026-07-04", amount: 200, category: ["Halal Food"] },
+    ];
+    const r = suggestBudgets(twoMonths, { asOf: AUG15 });
+    expect(r.monthsUsed).toBe(2);
+    expect(r.categories["Halal Food"]).toBe(200);   // not 133
+  });
+
+  it("rounds to a readable step", () => {
+    const odd = [{ date: "2026-07-04", amount: 187.34, category: ["Halal Food"] }];
+    const r = suggestBudgets(odd, { asOf: AUG15, lookbackMonths: 1 });
+    expect(r.categories["Halal Food"] % 5).toBe(0);
+  });
+
+  it("survives junk without throwing", () => {
+    expect(() => suggestBudgets(null, { asOf: AUG15 })).not.toThrow();
+    expect(() => suggestBudgets([{}, null], { asOf: AUG15 })).not.toThrow();
   });
 });
