@@ -423,3 +423,49 @@ export function suggestBudgets(txns = [], { asOf = new Date(), lookbackMonths = 
     monthsUsed: months.length,
   };
 }
+
+/**
+ * Categories arranged into groups, with a subtotal per group.
+ *
+ * All three of Copilot, Monarch and Origin group categories, and for the same
+ * reason: past about eight envelopes a flat list stops being scannable. Origin's
+ * framing is the clearest — "I only want to spend $600 on Food this month",
+ * even though that splits across groceries, restaurants and meal kits.
+ *
+ * Groups are a PRESENTATION layer, deliberately. The envelope math stays
+ * per-category, so a group total is always the sum of its parts and can never
+ * disagree with them. Budgeting at the group level would need its own stored
+ * amount and a reconciliation rule for when the children do not add up — that
+ * is a different feature, and this is the half that earns its keep first.
+ *
+ * Ungrouped categories come last under an empty name, so a user who never
+ * groups anything sees exactly the flat list they had before.
+ */
+export function groupCategories(rows = [], groups = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  const map = groups && typeof groups === "object" ? groups : {};
+  const byGroup = new Map();
+  const ungrouped = [];
+
+  for (const r of list) {
+    if (!r) continue;
+    const g = String(map[r.category] || "").trim();
+    if (!g) { ungrouped.push(r); continue; }
+    if (!byGroup.has(g)) byGroup.set(g, []);
+    byGroup.get(g).push(r);
+  }
+
+  const summarize = (name, rs) => ({
+    name,
+    rows: rs,
+    budgeted: round2(rs.reduce((s, r) => s + num(r.budgeted), 0)),
+    spent:    round2(rs.reduce((s, r) => s + num(r.spent), 0)),     // negative
+    leftover: round2(rs.reduce((s, r) => s + num(r.leftover), 0)),
+  });
+
+  const out = [...byGroup.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([name, rs]) => summarize(name, rs));
+  if (ungrouped.length) out.push(summarize("", ungrouped));
+  return out;
+}

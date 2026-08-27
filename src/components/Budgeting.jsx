@@ -4,7 +4,7 @@ import { useHideValues } from "../lib/useHideValues.js";
 import { persistUserState } from "../lib/userState.js";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, computeSeries,
-  ISLAMIC_CATEGORY_PRESETS, paceStatus, suggestBudgets,
+  ISLAMIC_CATEGORY_PRESETS, paceStatus, suggestBudgets, groupCategories,
 } from "../lib/envelope.js";
 
 /* ─── ENVELOPE BUDGET ────────────────────────────────────
@@ -145,6 +145,25 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
     try { return JSON.parse(localStorage.getItem("mizan_category_rules") || "{}") || {}; }
     catch { return {}; }
   });
+  // Category groups: { [category]: "Group name" }. Presentation only — see
+  // groupCategories() in envelope.js for why the math stays per-category.
+  const [groups, setGroups] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("mizan_category_groups") || "{}") || {}; }
+    catch { return {}; }
+  });
+  const saveGroup = useCallback((category, group) => {
+    const key = String(category || "").trim();
+    const val = String(group || "").trim();
+    if (!key) return;
+    setGroups(prev => {
+      const next = { ...prev };
+      if (!val) delete next[key]; else next[key] = val;
+      try { localStorage.setItem("mizan_category_groups", JSON.stringify(next)); } catch { /* quota */ }
+      persistUserState("mizan_category_groups", next);
+      return next;
+    });
+  }, []);
+
   const saveRule = useCallback((from, to) => {
     const key = String(from || "").trim();
     const val = String(to || "").trim();
@@ -261,6 +280,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
   // from nothing, which is why a blank budget stays blank. Copilot, Origin and
   // Monarch all seed from history; this is that, computed client-side from the
   // transactions the tab already has.
+  const grouped = useMemo(() => groupCategories(rows, groups), [rows, groups]);
   const suggestion = useMemo(() => suggestBudgets(txns, { asOf: new Date() }), [txns]);
   const suggestedCount = Object.keys(suggestion.categories).length;
 
@@ -455,6 +475,10 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
       <Tile>
         {/* Offers existing names when merging, so "Halal Food" and "halal food"
             do not become two envelopes through a typo. */}
+        {/* Existing group names, so grouping does not fragment on a typo. */}
+        <datalist id="mz-existing-groups">
+          {[...new Set(Object.values(groups).filter(Boolean))].map(g => <option key={g} value={g} />)}
+        </datalist>
         <datalist id="mz-existing-categories">
           {rows.map(r => <option key={r.category} value={r.category} />)}
           {ISLAMIC_CATEGORY_PRESETS.map(p => <option key={p.category} value={p.category} />)}
@@ -531,8 +555,29 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
              screen a data-entry form: to see where you stood you had to read
              two figures per category and do the subtraction yourself. Editing
              is now behind a tap, so the default state is a status view. */
-          <div style={{ display: "flex", flexDirection: "column", gap: TT.s2 }}>
-            {rows.map(r => {
+          <div style={{ display: "flex", flexDirection: "column", gap: TT.s4 }}>
+            {grouped.map(g => (
+            <div key={g.name || "__ungrouped"} style={{ display: "flex", flexDirection: "column", gap: TT.s2 }}>
+            {/* Group header. Presentation only — the subtotal is always the sum
+                of the rows beneath it, so it can never disagree with them. */}
+            {g.name && (() => {
+              const gSpent = Math.abs(g.spent);
+              const gu = usage(gSpent, g.budgeted, month);
+              return (
+                <div style={{ marginTop: TT.s2 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: TT.s3, marginBottom: TT.s1 }}>
+                    <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.14em", fontWeight: 600 }}>
+                      {g.name.toUpperCase()}
+                    </span>
+                    <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, fontVariantNumeric: "tabular-nums" }}>
+                      {mask(fmtUSD(gSpent))} of {mask(fmtUSD(g.budgeted))}
+                    </span>
+                  </div>
+                  <Bar pct={gu.pct} color={gu.color} over={gu.over} height={4} />
+                </div>
+              );
+            })()}
+            {g.rows.map(r => {
               const spentAbs = Math.abs(r.spent);
               const u = usage(spentAbs, r.budgeted, month);
               const over = r.leftover < 0;
@@ -654,9 +699,33 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
                       </span>
                     </div>
                   )}
+
+                  {/* Grouping. Past about eight envelopes a flat list stops
+                      being scannable, which is why every mainstream app groups.
+                      Presentation only — the subtotal is the sum of its rows,
+                      so a group can never disagree with its children. */}
+                  {isEditing && (
+                    <div className="mz-ctrl-row" style={{ display: "flex", gap: TT.s2, alignItems: "center", marginTop: TT.s2, flexWrap: "wrap" }}>
+                      <label htmlFor={`mz-group-${r.category}`} style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.1em" }}>
+                        GROUP
+                      </label>
+                      <input id={`mz-group-${r.category}`} type="text" className="field"
+                        style={{ width: 180 }} placeholder="none"
+                        defaultValue={groups[r.category] || ""}
+                        list="mz-existing-groups"
+                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditing(""); }}
+                        onBlur={e => saveGroup(r.category, e.target.value)}
+                        aria-label={`Group for ${r.category}`} />
+                      <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted }}>
+                        e.g. Food, Giving, Home
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })}
+            </div>
+            ))}
           </div>
         )}
       </Tile>

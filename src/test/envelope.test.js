@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, leftoverByCategory,
-  monthProgress, paceStatus, suggestBudgets, merchantKey,
+  monthProgress, paceStatus, suggestBudgets, merchantKey, groupCategories,
   lastMonthOverspent, computeMonth, computeSeries, ISLAMIC_CATEGORY_PRESETS,
   categoryOf,
 } from "../lib/envelope.js";
@@ -398,5 +398,57 @@ describe("category rules", () => {
     const spent = spentByCategory(txns, "2026-08-01", { rules: { FOOD_AND_DRINK: "Halal Food" } });
     expect(spent).toEqual({ "Halal Food": -80 });
     expect(spent).not.toHaveProperty("FOOD_AND_DRINK");
+  });
+});
+
+// ── Category groups ─────────────────────────────────────────────────────────
+// Past ~8 envelopes a flat list stops being scannable, which is why Copilot,
+// Monarch and Origin all group. Grouping here is PRESENTATION only: totals are
+// always the sum of the parts, so a group can never disagree with its children.
+describe("groupCategories", () => {
+  const R = (category, budgeted, spent, leftover) => ({ category, budgeted, spent, leftover });
+  const ROWS = [
+    R("Groceries", 400, -300, 100),
+    R("Restaurants", 200, -250, -50),
+    R("Zakat", 500, 0, 500),
+  ];
+
+  it("returns one flat, unnamed group when nothing is grouped", () => {
+    const g = groupCategories(ROWS, {});
+    expect(g).toHaveLength(1);
+    expect(g[0].name).toBe("");
+    expect(g[0].rows).toHaveLength(3);
+  });
+
+  it("subtotals a group as the exact sum of its parts", () => {
+    const g = groupCategories(ROWS, { Groceries: "Food", Restaurants: "Food" });
+    const food = g.find(x => x.name === "Food");
+    expect(food.rows).toHaveLength(2);
+    expect(food.budgeted).toBe(600);
+    expect(food.spent).toBe(-550);
+    expect(food.leftover).toBe(50);   // 100 + (−50)
+  });
+
+  it("puts ungrouped categories last, under no header", () => {
+    const g = groupCategories(ROWS, { Groceries: "Food", Restaurants: "Food" });
+    expect(g.map(x => x.name)).toEqual(["Food", ""]);
+    expect(g[1].rows.map(r => r.category)).toEqual(["Zakat"]);
+  });
+
+  it("orders groups alphabetically so the list does not jump around", () => {
+    const g = groupCategories(ROWS, { Zakat: "Giving", Groceries: "Food", Restaurants: "Food" });
+    expect(g.map(x => x.name)).toEqual(["Food", "Giving"]);
+  });
+
+  it("ignores blank or whitespace group names rather than making an empty group", () => {
+    const g = groupCategories(ROWS, { Groceries: "   ", Restaurants: "" });
+    expect(g).toHaveLength(1);
+    expect(g[0].name).toBe("");
+  });
+
+  it("survives junk without throwing", () => {
+    expect(() => groupCategories(null, null)).not.toThrow();
+    expect(groupCategories(null, null)).toEqual([]);
+    expect(() => groupCategories([null, undefined], {})).not.toThrow();
   });
 });

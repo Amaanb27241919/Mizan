@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-27
+
+### Added
+- **budget:** Let the user overrule Plaid's categories (`e1031b0`)
+
 ## 2026-08-26
 
 ### Added

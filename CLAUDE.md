@@ -79,6 +79,22 @@ src/components/Budgeting.jsx   — ENVELOPE (zero-based) budget, on the Finances
                                  you edit it is worse than one you scan. Amber at 80% used.
                                  Budget figures go through mask() — they ignored privacy mode
                                  entirely until this change.
+                                 Colour is PACE, not raw usage (envelope.js paceStatus): 80%
+                                 spent on the 3rd is an emergency, the same 80% on the 28th is
+                                 fine, and a plain ratio paints both amber. Amber rows state
+                                 the run-rate ("on pace for $4,960") — a projection the user
+                                 cannot see is one they can only obey. A finished month never
+                                 projects.
+                                 A blank budget is seeded from history (suggestBudgets): mean
+                                 of COMPLETE months, zero-padded, income excluded from spend
+                                 categories. Applying skips anything already budgeted — seeding
+                                 is a starting point, never a correction of a user's decision.
+                                 mizan_category_rules overrides the provider's taxonomy
+                                 (merchant key beats provider category); mizan_category_groups
+                                 groups rows for display. Both TRACKED_KEYs, both store the
+                                 RULE not the result, so a re-sync cannot undo a decision.
+                                 Group subtotals are always the sum of their rows — grouping is
+                                 presentation, the envelope math stays per-category.
 src/components/BillsCalendar.jsx — Bills calendar
 src/components/ConnectionHealth.jsx — Account connection status
 src/components/ComingSoon.jsx  — Coming soon placeholder
