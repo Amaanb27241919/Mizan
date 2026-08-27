@@ -32,8 +32,19 @@ const BUDGET_FIXTURES = {
   },
 };
 
+/**
+ * Finances → Budget.
+ *
+ * The Budget used to be a collapsed tile on a single long Finances scroll. It
+ * now lives behind its own sub-tab, so reaching it takes two clicks and this
+ * helper has to make the second one — otherwise every assertion below runs
+ * against the Accounts tab and fails for a reason that has nothing to do with
+ * budgeting.
+ */
 async function openFinances(page) {
   await page.locator('[data-tour="nav-finances"]').click({ force: true });
+  await page.waitForTimeout(400);
+  await page.locator(".mz-tabbar > button", { hasText: /^Budget$/ }).first().click({ force: true });
   await page.waitForTimeout(600);
 }
 
@@ -62,10 +73,12 @@ test.describe("envelope budget", () => {
     await appReady(page);
     await openFinances(page);
     const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
-    // Halal Food: budgeted 600, spent 240 -> 360 left.
+    // Halal Food: budgeted 600, spent 240 -> 360 left. The row now leads with
+    // what REMAINS and states the arithmetic underneath, rather than making the
+    // reader subtract two figures themselves.
     expect(t).toMatch(/Halal Food/);
-    expect(t).toMatch(/spent \$240\.00/);
-    expect(t).toMatch(/left \$360\.00/);
+    expect(t).toMatch(/\$240\.00 of \$600\.00/);
+    expect(t).toMatch(/\$360\.00\s*left/);   // nested span — textContent has no space
   });
 
   test("offers the Islamic category presets", async ({ page }) => {
@@ -73,7 +86,12 @@ test.describe("envelope budget", () => {
     await page.goto("/");
     await appReady(page);
     await openFinances(page);
-    await page.getByRole("button", { name: /add category/i }).first().click({ force: true });
+    // Real tap, not a forced one: scroll it into view and let Playwright do
+    // its actionability checks, so a button a phone user genuinely cannot
+    // reach fails here instead of being papered over by force:true.
+    const addBtn = page.getByRole("button", { name: /add category/i }).first();
+    await addBtn.scrollIntoViewIfNeeded();
+    await addBtn.click();
     await page.waitForTimeout(300);
     const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
     // Sadaqah/Masjid are unused in the fixture so they should be offered;
@@ -118,5 +136,60 @@ test.describe("information density", () => {
     // 11.4 before the fix, ~5.4 after. 8 leaves room for real data growth
     // while still failing if the transaction list goes unbounded again.
     expect(m.screens, `Finances is ${m.screens.toFixed(1)} phone-screens tall`).toBeLessThan(8);
+  });
+});
+
+/**
+ * The Finances IA split (2026-08-25). Seven stacked sections became five
+ * destinations. These pin the two things that break silently: a strip with no
+ * `track` prefix is invisible to nav_usage, and a section that lost its home
+ * during the wrap is simply gone with no error anywhere.
+ */
+test.describe("Finances sub-tabs", () => {
+  const ALL = ["Accounts", "Budget", "Spending", "Recurring", "Transactions"];
+
+  test("offers all five destinations", async ({ page }) => {
+    await signedIn(page, { fixtures: BUDGET_FIXTURES });
+    await page.goto("/");
+    await appReady(page);
+    await page.locator('[data-tour="nav-finances"]').click({ force: true });
+    await page.waitForTimeout(500);
+    for (const label of ALL) {
+      await expect(
+        page.locator(".mz-tabbar > button", { hasText: new RegExp(`^${label}$`) }).first(),
+        `${label} sub-tab missing`,
+      ).toBeVisible();
+    }
+  });
+
+  // Every section must still be reachable. Before the split they were all on
+  // one scroll, so "did anything fall out of the wrap" had no other detector.
+  test("each destination renders its own content", async ({ page }) => {
+    await signedIn(page, { fixtures: BUDGET_FIXTURES });
+    await page.goto("/");
+    await appReady(page);
+    await page.locator('[data-tour="nav-finances"]').click({ force: true });
+    await page.waitForTimeout(500);
+
+    for (const label of ALL) {
+      await page.locator(".mz-tabbar > button", { hasText: new RegExp(`^${label}$`) }).first().click({ force: true });
+      await page.waitForTimeout(400);
+      const body = (await page.locator("main").textContent()).replace(/\s+/g, " ").trim();
+      // A blank pane is the failure mode of a mis-balanced JSX wrap: the tab
+      // switches, nothing renders, and no error is thrown anywhere.
+      expect(body.length, `${label} pane rendered empty`).toBeGreaterThan(80);
+    }
+  });
+
+  test("the budget respects privacy mode", async ({ page }) => {
+    // Budget figures ignored mask() entirely until this change — net worth and
+    // holdings hid, every envelope stayed on screen.
+    await signedIn(page, { fixtures: BUDGET_FIXTURES, storage: { mizan_hide_values: "1" } });
+    await page.goto("/");
+    await appReady(page);
+    await openFinances(page);
+    const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(t, "budget amounts leaked while privacy mode was on").not.toContain("$4,000.00");
+    expect(t).toMatch(/Halal Food/);   // labels still render, only figures hide
   });
 });

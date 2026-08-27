@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiFetch } from "../lib/apiFetch.js";
+import { useHideValues } from "../lib/useHideValues.js";
 import {
   monthKey, prevMonth, nextMonth, spentByCategory, computeSeries,
   ISLAMIC_CATEGORY_PRESETS,
@@ -52,6 +53,54 @@ const monthLabel = m => {
     : d.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 };
 
+/**
+ * How much of an envelope is used, 0–1, plus the colour that says so.
+ *
+ * The colour is the whole point of a budget at a glance: you should be able to
+ * scan the column and know where you stand without reading a single number.
+ * Amber starts at 80% because a category you have nearly emptied needs
+ * attention before it is a problem, not after.
+ */
+function usage(spentAbs, budgeted) {
+  if (!(budgeted > 0)) return { pct: spentAbs > 0 ? 1 : 0, color: spentAbs > 0 ? TT.loss : TT.dim, over: spentAbs > 0 };
+  const ratio = spentAbs / budgeted;
+  return {
+    pct: Math.max(0, Math.min(1, ratio)),
+    color: ratio > 1 ? TT.loss : ratio >= 0.8 ? TT.gold : TT.gain,
+    over: ratio > 1,
+  };
+}
+
+/**
+ * A budget bar. Deliberately not a generic progress component — it renders the
+ * OVERSPILL as a distinct segment past the track so "over by $40" is visible as
+ * a shape, not only as red text you have to read.
+ */
+function Bar({ pct, color, over, height = 6 }) {
+  return (
+    <div
+      role="presentation"
+      style={{
+        position: "relative", width: "100%", height, borderRadius: 999,
+        background: "var(--mz-dim, rgba(0,0,0,0.08))", overflow: "hidden",
+      }}
+    >
+      <div style={{
+        width: `${Math.round(pct * 100)}%`, height: "100%", borderRadius: 999,
+        background: color, transition: "width 220ms cubic-bezier(0.16,1,0.3,1)",
+      }} />
+      {/* A hatch on the last sliver when over, so overspend reads at a glance
+          even for a reader who cannot distinguish the red from the green. */}
+      {over && (
+        <div style={{
+          position: "absolute", top: 0, right: 0, height: "100%", width: 6,
+          background: `repeating-linear-gradient(45deg, ${TT.loss}, ${TT.loss} 2px, transparent 2px, transparent 4px)`,
+        }} />
+      )}
+    </div>
+  );
+}
+
 function Tile({ children, accent, style }) {
   return (
     <div style={{
@@ -74,6 +123,12 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
   const [saving, setSaving] = useState("");        // category currently being written
   const [adding, setAdding] = useState(false);
   const [newCat, setNewCat] = useState("");
+  const [editing, setEditing] = useState("");      // category whose amount is open for editing
+
+  // Budget figures are financial values and were the one surface that ignored
+  // privacy mode — net worth and holdings masked, every envelope left on
+  // screen. See CLAUDE.md §6: mask() belongs on every number a user can see.
+  const { mask } = useHideValues();
 
   // ── Load the WHOLE history, not just this month ──────────
   // Envelope balances are path-dependent: each month's leftover feeds the next.
@@ -150,13 +205,20 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
       ...Object.keys(byMonth[month]?.entries || {}),
       ...Object.keys(byMonth[month]?.spent || {}),
     ]);
-    return [...cats].sort().map(c => ({
+    const mapped = [...cats].sort().map(c => ({
       category: c,
       budgeted: byMonth[month]?.entries?.[c]?.budgeted ?? 0,
       carryover: !!byMonth[month]?.entries?.[c]?.carryover,
       spent: byMonth[month]?.spent?.[c] ?? 0,     // negative
       leftover: current.leftover?.[c] ?? 0,
     }));
+    // Overspent categories float to the top — they are the only rows that need
+    // a decision. Everything else stays ALPHABETICAL rather than sorted by
+    // percentage used: a list that reorders while you are editing it is worse
+    // than one you have to scan, and "over or not" flips rarely enough that the
+    // top group is stable in practice.
+    return mapped.sort((a, b) => (a.leftover < 0 ? 0 : 1) - (b.leftover < 0 ? 0 : 1)
+      || a.category.localeCompare(b.category));
   }, [byMonth, month, current]);
 
   // ── Writes ───────────────────────────────────────────────
@@ -228,6 +290,10 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
 
   const toBudget = current.toBudget;
   const toBudgetColor = current.overAssigned ? TT.loss : current.isBalanced ? TT.gain : TT.blue;
+  // Month-level usage: how much of what you ASSIGNED you have actually spent.
+  // totalSpent is negative (outflow) — envelope.js's sign convention.
+  const monthSpent = Math.abs(current.totalSpent || 0);
+  const monthUse = usage(monthSpent, current.totalBudgeted || 0);
   const presetsToOffer = ISLAMIC_CATEGORY_PRESETS.filter(
     p => !rows.some(r => r.category.toLowerCase() === p.category.toLowerCase()),
   );
@@ -257,7 +323,7 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
         </div>
 
         <div style={{ fontFamily: FU, fontSize:"var(--fs-5xl)", fontWeight: 700, color: toBudgetColor, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>
-          {fmtUSD(toBudget)}
+          {mask(fmtUSD(toBudget))}
         </div>
         <div style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: TT.muted, marginTop: TT.s1, lineHeight: 1.5 }}>
           {current.overAssigned
@@ -266,9 +332,27 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
               ? "Every dollar has a job."
               : "Still to assign — give it a job."}
           {current.overspent < 0 && (
-            <> <span style={{ color: TT.loss }}>· {fmtUSD(current.overspent)} covering last month's overspend</span></>
+            <> <span style={{ color: TT.loss }}>· {mask(fmtUSD(current.overspent))} covering last month's overspend</span></>
           )}
         </div>
+
+        {/* Month at a glance. "To Budget" answers a planning question; this
+            answers the one people actually open a budget app to ask — how much
+            of the plan is left. Hidden until something is assigned, so a fresh
+            month shows an empty state rather than a 0-of-0 bar. */}
+        {current.totalBudgeted > 0 && (
+          <div style={{ marginTop: TT.s4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: TT.s3, marginBottom: TT.s2 }}>
+              <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.12em", fontWeight: 600 }}>
+                SPENT THIS MONTH
+              </span>
+              <span style={{ fontFamily: FM, fontSize:"var(--fs-xs)", color: TT.text, fontVariantNumeric: "tabular-nums" }}>
+                {mask(fmtUSD(monthSpent))} <span style={{ color: TT.muted }}>of {mask(fmtUSD(current.totalBudgeted))}</span>
+              </span>
+            </div>
+            <Bar pct={monthUse.pct} color={monthUse.color} over={monthUse.over} height={8} />
+          </div>
+        )}
 
         {/* Manual income — the path for users with no linked bank. */}
         <div style={{ marginTop: TT.s4, display: "flex", alignItems: "center", gap: TT.s2, flexWrap: "wrap" }}>
@@ -338,48 +422,86 @@ export default function Budgeting({ txns = [], demoMode = false, bankLinked = fa
             No categories yet. Add one above — or start with Sadaqah, Zakat and Halal Food.
           </div>
         ) : (
+          /* Each envelope reads as a bar first and numbers second. The old
+             layout put a permanent number input on every row, which made the
+             screen a data-entry form: to see where you stood you had to read
+             two figures per category and do the subtraction yourself. Editing
+             is now behind a tap, so the default state is a status view. */
           <div style={{ display: "flex", flexDirection: "column", gap: TT.s2 }}>
             {rows.map(r => {
+              const spentAbs = Math.abs(r.spent);
+              const u = usage(spentAbs, r.budgeted);
               const over = r.leftover < 0;
+              const isEditing = editing === r.category;
               return (
                 <div key={r.category} style={{
-                  display: "grid", gridTemplateColumns: "1fr auto auto", gap: TT.s3, alignItems: "center",
-                  padding: `${TT.s2} ${TT.s3}`, background: TT.surface,
+                  padding: `${TT.s3} ${TT.s3}`, background: TT.surface,
                   border: `1px solid ${over ? `${TT.loss}40` : TT.border}`, borderRadius: TT.rMd,
+                  opacity: saving === r.category ? 0.6 : 1, transition: "opacity 150ms",
                 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: TT.textHi, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {/* Row 1 — name, and the number that matters: what is left. */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: TT.s3, marginBottom: TT.s2 }}>
+                    <span style={{ fontFamily: FP, fontSize:"var(--fs-md)", color: TT.textHi, fontWeight: 500, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.category}
-                    </div>
-                    <div style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, marginTop: 2 }}>
-                      spent {fmtUSD(Math.abs(r.spent))} ·{" "}
-                      <span style={{ color: over ? TT.loss : TT.gain }}>
-                        {over ? "over by " : "left "}{fmtUSD(Math.abs(r.leftover))}
+                    </span>
+                    <span style={{ fontFamily: FM, fontSize:"var(--fs-sm)", fontWeight: 600, color: over ? TT.loss : TT.textHi, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                      {mask(fmtUSD(Math.abs(r.leftover)))}
+                      <span style={{ fontSize:"var(--fs-2xs)", fontWeight: 500, color: TT.muted, marginLeft: 4 }}>
+                        {over ? "over" : "left"}
                       </span>
-                    </div>
+                    </span>
                   </div>
-                  <input type="number" inputMode="decimal" min="0" step="0.01" className="field"
-                    style={{ width: 104, textAlign: "right" }}
-                    defaultValue={r.budgeted || ""}
-                    onBlur={e => {
-                      const v = e.target.value === "" ? 0 : Number(e.target.value);
-                      if (v !== r.budgeted) saveEntry(r.category, { budgeted: v });
-                    }}
-                    aria-label={`Budget for ${r.category}`} />
-                  <button className="mz-tap"
-                    onClick={() => saveEntry(r.category, { carryover: !r.carryover })}
-                    title={r.carryover
-                      ? "Overspending stays with this category next month"
-                      : "Overspending is taken from next month's To Budget"}
-                    aria-pressed={r.carryover}
-                    style={{
-                      fontFamily: FM, fontSize:"var(--fs-2xs)", letterSpacing: "0.06em", padding: `4px ${TT.s2}`,
-                      borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
-                      background: r.carryover ? `${TT.blue}18` : "transparent",
-                      border: `1px solid ${r.carryover ? TT.blue : TT.border}`,
-                      color: r.carryover ? TT.blue : TT.muted,
-                      opacity: saving === r.category ? 0.5 : 1,
-                    }}>ROLL {r.carryover ? "ON" : "OFF"}</button>
+
+                  <Bar pct={u.pct} color={u.color} over={u.over} />
+
+                  {/* Row 3 — the supporting arithmetic, deliberately quiet. */}
+                  <div className="mz-ctrl-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: TT.s2, marginTop: TT.s2, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, fontVariantNumeric: "tabular-nums" }}>
+                      {mask(fmtUSD(spentAbs))} of {mask(fmtUSD(r.budgeted))}
+                    </span>
+                    <span style={{ display: "flex", gap: TT.s2, alignItems: "center" }}>
+                      <button className="mz-tap"
+                        onClick={() => saveEntry(r.category, { carryover: !r.carryover })}
+                        title={r.carryover
+                          ? "Overspending stays with this category next month"
+                          : "Overspending is taken from next month's To Budget"}
+                        aria-pressed={r.carryover}
+                        style={{
+                          fontFamily: FM, fontSize:"var(--fs-2xs)", letterSpacing: "0.06em", padding: `3px ${TT.s2}`,
+                          borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
+                          background: r.carryover ? `${TT.blue}18` : "transparent",
+                          border: `1px solid ${r.carryover ? TT.blue : TT.border}`,
+                          color: r.carryover ? TT.blue : TT.muted,
+                        }}>ROLL {r.carryover ? "ON" : "OFF"}</button>
+                      {!isEditing && (
+                        <button className="mz-tap" onClick={() => setEditing(r.category)}
+                          aria-label={`Edit budget for ${r.category}`}
+                          style={{
+                            fontFamily: FM, fontSize:"var(--fs-2xs)", letterSpacing: "0.06em", padding: `3px ${TT.s2}`,
+                            borderRadius: 999, cursor: "pointer", background: "transparent",
+                            border: `1px solid ${TT.border}`, color: TT.muted, whiteSpace: "nowrap",
+                          }}>EDIT</button>
+                      )}
+                    </span>
+                  </div>
+
+                  {isEditing && (
+                    <div className="mz-ctrl-row" style={{ display: "flex", gap: TT.s2, alignItems: "center", marginTop: TT.s3, flexWrap: "wrap" }}>
+                      <label htmlFor={`mz-budget-${r.category}`} style={{ fontFamily: FM, fontSize:"var(--fs-2xs)", color: TT.muted, letterSpacing: "0.1em" }}>
+                        BUDGETED
+                      </label>
+                      <input id={`mz-budget-${r.category}`} type="number" inputMode="decimal" min="0" step="0.01"
+                        className="field" style={{ width: 120, textAlign: "right" }}
+                        defaultValue={r.budgeted || ""} autoFocus
+                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditing(""); }}
+                        onBlur={e => {
+                          const v = e.target.value === "" ? 0 : Number(e.target.value);
+                          if (v !== r.budgeted) saveEntry(r.category, { budgeted: v });
+                          setEditing("");
+                        }}
+                        aria-label={`Budget for ${r.category}`} />
+                    </div>
+                  )}
                 </div>
               );
             })}

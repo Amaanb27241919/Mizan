@@ -57,8 +57,8 @@ src/components/Goals.jsx       — Goals tab (extracted). Savings goals + DEBT P
 src/components/PerformancePanel.jsx — Overview "RETURN & RISK" panel: money-weighted return
                                  (XIRR), realized/unrealized P&L split, risk metrics. Pure math
                                  in src/lib/performance.js.
-src/components/Budgeting.jsx   — ENVELOPE (zero-based) budget, mounted in Finances as a
-                                 CollapsibleTile. Math lives in src/lib/envelope.js (pure,
+src/components/Budgeting.jsx   — ENVELOPE (zero-based) budget, on the Finances → Budget
+                                 sub-tab. Math lives in src/lib/envelope.js (pure,
                                  ported from actualbudget/actual). Stores ONLY user intent
                                  (budgeted, carryover); leftover / overspend / To-Budget are
                                  all DERIVED, so nothing can drift. Tables: budget_entries +
@@ -68,6 +68,17 @@ src/components/Budgeting.jsx   — ENVELOPE (zero-based) budget, mounted in Fina
                                  the first budgeted month, never a mid-history window, or you
                                  get a plausible wrong balance. /api/budget returns the whole
                                  history for exactly this reason.
+                                 Presentation (2026-08-25): every envelope is a BAR first and
+                                 numbers second — leading with what's LEFT, the arithmetic
+                                 ("$240.00 of $600.00") quiet underneath, and editing behind a
+                                 tap. It used to put a permanent number input on every row,
+                                 which made the screen a data-entry form: to see where you
+                                 stood you read two figures per category and subtracted them
+                                 yourself. Overspent categories float to the top; everything
+                                 else stays ALPHABETICAL, because a list that reorders while
+                                 you edit it is worse than one you scan. Amber at 80% used.
+                                 Budget figures go through mask() — they ignored privacy mode
+                                 entirely until this change.
 src/components/BillsCalendar.jsx — Bills calendar
 src/components/ConnectionHealth.jsx — Account connection status
 src/components/ComingSoon.jsx  — Coming soon placeholder
@@ -460,10 +471,11 @@ They are in **rem, not px, and that is load-bearing**: a px clamp adapts to the 
 **One deliberate exception:** the iOS focus-zoom rule (`.field`, `input,select,textarea`) stays a literal `16px`. Safari zooms whenever a focused field computes under 16px, and a rem token drops below that the moment a reader *lowers* their OS text size. That is a browser behaviour threshold, not a design token — don't "tidy" it into the scale.
 
 ### Information architecture (added 2026-08-18)
-6 top-level tabs · 21 destinations · **max depth 2**. Guarded by `e2e/responsive.spec.js`.
+6 top-level tabs · 25 destinations · **max depth 2**. Guarded by `e2e/responsive.spec.js`.
 
 - The **"Plan"** tab's nav id is still `goals`. The label changed; the id must not — `localStorage.mizan_nav`, the `?tab=` deep link, the manifest shortcut, `nav_usage` paths and every `data-tour` hook are keyed on it.
 - **Portfolio is one flat strip of 9.** It used to end in "Tools", which revealed a second strip — the app's only depth-3 branch, behind a label describing none of its five unrelated contents. Do not reintroduce nesting; the strip scrolls with snap.
+- **Finances is a strip of 5** (Accounts · Budget · Spending · Recurring · Transactions), split 2026-08-25 from a single scroll of SEVEN stacked sections, each with its own state and several with their own modals. Grouped the way Copilot and Monarch group the same surface. **A section that becomes a destination owes the reader an empty state** — on one scroll an empty section simply did not appear; behind a tab it is a blank screen you clicked into. Recurring, Spending and Transactions each gained a `<ComingSoon pending>` fallback for exactly this, and `e2e/budget.spec.js` fails if any pane renders under ~80 characters.
 - `nav_usage` (migration 028) counts destinations per user — **counters, not an event log**, so there is no timeline and nothing financial. Use it to answer whether Backtest / ETF Overlap earn their slots rather than deciding by taste.
 - **Every `<TabBar>` needs a `track` prefix** (`track="portfolio"` → records `portfolio/backtest`). Without it that strip is silently uncounted. This is not hypothetical: for its first day `recordNavView` was wired only into the top-level `setNav`, so sub-tabs recorded nothing and the feature could not answer its own question. `e2e/responsive.spec.js` guards it.
 

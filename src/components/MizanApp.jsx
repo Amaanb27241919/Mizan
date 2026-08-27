@@ -10177,6 +10177,13 @@ function GoalsHub({snapAccounts=[],plaidAccounts=[],netWorthHistory=[],demoMode=
 function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNickname}){
   const { mask } = useHideValues();
   const{user}=useAuth();
+  // Sub-tabs. Finances had grown to SEVEN stacked sections in one scroll —
+  // balance, institutions, budget, spending, debt transfers, subscriptions and
+  // the transaction list — each with its own state and several with their own
+  // modals. Grouped the way Copilot and Monarch group the same surface, which
+  // also gives the budget a full screen instead of a collapsed tile competing
+  // with six siblings. Depth stays at 2 (CLAUDE.md §5).
+  const[sub,setSub]=useState("accounts");
   // In demo mode short-circuit straight to the local fixtures so the
   // tab is fully populated without ever talking to Plaid. Toggle off
   // returns the user to real (or empty) state.
@@ -10789,6 +10796,15 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         receivedRedirectUri={receivedRedirectUri}
       />
     )}
+    {/* Five destinations, grouped the way Copilot and Monarch group the same
+        surface. Every TabBar needs a `track` prefix or the strip is silently
+        uncounted in nav_usage (CLAUDE.md §5). */}
+    <TabBar track="finances" active={sub} onChange={setSub} tabs={[
+      ["accounts","Accounts"],["budget","Budget"],["spending","Spending"],
+      ["recurring","Recurring"],["transactions","Transactions"],
+    ]}/>
+
+    {sub==="accounts"&&<>
     {/* ─── HERO: Total bank balance + Connect ─────────── */}
     <BentoTile dataTour="finances" style={{
       background:`radial-gradient(circle at 0% 0%, ${T.blue}1A, transparent 55%), radial-gradient(circle at 100% 100%, ${T.gain}10, transparent 50%), ${T.card}`,
@@ -10912,7 +10928,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     </BentoTile>;
     })}
 
-    {/* ─── SPENDING BY CATEGORY ─────────────────── */}
+    </>}
+
+    {sub==="budget"&&<>
     {/* ── BUDGET ──────────────────────────────────────────────
         Envelope (zero-based) budgeting. Mounted 2026-08-18 — this component
         existed as 429 lines of dead code that was never imported, so no user
@@ -10923,6 +10941,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       <Budgeting txns={txns} demoMode={demoMode} bankLinked={accounts.length>0}/>
     </CollapsibleTile>
 
+    </>}
+
+    {sub==="spending"&&<>
     {spendingByCategory.entries.length>0&&(()=>{
       const{entries,monthTotal}=spendingByCategory;
       const now=new Date();
@@ -10945,6 +10966,11 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         </div>
       </CollapsibleTile>;
     })()}
+
+    {spendingByCategory.entries.length===0&&<ComingSoon pending
+      title="Nothing categorised this month"
+      description="Spending is grouped from your bank transactions. Once this month has some, it breaks down here by category."
+      hint={institutions.length===0?"Connect a bank under Accounts to get started.":"Your bank is linked — categories appear as transactions land."}/>}
 
     {/* ─── DEBT PAYMENTS & TRANSFERS ──────────── */}
     {paymentFlows.outEntries.length>0&&(()=>{
@@ -10974,6 +11000,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       </CollapsibleTile>;
     })()}
 
+    </>}
+
+    {sub==="recurring"&&<>
     {/* ─── RECURRING SUBSCRIPTIONS ─────────────── */}
     {(()=>{
       // Prefer Plaid's native recurring-transactions data when available.
@@ -11056,7 +11085,13 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
           edited:true,
         };
       });
-      if(rows.length===0)return null;
+      // A pane you can click into must never be blank (CLAUDE.md §7). Before
+      // the Finances split an empty section simply did not appear on the
+      // scroll; now it is a destination, so it owes the reader a reason.
+      if(rows.length===0)return<ComingSoon pending
+        title="No recurring payments detected yet"
+        description="Mizan finds subscriptions by spotting charges that repeat on a cadence. That needs a couple of months of transactions before the pattern is clear."
+        hint={institutions.length===0?"Connect a bank under Accounts to get started.":"Your bank is linked — this fills in as transactions accumulate."}/>;
       const active=rows.filter(r=>r.active);
       const inactive=rows.filter(r=>!r.active);
       const totalMonthly=active.reduce((s,r)=>s+r.estMonthly,0);
@@ -11160,6 +11195,9 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       </div>;
     })()}
 
+    </>}
+
+    {sub==="transactions"&&<>
     {/* Empty-state when a bank is connected but transactions haven't landed yet. */}
     {institutions.length>0&&bankTxns.length===0&&!demoMode&&<ComingSoon
       pending
@@ -11170,6 +11208,10 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
     />}
 
     {/* ─── RECENT TRANSACTIONS — search + filter + paged, nickname-aware ─── */}
+    {txns.length===0&&institutions.length===0&&!demoMode&&<ComingSoon pending
+      title="No transactions yet"
+      description="Connect a bank and Mizan pulls your transaction history, then categorises it for budgeting and Zakat."
+      action={{ label: "Connect a bank", onClick: () => setSub("accounts") }}/>}
     {txns.length>0&&(()=>{
       // Chip styling helper — keep visual style consistent with the rest of
       // the Finances tab (Tag-component look but selectable).
@@ -11273,6 +11315,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         )}
       </BentoTile>;
     })()}
+    </>}
   </div>;
 }
 

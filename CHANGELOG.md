@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **chart:** State the window the chart is actually showing (`5952376`)
 
 ### Fixed
+- **chart:** The price chart's font size is canvas pixels, not CSS (`7cbad1e`)
 - **chart:** Never render one timeframe's candles under another's label (`90fd92b`)
 
 ## 2026-08-21
