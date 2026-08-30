@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-08-30
+
+### Added
+- **budget:** Replace zero-based envelopes with one monthly number (`46bfbe4`)
+
 ## 2026-08-27
 
 ### Added
