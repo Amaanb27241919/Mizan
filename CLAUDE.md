@@ -252,7 +252,7 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 
 ### Verification (what actually proves the app works)
 ```
-npm test              — Vitest, 419 unit tests. Pure functions + static contracts. Fast (~3s).
+npm test              — Vitest, 644 unit tests. Pure functions + static contracts. Fast (~10s).
 npm run test:e2e      — Playwright. Renders the real production build. NOT in `npm run build`.
 npm run test:all      — both
 npm run lint          — crash-focused ESLint (config/eslint.mjs). Wired INTO `npm run build`.
@@ -273,7 +273,12 @@ e2e/responsive.spec.js        — overflow/clipping across login + every tab + e
 e2e/mobile-and-privacy.spec.js— the two P0s from the 2026-08-13 UI audit (320px clipping, privacy
                                 mode being decorative)
 e2e/screener.spec.js          — the "screen any ticker" lookup + typeahead
-src/test/*.test.js            — 22 files. Pure logic (zakat, netWorth, performance, recurring,
+e2e/budget.spec.js            — the top-down budget (setup state, Everything else absorbing
+                                uncapped spend, row controls staying behind their disclosure,
+                                privacy mode) + the five Finances destinations. Its fixtures and
+                                assertions derive their month from the clock: hardcoding one
+                                made the suite fail on the 1st for reasons unrelated to budgeting
+src/test/*.test.js            — 32 files. Pure logic (zakat, netWorth, performance, recurring,
                                 notifications, compliance…) plus two contract suites:
                                 demoFixtures.test.js  — demo data is deterministic and self-consistent
                                 pwaManifest.test.js   — manifest + iOS meta + splash matrix (§5)
@@ -826,7 +831,6 @@ Current gaps in order of user value (from MIZAN-STATE-AUDIT.md Section 6):
 | Gap | Effort | Notes |
 |-----|--------|-------|
 | Hijri Calendar / Hawl tracking | M | Reuses ZakatSadaqah component + push notifications |
-| Muslim budget categories (Sadaqah, Masjid, Halal food) | S | Plaid categories already working — need Islamic presets |
 | Shareable snapshot links | M | Read-only token-based view |
 | Risk metrics (Sharpe, max drawdown, volatility) | M | Reuses Polygon OHLC + existing backtester pipeline |
 | Order Ticket activation | S | Remove two gates — backend already deployed |
