@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-08-27
 
 ### Added
+- **budget:** Group categories, with subtotals that cannot lie (`7876db6`)
 - **budget:** Let the user overrule Plaid's categories (`e1031b0`)
 
 ## 2026-08-26

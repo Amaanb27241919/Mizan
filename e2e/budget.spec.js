@@ -1,22 +1,39 @@
 /**
- * Envelope budgeting (migration 027 + src/lib/envelope.js + Budgeting.jsx).
+ * The Budget tab (migration 027 + src/lib/budgetPlan.js + Budgeting.jsx).
  *
- * Why this spec exists at all: the previous Budgeting component shipped as 429
- * lines that were never imported. The table, the API and the UI all existed and
- * no user could reach any of it, and CLAUDE.md described it as a shipped tab.
- * The first test here is therefore the dumbest and most important one — does it
+ * Why this spec exists at all: the FIRST Budgeting component shipped as 429
+ * lines that were never imported. The table, the API and the UI all existed
+ * and no user could reach any of it, while CLAUDE.md described it as a shipped
+ * tab. So the dumbest test here is still the most important one — does it
  * render for a user at all.
+ *
+ * Rewritten 2026-08-30 with the model: the tab was zero-based (envelope) and
+ * led with "To Budget", which the owner reported as confusing. It is now
+ * TOP-DOWN — one monthly budget, category limits inside it, "Everything else"
+ * holding the remainder.
+ *
+ * Dates are derived from the clock, not written down. The previous version
+ * hardcoded 2026-08 in both the fixtures and the assertions, so it was going
+ * to fail on the 1st of the following month for reasons having nothing to do
+ * with budgeting.
  */
 import { test, expect } from "@playwright/test";
 import { signedIn, appReady } from "./support/app.js";
 
+const now = new Date();
+const M = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+const day = d => `${M.slice(0, 8)}${String(d).padStart(2, "0")}`;
+
+/** A budget of $2,000 with $1,000 of it given to two named categories. */
+const PLAN = JSON.stringify({ rollover: false, months: { [M]: { total: 2000 } } });
+
 const BUDGET_FIXTURES = {
   "/api/budget": {
     entries: [
-      { month: "2026-08-01", category: "Halal Food", budgeted: 600, carryover: false },
-      { month: "2026-08-01", category: "Zakat",      budgeted: 400, carryover: true  },
+      { month: M, category: "Halal Food", budgeted: 600, carryover: false },
+      { month: M, category: "Zakat",      budgeted: 400, carryover: false },
     ],
-    months: [{ month: "2026-08-01", manual_income: 5000 }],
+    months: [{ month: M, manual_income: 5000 }],
   },
   // NOTE the shape: Plaid sends `category` as an ARRAY and the modern field as
   // `personal_finance_category.primary`. An earlier version of this fixture
@@ -26,89 +43,169 @@ const BUDGET_FIXTURES = {
   // mirror what the provider actually sends, or they only test themselves.
   "/api/plaid/transactions": {
     transactions: [
-      { date: "2026-08-04", amount: 150, category: ["FOOD_AND_DRINK", "Halal Food"], name: "Grocer" },
-      { date: "2026-08-09", amount: 90,  personal_finance_category: { primary: "Halal Food" }, name: "Grocer" },
+      { date: day(4), amount: 150, category: ["FOOD_AND_DRINK", "Halal Food"], name: "Grocer" },
+      { date: day(9), amount: 90,  personal_finance_category: { primary: "Halal Food" }, name: "Grocer" },
+      // Uncapped: this must land in Everything else, not vanish. In the
+      // envelope model spending in a category you never created was invisible.
+      { date: day(6), amount: 500, personal_finance_category: { primary: "Rent" }, name: "Landlord" },
     ],
   },
 };
 
-/**
- * Finances → Budget.
- *
- * The Budget used to be a collapsed tile on a single long Finances scroll. It
- * now lives behind its own sub-tab, so reaching it takes two clicks and this
- * helper has to make the second one — otherwise every assertion below runs
- * against the Accounts tab and fails for a reason that has nothing to do with
- * budgeting.
- */
+/** Finances → Budget. Two clicks: the tab, then the sub-tab. */
 async function openFinances(page) {
   await page.locator('[data-tour="nav-finances"]').click({ force: true });
   await page.waitForTimeout(400);
   await page.locator(".mz-tabbar > button", { hasText: /^Budget$/ }).first().click({ force: true });
   await page.waitForTimeout(600);
 }
+// `...extra` goes FIRST: spreading it last overwrote `storage` wholesale, so
+// any caller passing its own storage silently lost the seeded budget plan and
+// landed on the setup screen instead.
+const budgeted = (extra = {}) => ({
+  fixtures: BUDGET_FIXTURES,
+  ...extra,
+  storage: { mizan_budget_plan: PLAN, ...(extra.storage || {}) },
+});
 
-test.describe("envelope budget", () => {
-  test("the Budget section renders in Finances at all", async ({ page }) => {
+test.describe("budget — setup", () => {
+  test("asks for one number when no budget has been set", async ({ page }) => {
+    // A budget nobody has set is not a $0 budget. Showing a gauge pinned at
+    // zero would report a plan the user never made.
     await signedIn(page, { fixtures: BUDGET_FIXTURES });
     await page.goto("/");
     await appReady(page);
     await openFinances(page);
-    await expect(page.getByText("TO BUDGET")).toBeVisible();
+    await expect(page.getByText("SET YOUR MONTHLY BUDGET")).toBeVisible();
   });
 
-  test("computes To Budget from income minus what is assigned", async ({ page }) => {
-    await signedIn(page, { fixtures: BUDGET_FIXTURES });
+  test("renders the budget once one is set", async ({ page }) => {
+    await signedIn(page, budgeted());
     await page.goto("/");
     await appReady(page);
     await openFinances(page);
-    // income 5000 − (600 + 400) assigned = 4000 still to assign.
-    const main = await page.locator("main").textContent();
-    expect(main.replace(/\s+/g, " ")).toContain("$4,000.00");
+    await expect(page.getByText(/LEFT TO SPEND|OVERSPENT/)).toBeVisible();
+  });
+});
+
+test.describe("budget — the numbers on screen", () => {
+  test("leads with what is left of the whole budget", async ({ page }) => {
+    await signedIn(page, budgeted());
+    await page.goto("/");
+    await appReady(page);
+    await openFinances(page);
+    // 2000 budget − (240 food + 500 rent) spent = 1260 left.
+    const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(t).toContain("$1,260");
+    expect(t).toContain("of $2,000 budget");
   });
 
-  test("shows what is left in a category after real spending", async ({ page }) => {
-    await signedIn(page, { fixtures: BUDGET_FIXTURES });
+  test("shows a category against its limit", async ({ page }) => {
+    await signedIn(page, budgeted());
     await page.goto("/");
     await appReady(page);
     await openFinances(page);
     const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
-    // Halal Food: budgeted 600, spent 240 -> 360 left. The row now leads with
-    // what REMAINS and states the arithmetic underneath, rather than making the
-    // reader subtract two figures themselves.
     expect(t).toMatch(/Halal Food/);
-    expect(t).toMatch(/\$240\.00 of \$600\.00/);
-    expect(t).toMatch(/\$360\.00\s*left/);   // nested span — textContent has no space
+    expect(t).toMatch(/\$240 of \$600/);
   });
 
-  test("offers the Islamic category presets", async ({ page }) => {
-    await signedIn(page, { fixtures: BUDGET_FIXTURES });
+  test("Everything else holds the spending no category claimed", async ({ page }) => {
+    // The property that makes top-down usable on real data: $500 of rent, in a
+    // category with no limit, still has to appear somewhere.
+    await signedIn(page, budgeted());
     await page.goto("/");
     await appReady(page);
     await openFinances(page);
-    // Real tap, not a forced one: scroll it into view and let Playwright do
+    const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(t).toContain("Everything else");
+    expect(t).toMatch(/\$500 of \$1,000/);   // 2000 budget − 1000 in limits
+  });
+
+  test("splits income into what is budgeted and what is left to save", async ({ page }) => {
+    await signedIn(page, budgeted());
+    await page.goto("/");
+    await appReady(page);
+    await openFinances(page);
+    const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    // Income 5000, budget 2000 → save 3000 (60%).
+    expect(t).toContain("Left to save");
+    expect(t).toContain("$3,000");
+  });
+});
+
+test.describe("budget — editing", () => {
+  test("offers the Islamic category presets when adding a limit", async ({ page }) => {
+    await signedIn(page, budgeted());
+    await page.goto("/");
+    await appReady(page);
+    await openFinances(page);
+    // A real tap, not a forced one: scroll it into view and let Playwright run
     // its actionability checks, so a button a phone user genuinely cannot
     // reach fails here instead of being papered over by force:true.
-    const addBtn = page.getByRole("button", { name: /add category/i }).first();
+    const addBtn = page.getByRole("button", { name: /add limit/i }).first();
     await addBtn.scrollIntoViewIfNeeded();
     await addBtn.click();
     await page.waitForTimeout(300);
     const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
-    // Sadaqah/Masjid are unused in the fixture so they should be offered;
-    // Zakat is already budgeted so it must NOT be offered again.
     expect(t).toContain("+ Sadaqah");
     expect(t).toContain("+ Masjid");
-    expect(t).not.toContain("+ Zakat");
+    expect(t).not.toContain("+ Zakat");   // already has a limit
+  });
+
+  test("offers this month's real spending as something to cap", async ({ page }) => {
+    await signedIn(page, budgeted());
+    await page.goto("/");
+    await appReady(page);
+    await openFinances(page);
+    const addBtn = page.getByRole("button", { name: /add limit/i }).first();
+    await addBtn.scrollIntoViewIfNeeded();
+    await addBtn.click();
+    await page.waitForTimeout(300);
+    const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(t).toContain("WHERE YOUR MONEY WENT THIS MONTH");
+    expect(t).toMatch(/Rent · \$500/);
+  });
+
+  test("keeps a row's controls behind its own disclosure", async ({ page }) => {
+    // The old screen put ROLL and EDIT on every row and three labelled inputs
+    // behind EDIT, so the resting state of the page was a data-entry form.
+    await signedIn(page, budgeted());
+    await page.goto("/");
+    await appReady(page);
+    await openFinances(page);
+    const before = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(before).not.toContain("SHOW AS");
+    expect(before).not.toContain("GROUP");
+    expect(before).not.toContain("Remove limit");
+
+    await page.getByRole("button", { expanded: false }).filter({ hasText: "Halal Food" }).first().click();
+    await page.waitForTimeout(250);
+    const after = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(after).toContain("SHOW AS");
+    expect(after).toContain("GROUP");
+  });
+
+  test("rollover is one switch for the whole budget, not one per row", async ({ page }) => {
+    await signedIn(page, budgeted());
+    await page.goto("/");
+    await appReady(page);
+    await openFinances(page);
+    await page.getByRole("button", { name: /edit budget/i }).first().click();
+    await page.waitForTimeout(250);
+    await expect(page.getByRole("switch")).toHaveCount(1);
   });
 
   test("prompts for income when no bank is linked", async ({ page }) => {
     // 8 of 12 real users are in this state, so it is the primary path.
-    await signedIn(page, {
+    await signedIn(page, budgeted({
       fixtures: { ...BUDGET_FIXTURES, "/api/budget": { entries: [], months: [] }, "/api/plaid/accounts": { accounts: [] } },
-    });
+    }));
     await page.goto("/");
     await appReady(page);
     await openFinances(page);
+    await page.getByRole("button", { name: /edit budget/i }).first().click();
+    await page.waitForTimeout(250);
     await expect(page.getByText(/No bank linked/i)).toBeVisible();
   });
 });
@@ -128,13 +225,8 @@ test.describe("information density", () => {
     await page.waitForTimeout(1200);
     const m = await page.evaluate(() => {
       const main = document.querySelector("main");
-      return {
-        screens: main.scrollHeight / window.innerHeight,
-        rows: main.querySelectorAll("*").length,
-      };
+      return { screens: main.scrollHeight / window.innerHeight };
     });
-    // 11.4 before the fix, ~5.4 after. 8 leaves room for real data growth
-    // while still failing if the transaction list goes unbounded again.
     expect(m.screens, `Finances is ${m.screens.toFixed(1)} phone-screens tall`).toBeLessThan(8);
   });
 });
@@ -149,7 +241,7 @@ test.describe("Finances sub-tabs", () => {
   const ALL = ["Accounts", "Budget", "Spending", "Recurring", "Transactions"];
 
   test("offers all five destinations", async ({ page }) => {
-    await signedIn(page, { fixtures: BUDGET_FIXTURES });
+    await signedIn(page, budgeted());
     await page.goto("/");
     await appReady(page);
     await page.locator('[data-tour="nav-finances"]').click({ force: true });
@@ -162,10 +254,8 @@ test.describe("Finances sub-tabs", () => {
     }
   });
 
-  // Every section must still be reachable. Before the split they were all on
-  // one scroll, so "did anything fall out of the wrap" had no other detector.
   test("each destination renders its own content", async ({ page }) => {
-    await signedIn(page, { fixtures: BUDGET_FIXTURES });
+    await signedIn(page, budgeted());
     await page.goto("/");
     await appReady(page);
     await page.locator('[data-tour="nav-finances"]').click({ force: true });
@@ -182,14 +272,15 @@ test.describe("Finances sub-tabs", () => {
   });
 
   test("the budget respects privacy mode", async ({ page }) => {
-    // Budget figures ignored mask() entirely until this change — net worth and
+    // Budget figures ignored mask() entirely until 2026-08-25 — net worth and
     // holdings hid, every envelope stayed on screen.
-    await signedIn(page, { fixtures: BUDGET_FIXTURES, storage: { mizan_hide_values: "1" } });
+    await signedIn(page, budgeted({ storage: { mizan_hide_values: "1" } }));
     await page.goto("/");
     await appReady(page);
     await openFinances(page);
     const t = (await page.locator("main").textContent()).replace(/\s+/g, " ");
-    expect(t, "budget amounts leaked while privacy mode was on").not.toContain("$4,000.00");
+    expect(t, "budget amounts leaked while privacy mode was on").not.toContain("$1,260");
+    expect(t, "budget amounts leaked while privacy mode was on").not.toContain("$240 of $600");
     expect(t).toMatch(/Halal Food/);   // labels still render, only figures hide
   });
 });

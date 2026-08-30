@@ -39,6 +39,7 @@ export const TRACKED_KEYS = [
   'mizan_category_groups',            // { [category]: "Group name" } — presentation grouping for the budget; totals stay per-category
   'mizan_category_rules',             // { [merchantKey|providerCategory]: "Your Category" } — user overrides of Plaid's taxonomy; synced so a rule set on a laptop holds on a phone
   'mizan_connection_baseline',        // last-seen SnapTrade/Plaid connection states — synced so a second device doesn't re-announce every existing connection as new
+  'mizan_budget_plan',                // { rollover, months: { [month]: { total } } } — the top-down budget's monthly total + the rollover switch. Lives here rather than in budget_months (which has only manual_income) because adding a column is a schema migration; see CLAUDE.md §8
   'mizan_ethical_overlay',            // "1" when the ethical/BDS overlay is on. Added 2026-08-20: the setter had always called persistUserState for this key, but an untracked key returns early, so the choice was silently per-device for the overlay's whole life
 ];
 

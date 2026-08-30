@@ -57,44 +57,65 @@ src/components/Goals.jsx       — Goals tab (extracted). Savings goals + DEBT P
 src/components/PerformancePanel.jsx — Overview "RETURN & RISK" panel: money-weighted return
                                  (XIRR), realized/unrealized P&L split, risk metrics. Pure math
                                  in src/lib/performance.js.
-src/components/Budgeting.jsx   — ENVELOPE (zero-based) budget, on the Finances → Budget
-                                 sub-tab. Math lives in src/lib/envelope.js (pure,
-                                 ported from actualbudget/actual). Stores ONLY user intent
-                                 (budgeted, carryover); leftover / overspend / To-Budget are
-                                 all DERIVED, so nothing can drift. Tables: budget_entries +
-                                 budget_months (migration 027) — the flat `budgets` table and
-                                 /api/budgets are SUPERSEDED (0 rows, never had a UI).
-                                 ⚠️ Envelope balances are PATH-DEPENDENT: always compute from
-                                 the first budgeted month, never a mid-history window, or you
-                                 get a plausible wrong balance. /api/budget returns the whole
-                                 history for exactly this reason.
-                                 Presentation (2026-08-25): every envelope is a BAR first and
-                                 numbers second — leading with what's LEFT, the arithmetic
-                                 ("$240.00 of $600.00") quiet underneath, and editing behind a
-                                 tap. It used to put a permanent number input on every row,
-                                 which made the screen a data-entry form: to see where you
-                                 stood you read two figures per category and subtracted them
-                                 yourself. Overspent categories float to the top; everything
-                                 else stays ALPHABETICAL, because a list that reorders while
-                                 you edit it is worse than one you scan. Amber at 80% used.
-                                 Budget figures go through mask() — they ignored privacy mode
-                                 entirely until this change.
-                                 Colour is PACE, not raw usage (envelope.js paceStatus): 80%
-                                 spent on the 3rd is an emergency, the same 80% on the 28th is
-                                 fine, and a plain ratio paints both amber. Amber rows state
-                                 the run-rate ("on pace for $4,960") — a projection the user
-                                 cannot see is one they can only obey. A finished month never
-                                 projects.
-                                 A blank budget is seeded from history (suggestBudgets): mean
-                                 of COMPLETE months, zero-padded, income excluded from spend
-                                 categories. Applying skips anything already budgeted — seeding
-                                 is a starting point, never a correction of a user's decision.
+src/components/Budgeting.jsx   — TOP-DOWN budget, on the Finances → Budget sub-tab.
+                                 ONE monthly number, with category limits inside it:
+                                   income = save + budget
+                                   budget = Σ category limits + Everything else
+                                   left   = budget + carried-in − spent
+                                 Math in src/lib/budgetPlan.js (pure, tested); the
+                                 month/category/pace primitives in src/lib/budgetCategories.js.
+                                 ⚠️ REPLACED the ENVELOPE (zero-based) model on 2026-08-30, on
+                                 the owner's explicit call after "the budgeting UI doesn't make
+                                 sense to me very confusing". Envelope led with To Budget
+                                 (income − everything assigned), which only means anything once
+                                 you have accepted the method, and it was the biggest figure on
+                                 the page. Origin/Copilot/Monarch all lead with the pair people
+                                 actually ask about: what did I plan, what have I spent. Do NOT
+                                 reintroduce To Budget or per-category carryover — the chain
+                                 functions were DELETED, not left dormant, so there is exactly
+                                 one definition of "what's left".
+                                 **Everything else** is what makes this work on real data: the
+                                 remainder of the budget is itself a bucket, so spending in a
+                                 category nobody named still appears. Under envelope it was
+                                 invisible unless you created a category for it.
+                                 The monthly total + the rollover switch live in the TRACKED_KEY
+                                 `mizan_budget_plan` ({rollover, months:{[m]:{total}}}) — NOT in
+                                 budget_months, which has only manual_income; a column there is
+                                 a migration and those need an explicit ask (§8). Category
+                                 limits stay in budget_entries (migration 027); its `carryover`
+                                 column is now vestigial and always written false. The flat
+                                 `budgets` table and /api/budgets remain SUPERSEDED.
+                                 ⚠️ Rollover is PATH-DEPENDENT: compute from the first planned
+                                 month, never a mid-history window, or you get a plausible wrong
+                                 balance. /api/budget returns the whole history for this reason.
+                                 Rollover is ONE switch for the whole budget, not one per row —
+                                 per-category carryover was seven decisions a month for a
+                                 question most people answer once.
+                                 A budget set in August is still the plan in September until
+                                 changed (inheritedTotal), so a new month never opens empty.
+                                 A ROW IS A STATUS LINE, NOT A FORM: icon + name + "$602 of
+                                 $600" + bar, everything editable behind the row's own
+                                 disclosure. The previous version put ROLL and EDIT on every row
+                                 and three labelled inputs behind EDIT, which made the resting
+                                 state of the screen data entry.
+                                 Colour stays SEMANTIC and is PACE, not raw usage
+                                 (budgetCategories.js paceStatus): 80% spent on the 3rd is an
+                                 emergency, the same 80% on the 28th is fine, and a plain ratio
+                                 paints both amber. Amber rows state the run-rate ("on pace for
+                                 $413"); a finished month never projects. Category identity is
+                                 carried by a GLYPH (categoryIcon), never a per-category colour
+                                 — handing out green/red/amber as decoration would make a row's
+                                 colour argue with its own bar (§5).
+                                 Layout: summary rail beside the list at ≥900px, stacked below.
+                                 Both live in THEME_CSS (.mz-budget-grid / .mz-brow) — an
+                                 inline grid-template-columns outranks a media query and
+                                 silently pinned desktop to one column once already.
+                                 Budget figures go through mask().
                                  mizan_category_rules overrides the provider's taxonomy
                                  (merchant key beats provider category); mizan_category_groups
-                                 groups rows for display. Both TRACKED_KEYs, both store the
-                                 RULE not the result, so a re-sync cannot undo a decision.
-                                 Group subtotals are always the sum of their rows — grouping is
-                                 presentation, the envelope math stays per-category.
+                                 groups rows for display (SORT → By group). Both TRACKED_KEYs,
+                                 both store the RULE not the result, so a re-sync cannot undo a
+                                 decision. Group subtotals are always the sum of their rows.
 src/components/BillsCalendar.jsx — Bills calendar
 src/components/ConnectionHealth.jsx — Account connection status
 src/components/ComingSoon.jsx  — Coming soon placeholder
@@ -290,9 +311,13 @@ scripts/generate-ios-splash.mjs      — iOS launch images + their <link> tags; 
 023_email_digest.sql           — (note: TWO files share the 023 prefix — dca + email_digest)
 024_etf_holdings_cache.sql     — service-role-only holdings cache for the ETF Overlap Analyzer
 025_messages.sql               — in-app two-way support thread (user↔operator); service-role writes, RLS select-own. Powers Settings → Messages + Admin → Messages
-027_envelope_budgeting.sql     — budget_entries + budget_months. Envelope budgeting with
-                                 rollover; CHECK pins `month` to the 1st so one month can never
-                                 split into two buckets. Supersedes 013_budgets.sql.
+027_envelope_budgeting.sql     — budget_entries + budget_months. CHECK pins `month` to the
+                                 1st so one month can never split into two buckets. Supersedes
+                                 013_budgets.sql. NB the filename: the envelope model it was
+                                 written for was retired 2026-08-30 (see Budgeting.jsx above).
+                                 The tables carry the top-down model's CATEGORY LIMITS
+                                 unchanged; `carryover` is vestigial and always false. The
+                                 monthly total lives in user_state, not here.
 026_user_names.sql             — profiles.first_name + last_name (nullable) + handle_new_user trigger now copies them from auth metadata. Signup collects the name; every pre-026 account gets the `NameNudge` — a GENTLE bottom-right toast on Overview only (owner call: never a blocking modal), skippable 3× then skip-less. Skip count = synced TRACKED_KEY `mizan_name_prompt_skips`, so it's per-user not per-device. Writes go through POST /api/user/profile (service role — profiles has no user UPDATE policy, and one would expose is_root/suspended on the same row)
 028_nav_usage.sql              — per-user destination counters (see §5 Information architecture)
 029_alpaca_user_keys.sql       — per-user Alpaca PAPER credentials on `user_keys`: ciphertext

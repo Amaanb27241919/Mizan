@@ -1,15 +1,14 @@
-// Envelope budgeting math (src/lib/envelope.js), ported from actualbudget/actual.
-// The rules being pinned:
-//   leftover  = budgeted + spent + (carryover ? prevLeftover : max(0, prevLeftover))
-//   overspent = Σ min(0, prevLeftover) over carryover=false categories
-//   toBudget  = income + overspent − Σ budgeted
+// Budget primitives (src/lib/budgetCategories.js) — the month/category/pace
+// math shared by the Budget tab and the rest of Finances. The zero-based
+// leftover-chain tests that used to live here went with the envelope model on
+// 2026-08-30; the top-down math is covered in budgetPlan.test.js.
 import { describe, it, expect } from "vitest";
 import {
-  monthKey, prevMonth, nextMonth, spentByCategory, leftoverByCategory,
+  monthKey, prevMonth, nextMonth, spentByCategory,
   monthProgress, paceStatus, suggestBudgets, merchantKey, groupCategories,
-  lastMonthOverspent, computeMonth, computeSeries, ISLAMIC_CATEGORY_PRESETS,
+  ISLAMIC_CATEGORY_PRESETS,
   categoryOf,
-} from "../lib/envelope.js";
+} from "../lib/budgetCategories.js";
 
 describe("month keys", () => {
   it("normalises to first-of-month, matching the DB CHECK constraint", () => {
@@ -54,95 +53,6 @@ describe("spentByCategory", () => {
   });
 });
 
-describe("leftover + carryover", () => {
-  it("rolls a POSITIVE balance forward regardless of the flag", () => {
-    const lo = leftoverByCategory(
-      { Food: { budgeted: 100, carryover: false } }, { Food: -80 }, { Food: 50 },
-    );
-    expect(lo.Food).toBe(70);   // 100 − 80 + 50
-  });
-  it("carryover ON: a NEGATIVE balance follows the category", () => {
-    const lo = leftoverByCategory(
-      { Food: { budgeted: 100, carryover: true } }, { Food: -80 }, { Food: -30 },
-    );
-    expect(lo.Food).toBe(-10);  // 100 − 80 − 30
-  });
-  it("carryover OFF: the hole does NOT follow — it is charged to To-Budget", () => {
-    // This is the distinction that makes envelope budgeting work. Same inputs
-    // as the test above, flag flipped: the −30 is dropped here...
-    const lo = leftoverByCategory(
-      { Food: { budgeted: 100, carryover: false } }, { Food: -80 }, { Food: -30 },
-    );
-    expect(lo.Food).toBe(20);   // 100 − 80 + max(0, −30)
-    // ...and reappears as a claim on this month's money.
-    expect(lastMonthOverspent({ Food: { budgeted: 100, carryover: false } }, { Food: -30 })).toBe(-30);
-  });
-  it("does not double-count: a carryover-ON debt is not ALSO taken from To-Budget", () => {
-    expect(lastMonthOverspent({ Food: { budgeted: 100, carryover: true } }, { Food: -30 })).toBe(0);
-  });
-});
-
-describe("computeMonth — the zero-based headline", () => {
-  it("reports money still to assign", () => {
-    const r = computeMonth({
-      month: "2026-08-01", income: 5000,
-      entries: { Rent: { budgeted: 2000 }, "Halal Food": { budgeted: 600 } },
-      spent: { Rent: -2000, "Halal Food": -450 },
-    });
-    expect(r.toBudget).toBe(2400);
-    expect(r.isBalanced).toBe(false);
-    expect(r.overAssigned).toBe(false);
-  });
-  it("flags over-assignment — assigning money you do not have", () => {
-    const r = computeMonth({
-      month: "2026-08-01", income: 1000,
-      entries: { Rent: { budgeted: 2000 } },
-    });
-    expect(r.toBudget).toBe(-1000);
-    expect(r.overAssigned).toBe(true);
-  });
-  it("counts a fully-assigned month as balanced", () => {
-    const r = computeMonth({
-      month: "2026-08-01", income: 2000, entries: { Rent: { budgeted: 2000 } },
-    });
-    expect(r.toBudget).toBe(0);
-    expect(r.isBalanced).toBe(true);
-  });
-  it("subtracts last month's overspend from what is available now", () => {
-    const r = computeMonth({
-      month: "2026-08-01", income: 3000,
-      entries: { Food: { budgeted: 500 } },
-      prevEntries: { Food: { budgeted: 400, carryover: false } },
-      prevLeftover: { Food: -120 },
-    });
-    // 3000 income − 120 overspend − 500 budgeted
-    expect(r.overspent).toBe(-120);
-    expect(r.toBudget).toBe(2380);
-  });
-});
-
-describe("computeSeries — balances are path-dependent", () => {
-  const byMonth = {
-    "2026-06-01": { entries: { Hajj: { budgeted: 300, carryover: true } }, spent: {} },
-    "2026-07-01": { entries: { Hajj: { budgeted: 300, carryover: true } }, spent: {} },
-    "2026-08-01": { entries: { Hajj: { budgeted: 300, carryover: true } }, spent: {} },
-  };
-  const income = { "2026-06-01": 1000, "2026-07-01": 1000, "2026-08-01": 1000 };
-
-  it("accumulates a savings envelope across months", () => {
-    const s = computeSeries(Object.keys(byMonth), byMonth, income);
-    expect(s["2026-06-01"].leftover.Hajj).toBe(300);
-    expect(s["2026-07-01"].leftover.Hajj).toBe(600);
-    expect(s["2026-08-01"].leftover.Hajj).toBe(900);
-  });
-
-  it("starting mid-history silently loses the accumulated balance", () => {
-    // Documents WHY callers must pass every month from the first budgeted one.
-    // This is the classic envelope bug: the number looks plausible and is wrong.
-    const partial = computeSeries(["2026-08-01"], byMonth, income);
-    expect(partial["2026-08-01"].leftover.Hajj).toBe(300);   // not 900
-  });
-});
 
 describe("Islamic category presets", () => {
   it("ships the categories CLAUDE.md §16 calls a gap", () => {

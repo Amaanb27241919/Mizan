@@ -10937,7 +10937,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
         has ever been able to budget in Mizan despite the table, the API and
         the UI all being present. Collapsible like its neighbours so the
         Finances tab stays short while the feature stays discoverable. */}
-    <CollapsibleTile flat title="BUDGET" subtitle="Give every dollar a job — envelope budgeting with rollover" storageKey="fin_budget" defaultOpen>
+    <CollapsibleTile flat title="BUDGET" subtitle="One monthly number, with limits on the categories you want to watch" storageKey="fin_budget" defaultOpen>
       <Budgeting txns={txns} demoMode={demoMode} bankLinked={accounts.length>0}/>
     </CollapsibleTile>
 
@@ -13394,6 +13394,32 @@ export default function Mizan(){
          reach, less than their own box, and the region a user aimed at could
          belong to a different chip. Silent mis-taps are worse than a small
          target, so these controls get real height instead. */
+      /* Budget: one column on a phone — gauge first, list under it, in reading
+         order — becoming a fixed summary rail beside the list once there is
+         room for both. The rail is 320px rather than a fraction so the list
+         keeps the width that actually varies.
+         Declared here in full, NOT inline on the element: an inline
+         grid-template-columns outranks a stylesheet rule, so the media query
+         below silently did nothing and desktop rendered as one column. */
+      .mz-budget-grid{display:grid;gap:var(--s-4);grid-template-columns:minmax(0,1fr);align-items:start;}
+      @media (min-width: 900px){
+        .mz-budget-grid{grid-template-columns:320px minmax(0,1fr);}
+      }
+      /* A category row's head. Side by side when the name has room; stacked
+         once it does not. At 320px a name and its figures competing on one
+         line left ~82px for the name, which rendered "Everything else" as
+         "Everyt…" — a truncated label is worse than a second line. */
+      .mz-brow{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;}
+      .mz-brow-top{display:flex;align-items:center;gap:var(--s-3);flex:1 1 auto;min-width:0;}
+      .mz-brow-amt{flex:0 0 auto;white-space:nowrap;}
+      /* The disclosure caret belongs at the far right of the row on both
+         layouts. CSS order keeps it there without a second DOM shape: wide, it
+         trails the figures; narrow, the figures take a full line AFTER it, so
+         the caret stays on the name's line. */
+      .mz-brow-chev{flex:0 0 auto;order:3;}
+      @media (max-width: 430px){
+        .mz-brow-amt{flex:1 0 100%;order:4;margin-top:4px;padding-left:38px;}
+      }
       @media (pointer: coarse){
         .mz-tap,.mz-chip-row button,.mz-range-row button,.mz-ctrl-row button{min-height:44px;}
         /* Wrapped rows need vertical gap now that the rows carry real height. */
