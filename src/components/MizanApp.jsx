@@ -1557,7 +1557,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   // full value (default), 0.30 for long-term holders per AAOIFI / contemporary
   // fatwa guidance. Cash (bank, brokerage cash) is always full value.
   const zakatSettings = useZakatSettings();
-  const liveNisab     = useLiveNisab();
+  const liveNisab     = useLiveNisab(demoMode);
   const nisabOverview = nisabValueFor(zakatSettings, liveNisab);
   // Never present a stale nisab as today's — withhold the verdict instead.
   const nisabReady    = isNisabAvailable(liveNisab);
@@ -1601,6 +1601,14 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   useEffect(() => {
     let cancelled = false;
     const log = (() => { try { return JSON.parse(localStorage.getItem("mizan_purification_log") || "{}"); } catch { return {}; } })();
+    // Demo reads the same fixture the Purification panel renders, so the
+    // Overview summary and that panel can never quote different totals.
+    if (demoMode) {
+      setPurificationOwedTotal(
+        DEMO_PURIFICATION_ITEMS.filter(it => !log[it.fingerprint])
+          .reduce((s, it) => s + it.purificationOwed, 0));
+      return;
+    }
     apiFetch(`/api/purification/calculate?year=${new Date().getFullYear()}`)
       .then(async r => {
         if (cancelled || !r.ok) return;
@@ -1611,7 +1619,7 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [demoMode]);
 
   const totCost=merged.reduce((s,h)=>s+cost(h),0);
   // Gain is computed against position cost basis only (cash isn't a "gain")
@@ -3791,7 +3799,14 @@ function effectiveZakatWorksheet(savedWs, manualAssets, demoMode){
 // failed, which presented a stale threshold as if it were today's — see
 // isNisabAvailable() in src/lib/zakat.js for why that's unsafe. Surfaces gate
 // on isNisabAvailable(liveNisab) and show "unavailable" rather than a number.
-function useLiveNisab(){
+// `demoMode` matters here: the fetch below is the demo's single hardest
+// dependency. Offline it rejects, the hook marks itself unavailable, and every
+// nisab-gated surface then withholds the number — so the demo's closing beat,
+// the Zakat figure, renders "unavailable" in front of the room. In demo we use
+// a frozen constant labelled as sample data instead. The real-user path keeps
+// its fail-closed behaviour exactly as-is: a stale threshold must never be
+// presented as today's (see isNisabAvailable in src/lib/zakat.js).
+function useLiveNisab(demoMode=false){
   const[data,setData]=useState({
     nisab_gold_usd:   NISAB_GOLD_USD,
     nisab_silver_usd: NISAB_SILVER_USD,
@@ -3800,6 +3815,18 @@ function useLiveNisab(){
     status:           "loading",
   });
   useEffect(()=>{
+    if(demoMode){
+      // "sample" is deliberately neither "static" nor "unavailable", the two
+      // values isNisabAvailable() rejects, so the demo computes a real verdict.
+      setData({
+        nisab_gold_usd:   NISAB_GOLD_USD,
+        nisab_silver_usd: NISAB_SILVER_USD,
+        refreshed_at:     null,
+        source:           "sample",
+        status:           "sample",
+      });
+      return;
+    }
     let cancelled=false;
     const markUnavailable=()=>{if(!cancelled)setData(p=>({...p,source:"unavailable",status:"unavailable"}));};
     apiFetch("/api/metals/spot").then(r=>r.ok?r.json():null).then(d=>{
@@ -3817,7 +3844,7 @@ function useLiveNisab(){
       });
     }).catch(markUnavailable);
     return()=>{cancelled=true;};
-  },[]);
+  },[demoMode]);
   return data;
 }
 
@@ -4161,7 +4188,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
   const[fYear,setFYear]=useState("all");
 
   const settings  = useZakatSettings();
-  const liveNisab = useLiveNisab();
+  const liveNisab = useLiveNisab(demoMode);
   const nisabUsd  = nisabValueFor(settings, liveNisab);
   // Gate every nisab-derived figure: a stale threshold can flip the verdict.
   const nisabReady = isNisabAvailable(liveNisab);
@@ -4387,13 +4414,13 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
           ? (liveNisab.status==="loading"?"Checking live gold & silver prices…":"Nisab unavailable — can't determine whether Zakat is due")
           : aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"
       }</div>
-      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and live nisab. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and {demoMode?"a frozen sample nisab":"live nisab"}. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
       <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
         {[
           ["Total zakatable assets",mask(fmtUSD(assetsTotal))],
           ["Less liabilities", `− ${mask(fmtUSD(liabilitiesTotal))}`],
           ["Net zakatable worth",mask(fmtUSD(netZakatable)),true],
-          [`Nisab (${settings.nisabStandard})`,nisabReady?mask(fmtUSD(nisabUsd)):"Unavailable"],
+          [`Nisab (${settings.nisabStandard})${demoMode?" · sample":""}`,nisabReady?mask(fmtUSD(nisabUsd)):"Unavailable"],
         ].map(([l,v,b])=><div key={l}>
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:500,marginBottom:T.s1}}>{l}</div>
           <div style={{fontFamily:FP,fontSize:"var(--fs-lg)",fontWeight:b?700:600,color:b?T.textHi:T.text,letterSpacing:"-0.01em",fontVariantNumeric:"tabular-nums"}}>{v}</div>
@@ -4503,7 +4530,9 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
         Silver nisab is more inclusive (lower threshold); gold is the majority view. <strong style={{color:T.text}}>Full market value</strong> is the default — it matches the scholar-designed calculators Mizan follows, which count shares and retirement at full resale/vested value. The optional <strong style={{color:T.text}}>30% rule</strong> treats public-equity holdings as ~30% zakatable (approximating the cash/receivables/inventory share of company assets vs. exempt fixed assets) — a lighter basis some fatwa councils allow for long-term buy-and-hold investors.
       </div>
       <div style={{marginTop:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.05em"}}>
-        {liveNisab.status==="unavailable"
+        {liveNisab.source==="sample"
+          ? "Sample data — gold & silver spot frozen for this demo, not today's price."
+          : liveNisab.status==="unavailable"
           ? "Live gold & silver prices unavailable — nisab can't be computed right now. Figures below exclude the nisab verdict."
           : liveNisab.status==="loading"
           ? "Fetching live gold & silver spot prices…"

@@ -68,6 +68,15 @@ const CURRENT_USER_KEY = 'mizan_current_user_id';
 // data can never be rendered while a different user is authenticated.
 // Per-device prefs (theme, ticker-keyed caches like sectors/AAOIFI) are
 // intentionally preserved — they're not user-identifying.
+// Demo mode must not touch the server in either direction: it can't read
+// (convention wifi fails, and the demo has its own fixtures) and it must not
+// write, because the demo persona would otherwise land in the signed-in user's
+// real user_state rows. Exported because apiFetch and the auth provider need
+// the same answer from the same place.
+export function isDemoMode() {
+  try { return localStorage.getItem('mizan_demo') === '1'; } catch { return false; }
+}
+
 export function clearTrackedLocalState() {
   [...TRACKED_KEYS, ...USER_SCOPED_CACHE_KEYS].forEach((k) => {
     try { localStorage.removeItem(k); } catch { /* ignore */ }
@@ -78,6 +87,10 @@ export function clearTrackedLocalState() {
 // Best-effort fetch of all user_state rows. Returns a map { key → parsed value }.
 export async function fetchUserState(userId) {
   if (!isSupabaseConfigured || !supabase || !userId) return {};
+  // NB the gate is here, not in hydrateUserState — hydrate's cross-user scrub
+  // is a safety property (it stops one user's cached state rendering under
+  // another's login) and must keep running even while demo is on.
+  if (isDemoMode()) return {};
   try {
     const { data, error } = await supabase
       .from('user_state')
@@ -125,6 +138,7 @@ export async function hydrateUserState(userId) {
 // Accepts either a JSON string (mirroring localStorage usage) or a raw value.
 export async function persistUserState(key, value) {
   if (!TRACKED_KEYS.includes(key)) return;
+  if (isDemoMode()) return;
   if (!isSupabaseConfigured || !supabase) return;
   try {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -170,6 +184,7 @@ export async function persistMergedUserState(key, mergeFn, localFallback = null)
     return merged;
   };
   if (!TRACKED_KEYS.includes(key) || !isSupabaseConfigured || !supabase) return applyLocal();
+  if (isDemoMode()) return applyLocal();
 
   try {
     const { data: sessionData } = await supabase.auth.getSession();

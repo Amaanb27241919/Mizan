@@ -8,6 +8,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from './supabase';
+import { isDemoMode } from './userState';
 import { clearTrackedLocalState } from './userState';
 import { recordAudit } from './apiFetch';
 
@@ -57,7 +58,9 @@ export function AuthProvider({ children }) {
   // fine — backfill fills in for legacy accounts and the signup trigger
   // for new ones, but if profiles isn't migrated yet we stay false.
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase || !user?.id || user.id === 'single-user') {
+    // isDemoMode(): the demo shows no root-only surface, so this lookup has
+    // nothing to change and would only be one more thing to fail offline.
+    if (!isSupabaseConfigured || !supabase || !user?.id || user.id === 'single-user' || isDemoMode()) {
       setProfileIsRoot(false);
       return;
     }

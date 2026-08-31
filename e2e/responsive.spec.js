@@ -225,7 +225,12 @@ test.describe("usage counting reaches sub-tabs", () => {
   // question. Caught by querying the live table rather than assuming.
   test("records sub-tab destinations, not just top-level tabs", async ({ page }) => {
     const posted = [];
-    await signedIn(page, { storage: { mizan_demo: "1" } });
+    // NOT demo mode. Since 2026-08-30 demo issues no network at all, telemetry
+    // included — a conference demo tapping through every tab must not land in
+    // the counters that answer "does Backtest earn its slot?". The sub-tab
+    // strip is structural and renders without connected data, so this test
+    // does not need the demo persona to reach it.
+    await signedIn(page);
     await page.route("**/api/nav-usage", (route) => {
       try { posted.push(JSON.parse(route.request().postData() || "{}").path); } catch { /* ignore */ }
       return route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });

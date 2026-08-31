@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **budget:** Replace zero-based envelopes with one monthly number (`46bfbe4`)
 
+### Fixed
+- **purification:** Stop claiming issuer-published provenance for estimated ratios (`a587212`)
+
 ### Docs
 - Retire the envelope model everywhere it was still described as current (`5294f29`)
 - **audit:** Record the budgeting model change and what rendering caught (`c831459`)
