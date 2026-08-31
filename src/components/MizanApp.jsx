@@ -3839,10 +3839,10 @@ const NISAB_USD = NISAB_GOLD_USD;
 // annual purification report for exact figures.
 
 const DEMO_PURIFICATION_ITEMS = [
-  { fingerprint:"SPUS_2026-03-28_12.40", ticker:"SPUS", date:"2026-03-28", dividendAmount:12.40, impurityPct:1.70, purificationOwed:0.2108, ratioSource:"SP Funds annual report — verify at spfunds.com" },
-  { fingerprint:"HLAL_2026-03-15_8.75",  ticker:"HLAL", date:"2026-03-15", dividendAmount:8.75,  impurityPct:2.80, purificationOwed:0.245,  ratioSource:"Wahed FTSE USA Shariah ETF — issuer estimate" },
-  { fingerprint:"SPUS_2025-12-30_11.90", ticker:"SPUS", date:"2025-12-30", dividendAmount:11.90, impurityPct:1.70, purificationOwed:0.2023, ratioSource:"SP Funds annual report — verify at spfunds.com" },
-  { fingerprint:"UMMA_2025-09-19_6.20",  ticker:"UMMA", date:"2025-09-19", dividendAmount:6.20,  impurityPct:2.20, purificationOwed:0.1364, ratioSource:"Wahed EM Sharia ETF — issuer estimate" },
+  { fingerprint:"SPUS_2026-03-28_12.40", ticker:"SPUS", date:"2026-03-28", dividendAmount:12.40, impurityPct:1.70, purificationOwed:0.2108, ratioSource:"SP Funds S&P 500 Sharia — MĪZAN estimate, verify at spfunds.com" },
+  { fingerprint:"HLAL_2026-03-15_8.75",  ticker:"HLAL", date:"2026-03-15", dividendAmount:8.75,  impurityPct:2.80, purificationOwed:0.245,  ratioSource:"Wahed FTSE USA Shariah ETF — MĪZAN estimate, verify at wahedinvest.com" },
+  { fingerprint:"SPUS_2025-12-30_11.90", ticker:"SPUS", date:"2025-12-30", dividendAmount:11.90, impurityPct:1.70, purificationOwed:0.2023, ratioSource:"SP Funds S&P 500 Sharia — MĪZAN estimate, verify at spfunds.com" },
+  { fingerprint:"UMMA_2025-09-19_6.20",  ticker:"UMMA", date:"2025-09-19", dividendAmount:6.20,  impurityPct:2.20, purificationOwed:0.1364, ratioSource:"Wahed Diversified EM Sharia ETF — MĪZAN estimate, verify at wahedinvest.com" },
 ];
 
 function PurificationPanel({ demoMode = false, onPurified }) {
@@ -3953,9 +3953,10 @@ function PurificationPanel({ demoMode = false, onPurified }) {
         fontFamily: FM, fontSize:"var(--fs-xs)", color: T.muted, lineHeight: 1.6,
       }}>
         <span style={{ color: T.gold, fontWeight: 600 }}>ℹ Sharia note — </span>
-        Purification ratios are estimates. Consult your scholar or the fund's annual purification report for exact figures.
+        Every ratio below is a <strong style={{ color: T.text }}>MĪZAN estimate</strong>, not a figure published by the fund. Check the fund's own purification report and override it here.
         {" "}<strong style={{ color: T.text }}>MĪZAN is not a religious authority.</strong>
-        {" "}Published reports: SP Funds (spfunds.com) · Wahed (wahedinvest.com) · Amana (saturna.com).
+        {" "}Issuer sources: SP Funds (spfunds.com) · Wahed (wahedinvest.com).
+        {" "}Saturna publishes Amana purification as an annual <em>dollar amount per share</em>, not a percentage, so our Amana estimates will not reconcile to theirs — use saturna.com for those.
       </div>
 
       {/* ── Summary row ─────────────────────────────────── */}
@@ -4078,7 +4079,9 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                             }}
                           >
                             {fmtPct(it.impurityPct)}
-                            {overrides[it.ticker] != null && <span style={{ fontSize:"var(--fs-2xs)", marginLeft: 3, color: T.blue }}>override</span>}
+                            {overrides[it.ticker] != null
+                              ? <span style={{ fontSize:"var(--fs-2xs)", marginLeft: 3, color: T.blue }}>override</span>
+                              : <span style={{ fontSize:"var(--fs-2xs)", marginLeft: 3, color: T.muted }}>est.</span>}
                           </span>
                         )}
                       </td>

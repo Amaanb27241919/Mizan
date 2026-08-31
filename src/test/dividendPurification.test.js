@@ -9,6 +9,8 @@
 // are what decides which of those rows is a purifiable dividend and for which
 // ticker, so they are the part worth pinning down.
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { isDividendActivity, snapTicker } from '../../lib/handlers.mjs'
 
 describe('isDividendActivity', () => {
@@ -74,5 +76,52 @@ describe('snapTicker', () => {
     for (const v of [null, undefined, {}, { symbol: {} }, 42]) {
       expect(snapTicker(v)).toBe('')
     }
+  })
+})
+
+// ── Provenance honesty ────────────────────────────────────────────────────
+// Added 2026-08-30. Every one of the eight rows in the production
+// `purification_ratios` table carries source text ending "estimate" — not one
+// is a figure the fund actually published. The UI nevertheless told the user
+// "Published reports: SP Funds · Wahed · Amana (saturna.com)", and the demo
+// fixture attributed its SPUS rows to an "SP Funds annual report" nobody had
+// read. Amana is worse than an overstatement: Saturna publishes purification
+// as an annual DOLLAR AMOUNT PER SHARE, so there is no published percentage
+// for our percentage to have come from.
+//
+// This is a trust surface — someone donates money on the strength of the
+// number — so the claim of where it came from is part of the product's
+// correctness, not copy. These are text contracts over the monolith because
+// the fixture and the disclaimer both live inside it (CLAUDE.md §8).
+describe('purification provenance claims', () => {
+  const SRC = readFileSync(
+    path.resolve(__dirname, '../components/MizanApp.jsx'), 'utf8')
+
+  const demoBlock = () => {
+    const m = SRC.match(/const DEMO_PURIFICATION_ITEMS[\s\S]*?\n\];/)
+    if (!m) throw new Error('DEMO_PURIFICATION_ITEMS block not found — marker moved')
+    return m[0]
+  }
+
+  it('ships a demo fixture whose rows are all attributed', () => {
+    const sources = [...demoBlock().matchAll(/ratioSource:\s*"([^"]+)"/g)].map(x => x[1])
+    expect(sources.length).toBeGreaterThan(0)
+    for (const s of sources) expect(s).toMatch(/estimate/i)
+  })
+
+  it('never attributes a demo ratio to a report nobody read', () => {
+    // The DB says "estimate" for all 8 tickers; the demo must not out-claim it.
+    for (const s of [...demoBlock().matchAll(/ratioSource:\s*"([^"]+)"/g)].map(x => x[1])) {
+      expect(s).not.toMatch(/annual report|published report/i)
+    }
+  })
+
+  it('does not present the shipped ratios as issuer-published', () => {
+    expect(SRC).not.toMatch(/Published reports:/)
+  })
+
+  it('says plainly that Saturna publishes a per-share amount, not a percent', () => {
+    // Guards against someone "tidying" Amana back into the issuer-sources list.
+    expect(SRC).toMatch(/dollar amount per share/i)
   })
 })

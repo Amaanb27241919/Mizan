@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **budget:** Replace zero-based envelopes with one monthly number (`46bfbe4`)
 
 ### Docs
+- Retire the envelope model everywhere it was still described as current (`5294f29`)
 - **audit:** Record the budgeting model change and what rendering caught (`c831459`)
 
 ## 2026-08-27
