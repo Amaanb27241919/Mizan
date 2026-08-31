@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **budget:** Replace zero-based envelopes with one monthly number (`46bfbe4`)
 
 ### Fixed
+- **demo:** Make demo mode run with no network at all (`abe74f1`)
 - **purification:** Stop claiming issuer-published provenance for estimated ratios (`a587212`)
 
 ### Docs
