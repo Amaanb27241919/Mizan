@@ -13,6 +13,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trading:** Deterministic basket allocator, pure and unwired (`aab66a4`)
 - **alpaca:** Notional/fractional orders, with cash as the ceiling (`d2f23e4`)
 
+### Fixed
+- **market:** Model early closes, and recover seven missing 2027 holidays (`b5e7168`)
+
 ## 2026-08-30
 
 ### Added
