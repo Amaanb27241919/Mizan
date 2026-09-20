@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-09-19
 
 ### Added
+- **trading:** Deterministic basket allocator, pure and unwired (`aab66a4`)
 - **alpaca:** Notional/fractional orders, with cash as the ceiling (`d2f23e4`)
 
 ## 2026-08-30

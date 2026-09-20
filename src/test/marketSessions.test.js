@@ -15,6 +15,7 @@ import {
   validateSessionOrder,
   SESSION_BOUNDS,
   MARKET_HOLIDAYS,
+  EARLY_CLOSES,
 } from '../../lib/market/sessions.mjs'
 
 // 2026-08-25 is a Tuesday in EDT (-04:00); 2026-01-13 a Tuesday in EST (-05:00).
@@ -138,5 +139,85 @@ describe('validateSessionOrder — broker rules, enforced before the broker', ()
     expect(v.ok).toBe(true)
     expect(v.extendedHours).toBe(true)
     expect(v.session.session).toBe('pre')
+  })
+})
+
+// ── Half-days and the 2027 calendar ─────────────────────────────────────────
+// Added 2026-09-19, after regenerating both tables from Alpaca's /v2/calendar
+// — the authority, because it is the venue that accepts or rejects the order.
+// That regeneration exposed two live defects, one per describe block below.
+describe('marketSession — early closes', () => {
+  // DEFECT 1: half-days were not modelled at all, so 13:00–16:00 on the day
+  // after Thanksgiving read `regular`. A market order sent then is not
+  // rejected by Alpaca — it is QUEUED to the next session and fills the
+  // following morning at a price nobody saw. That is the failure this module
+  // already refuses to allow in pre/after hours; it simply had a hole here.
+  const halfDay = (hhmm) => new Date(`2026-11-27T${hhmm}:00-05:00`) // Fri after Thanksgiving
+
+  it('trades normally up to the early close', () => {
+    expect(marketSession(halfDay('09:30')).session).toBe('regular')
+    expect(marketSession(halfDay('12:59')).session).toBe('regular')
+  })
+
+  it('keeps the reason string "open" on a half-day', () => {
+    // usMarketStatus promises weekend|holiday|pre_market|after_hours|open to
+    // the bot cron and the SnapTrade gate. A shortened session is still a
+    // regular session, so that contract must not shift underneath them.
+    expect(marketSession(halfDay('11:00')).reason).toBe('open')
+    expect(usMarketStatus(halfDay('11:00'))).toEqual({ open: true, reason: 'open' })
+  })
+
+  it('is closed after the early close, not after-hours', () => {
+    for (const t of ['13:00', '14:00', '15:59', '18:00']) {
+      const s = marketSession(halfDay(t))
+      expect(s.session).toBe('closed')
+      expect(s.reason).toBe('early_close')
+      expect(s.tradeable).toBe(false)
+    }
+  })
+
+  it('refuses an order after the early close', () => {
+    const v = validateSessionOrder({ type: 'market' }, halfDay('14:00'))
+    expect(v.ok).toBe(false)
+    expect(v.code).toBe('market_closed')
+  })
+
+  it('does not leak the early close to neighbouring days', () => {
+    // The Monday after, and the Wednesday before, are ordinary sessions.
+    expect(marketSession(new Date('2026-11-30T14:00:00-05:00')).session).toBe('regular')
+    expect(marketSession(new Date('2026-11-25T14:00:00-05:00')).session).toBe('regular')
+  })
+
+  it('has 2027-12-24 as a holiday, not an early close', () => {
+    // Christmas Eve is a half-day in 2026 and the observed holiday in 2027.
+    // Exactly the detail that makes hand-writing these dates a bad idea.
+    expect(EARLY_CLOSES.has('2026-12-24')).toBe(true)
+    expect(EARLY_CLOSES.has('2027-12-24')).toBe(false)
+    expect(MARKET_HOLIDAYS.has('2027-12-24')).toBe(true)
+  })
+})
+
+describe('MARKET_HOLIDAYS — 2027 was seven days short', () => {
+  // DEFECT 2: the table carried only three of 2027's ten holidays, so the
+  // clock reported the market open on each of the rest and the bot cron would
+  // have generated signals against a shut market all year.
+  it.each([
+    ['2027-03-26', 'Good Friday'],
+    ['2027-05-31', 'Memorial Day'],
+    ['2027-06-18', 'Juneteenth observed'],
+    ['2027-07-05', 'Independence Day observed'],
+    ['2027-09-06', 'Labor Day'],
+    ['2027-11-25', 'Thanksgiving'],
+    ['2027-12-24', 'Christmas observed'],
+  ])('%s (%s) is closed', (date) => {
+    expect(MARKET_HOLIDAYS.has(date)).toBe(true)
+    expect(marketSession(new Date(`${date}T12:00:00-05:00`)).session).toBe('closed')
+  })
+
+  it('covers every holiday Alpaca lists through 2027', () => {
+    // Guards against a partial year being added again. If this fails after a
+    // regeneration, the table is short — re-run the recipe in sessions.mjs.
+    expect([...MARKET_HOLIDAYS].filter((d) => d.startsWith('2026'))).toHaveLength(10)
+    expect([...MARKET_HOLIDAYS].filter((d) => d.startsWith('2027'))).toHaveLength(10)
   })
 })
