@@ -17,6 +17,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **purification:** Stop claiming issuer-published provenance for estimated ratios (`a587212`)
 
 ### Docs
+- Record the purification provenance and demo-offline fixes, and file both briefs (`535cc26`)
 - Retire the envelope model everywhere it was still described as current (`5294f29`)
 - **audit:** Record the budgeting model change and what rendering caught (`c831459`)
 
