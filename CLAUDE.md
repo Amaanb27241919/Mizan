@@ -44,7 +44,7 @@ External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alp
 
 ### Frontend (the monolith)
 ```
-src/components/MizanApp.jsx   — 13,200+ lines. ALL views, ALL state, ALL charts.
+src/components/MizanApp.jsx   — 13,900+ lines. ALL views, ALL state, ALL charts.
                                  DO NOT split unless explicitly asked.
 src/components/Goals.jsx       — Goals tab (extracted). Savings goals + DEBT PAYOFF TRACKER
                                  (manual/recurring/balance-linked debts, counting down to $0)
@@ -180,6 +180,28 @@ src/lib/ethicalOverlay.js      — Shared ethical/BDS overlay preference (useEth
                                  flag. It was Screener-local `useState` until 2026-08-20, which is
                                  why `mapPosition` computed `h.bds_` for every holding and NOTHING
                                  read it. Don't convert it back to component state. See §4.
+lib/market/orders.mjs          — Pure ORDER SIZING for the Alpaca path: qty XOR notional,
+                                 fractional ⇒ time_in_force=day, cents precision, and THE
+                                 CEILING IS CASH, NEVER buying_power. That last one is a
+                                 Sharia rule inverting what a buying-power check means
+                                 everywhere else — margin is riba. Not theoretical: a
+                                 $150,000 notional buy on a $100,000 cash paper account was
+                                 ACCEPTED (HTTP 200) before the guard existed.
+lib/trading/basket.mjs         — Pure DETERMINISTIC PORTFOLIO ALGORITHM (Trade Lab §35's
+                                 baseline). Splits one contribution across fixed weights,
+                                 rebalancing by CONTRIBUTION and never by selling; the
+                                 invariant is that allocations sum to the budget to the
+                                 cent. ⚠️ DELIBERATELY NOT WIRED — the DCA path it would
+                                 feed is live, funded and full-auto armed, and §26 asks for
+                                 independent review of trading logic first.
+src/lib/push.js                — Web push subscription (the client half, written 2026-09-29).
+                                 The server half existed for months — endpoints, the
+                                 push_subscriptions table, a `push` listener in sw.js, three
+                                 crons calling sendPushToUser — but NOTHING ever called
+                                 pushManager.subscribe(), so the table stayed empty and every
+                                 send had no recipient. Honours the documented contract that
+                                 a null VAPID key means stand down. urlBase64ToUint8Array is
+                                 pure and tested: it is where this flow classically dies.
 src/lib/userState.js           — localStorage ↔ Supabase state sync (mizan_debts is a TRACKED_KEY).
                                  `persistUserState` upserts the WHOLE value = last writer wins. For
                                  append-only keys use **`persistMergedUserState(key, mergeFn, local)`**,
@@ -192,7 +214,7 @@ src/lib/useKeyboard.js         — Global keyboard shortcuts
 ### Backend
 ```
 api/[...path].mjs              — Vercel catch-all. Routes to lib/handlers.mjs.
-lib/handlers.mjs               — 7,600+ lines. Every API route in one file.
+lib/handlers.mjs               — 8,000+ lines. Every API route in one file.
 lib/sharia.mjs                 — Sharia screening service (provider seam: Finnhub now, Zoya when ZOYA_API_KEY set). screenSymbol/screenBatch power /api/screen → governs h.sh_ app-wide
 lib/market/candles.mjs         — Pure (no I/O): validation (symbol regex, resolution whitelist,
                                  bounded window) + Polygon→chart normalization for the price chart.
@@ -252,7 +274,7 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 
 ### Verification (what actually proves the app works)
 ```
-npm test              — Vitest, 644 unit tests. Pure functions + static contracts. Fast (~10s).
+npm test              — Vitest, 703 unit tests. Pure functions + static contracts. Fast (~10s).
 npm run test:e2e      — Playwright. Renders the real production build. NOT in `npm run build`.
 npm run test:all      — both
 npm run lint          — crash-focused ESLint (config/eslint.mjs). Wired INTO `npm run build`.
@@ -273,12 +295,26 @@ e2e/responsive.spec.js        — overflow/clipping across login + every tab + e
 e2e/mobile-and-privacy.spec.js— the two P0s from the 2026-08-13 UI audit (320px clipping, privacy
                                 mode being decorative)
 e2e/screener.spec.js          — the "screen any ticker" lookup + typeahead
+e2e/demo-offline.spec.js      — demo mode issues ZERO network calls (an audit written as a
+                                test; it found 16, not the 1 that was predicted)
+e2e/demo-surfaces.spec.js     — no demo destination is entirely folded, and no demo screen
+                                shows NaN/undefined/[object Object] or logs an app error.
+                                Judges resource failures by ORIGIN: a third-party font is
+                                the network's problem, one of our own files is a broken deploy
+e2e/demo-fresh-browser.spec.js— demo survives a FIRST sign-in on a new machine. Deliberately
+                                does NOT use signedIn(), which seeds mizan_current_user_id —
+                                the very key whose absence caused the bug
+e2e/overview-empty-state.spec.js — the empty state agrees with what the page is showing; a
+                                funded bank account is not greeted as a new signup
+e2e/returns.spec.js           — performance/return surfaces
+e2e/screening-standard.spec.js— the screening standard drives compliance app-wide
+e2e/onboarding.spec.js        — the onboarding overlay (deliberately unseeded)
 e2e/budget.spec.js            — the top-down budget (setup state, Everything else absorbing
                                 uncapped spend, row controls staying behind their disclosure,
                                 privacy mode) + the five Finances destinations. Its fixtures and
                                 assertions derive their month from the clock: hardcoding one
                                 made the suite fail on the 1st for reasons unrelated to budgeting
-src/test/*.test.js            — 32 files. Pure logic (zakat, netWorth, performance, recurring,
+src/test/*.test.js            — 35 files. Pure logic (zakat, netWorth, performance, recurring,
                                 notifications, compliance…) plus two contract suites:
                                 demoFixtures.test.js  — demo data is deterministic and self-consistent
                                 pwaManifest.test.js   — manifest + iOS meta + splash matrix (§5)
@@ -288,7 +324,7 @@ scripts/generate-ios-splash.mjs      — iOS launch images + their <link> tags; 
 ```
 **The lesson that produced most of this** (2026-08-15): the fixture layer above had never worked — a service worker was bypassing `page.route()`, so specs passed *because* fixtures were inert. When you add a fixture-dependent test, **break the fixture once and confirm the test goes red.** A test that passes identically with and without its fixtures is not testing what it claims. Same applies to the guards themselves: every responsive and PWA guard here was mutation-tested, and that process caught a real hole (the responsive spec initially walked only top-level tabs and passed against a reverted sub-tab bug).
 
-### Database (26 Migrations — all applied in prod)
+### Database (30 migration files, 029 the highest — all applied in prod)
 ```
 001_init.sql                   — Core tables: user_snaptrade, user_state, user_keys, profiles
 002_plaid.sql                  — plaid_tokens, plaid_accounts, plaid_transactions
@@ -715,7 +751,7 @@ These are documented constraints, not undiscovered issues:
 
 8. **Hawl tracking (Zakat)** — Hijri calendar integration and per-asset hawl start dates are NOT implemented. The Zakat calculator assumes you manage hawl tracking yourself.
 
-9. **Order Ticket gating, and the Alpaca backend's real state** — corrected 2026-08-19, corrected again 2026-08-20. The old `{false && ...}` wrapper is gone; the only gate is `!isAdmin`. Note `isAdmin` in the frontend is **not** root — it is set from `d.trading_bot` (`MizanApp.jsx:12729`), i.e. the `profiles.trading_bot_enabled` beta allowlist, which is the *same* gate `/api/alpaca/*` uses server-side. **So enabling a trading tester is one SQL flag flip, not a code change.** ⚠️ **The previous claim here — "Alpaca paper trading backend is deployed and functional" — was HALF TRUE and is withdrawn.** The code is deployed; `ALPACA_KEY_ID` / `ALPACA_SECRET` **are absent from Vercel production** (verified 2026-08-20 via `vercel env ls production`), so every Alpaca route returns `503 Alpaca not configured` and `fetchAlpacaQuotes` has never returned a single quote in production. Memory `alpaca-data-pending` was the accurate record. Nothing Alpaca-related works until those two keys are set.
+9. **Order Ticket gating, and the Alpaca backend's real state** — corrected 2026-08-19, corrected again 2026-08-20. The old `{false && ...}` wrapper is gone; the only gate is `!isAdmin`. Note `isAdmin` in the frontend is **not** root — it is set from `d.trading_bot` (`MizanApp.jsx:12729`), i.e. the `profiles.trading_bot_enabled` beta allowlist, which is the *same* gate `/api/alpaca/*` uses server-side. **So enabling a trading tester is one SQL flag flip, not a code change.** ✅ **RESOLVED 2026-09-19: `ALPACA_KEY_ID` / `ALPACA_SECRET` are now SET in Vercel production** (type Encrypted, so they read back for verification). Paper account `PA3ME4FKSILU` verified live — ACTIVE, $100,000 cash, `trading_blocked:false`; a $1 notional SPUS order round-tripped and cancelled cleanly. ⚠️ **BUT SEE `docs/TRADE_PIPELINE.md`: the strategy engine still CANNOT reach Alpaca.** `placeAlpacaOrder` has exactly one call site — `/api/alpaca/order`, the manual Order Ticket. Zero references inside `/api/cron/bot-signals`, zero in the signal-approval path. Every automated path calls `executeSnapTradeOrder`, which is LIVE money. So a strategy cannot be forward-tested on paper today, which matters because Trade Lab §17 makes forward paper testing the only valid evidence that AI research adds value.
 
 10. **Price chart granularity/history are Polygon-bound** — the holdings price chart (`PriceChart.jsx`) uses Polygon for OHLC because Finnhub's free tier has no `/stock/candle`. Polygon free tier = 5 req/min + ~2yr history, so the **5Y** timeframe is capped to what Polygon returns and intraday (**1D/1W**) depends on Polygon minute/hour bars. Bars cache 24h in `polygon_cache`. A symbol with no Polygon coverage (some crypto/OTC) renders the chart's **"No chart data"** empty state — intentional, not a bug.
 
@@ -733,12 +769,12 @@ These are documented constraints, not undiscovered issues:
 | Zoya | Sharia screening (optional provider — overrides Finnhub when keyed) | `ZOYA_API_KEY`, `ZOYA_API_BASE` (opt) | NOT yet provisioned. When set, `lib/sharia.mjs` routes screening to Zoya (adds non-permissible-income test + direct verdict); falls back to Finnhub on any error. Adapter response-mapping must be verified against the live API. |
 | Polygon | OHLC bars — backtester (`/api/polygon/bars`) **+ holdings price chart** (`/api/market/candles`, auth-gated + IMPERSONAL); both share `getPolygonBars()` (24h `polygon_cache` + backoff + stale-on-failure) | `POLYGON_KEY` | 5 req/min free, 2yr history |
 | Alpha Vantage | ETF constituent holdings (ETF Overlap Analyzer) | `ALPHAVANTAGE_KEY` | **LIVE (set in Vercel 2026-07-05, verified — HLAL returned 210 holdings).** Free tier **25 req/day** → fetch server-side ONLY + cache ~24h in `etf_holdings_cache` (7 halal ETFs = 7 calls/day). The overlap route fetches symbols **sequentially** (concurrent bursts get throttled → curated fallback). `ETF_PROFILE` returns full holdings + weights + sectors. **ETF-only** (Amana mutual funds use curated snapshots in `lib/etfHoldings.mjs`; all 7 ETFs also curated-seeded as fallback). Stored **Sensitive**, so `vercel env pull` shows it empty — verify via `etf_holdings_cache.source`. |
-| Alpaca | Paper trading **+ market data (IEX)** | `ALPACA_KEY_ID`, `ALPACA_SECRET` | ⚠️ **NEITHER KEY IS SET IN PRODUCTION** (verified 2026-08-20) → every route 503s and `fetchAlpacaQuotes` is dead code until they are. Paper only — `ALPACA_BASE` is `paper-api.alpaca.markets`, so no real money is reachable. Routes gated on `canUseTradingBot` (the `trading_bot_enabled` beta allowlist). **Per-user paper credentials shipped 2026-08-20 (migration 029)** — `getAlpacaCreds(user)` resolves the user's own encrypted pair first and falls back to the shared env pair, exposing `source: "user" \| "shared"` so a tester always knows whose blotter they are on. It **fails closed** on a decrypt error rather than dropping the user onto the shared account. **Data tier:** free/Basic = **IEX feed only, ~2% of market volume**; extended-hours coverage specifically improves on the paid SIP plan ($99/mo Algo Trader Plus). Surface that limitation in-UI rather than presenting an IEX pre-market print as *the* price. Market clock + extended-hours order rules live in `lib/market/sessions.mjs`. |
+| Alpaca | Paper trading **+ market data (IEX)** | `ALPACA_KEY_ID`, `ALPACA_SECRET` | ✅ **BOTH KEYS SET IN PRODUCTION 2026-09-19** (Encrypted, verifiable). Paper account `PA3ME4FKSILU` confirmed live. All seven halal ETFs return `fractionable:true`; **AMAGX is NOT on Alpaca at all** (no mutual funds), so Amana can never be in an Alpaca basket. Notional/fractional orders supported — see `lib/market/orders.mjs`. ⚠️ The BOT cannot reach Alpaca (`docs/TRADE_PIPELINE.md`). Paper only — `ALPACA_BASE` is `paper-api.alpaca.markets`, so no real money is reachable. Routes gated on `canUseTradingBot` (the `trading_bot_enabled` beta allowlist). **Per-user paper credentials shipped 2026-08-20 (migration 029)** — `getAlpacaCreds(user)` resolves the user's own encrypted pair first and falls back to the shared env pair, exposing `source: "user" \| "shared"` so a tester always knows whose blotter they are on. It **fails closed** on a decrypt error rather than dropping the user onto the shared account. **Data tier:** free/Basic = **IEX feed only, ~2% of market volume**; extended-hours coverage specifically improves on the paid SIP plan ($99/mo Algo Trader Plus). Surface that limitation in-UI rather than presenting an IEX pre-market print as *the* price. Market clock + extended-hours order rules live in `lib/market/sessions.mjs`. |
 | Supabase | DB + Auth | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Paid plan |
 | Resend | All Mizan email (owner alerts + user emails) | `RESEND_API_KEY`, `ALERT_FROM` | Sends owner anomaly alerts AND user emails (weekly digest, Plaid re-auth, bug-report receipts, trade invites) via `lib/alerts.mjs` (branded HTML shell w/ logo). **From = `ALERT_FROM`, which MUST be on the verified `mizan.exchange` domain** (set to `alerts@mizan.exchange` in Vercel; code default `MIZAN <no-reply@mizan.exchange>`). Was `mizan.app` — migrated 2026-07-02. Supabase **Auth** emails (signup/reset/magic-link) send separately via Supabase custom SMTP → Resend, sender `no-reply@mizan.exchange`. **2026-07-12:** user **invites** are now app-side + branded via `POST /api/admin/invite` (Admin → Users form) → `generateLink` + `renderBrandedEmail` (NOT Supabase's default). All 6 branded Supabase Auth templates live in `supabase/email-templates/` (apply via `scripts/push-auth-email-templates.mjs`). **DMARC** was missing (the spam cause) — added to Vercel DNS (`mizan.exchange` NS = `*.vercel-dns.com`; manage via `vercel dns`). **⚠️ 2026-07-20: `ALERT_FROM` had regressed to the unverified `alerts@omni-flow.net` → Resend `403` on EVERY email (invites/digest/re-auth/broadcasts) — corrected back to `MIZAN <alerts@mizan.exchange>`. If email "isn't arriving," check `ALERT_FROM`'s domain against `api.resend.com/domains` FIRST (single point of failure). Set it via the Vercel REST API as `type:encrypted` — the CLI `env add` now creates write-only `sensitive` vars that read back empty. Every `sendUserEmail` now sets `reply_to=OWNER_EMAIL`; the in-app Messages thread (migration 025) is the contact channel since there's no inbound mailbox.** See memory `email-sender-domain`. |
 | Vercel Cron | Scheduled jobs auth | `CRON_SECRET` | **Required.** `cronUnauthorized()` is fail-closed (`!CRON_SECRET` → all crons 401). Vercel auto-attaches `Authorization: Bearer $CRON_SECRET` to cron paths ONLY when this exact var is set. Set in Vercel Prod 2026-06-25 after it was missing (crons hadn't run). Note: a Vercel **Redeploy** reuses the old env snapshot — bind new env vars with a fresh git build. |
 | Sentry | Error tracking | `VITE_SENTRY_DSN`, `SENTRY_DSN` | Frontend + backend, v10.52 |
-| Web Push | Push notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | VAPID, per-device subscriptions |
+| Web Push | Push notifications | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | ⚠️ **HAS NEVER DELIVERED A NOTIFICATION.** None of the three vars is set in production, so `initWebPush()` logs `notify.init.skipped` at INFO and returns false while every caller swallows it — the weekly digest, dividend alerts and bill reminders **report success while sending nothing**. Worse, the client half was never written until 2026-09-29: nothing called `pushManager.subscribe()`, so `push_subscriptions` was empty and there was nothing to send TO even with keys. Client flow now exists (`src/lib/push.js`) and stands down correctly on a null key; the `push.vapid` check in `lib/anomaly.mjs` makes the config half loud. **Generate the pair to switch it on:** `npx web-push generate-vapid-keys`, three vars in Vercel, fresh git build (a Redeploy will NOT bind them). |
 
 ---
 
@@ -841,8 +877,8 @@ Current gaps in order of user value (from MIZAN-STATE-AUDIT.md Section 6):
 
 ## 17. FILE SIZE WARNINGS
 
-🚨 **MizanApp.jsx** (~13,200 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
+🚨 **MizanApp.jsx** (~13,900 lines) — intentionally monolithic. Do not split without explicit instruction. When adding code here, prefer compact patterns and keep functions under 50 lines.
 
-🚨 **handlers.mjs** (~7,600 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
+🚨 **handlers.mjs** (~8,100 lines) — same rule. When adding a new API route, follow the existing pattern precisely (requireAuth → checkRateLimit → business logic → audit log → response).
 
 Both files exceed the 800-line guideline by design — this is a known, accepted tradeoff for this project phase.

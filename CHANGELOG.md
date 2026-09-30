@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **push:** Build the client subscription flow that was never written (`3c8df7f`)
 
 ### Fixed
+- **overview:** Stop greeting a funded account as a new signup (`bab29ef`)
 - **anomaly:** The credential preflight never checked VAPID, so push was silent (`82c42fd`)
 - **demo:** Stop a first sign-in from wiping demo mode (`4469312`)
 - **demo:** Three blank destinations and two data-driven overflows (`3b7ab78`)
