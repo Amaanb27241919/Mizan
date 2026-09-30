@@ -154,3 +154,53 @@ describe('activationState', () => {
     }
   })
 })
+
+// ── Web Push config check ───────────────────────────────────────────────────
+// Added 2026-09-29. VAPID was absent from production and the credential
+// preflight did not look for it, so every push notification in the product was
+// a silent no-op: initWebPush() returns false at INFO level and every caller
+// swallows it. Three crons reported success while sending nothing — the same
+// shape as the dividend cron that had never once worked and answered "ok".
+describe('push.vapid config check', () => {
+  const vapid = check('push.vapid')
+
+  it('exists, so the preflight covers push at all', () => {
+    expect(vapid).toBeTruthy()
+    expect(vapid.severity).toBe('high')
+    // The impact line is what lands in the owner's alert email, so it decides
+    // whether this gets acted on. It has to state the counterintuitive part —
+    // that sends SUCCEED while delivering nothing — and must not hedge, or a
+    // total outage reads as partial degradation and waits.
+    //
+    // Mutation-testing caught an earlier version of this assertion:
+    // /silent|nothing/ still matched a rewrite to "may be degraded … sending
+    // nothing", because the hedge kept the keyword. Pin the meaning instead.
+    expect(vapid.impact).toMatch(/silent no-op/i)
+    expect(vapid.impact).toMatch(/report success/i)
+    expect(vapid.impact, 'the impact line must not hedge a total outage')
+      .not.toMatch(/may be|might|possibly|could be|partial/i)
+  })
+
+  it('is unhealthy when any of the three vars is missing', () => {
+    for (const missing of [
+      ['VAPID_PUBLIC_KEY'], ['VAPID_PRIVATE_KEY'], ['VAPID_SUBJECT'],
+      ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT'],
+    ]) {
+      const v = vapid.verdict({ present: false, missing })
+      expect(v.healthy).toBe(false)
+      for (const m of missing) expect(v.reason).toContain(m)
+    }
+  })
+
+  it('is unhealthy when the keys are present but unusable', () => {
+    // Presence alone proves nothing — the same reason the Anthropic probe
+    // spends a real token. A malformed pair is still silence.
+    const v = vapid.verdict({ present: true, valid: false, error: 'Vapid public key must be a URL safe Base 64' })
+    expect(v.healthy).toBe(false)
+    expect(v.reason).toMatch(/web-push rejected/i)
+  })
+
+  it('is healthy only when the keypair actually loads', () => {
+    expect(vapid.verdict({ present: true, valid: true }).healthy).toBe(true)
+  })
+})

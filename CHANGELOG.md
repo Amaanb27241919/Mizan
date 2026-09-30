@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-09-29
 
 ### Fixed
+- **demo:** Stop a first sign-in from wiping demo mode (`4469312`)
 - **demo:** Three blank destinations and two data-driven overflows (`3b7ab78`)
 
 ## 2026-09-19
