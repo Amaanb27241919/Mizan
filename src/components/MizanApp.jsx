@@ -3344,7 +3344,7 @@ function DocumentsPanel({documents=[],accounts=[]}){
       <div className="mz-chip-row" style={{display:"flex",gap:T.s2,flexWrap:"wrap",alignItems:"center",marginBottom:T.s3}}>
         <button onClick={()=>setType("all")} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,background:type==="all"?T.blue:"transparent",border:`1px solid ${type==="all"?T.blue:T.border}`,color:type==="all"?"#fff":T.muted,cursor:"pointer"}}>All</button>
         {types.map(t=><button key={t} onClick={()=>setType(t)} style={{padding:`5px ${T.s3}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:500,background:type===t?`${colorOf(t)}22`:"transparent",border:`1px solid ${type===t?colorOf(t):T.border}`,color:type===t?colorOf(t):T.muted,cursor:"pointer"}}>{t.replace(/_/g," ")}</button>)}
-        <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{marginLeft:"auto",width:"auto",fontSize:"var(--fs-xs)",padding:`5px ${T.s3}`}}>
+        <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{marginLeft:"auto",width:"auto",maxWidth:"100%",minWidth:0,textOverflow:"ellipsis",fontSize:"var(--fs-xs)",padding:`5px ${T.s3}`}}>
           <option value="all">All Accounts</option>
           {accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName}</option>)}
         </select>
@@ -3463,7 +3463,7 @@ function ActivityPanel({activities=[],accounts=[],botFills=[]}){
           border:`1px solid ${type===v?colorOf(v):T.border}`,
           color:type===v?colorOf(v):T.muted,cursor:"pointer",transition:"all 0.15s"}}>{l}</button>)}
       <div style={{width:1,height:18,background:T.border,alignSelf:"center"}}/>
-      <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{width:"auto",fontSize:"var(--fs-xs)",padding:`5px ${T.s3}`}}>
+      <select value={acctF} onChange={e=>setAcctF(e.target.value)} className="field" style={{width:"auto",maxWidth:"100%",minWidth:0,textOverflow:"ellipsis",fontSize:"var(--fs-xs)",padding:`5px ${T.s3}`}}>
         <option value="all">All Accounts</option>
         {acctOptions.filter(o=>o!=="all").map(id=><option key={id} value={id}>{acctNameById[id]||id}</option>)}
       </select>
@@ -4566,7 +4566,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
 
     {/* ─── Sadaqah view: charity log (log entry + filter + history) ─── */}
     {view==="sadaqah"&&<>
-    <CollapsibleTile flat title="SADAQAH — CHARITY LOG" subtitle="Log donations, track pledges & view history" storageKey="zakat_sadaqah">
+    <CollapsibleTile defaultOpen flat title="SADAQAH — CHARITY LOG" subtitle="Log donations, track pledges & view history" storageKey="zakat_sadaqah">
     <BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
         <div style={{display:"flex",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
@@ -7642,7 +7642,7 @@ Activity rows on file: ${activities.length}.`;
         </div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:T.s4,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,flexWrap:"wrap"}}>
-        <span style={{display:"inline-flex",alignItems:"center",gap:T.s1}}>
+        <span style={{display:"inline-flex",alignItems:"center",gap:T.s1,flexWrap:"wrap",minWidth:0}}>
           <LiveDot on={totalNW>0} pulse={false}/>
           Context: <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{accounts.length}</span> account{accounts.length===1?"":"s"} · <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{totalPos}</span> position{totalPos===1?"":"s"} · <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{kf(totalNW)}</span>
         </span>
@@ -10981,7 +10981,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const now=new Date();
       const monthLabel=now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
       const fmtCat=s=>s.split("_").map(w=>w==="AND"?"&":w[0].toUpperCase()+w.slice(1).toLowerCase()).join(" ");
-      return<CollapsibleTile title="SPENDING BY CATEGORY" subtitle={`${monthLabel} · ${mask(fmtUSD(monthTotal))} spent`} storageKey="fin_spending">
+      return<CollapsibleTile defaultOpen title="SPENDING BY CATEGORY" subtitle={`${monthLabel} · ${mask(fmtUSD(monthTotal))} spent`} storageKey="fin_spending">
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {entries.map(s=>{
             const pct=monthTotal>0?(s.total/monthTotal)*100:0;
@@ -11010,7 +11010,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const now=new Date();
       const monthLabel=now.toLocaleDateString("en-US",{month:"long",year:"numeric"});
       const CAT_LABEL={LOAN_PAYMENTS:"Loan & Card Payments",TRANSFER_OUT:"Outbound Transfers",BANK_FEES:"Bank Fees"};
-      return<CollapsibleTile title="DEBT PAYMENTS & TRANSFERS" subtitle={`${monthLabel} · ${mask(fmtUSD(outTotal))}`} storageKey="fin_debt">
+      return<CollapsibleTile defaultOpen title="DEBT PAYMENTS & TRANSFERS" subtitle={`${monthLabel} · ${mask(fmtUSD(outTotal))}`} storageKey="fin_debt">
         <div style={{display:"flex",flexDirection:"column",gap:T.s2}}>
           {outEntries.map(e=>{
             const pct=outTotal>0?(e.total/outTotal)*100:0;
@@ -11127,7 +11127,7 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
       const active=rows.filter(r=>r.active);
       const inactive=rows.filter(r=>!r.active);
       const totalMonthly=active.reduce((s,r)=>s+r.estMonthly,0);
-      return<CollapsibleTile accent={T.gold} title="RECURRING SUBSCRIPTIONS" subtitle={`${active.length} active · ${mask(fmtUSD(totalMonthly))}/mo`} storageKey="fin_subs" right={usingPlaid?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>:null}>
+      return<CollapsibleTile defaultOpen accent={T.gold} title="RECURRING SUBSCRIPTIONS" subtitle={`${active.length} active · ${mask(fmtUSD(totalMonthly))}/mo`} storageKey="fin_subs" right={usingPlaid?<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.1em",padding:"1px 6px",border:`1px solid ${T.gain}50`,borderRadius:T.rSm}}>PLAID</span>:null}>
         <div style={{overflow:"hidden",borderRadius:T.rMd,border:`1px solid ${T.border}`}}>
           <Tbl cols={[
             {l:"Merchant",r_:r=><div style={{display:"flex",alignItems:"center",gap:T.s2}}>

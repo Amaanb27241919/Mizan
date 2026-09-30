@@ -16,6 +16,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Fixed
 - **market:** Model early closes, and recover seven missing 2027 holidays (`b5e7168`)
 
+### Docs
+- **audit:** Record the Alpaca unblock, the proven margin trap, and the clock defects (`3ea9ce4`)
+
 ## 2026-08-30
 
 ### Added

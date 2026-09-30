@@ -71,10 +71,21 @@ async function clippedIn(page, root = "main") {
 test.describe("responsive — portrait phones", () => {
   test.skip(({ viewport }) => (viewport?.width ?? 0) > 400, "portrait project only");
 
+  // Run the walk EMPTY and again with DEMO DATA. Demo is not redundant: it is
+  // the only fixture in the repo with realistic volume, and on 2026-09-29 two
+  // overflows at 320px were found that this sweep could never have seen empty.
+  //   · the Activity account <select> measured 382px in a 320px viewport,
+  //     because a <select> sizes to its LONGEST OPTION and the demo accounts
+  //     are named "Empower Retirement — 401(k) Plan". An empty account list
+  //     holds only "All Accounts", so the control was always narrow in CI.
+  //   · the Assistant's context line ran 12px over once it carried real
+  //     account counts and a dollar figure instead of zeros.
+  // An empty-state sweep proves the easy case. Most overflow is data-driven.
   for (const { w, h, n } of PORTRAIT) {
-    test(`${w}x${h} (${n}): nothing overflows, on any tab`, async ({ page }) => {
+    for (const withDemo of [false, true]) {
+    test(`${w}x${h} (${n})${withDemo ? " with demo data" : ""}: nothing overflows, on any tab`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: h });
-      await signedIn(page);
+      await signedIn(page, withDemo ? { storage: { mizan_demo: "1" } } : {});
       await page.goto("/");
       await appReady(page);
 
@@ -121,6 +132,7 @@ test.describe("responsive — portrait phones", () => {
         }
       }
     });
+    }
   }
 
   // The dock is the primary navigation. It scrolls horizontally when it does
