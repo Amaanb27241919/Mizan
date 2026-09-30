@@ -17,6 +17,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **demo:** Stop a first sign-in from wiping demo mode (`4469312`)
 - **demo:** Three blank destinations and two data-driven overflows (`3b7ab78`)
 
+### Docs
+- **trade:** Phase 1 — the pipeline as it actually exists (`af49add`)
+
 ## 2026-09-19
 
 ### Added

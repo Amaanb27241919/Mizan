@@ -1943,7 +1943,18 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
   // Empty-state welcome card — shows for fresh users with no real broker
   // connections and demo mode off. Replaces the previous behavior where new
   // users saw a hardcoded sample portfolio.
-  const isEmpty=snapAccounts.length===0&&merged.length===0;
+  // "No brokerage" was never the same thing as "nothing to show". This Overview
+  // also draws CASH ON HAND from Plaid depository balances, ZAKAT DUE from the
+  // worksheet, and compliance from the screening cache — none of which involve
+  // SnapTrade. Keying the welcome hero on brokerage alone meant a Plaid-only
+  // user got the full-page "WELCOME TO MĪZAN · Connect your first brokerage"
+  // rendered directly above $64,981.57 of their own cash and a real Zakat
+  // figure. Found 2026-09-29 in a screen recording of a live account; it is
+  // deterministic, not a render race.
+  const hasBrokerage=snapAccounts.length>0||merged.length>0;
+  const hasOtherValue=bankCashContribution>0||plaidAccounts.length>0||manualAssetTotal>0;
+  const isEmpty=!hasBrokerage&&!hasOtherValue;          // genuinely nothing yet
+  const needsBrokerage=!hasBrokerage&&hasOtherValue;    // has money, no holdings
 
   // Why a holding screens non-compliant — read from the screener's day cache so
   // the Overview alert can explain each verdict (sector exclusion or the failing
@@ -2007,6 +2018,21 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
       <div style={{display:"flex",gap:T.s2,justifyContent:"center",flexWrap:"wrap"}}>
         <button onClick={onConnect} className="btn-primary" style={{fontSize:"var(--fs-md)",padding:`12px ${T.s5}`}}>+ Connect Account</button>
         <button onClick={onToggleDemoFromBanner} className="btn-ghost" style={{fontSize:"var(--fs-md)",padding:`11px ${T.s5}`,color:T.gold,borderColor:T.gold+"40"}}>Try Demo Mode →</button>
+      </div>
+    </BentoTile>}
+
+    {/* Bank or manual assets present, but no brokerage. The hero above would
+        greet a returning user with real money on screen as though they were
+        new, so this says only the true thing and keeps the page's data. */}
+    {needsBrokerage&&<BentoTile style={{padding:`${T.s5} ${T.s6}`}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:T.s4,flexWrap:"wrap"}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,letterSpacing:"0.18em",fontWeight:600,marginBottom:T.s1}}>NO BROKERAGE CONNECTED</div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.55,maxWidth:520}}>
+            Your bank and manual assets are counted below. Holdings, Sharia screening and performance appear once a brokerage is linked.
+          </div>
+        </div>
+        <button onClick={onConnect} className="btn-primary mz-tap" style={{fontSize:"var(--fs-sm)",padding:`10px ${T.s4}`,flexShrink:0}}>+ Connect brokerage</button>
       </div>
     </BentoTile>}
 
