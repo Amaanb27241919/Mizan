@@ -19,6 +19,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **demo:** Three blank destinations and two data-driven overflows (`3b7ab78`)
 
 ### Docs
+- Bring CLAUDE.md and the audit in line with what shipped (`88d7021`)
 - **trade:** Phase 1 — the pipeline as it actually exists (`af49add`)
 
 ## 2026-09-19
