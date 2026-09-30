@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-09-29
 
 ### Fixed
+- **anomaly:** The credential preflight never checked VAPID, so push was silent (`82c42fd`)
 - **demo:** Stop a first sign-in from wiping demo mode (`4469312`)
 - **demo:** Three blank destinations and two data-driven overflows (`3b7ab78`)
 

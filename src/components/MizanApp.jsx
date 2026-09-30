@@ -3,6 +3,7 @@ import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tool
 import { useAuth } from "../lib/auth.jsx";
 import { apiFetch, recordAudit } from "../lib/apiFetch.js";
 import { persistUserState, persistMergedUserState } from "../lib/userState.js";
+import { subscribeToPush } from "../lib/push.js";
 import { downloadCSV } from "../lib/exportCSV.js";
 import {
   computeZakatWorksheet, nisabValueFor, isNisabAvailable,
@@ -12761,10 +12762,18 @@ export default function Mizan(){
     }).catch(()=>{});
     return()=>{cancelled=true;};
   },[isAdmin,demoMode]);
+  // Permission alone creates NO push subscription — it only unlocks local
+  // notifications. Without the subscribe() call below `push_subscriptions`
+  // stays empty and the weekly digest, dividend and bill-reminder crons send
+  // to nobody while reporting success. See src/lib/push.js.
   const requestAlertPermission=async()=>{
     if(!("Notification"in window))return alert("This browser doesn't support notifications.");
-    if(Notification.permission==="granted")return;
-    await Notification.requestPermission();
+    if(Notification.permission!=="granted"){
+      const perm=await Notification.requestPermission();
+      if(perm!=="granted")return;
+    }
+    if(demoMode)return;   // demo issues no network at all
+    await subscribeToPush().catch(()=>{});
   };
 
   // Dividend payment notifications — diff incoming /activities against the
