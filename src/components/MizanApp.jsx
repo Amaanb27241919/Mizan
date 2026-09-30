@@ -5991,6 +5991,11 @@ function StrategyProgressCard({strat}){
         {held&&cands.length>1&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em"}}>HELD</span>}
         <Tag label={lyr.toUpperCase()} color={lyrColor}/>
         {isDca&&<Tag label="DCA" color={T.gain}/>}
+        {/* Paper fills are labelled at the point the money is shown. Carried
+            from pending_signals.paper (migration 030) all the way through the
+            API — computing it and dropping it server-side is how a simulated
+            P&L gets rendered as real. */}
+        {p?.paper&&<Tag label="PAPER" color={T.gold}/>}
       </div>
       <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em"}}>{isDca?`ACCUMULATE · ${cadence}D`:`TARGET ${strat.profit_target_pct}%`}</span>
     </div>
@@ -6777,7 +6782,11 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     {showStrat&&ledger&&ledger.closed_count>0&&(()=>{
       const net=Number(ledger.realized_pnl)||0;
       const pos=net>=0;
-      return<CollapsibleTile accent={pos?T.gain:T.loss} title="REALIZED P&L · CLOSED TRADES" subtitle="Net realized gains from the bot's closed round-trips" storageKey="bot_pnl">
+      return<CollapsibleTile accent={pos?T.gain:T.loss}
+        title={ledger.paper?"REALIZED P&L · CLOSED TRADES · PAPER":"REALIZED P&L · CLOSED TRADES"}
+        subtitle={ledger.paper
+          ? "Simulated round-trips on a paper account — not money"
+          : "Net realized gains from the bot's closed round-trips"} storageKey="bot_pnl">
         <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",flexWrap:"wrap",gap:T.s2,marginBottom:T.s3}}>
           <button onClick={loadLedger} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>Refresh</button>
         </div>

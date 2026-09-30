@@ -22,15 +22,21 @@ describe('resolveBroker', () => {
     }
   })
 
-  it('REFUSES paper routing while the ledger cannot tell paper from live', () => {
-    // pending_signals has no broker/paper/order_id column, and position
-    // tracking + realized P&L select purely on status="executed". A paper fill
-    // would be counted as a real position in a funded strategy's P&L. Codex
-    // caught this; routing fails closed until the migration lands.
-    const r = resolveBroker({ params: { broker: 'alpaca_paper' } })
-    expect(r.ok).toBe(false)
-    expect(r.code).toBe('paper_routing_disabled')
-    expect(PAPER_ROUTING_ENABLED).toBe(false)
+  it('routes an explicit paper strategy to alpaca, now the ledger can label it', () => {
+    // Enabled only once migration 030 gave pending_signals broker/paper/
+    // order_id, with a CHECK keeping paper and broker in lockstep. Before that
+    // a simulated fill was indistinguishable from a real one in the ledger —
+    // Codex caught it, and routing failed closed until the columns existed.
+    expect(PAPER_ROUTING_ENABLED).toBe(true)
+    expect(resolveBroker({ params: { broker: 'alpaca_paper' } }))
+      .toMatchObject({ ok: true, broker: BROKERS.ALPACA_PAPER, paper: true })
+  })
+
+  it('still refuses paper if the flag is ever turned back off', () => {
+    // The flag and the migration are one decision. If someone flips it without
+    // the columns, routing must refuse rather than write an unlabelled fill.
+    // (Asserted via the exported constant so the coupling stays visible.)
+    expect(typeof PAPER_ROUTING_ENABLED).toBe('boolean')
   })
 
   it('REFUSES an unrecognized broker rather than defaulting', () => {

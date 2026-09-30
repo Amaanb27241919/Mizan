@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-09-30
+
+### Added
+- **trading:** Broker routing seam, with paper failed closed after Codex review (`2804a38`)
+
 ## 2026-09-29
 
 ### Added
