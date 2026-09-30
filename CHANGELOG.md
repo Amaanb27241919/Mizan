@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-09-29
 
+### Added
+- **push:** Build the client subscription flow that was never written (`3c8df7f`)
+
 ### Fixed
 - **anomaly:** The credential preflight never checked VAPID, so push was silent (`82c42fd`)
 - **demo:** Stop a first sign-in from wiping demo mode (`4469312`)
