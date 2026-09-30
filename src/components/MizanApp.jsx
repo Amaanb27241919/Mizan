@@ -5958,6 +5958,11 @@ function StrategyReality({strat}){
 // Progress card for a single enabled strategy. Uses the `progress` object from
 // GET /api/bot/strategies: { current_value, pct_to_target, days_elapsed,
 // days_horizon, trades_executed }. Degrades gracefully when progress is missing.
+// One definition of "is this strategy simulated", read from the strategy's own
+// venue. Anything rendering a figure for a strategy asks THIS, so a new shadow
+// run is labelled before its first fill rather than after.
+const isPaperStrategy=(s)=>s?.params?.broker==="alpaca_paper";
+
 function StrategyProgressCard({strat}){
   const p=strat&&strat.progress;
   const capital=Number(strat?.capital_allocated)||0;
@@ -5995,7 +6000,7 @@ function StrategyProgressCard({strat}){
             from pending_signals.paper (migration 030) all the way through the
             API — computing it and dropping it server-side is how a simulated
             P&L gets rendered as real. */}
-        {p?.paper&&<Tag label="PAPER" color={T.gold}/>}
+        {(p?.paper||isPaperStrategy(strat))&&<Tag label="PAPER" color={T.gold}/>}
       </div>
       <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em"}}>{isDca?`ACCUMULATE · ${cadence}D`:`TARGET ${strat.profit_target_pct}%`}</span>
     </div>
@@ -6161,6 +6166,14 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
   const[nlDisclaimer,setNlDisclaimer]=useState(null); // self-directed compliance line
   const[nlErr,setNlErr]=useState(null);
   const[nlAccount,setNlAccount]=useState(""); // brokerage account the strategy runs on
+  // LIVE vs SHADOW. Borrowed framing: a shadow strategy makes the trades it
+  // WOULD have made, at real prices, against a paper account — so an idea can
+  // be judged on its own record before any money is pointed at it. Trade Lab
+  // §17 makes forward paper testing the only valid evidence a strategy works,
+  // and until migration 030 the ledger could not even label a simulated fill.
+  const[nlVenue,setNlVenue]=useState("live");          // "live" | "shadow"
+  const[nlShadowCapital,setNlShadowCapital]=useState(100000);
+  const isShadow=nlVenue==="shadow";
   const[riskAck,setRiskAck]=useState(false);
   const acctId=a=>a.accountId||a.id; // SnapTrade accounts expose either shape
   // Halal Bogleheads quick-preset picker. Sleeves come from the server (single
@@ -6337,7 +6350,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
 
   const saveNlStrategy=async()=>{
     if(!nlResult||!riskAck)return;
-    if(!nlAccount){setNlErr("Select a brokerage account to run this strategy on.");return;}
+    if(!isShadow&&!nlAccount){setNlErr("Select a brokerage account to run this strategy on.");return;}
     // Deployable cap (authoritative): capital_allocated = deploy_pct% of the
     // selected account's buying power, hard-capped at 50% so the rest is reserved.
     const acc=snapAccounts.find(a=>acctId(a)===nlAccount);
@@ -6347,7 +6360,15 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     try{
       const r=await apiFetch("/api/bot/strategies",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...nlResult,capital_allocated:capital,params:{...(nlResult.params||{}),deploy_pct:deployPct},account_id:nlAccount,layer:defaultLayer,nl_description:nlInput,nl_risk_disclosed:true}),
+        body:JSON.stringify({...nlResult,
+          capital_allocated:isShadow?Math.max(1000,Number(nlShadowCapital)||0):capital,
+          // `broker` is what the server routes on (lib/trading/broker.mjs).
+          // account_id is NOT NULL on bot_strategies and unused for the paper
+          // path, so a shadow records where it actually runs rather than
+          // borrowing a real account id it never touches.
+          params:{...(nlResult.params||{}),deploy_pct:deployPct,broker:isShadow?"alpaca_paper":"snaptrade"},
+          account_id:isShadow?"alpaca-paper":nlAccount,
+          layer:defaultLayer,nl_description:nlInput,nl_risk_disclosed:true}),
       });
       const d=await r.json().catch(()=>({}));
       if(r.ok){setNlResult(null);setNlInput("");setRiskAck(false);setNlErr(null);await loadStrategies();}
@@ -6626,9 +6647,37 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           </div>)}
         </div>
 
+        {/* Where it runs. The first decision, because it changes what every
+            figure below MEANS — a shadow strategy's P&L is not money. */}
+        <div style={{marginBottom:T.s3}}>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s1}}>WHERE IT RUNS</div>
+          <div className="mz-chip-row" style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
+            {[["live","Live","Trades your connected brokerage. Real money."],
+              ["shadow","Shadow","Paper account. Makes the same decisions at real prices — no money moves."]].map(([v,label,blurb])=>
+              <button key={v} onClick={()=>setNlVenue(v)} className="mz-tap" style={{
+                flex:"1 1 200px",textAlign:"left",padding:`${T.s3} ${T.s4}`,borderRadius:T.rMd,cursor:"pointer",
+                background:nlVenue===v?(v==="shadow"?`${T.gold}14`:`${T.blue}14`):"transparent",
+                border:`1px solid ${nlVenue===v?(v==="shadow"?T.gold:T.blue):T.border}`,
+              }}>
+                <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.06em",color:nlVenue===v?(v==="shadow"?T.gold:T.blue):T.text}}>{label.toUpperCase()}</div>
+                <div style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2,lineHeight:1.45}}>{blurb}</div>
+              </button>)}
+          </div>
+        </div>
+
+        {isShadow&&<div style={{marginBottom:T.s3}}>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s1}}>STARTING CAPITAL (SIMULATED)</div>
+          <input type="number" min="1000" step="1000" value={nlShadowCapital}
+            onChange={e=>setNlShadowCapital(Math.max(1000,Number(e.target.value)||0))}
+            className="field" style={{width:"100%"}}/>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:4,lineHeight:1.45}}>
+            No brokerage account is used. Fills are simulated at real prices and every figure this strategy reports is labelled PAPER.
+          </div>
+        </div>}
+
         {/* Brokerage account selector — the strategy runs on this connected account.
             Defaults to the account the AI resolved from your text, else the first one. */}
-        <div style={{marginBottom:T.s3}}>
+        {!isShadow&&<div style={{marginBottom:T.s3}}>
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",fontWeight:600,marginBottom:T.s1}}>BROKERAGE ACCOUNT</div>
           {snapAccounts.length===0
             ?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss}}>No brokerage connected. Connect one in Settings → Connections before activating.</div>
@@ -6636,7 +6685,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
               {snapAccounts.map(a=>{const id=acctId(a);return<option key={id} value={id}>{(a.brokerage||a.name||"Account")}{a.accountName?` — ${a.accountName}`:""}{a.balance!=null?` (${kf(a.balance)})`:""}</option>;})}
             </select>}
           {nlResult.account_id&&!snapAccounts.find(a=>acctId(a)===nlResult.account_id)&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,marginTop:4}}>Couldn’t match “{nlResult.account_id}” to a connected account — pick one above.</div>}
-        </div>
+        </div>}
 
         {/* Deployable capital — how much of THIS account's buying power the strategy
             may use. Hard-capped at 50%; the rest stays untouched in every mode. */}
@@ -6703,7 +6752,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           I understand this is a TARGET, not a guarantee. The strategy could lose up to {nlResult.stop_loss_pct||nlResult.max_drawdown_pct}% of my allocated capital, and backtest results do not predict live performance.
         </label>
         <div style={{display:"flex",gap:T.s3}}>
-          <button onClick={saveNlStrategy} disabled={!riskAck||!nlAccount} title={!nlAccount?"Select a brokerage account first":""} className="btn-primary" style={{fontSize:"var(--fs-xs)",opacity:(riskAck&&nlAccount)?1:0.5}}>Activate Strategy</button>
+          <button onClick={saveNlStrategy} disabled={!riskAck||(!isShadow&&!nlAccount)} title={(!isShadow&&!nlAccount)?"Select a brokerage account first":""} className="btn-primary" style={{fontSize:"var(--fs-xs)",opacity:(riskAck&&(isShadow||nlAccount))?1:0.5}}>{isShadow?"Start Shadow Run":"Activate Strategy"}</button>
           <button onClick={()=>{setNlResult(null);setRiskAck(false);}} className="btn-ghost" style={{fontSize:"var(--fs-xs)"}}>Cancel</button>
         </div>
       </div>;})()}
@@ -6724,6 +6773,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         </div>
         <div style={{display:"flex",gap:T.s2}}>
           <button onClick={()=>approveSignal(sig.id)} className="btn-primary" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s3}`}}>Approve</button>
+          {sig.paper&&<Tag label="PAPER" color={T.gold}/>}
           <button onClick={()=>rejectSignal(sig.id)} className="btn-ghost" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s3}`}}>Reject</button>
         </div>
       </div>)}
@@ -6760,6 +6810,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
               <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
                 <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>~${Number(a.suggested_price||0).toFixed(2)}</span>
                 <Tag label={m.label} color={m.color}/>
+                {a.paper&&<Tag label="PAPER" color={T.gold}/>}
                 <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{when?new Date(when).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"—"}</span>
               </div>
               {m.label==="FAILED"&&a.error_msg&&<div style={{flexBasis:"100%",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss}}>{a.error_msg}</div>}
@@ -6839,7 +6890,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             {s.strategy_type==="dca"&&<Tag label="DCA" color={T.gain}/>}
             {!s.enabled&&<Tag label="PAUSED" color={T.muted}/>}
           </div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}{`$${Number(s.capital_allocated).toLocaleString()} · `}{s.strategy_type==="dca"?`DCA · every ${Number(s.params?.dca_cadence_days)||7}d · holds (no auto-sell)`:`Target: ${s.profit_target_pct}% · Stop: ${s.stop_loss_pct}%`}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}{`$${Number(s.capital_allocated).toLocaleString()}${isPaperStrategy(s)?" simulated":""} · `}{s.strategy_type==="dca"?`DCA · every ${Number(s.params?.dca_cadence_days)||7}d · holds (no auto-sell)`:`Target: ${s.profit_target_pct}% · Stop: ${s.stop_loss_pct}%`}</div>
         </div>
         <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
           {/* Layer selector — switching opens the acknowledgment gate */}

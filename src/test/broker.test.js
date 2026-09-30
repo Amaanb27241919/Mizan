@@ -147,3 +147,16 @@ describe('routing has the data it routes on', () => {
     expect(SRC).not.toMatch(/broker:\s*"snaptrade"/)
   })
 })
+
+describe('broker is validated where it is written', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+
+  it('both create and patch reject an unroutable venue', () => {
+    // Codex: execution-time refusal is too late for a live seam — by then a
+    // signal exists, may be pending approval, and the strategy looks armed.
+    // Two call sites (create + patch), so two guards.
+    const guards = SRC.match(/resolveBroker\(\{ params: (mergedParams|nextParams) \}\)/g) || []
+    expect(guards, 'create and patch must each validate params.broker before writing')
+      .toHaveLength(2)
+  })
+})
