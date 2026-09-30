@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-09-29
+
+### Fixed
+- **demo:** Three blank destinations and two data-driven overflows (`3b7ab78`)
+
 ## 2026-09-19
 
 ### Added

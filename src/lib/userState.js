@@ -118,7 +118,21 @@ export async function hydrateUserState(userId) {
   if (!userId) return [];
   let previousUserId = null;
   try { previousUserId = localStorage.getItem(CURRENT_USER_KEY); } catch { /* ignore */ }
-  if (previousUserId !== userId) {
+  // Only wipe when there IS a previous, DIFFERENT user. The wipe exists so one
+  // user's cached state cannot render under another's login, and that case
+  // always carries a non-null previousUserId — a SIGNED_OUT event already
+  // clears CURRENT_USER_KEY along with every tracked key (auth.jsx). When it is
+  // null there is no other user's data present to protect against, and wiping
+  // destroys state the person legitimately set on this device.
+  //
+  // Found 2026-09-29 from a report of "a loading and rendering error" in demo
+  // on someone else's computer. `mizan_demo` is a TRACKED_KEY, and App.jsx
+  // gates rendering on hydrateUserState finishing — so on a machine with no
+  // stored user id the wipe ran BEFORE MizanApp read the flag, demo turned
+  // itself off, and the screen showed "WELCOME TO MĪZAN · Connect your first
+  // brokerage" instead of the demo portfolio. Indistinguishable, from the
+  // outside, from the app failing to load.
+  if (previousUserId && previousUserId !== userId) {
     clearTrackedLocalState();
   }
   const remote = await fetchUserState(userId);
