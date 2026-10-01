@@ -144,3 +144,69 @@ describe('inverseVolWeights — calmer gets larger', () => {
     expect(w.B).toBeCloseTo(0.5, 10)
   })
 })
+
+// ── Static contract: the rank-rebalance branch is shadow-only ───────────────
+// Every other engine branch holds ONE name with a stop and an exit. This one
+// commits a whole book and runs with stops OFF, relying on the hold zone to
+// exit — which is what the reference system does, and which has no forward
+// record here yet. §17 says a forward record is the only evidence. So the
+// branch must refuse to run for a live strategy, and that refusal is a
+// property worth a test rather than a comment.
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
+describe('rank_rebalance is shadow-only', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  const branch = SRC.slice(
+    SRC.indexOf('if (strat.strategy_type === "rank_rebalance")'),
+    SRC.indexOf('if (strat.strategy_type === "dca")'),
+  )
+
+  it('the branch exists and is reachable', () => {
+    expect(branch.length).toBeGreaterThan(500)
+  })
+
+  it('refuses to run for a non-paper strategy', () => {
+    expect(branch, 'a live rank_rebalance strategy must be refused before any order')
+      .toMatch(/if \(!venue\.paper\)/)
+    expect(branch).toMatch(/bot\.rank\.live_refused/)
+  })
+
+  it('refuses before it places anything, not after', () => {
+    // The guard has to come before the first executeStrategyOrder, or it is
+    // decoration. Compare positions inside the branch.
+    const guard = branch.indexOf('if (!venue.paper)')
+    const firstOrder = branch.indexOf('executeStrategyOrder')
+    expect(guard).toBeGreaterThan(-1)
+    expect(firstOrder).toBeGreaterThan(-1)
+    expect(guard, 'the live refusal must precede any order placement').toBeLessThan(firstOrder)
+  })
+
+  it('does not run at all until fill reconciliation exists', () => {
+    // Codex returned "not safe to ship" on this branch. Two findings are
+    // structural: a 2xx from Alpaca means ACCEPTED not FILLED (a market order
+    // outside session hours is queued), and partial failure mid-loop leaves a
+    // half-rebalanced book with no rollback. Both are about whether the book
+    // is TRUE, which is the entire point of a forward test.
+    expect(branch).toMatch(/if \(!RANK_REBALANCE_ENABLED\) continue;/)
+    expect(SRC).toMatch(/const RANK_REBALANCE_ENABLED = false;/)
+  })
+
+  it('records a notional buy as a SHARE COUNT, not zero', () => {
+    // The bug that made this not merely unsafe but broken: bookFromSignals
+    // sums qty, so a notional buy stored as qty 0 vanished from the book —
+    // the next rebalance would think it owned nothing and re-buy forever.
+    expect(branch).not.toMatch(/qty: o\.qty \?\? 0,/)
+    expect(branch).toMatch(/o\.notional \/ priceOf\(o\.sym\)/)
+  })
+
+  it('only consumes the rebalance cadence when something was placed', () => {
+    expect(branch).toMatch(/placed > 0 \? \{ \.\.\.\(strat\.params/)
+  })
+
+  it('records that the earnings filter is not yet applied', () => {
+    // The reference config skips names reporting within 3 days. We do not do
+    // that yet. Saying so in code beats implying it by omission.
+    expect(branch).toMatch(/Not applied yet/i)
+  })
+})
