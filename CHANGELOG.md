@@ -13,6 +13,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **db:** Migration 032 — a submitted-but-unfilled signal status (`e777031`)
 - **trading:** Fill reconciliation — pure core (`12ea956`)
 
+### Fixed
+- **trading:** Correct fill reconciliation against the real Alpaca spec (`fbcc31d`)
+
 ### Docs
 - **trade:** The Trade Lab build plan (`b933868`)
 

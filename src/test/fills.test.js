@@ -105,14 +105,26 @@ describe('reconcileSignal — silence is a valid answer', () => {
     expect(reconcileSignal(readFill({ status: 'accepted', filled_qty: '0' }))).toBeNull()
   })
 
-  it('records a partial fill as `submitted`, never `executed`', () => {
-    // Writing "executed" with 3 of 10 shares claims a position still being
-    // built; writing "rejected" discards one already held; writing nothing
-    // understates the book and makes a rebalancer re-buy what it owns. The
-    // `submitted` status from migration 032 is the honest third answer.
-    const r = reconcileSignal(readFill({ status: 'partially_filled', filled_qty: '3', filled_avg_price: '50' }))
-    expect(r).toMatchObject({ status: 'submitted', qty: 3, suggested_price: 50 })
-    expect(r.status).not.toBe('executed')
+  it('gives a partial fill no verdict, keeping one meaning per state', () => {
+    // I briefly wrote these as `submitted` with the filled quantity. Codex
+    // caught why that is worse: every reader filters status = "executed", so
+    // it changed nothing visible, AND it made `qty` mean "intended" on one
+    // submitted row and "filled so far" on another — one column, two
+    // meanings, decided by reconciliation history. A submitted row's qty is
+    // always the INTENT; only `executed` carries broker truth.
+    expect(reconcileSignal(readFill({ status: 'partially_filled', filled_qty: '3' }))).toBeNull()
+    expect(reconcileSignal(readFill({ status: 'done_for_day', filled_qty: '4' }))).toBeNull()
+  })
+
+  it('takes executed_at from the BROKER, not from reconciliation time', () => {
+    // Realized P&L sorts on executed_at. Stamping the time the cron happened
+    // to run reorders history — a Friday fill reconciled on Monday would sort
+    // after Monday's trades.
+    const r = reconcileSignal(readFill({
+      status: 'filled', filled_qty: '5', filled_avg_price: '10',
+      filled_at: '2026-09-30T13:31:00Z',
+    }))
+    expect(r.executed_at).toBe('2026-09-30T13:31:00Z')
   })
 
   it('leaves an unreadable order alone', () => {
@@ -136,5 +148,91 @@ describe('reconcileSignal — silence is a valid answer', () => {
     const r = reconcileSignal(readFill({ status: 'filled', filled_qty: '2' }))
     expect(r.status).toBe('executed')
     expect(r.suggested_price).toBeUndefined()
+  })
+})
+
+// ── Static contracts on the wiring ──────────────────────────────────────────
+// These are ORDERING and QUERY properties. A logic test cannot reach them —
+// which is the lesson from the broker seam, where a correct resolveBroker was
+// fed a row the query never loaded a broker into.
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
+describe('Phase 0 wiring', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  // Just the reconcile function, for assertions that would otherwise match a
+  // lookalike elsewhere in an 8,000-line file.
+  const RECONCILE_FN = (() => {
+    const i = SRC.indexOf('async function reconcileSubmittedSignals')
+    expect(i, 'reconcileSubmittedSignals must exist').toBeGreaterThan(-1)
+    const j = SRC.indexOf('\n}', i)
+    return SRC.slice(i, j)
+  })()
+
+  it('EVERY paper execution site lands as submitted, not executed', () => {
+    // Alpaca answers 2xx on ACCEPT. Counting, not presence: an earlier version
+    // of this test checked that `submitted` APPEARED, which passed happily
+    // while one of the five sites had been flipped back to `executed`.
+    // Mutation testing caught it. There are five execution sites; all five
+    // must branch the same way.
+    const submitted = SRC.match(/\? \{ status: "submitted" \}/g) || []
+    expect(submitted, 'all five execution sites must write submitted for paper')
+      .toHaveLength(5)
+    const ternaryExecuted = SRC.match(/\? \{ status: "executed"/g) || []
+    expect(ternaryExecuted, 'no site may claim executed on the paper branch')
+      .toHaveLength(0)
+  })
+
+  it('reconciles on BOTH cron paths, and never ahead of live strategies', () => {
+    // Two competing requirements, and I got this wrong twice. Reconciliation
+    // must not run FIRST — one Alpaca request per user ahead of the strategy
+    // loop can starve the cron that serves a funded live account. But it also
+    // cannot live only in the market-closed branch, or a 10:00 fill goes
+    // unrecorded until after the close. So: once at the end of the open path,
+    // once inside the closed branch.
+    const calls = SRC.match(/await reconcileSubmittedSignals\(\)/g) || []
+    expect(calls, 'one call per cron path').toHaveLength(2)
+
+    const closed = SRC.indexOf('if (!market.open) {')
+    const first = SRC.indexOf('await reconcileSubmittedSignals()')
+    expect(first, 'must not run before the market check / strategy loop')
+      .toBeGreaterThan(closed)
+  })
+
+  it('bounds the pass so it cannot run away', () => {
+    // A funded live strategy shares this cron. An unbounded ledger sweep is a
+    // denial of service against it.
+    expect(SRC).toMatch(/RECONCILE_ROW_CAP\s*=\s*\d+/)
+    expect(SRC).toMatch(/RECONCILE_USER_CAP\s*=\s*\d+/)
+    expect(SRC).toMatch(/RECONCILE_MS_BUDGET\s*=/)
+    expect(SRC).toMatch(/if \(Date\.now\(\) > deadline\)/)
+  })
+
+  it('does not let a submitted row live forever', () => {
+    // A row stuck in `submitted` is invisible to every reader, so it silently
+    // shrinks the book. If the broker no longer returns the order and it is
+    // old enough that it never will, abandon it.
+    expect(SRC).toMatch(/RECONCILE_ABANDON_DAYS\s*=\s*\d+/)
+    expect(SRC).toMatch(/reconcile\.abandoned/)
+    // Oldest first, or a backlog larger than the cap starves the stale rows
+    // that most need attention. Scoped to THIS function's body: that order
+    // clause appears five times in handlers.mjs, and an unscoped assertion
+    // matched an unrelated query and survived mutation.
+    expect(RECONCILE_FN).toMatch(/\.order\("created_at", \{ ascending: true \}\)/)
+  })
+
+  it('the reconcile query asks for status=all', () => {
+    // Alpaca's /v2/orders defaults to status=open, which silently omits every
+    // order that just FILLED — precisely the rows this pass exists to find.
+    expect(SRC).toMatch(/status:\s*"all"/)
+  })
+
+  it('bars are fetched from the consolidated feed, not IEX', () => {
+    // IEX is a MEDIAN 4.4% of consolidated volume with a per-symbol range of
+    // 0.07%-21%, so the error is not a constant that calibrates out — it
+    // silently reorders any volume-weighted ranking. Measured on this account:
+    // MSFT 788,881 (IEX) vs 19,788,977 (SIP) for the same daily bar.
+    expect(SRC).toMatch(/fetchAlpacaBars\([^)]*feed = "sip"/s)
+    expect(SRC).not.toMatch(/fetchAlpacaBars\([^)]*feed = "iex"/s)
   })
 })
