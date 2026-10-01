@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-01
+
+### Added
+- **trading:** Fill reconciliation — pure core (`12ea956`)
+
 ## 2026-09-30
 
 ### Added
