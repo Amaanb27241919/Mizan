@@ -14,6 +14,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trading:** Fill reconciliation — pure core (`12ea956`)
 
 ### Fixed
+- **trading:** Bound and correct the fill reconciliation pass (`cedda64`)
 - **trading:** Correct fill reconciliation against the real Alpaca spec (`fbcc31d`)
 
 ### Docs

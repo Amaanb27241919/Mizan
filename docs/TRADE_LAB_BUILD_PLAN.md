@@ -37,13 +37,39 @@ Nothing else can be trusted until a signal's `executed` means FILLED.
 - [x] **Migration 032: `pending_signals.status` gains `submitted`.** Applied + verified. A sent-but-
       unfilled order has no honest home today. Overloading `pending` makes the
       approval queue show orders already at the market.
-- [ ] `fetchAlpacaOrder` + a reconcile pass over submitted rows
-- [ ] Apply to all 5 executed-update sites
-- [ ] Codex review
+- [x] `fetchAlpacaOrders` (batch) + `reconcileSubmittedSignals` (`cedda64`)
+- [x] All 5 executed-update sites write `submitted` on the Alpaca path
+- [x] Codex review — returned *"not Phase 0 complete yet, the ledger can still
+      lie"*, five findings, all five fixed in `cedda64`
 
-**Done when:** a market order placed outside session hours shows `submitted`,
-flips to `executed` with the broker's real `filled_qty` after the open, and
-`bookFromSignals` matches the Alpaca positions endpoint exactly.
+### ✅ PHASE 0 COMPLETE — verified live, 2026-10-01 22:45 UTC
+
+Not "the tests pass". A real order on paper account `PA3ME4FKSILU`:
+
+| step | observed |
+|---|---|
+| place 1 SPUS limit, extended hours | `pending_new` |
+| batch read seconds later | `new` → `outcome=open` → verdict **null** (row stays `submitted`) |
+| fill | `filled`, `filled_qty:"1"`, `filled_avg_price:"59.88"` |
+| reconcile | `{status:"executed", qty:1, suggested_price:59.88, executed_at:"2026-10-01T22:45:01.778Z"}` |
+| cancel path, separate order | `canceled` → `{status:"rejected", qty:0}` |
+
+Position closed afterwards; account left flat at $99,999.72 (28¢ of spread).
+
+**Three things only a live order could have shown:**
+1. The POST answered `pending_new` while a read moments later said `new` — the
+   status moved BETWEEN two calls. That transition is the whole argument
+   against marking a row `executed` on a 2xx.
+2. `executed_at` is the broker's `filled_at`, not the time the cron ran.
+3. Every numeric came back a JSON **string** (`"1"`, `"59.88"`), and `qty` was
+   `null` on the notional orders already in the account's history, exactly as
+   the spec says and as nothing in a fixture would have forced us to handle.
+
+**What is NOT verified:** a PARTIAL fill, and the SnapTrade venue. Partial
+fills are modelled from the spec and unit-tested but have not occurred on this
+account. SnapTrade still marks `executed` on place — deliberately, since its
+order lifecycle is a different, unresearched API — so the two venues mean
+slightly different things by `executed` until that work happens.
 
 ## Phase 1 — Trade → Mīzan Trade Lab  *(UI, zero risk)*
 
