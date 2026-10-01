@@ -7218,11 +7218,10 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   const[sub,setSub]=useState("signals");
   // Holdings (with live prices merged) — needed by Screener + Rebalance. Same
   // derivation Portfolio uses, kept self-contained here.
-  const merged=(()=>{
-    if(!mapPosition)return[];
-    const base=accounts.length>0?accounts.flatMap(a=>(a.positions||[]).map(p=>mapPosition(p,a.accountName,a.brokerage))).filter(h=>h&&h.sh>0):[];
-    return base.map(h=>{const l=(live||[]).find(q=>q.tk===h.tk);return l?{...h,px:l.price||h.px,_p:l.pct||0,_live:true}:h;});
-  })();
+  // The `merged` holdings IIFE lived here. Removed 2026-10-01: its only
+  // consumers were the Screener and Rebalancer, both of which moved to the
+  // Portfolio tab. Verified zero remaining references inside TradeBot before
+  // deleting — it was recomputing a holdings map on every render for nobody.
   const[side,setSide]=useState("buy");
   const[sym,setSym]=useState("AAPL");
   const[otype,setOtype]=useState("limit");
@@ -7426,12 +7425,9 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
 
     {/* Quick Trade (ad-hoc order ticket) lives behind a Coming Soon banner for non-admin users. */}
-    {sub==="order"&&!isAdmin&&<ComingSoon
-      title="Order Ticket"
-      description="Place halal-screened buy/sell orders against your connected SnapTrade brokerage or against a free Alpaca paper account. Available for authorized users."
-      hint="Want early access? Use the Assistant tab to research positions while this ships."
-      action={onNav ? { label: "Open Assistant", onClick: () => onNav("advisor") } : null}
-    />}
+    {/* The non-admin Order Ticket placeholder lived here. Removed 2026-10-01:
+        TradeBot returns null for !isAdmin above, so a block guarded on
+        !isAdmin could never render. Verified before deleting. */}
     {sub==="order"&&isAdmin&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
     {/* Whose paper account this ticket acts on. Above the ticket deliberately:
         a tester needs to know they're on the shared blotter BEFORE they place

@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-01
 
 ### Added
+- **db:** Migration 032 — a submitted-but-unfilled signal status (`e777031`)
 - **trading:** Fill reconciliation — pure core (`12ea956`)
 
 ### Docs

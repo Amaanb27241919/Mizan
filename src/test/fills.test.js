@@ -32,11 +32,48 @@ describe('readFill', () => {
     expect(f.outcome).toBe('filled')
   })
 
-  it('treats terminal-with-a-partial-fill as owning shares', () => {
-    // done_for_day after a partial fill: we DO hold something, just less than
-    // we asked for. The case most likely to be got wrong.
-    expect(readFill({ status: 'done_for_day', filled_qty: '4' }).outcome).toBe('filled')
+  it('does NOT treat done_for_day as terminal', () => {
+    // Corrected after reading the docs: done_for_day means "no further updates
+    // UNTIL THE NEXT TRADING DAY". A GTC order there resumes and can fill
+    // tomorrow. This module had it in TERMINAL_STATUSES for an hour, which is
+    // the classic reconciliation bug — it would have closed orders that were
+    // still working.
+    const f = readFill({ status: 'done_for_day', filled_qty: '4' })
+    expect(f.terminal).toBe(false)
+    expect(f.outcome).toBe('partial')
+    expect(TERMINAL_STATUSES.has('done_for_day')).toBe(false)
+  })
+
+  it('counts a partial fill as shares held even while the order works', () => {
+    // A rebalancer that cannot see a partial fill buys more of what it owns.
+    expect(settledQty(readFill({ status: 'partially_filled', filled_qty: '3' }))).toBe(3)
     expect(settledQty(readFill({ status: 'done_for_day', filled_qty: '4' }))).toBe(4)
+  })
+
+  it('parses Alpaca string numerics — every numeric field is a string', () => {
+    // Verbatim from the OpenAPI spec: filled_qty is {"type":"string"} and
+    // filled_avg_price is ["string","null"]. No numeric field is a JSON number.
+    const f = readFill({ status: 'filled', filled_qty: '12.5', filled_avg_price: '101.2' })
+    expect(f.filledQty).toBe(12.5)
+    expect(f.avgPrice).toBe(101.2)
+  })
+
+  it('never reads `qty` — it stays null forever on a notional order', () => {
+    // Spec: "Ordered quantity. If entered, notional will be null." qty is the
+    // INTENT and is never back-filled with the resulting share count, so a
+    // dollar-amount order reconciled on qty would always read as zero.
+    const f = readFill({ status: 'filled', qty: null, notional: '500', filled_qty: '3.1446' })
+    expect(f.filledQty).toBe(3.1446)
+  })
+
+  it('gives a replaced order NO verdict, and surfaces its successor', () => {
+    // The row must neither claim the position (the successor may not have
+    // filled) nor discard it (it may have). Resolving it to `rejected` would
+    // silently lose a real holding.
+    const f = readFill({ status: 'replaced', filled_qty: '0', replaced_by: 'abc-123' })
+    expect(f.outcome).toBe('replaced')
+    expect(f.replacedBy).toBe('abc-123')
+    expect(reconcileSignal(f)).toBeNull()
   })
 
   it('distinguishes an unreadable order from a dead one', () => {
@@ -49,9 +86,10 @@ describe('readFill', () => {
     }
   })
 
-  it('never counts an open order as settled', () => {
-    for (const s of ['new', 'accepted', 'pending_new', 'partially_filled', 'held']) {
-      expect(settledQty(readFill({ status: s, filled_qty: '5' })), s).toBe(0)
+  it('counts zero for an open order that has filled nothing', () => {
+    for (const s of ['new', 'accepted', 'pending_new', 'held', 'accepted_for_bidding']) {
+      expect(settledQty(readFill({ status: s, filled_qty: '0' })), s).toBe(0)
+      expect(reconcileSignal(readFill({ status: s, filled_qty: '0' })), s).toBeNull()
     }
   })
 
@@ -67,10 +105,14 @@ describe('reconcileSignal — silence is a valid answer', () => {
     expect(reconcileSignal(readFill({ status: 'accepted', filled_qty: '0' }))).toBeNull()
   })
 
-  it('leaves a partially filled, still-open order alone', () => {
-    // Writing "executed" with 3 of 10 shares would claim a position we are
-    // still building; writing "rejected" would discard one we already hold.
-    expect(reconcileSignal(readFill({ status: 'partially_filled', filled_qty: '3' }))).toBeNull()
+  it('records a partial fill as `submitted`, never `executed`', () => {
+    // Writing "executed" with 3 of 10 shares claims a position still being
+    // built; writing "rejected" discards one already held; writing nothing
+    // understates the book and makes a rebalancer re-buy what it owns. The
+    // `submitted` status from migration 032 is the honest third answer.
+    const r = reconcileSignal(readFill({ status: 'partially_filled', filled_qty: '3', filled_avg_price: '50' }))
+    expect(r).toMatchObject({ status: 'submitted', qty: 3, suggested_price: 50 })
+    expect(r.status).not.toBe('executed')
   })
 
   it('leaves an unreadable order alone', () => {
