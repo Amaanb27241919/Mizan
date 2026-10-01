@@ -16,6 +16,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trading:** Enable paper routing, with the ledger able to label it (`da559af`)
 - **trading:** Broker routing seam, with paper failed closed after Codex review (`2804a38`)
 
+### Docs
+- **audit:** Record the Trade Lab build and four Codex reviews (`cc21c8a`)
+
 ## 2026-09-29
 
 ### Added
