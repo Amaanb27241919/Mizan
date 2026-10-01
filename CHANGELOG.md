@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **trading:** Fill reconciliation — pure core (`12ea956`)
 
+### Docs
+- **trade:** The Trade Lab build plan (`b933868`)
+
 ## 2026-09-30
 
 ### Added

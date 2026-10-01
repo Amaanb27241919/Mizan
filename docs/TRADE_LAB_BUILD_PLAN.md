@@ -34,7 +34,7 @@ day one, not bolted on later.
 Nothing else can be trusted until a signal's `executed` means FILLED.
 
 - [x] `lib/trading/fills.mjs` — pure `readFill` / `reconcileSignal` (`12ea956`)
-- [ ] **Migration: `pending_signals.status` gains `submitted`.** A sent-but-
+- [x] **Migration 032: `pending_signals.status` gains `submitted`.** Applied + verified. A sent-but-
       unfilled order has no honest home today. Overloading `pending` makes the
       approval queue show orders already at the market.
 - [ ] `fetchAlpacaOrder` + a reconcile pass over submitted rows
