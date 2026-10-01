@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-09-30
 
 ### Added
+- **trading:** Rank-rebalance engine branch, shipped disabled after review (`149a420`)
 - **trading:** Ranking, hold-zone hysteresis and inverse-vol sizing (`ec58be4`)
 - **trade:** Shadow strategies — create a paper run from the UI (`1b60864`)
 - **trading:** Enable paper routing, with the ledger able to label it (`da559af`)
