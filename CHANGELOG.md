@@ -18,6 +18,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trading:** Correct fill reconciliation against the real Alpaca spec (`fbcc31d`)
 
 ### Docs
+- **trade:** Phase 0 verified against a live Alpaca fill (`a87bd21`)
 - **trade:** The Trade Lab build plan (`b933868`)
 
 ## 2026-09-30

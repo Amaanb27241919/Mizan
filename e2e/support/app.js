@@ -121,7 +121,19 @@ export async function signedIn(page, opts = {}) {
       .filter((k) => path === k || path.startsWith(k))
       .sort((a, b) => b.length - a.length)[0];
     const body = key ? merged[key] : {};
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    // A fixture may name its own status with `__status`, so a spec can express
+    // the ORDINARY failures — a 403 for a user not on an allowlist, a 503 for
+    // an unconfigured integration. Everything here returned 200 before, which
+    // meant error and empty states were the one class of behaviour the suite
+    // structurally could not reach, while CLAUDE.md §7 requires every panel to
+    // have one. The key is stripped so the app never sees it.
+    const { __status, ...payload } = body && typeof body === "object" && !Array.isArray(body) ? body : { __payload: body };
+    const out = "__payload" in payload ? payload.__payload : payload;
+    return route.fulfill({
+      status: __status || 200,
+      contentType: "application/json",
+      body: JSON.stringify(out),
+    });
   });
 
   // Third-party embeds that would otherwise reach the network in a test.

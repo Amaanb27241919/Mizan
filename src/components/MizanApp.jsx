@@ -14,6 +14,7 @@ import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptio
 import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHistory } from "../lib/netWorth.js";
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
+import { deskSummary } from "../lib/deskSummary.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
 import { useEthicalOverlay, ethicalFlag } from "../lib/ethicalOverlay.js";
 import Budgeting from "./Budgeting.jsx";
@@ -101,7 +102,14 @@ const THEME_CSS = `
     --mz-tile-fill: rgba(255,255,255,0.74);
     color-scheme: light;
   }
-  :root[data-theme="dark"] {
+  /* The Trade Lab cockpit re-declares the SAME dark variables on itself, so a
+     dark instrument panel works while the rest of the app stays on the paper
+     canvas. It is one selector added to the existing block, deliberately NOT a
+     second copy of the palette — two lists of fifteen hex values drift, and
+     this codebase has already paid for duplicated definitions twice (two
+     net-worth series, two Sharia verdicts). Everything inside resolves its
+     T.* tokens dark by ordinary CSS inheritance. */
+  :root[data-theme="dark"], .mz-cockpit {
     /* Midnight-navy dark theme — the cool inverse of the warm paper light face,
        built on the brand navy accent (not the old warm "ink" brown). */
     --mz-bg: #0e1626; --mz-surface: #16213a; --mz-card: #1c2945;
@@ -7211,11 +7219,325 @@ function AlpacaKeysPanel({onChanged}){
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   MĪZAN TRADE LAB — the cockpit
+   ═══════════════════════════════════════════════════════════════════════════
+   A dark instrument panel inside a light app. The dark comes from `.mz-cockpit`
+   re-declaring the dark theme's OWN variables (see THEME_CSS), so every T.*
+   token inside resolves dark by inheritance and no second palette exists.
+
+   House rules this surface keeps, because they are what make it readable:
+     · every label FM, every number FM + tabular-nums
+     · gain/loss carry the only colour; navy is for structure, not small text
+     · rules, not cards, for anything tabular
+     · every financial value through mask()
+     · every panel states in plain English what it is — the owner's ask was
+       "simple and help you learn", and a terminal that teaches nothing is
+       just a dense screen
+
+   And the line it must never cross: this surface shows the user their OWN
+   positions and the market's own facts. It never ranks by desirability, never
+   says what to buy or sell. See docs/COMPLIANCE.md.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Eyebrow + the plain-English line under it. The app had 108 hand-rolled
+ *  copies of this label styling and no component; new code uses this. */
+function SectionHead({label,hint,right,style}){
+  return<div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:T.s3,flexWrap:"wrap",...style}}>
+    <div style={{minWidth:0}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,textTransform:"uppercase"}}>{label}</div>
+      {hint&&<div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:2,maxWidth:"62ch",lineHeight:1.45}}>{hint}</div>}
+    </div>
+    {right&&<div style={{flexShrink:0,display:"flex",alignItems:"center",gap:T.s2}}>{right}</div>}
+  </div>;
+}
+
+/** The ET clock. Its own component so a per-second tick re-renders six
+ *  characters instead of the whole cockpit. */
+function RailClock(){
+  const[now,setNow]=useState(()=>new Date());
+  useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t);},[]);
+  let txt="--:--:--";
+  try{
+    txt=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(now);
+  }catch{/* exotic ICU — the rail still renders, just without a clock */}
+  return<span style={{fontVariantNumeric:"tabular-nums"}}>{txt} ET</span>;
+}
+
+function RailCell({label,children,desk=false,grow=false,title}){
+  return<div className={`mz-rail-cell${desk?" mz-rail-desk":""}${grow?" mz-rail-grow":""}`} title={title||undefined}>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,whiteSpace:"nowrap"}}>{label}</div>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{children}</div>
+  </div>;
+}
+
+/** A signed figure. Zero is deliberately neutral, not green — a flat day is
+ *  not a gain, and painting it green is the kind of small lie that erodes
+ *  trust in every other number on the screen. */
+function Signed({v,pct=null,mask=(x=>x),dash="—"}){
+  if(v===null||v===undefined||!isFinite(v))return<span style={{color:T.muted}}>{dash}</span>;
+  const c=v>0?T.gain:v<0?T.loss:T.muted;
+  const arrow=v>0?"▲":v<0?"▼":"·";
+  return<span style={{color:c}}>
+    {arrow} {mask(f$(v))}{pct!=null&&isFinite(pct)?<span style={{color:T.muted,fontWeight:400}}> · {fp(pct)}</span>:null}
+  </span>;
+}
+
+/**
+ * The status rail: two desks side by side, plus the market clock.
+ *
+ * PAPER's numbers come from the broker. LIVE's are derived from quotes, so
+ * when coverage is partial the figure is rendered as unavailable rather than
+ * as a smaller-looking truth — see src/lib/deskSummary.js for why that
+ * distinction is the whole point of the module.
+ */
+function StatusRail({session,summary,mask}){
+  const sess=session?.session||null;
+  const dot=sess==="regular"?T.gain:session?.tradeable?T.gold:T.slate;
+  const p=summary.paper,l=summary.live;
+  return<div className="mz-rail">
+    <RailCell label="SESSION" grow title={session?.reason?`Market session: ${session.reason}`:"Market session"}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:T.s2}}>
+        <span style={{width:7,height:7,borderRadius:999,background:dot,boxShadow:`0 0 8px ${dot}`,flexShrink:0}}/>
+        <span>{session?.label?String(session.label).toUpperCase():"—"}</span>
+        <span style={{color:T.muted,fontWeight:400}}><RailClock/></span>
+      </span>
+    </RailCell>
+
+    <RailCell label="PAPER · ALPACA" desk title={p?.accountNumber?`Paper account ${p.accountNumber}`:"Alpaca paper account"}>
+      {p?<span>{mask(f$(p.equity))} <Signed v={p.change} pct={p.changePct} mask={mask}/></span>
+        :<span style={{color:T.muted}}>not connected</span>}
+    </RailCell>
+    <RailCell label="PAPER CASH" desk title="Cash is the order ceiling here. Margin is riba, so buying power is deliberately not shown.">
+      {p?mask(f$(p.cash)):<span style={{color:T.muted}}>—</span>}
+    </RailCell>
+
+    <RailCell label="LIVE · BROKERAGE" title="Your connected brokerage accounts.">
+      {l.equity>0?mask(f$(l.equity)):<span style={{color:T.muted}}>none linked</span>}
+    </RailCell>
+    <RailCell label="LIVE DAY"
+      title={l.total>0&&!l.complete
+        ?`Live quotes cover ${l.quoted} of ${l.total} positions, so a day change for the whole book cannot be stated yet.`
+        :"Change since the prior close, from live quotes."}>
+      {l.total>0&&!l.complete
+        ?<span style={{color:T.muted}}>{l.quoted}/{l.total} quoted</span>
+        :<Signed v={l.change} pct={l.changePct} mask={mask}/>}
+    </RailCell>
+  </div>;
+}
+
+/** Positions as a tape. Weight is share of the book — a fact about the
+ *  portfolio, not a view on any holding. */
+function PositionTape({rows,mask,emptyNote}){
+  if(!rows.length)return<div style={{padding:T.s6,textAlign:"center",fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted}}>{emptyNote}</div>;
+  const total=rows.reduce((s,r)=>s+(r.value||0),0);
+  return<div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
+    <thead><tr>
+      <th style={{fontSize:"var(--fs-2xs)"}}>SYMBOL</th><th style={{fontSize:"var(--fs-2xs)"}}>QTY</th>
+      <th style={{fontSize:"var(--fs-2xs)"}}>AVG</th><th style={{fontSize:"var(--fs-2xs)"}}>LAST</th>
+      <th style={{fontSize:"var(--fs-2xs)"}}>VALUE</th><th style={{fontSize:"var(--fs-2xs)"}}>P&amp;L</th>
+      <th style={{fontSize:"var(--fs-2xs)"}}>WEIGHT</th>
+    </tr></thead>
+    <tbody>{rows.map(r=>{
+      const w=total>0?(r.value/total)*100:0;
+      const c=r.pl>0?T.gain:r.pl<0?T.loss:T.muted;
+      return<tr key={r.sym}>
+        <td style={{color:T.textHi,fontWeight:600}}>{r.sym}</td>
+        <td style={{color:T.text}}>{r.qty}</td>
+        <td style={{color:T.muted}}>{mask(f$(r.avg))}</td>
+        <td style={{color:T.text}}>{r.last!=null?mask(f$(r.last)):"—"}</td>
+        <td style={{color:T.textHi}}>{mask(f$(r.value))}</td>
+        <td style={{color:c}}>{r.pl!=null?<>{r.pl>0?"▲":r.pl<0?"▼":"·"} {mask(f$(r.pl))}{r.plPct!=null?<span style={{color:T.muted}}> · {fp(r.plPct)}</span>:null}</>:"—"}</td>
+        <td><span style={{display:"inline-flex",alignItems:"center",gap:T.s2,justifyContent:"flex-end"}}>
+          {/* Neutral, not navy. T.blue is a hex literal tuned for the light
+              theme (CLAUDE.md §5 names this as the known weak spot), and on
+              the cockpit's dark track it was navy-on-navy — the bars were the
+              right lengths and looked identical. A weight is a quantity, not a
+              semantic, so a plain high-contrast fill is also the honest
+              choice: colour here would imply a judgment about the holding. */}
+          <span className="mz-wbar"><span style={{width:`${Math.max(0,Math.min(100,w))}%`,background:T.textHi,opacity:.78}}/></span>
+          <span style={{color:T.muted,minWidth:"3.2em",textAlign:"right"}}>{w.toFixed(0)}%</span>
+        </span></td>
+      </tr>;
+    })}</tbody>
+  </table></div>;
+}
+
+/** Reads the paper desk. Null while loading; null forever if Alpaca is not
+ *  configured or the user is not on the trading allowlist — both of which are
+ *  ordinary states that must render as "not connected", never as an error. */
+function useAlpacaDesk(enabled){
+  const[account,setAccount]=useState(null);
+  const[positions,setPositions]=useState([]);
+  const[orders,setOrders]=useState([]);
+  // Seeded from `enabled`, NOT a flat "idle". Starting idle meant the
+  // disabled-state copy rendered for one frame on every ordinary load, before
+  // the effect flipped it to loading — a wrong empty state, briefly, for
+  // everyone. Caught by rendering it, not by a test.
+  const[state,setState]=useState(enabled?"loading":"idle");   // idle | loading | ready | unavailable
+  const load=useCallback(async()=>{
+    if(!enabled){setState("idle");return;}
+    setState(s=>s==="ready"?s:"loading");
+    try{
+      const[a,pos,ord]=await Promise.all([
+        apiFetch("/api/alpaca/account"),
+        apiFetch("/api/alpaca/positions"),
+        apiFetch("/api/alpaca/orders?status=open"),
+      ]);
+      if(!a.ok){setState("unavailable");setAccount(null);return;}
+      setAccount(await a.json().catch(()=>null));
+      setPositions(pos.ok?((await pos.json().catch(()=>[]))||[]):[]);
+      setOrders(ord.ok?((await ord.json().catch(()=>[]))||[]):[]);
+      setState("ready");
+    }catch{setState("unavailable");}
+  },[enabled]);
+  useEffect(()=>{load();},[load]);
+  return{account,positions,orders,state,reload:load};
+}
+
+/**
+ * The Desk — the Trade Lab's landing view.
+ *
+ * Answers, in order: is the market open, what am I worth on each desk, is
+ * anything waiting on me, what do I hold, what is working. Pending approvals
+ * are surfaced here as a banner rather than left to the Signals tab, because
+ * an approval window is short and a view you have to go looking for is a view
+ * that expires.
+ */
+function TradeDesk({session,accounts,live,mapPosition,onNav,onGoSignals,demoMode}){
+  const{mask}=useHideValues();
+  const desk=useAlpacaDesk(!demoMode);
+  const[pending,setPending]=useState(null);
+
+  useEffect(()=>{
+    if(demoMode){setPending(0);return;}
+    let cancelled=false;
+    (async()=>{
+      try{
+        const r=await apiFetch("/api/bot/signals");
+        if(!r.ok)return;
+        const d=await r.json();
+        if(!cancelled)setPending((d.signals||[]).filter(x=>x.status==="pending").length);
+      }catch{/* the banner simply does not appear */}
+    })();
+    return()=>{cancelled=true;};
+  },[demoMode]);
+
+  const summary=useMemo(()=>deskSummary({paper:desk.account,accounts,live,mapPosition}),[desk.account,accounts,live,mapPosition]);
+
+  // Alpaca hands back strings for every numeric. Parsed once, here, so the
+  // tape never has to think about it.
+  const paperRows=useMemo(()=>(desk.positions||[]).map(p=>{
+    const n=v=>(v===null||v===undefined||v===""?null:Number(v));
+    const qty=n(p.qty),last=n(p.current_price),avg=n(p.avg_entry_price);
+    return{
+      sym:String(p.symbol||"—"),
+      qty:qty!=null?(Math.abs(qty)<1?qty.toFixed(4):String(qty)):"—",
+      avg,last,
+      value:n(p.market_value)||0,
+      pl:n(p.unrealized_pl),
+      plPct:n(p.unrealized_plpc)!=null?n(p.unrealized_plpc)*100:null,
+    };
+  }),[desk.positions]);
+
+  const openOrders=desk.orders||[];
+
+  return<div className="mz-cockpit" style={{display:"flex",flexDirection:"column"}}>
+    <StatusRail session={session} summary={summary} mask={mask}/>
+
+    <div style={{display:"flex",flexDirection:"column",gap:T.s6,padding:T.s5}}>
+      {/* Anything waiting on a human comes first. */}
+      {pending>0&&<button onClick={onGoSignals} className="mz-tap" style={{
+        display:"flex",alignItems:"center",gap:T.s3,textAlign:"left",width:"100%",
+        padding:`${T.s3} ${T.s4}`,borderRadius:T.rMd,cursor:"pointer",
+        background:`${T.gold}1a`,border:`1px solid ${T.gold}55`,color:T.textHi,
+      }}>
+        <span style={{width:7,height:7,borderRadius:999,background:T.gold,boxShadow:`0 0 8px ${T.gold}`,flexShrink:0}}/>
+        <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",letterSpacing:"0.08em",fontWeight:600}}>
+          {pending} SIGNAL{pending===1?"":"S"} AWAITING YOUR APPROVAL
+        </span>
+        <span style={{marginLeft:"auto",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>REVIEW →</span>
+      </button>}
+
+      {/* Positions. */}
+      <section>
+        <SectionHead label="Paper positions"
+          hint="What the paper desk holds right now. AVG is what you paid, LAST is what it is worth, WEIGHT is each holding's share of this desk — not a view on any of them."
+          right={desk.state==="ready"&&<Tag label={`${paperRows.length} HELD`} color={T.slate}/>}
+          style={{marginBottom:T.s3}}/>
+        {desk.state==="loading"&&<div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>LOADING…</div>}
+        {desk.state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+          The paper desk is not reachable. Add your own Alpaca paper keys in Quick Trade, or ask the owner to enable trading for this account.
+        </div>}
+        {/* "idle" = the desk was never asked for. Unreachable through the nav
+            today, since demo mode removes Trade from it entirely (verified in
+            e2e/trade-lab.spec.js), but the hook still has to have an answer
+            for enabled:false rather than rendering a blank area. Deliberately
+            NOT demo-specific copy — that would be prose nobody can reach. */}
+        {desk.state==="idle"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+          The paper desk is not loaded.
+        </div>}
+        {desk.state==="ready"&&<PositionTape rows={paperRows} mask={mask}
+          emptyNote="Nothing held yet. A strategy's first fill, or an order from Quick Trade, will appear here."/>}
+      </section>
+
+      {/* Working orders. */}
+      <section>
+        <SectionHead label="Working orders"
+          hint="Orders sent to the broker that have not finished. An order placed outside market hours sits here until the next session — it is not a fill until the broker says so."
+          right={openOrders.length>0&&<Tag label={`${openOrders.length} OPEN`} color={T.gold}/>}
+          style={{marginBottom:T.s3}}/>
+        {openOrders.length===0
+          ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No working orders.</div>
+          :<div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
+            <thead><tr>
+              <th style={{fontSize:"var(--fs-2xs)"}}>SYMBOL</th><th style={{fontSize:"var(--fs-2xs)"}}>SIDE</th>
+              <th style={{fontSize:"var(--fs-2xs)"}}>TYPE</th><th style={{fontSize:"var(--fs-2xs)"}}>QTY</th>
+              <th style={{fontSize:"var(--fs-2xs)"}}>FILLED</th><th style={{fontSize:"var(--fs-2xs)"}}>STATUS</th>
+            </tr></thead>
+            <tbody>{openOrders.map(o=><tr key={o.id}>
+              <td style={{color:T.textHi,fontWeight:600}}>{o.symbol}</td>
+              <td style={{color:o.side==="buy"?T.gain:T.loss}}>{String(o.side||"").toUpperCase()}</td>
+              <td style={{color:T.muted}}>{String(o.type||"").toUpperCase()}</td>
+              <td style={{color:T.text}}>{o.qty??(o.notional?mask(f$(Number(o.notional))):"—")}</td>
+              <td style={{color:T.text}}>{o.filled_qty??"0"}</td>
+              <td><Tag label={String(o.status||"").replace(/_/g," ").toUpperCase()} color={T.slate}/></td>
+            </tr>)}</tbody>
+          </table></div>}
+      </section>
+
+      {/* The owner asked for something that helps a person learn. This is that,
+          and it is deliberately honest about what paper proves. */}
+      <section>
+        <SectionHead label="Lab notes"
+          hint="What this place is for, in plain terms."
+          style={{marginBottom:T.s3}}/>
+        <div style={{display:"grid",gap:T.s3,gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))"}}>
+          {[
+            ["Paper first, for months not days","Fills here are simulated. Paper proves a strategy's LOGIC — that it buys what it meant to, sizes correctly, and exits when it said it would. It cannot prove returns, because a simulated fill never moves the market. Months of data is evidence; a good week is noise."],
+            ["Cash is the ceiling, always","Your broker will quote a buying power several times your cash. That is margin, and margin is riba. The order path here refuses it, so the only number that limits a trade is cash on hand."],
+            ["You approve every order","Strategies propose; you decide. Nothing on this desk is a recommendation to buy or sell anything — it shows the market's own facts and your own positions, and the judgment stays yours."],
+          ].map(([h,b])=><div key={h} style={{padding:T.s4,border:`1px solid ${T.border}`,borderRadius:T.rMd,background:T.tileFill}}>
+            <div style={{fontFamily:FU,fontSize:"var(--fs-base)",color:T.textHi,fontWeight:600,marginBottom:T.s2,lineHeight:1.25}}>{h}</div>
+            <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55}}>{b}</div>
+          </div>)}
+        </div>
+      </section>
+    </div>
+  </div>;
+}
+
 function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOrderPlaced,activities=[],onNav,onConnectTrade,isAdmin=false,fullAutoEnabled=false,isRoot=false,consented=false,demoMode=false}){
   // Trade is the admin trading hub: bot Strategies + Signals, plus the analysis
   // tools (Screener / Rebalance / Backtest, reused from Portfolio) and an ad-hoc
   // Opens on Signals (pending approvals are the most time-sensitive view).
-  const[sub,setSub]=useState("signals");
+  // Opens on the DESK. It used to open on Signals because approvals are
+  // time-sensitive; the desk now carries a pending-approval banner, so nothing
+  // urgent is buried and the landing view can be the one that orients you.
+  // The three original ids (signals / strategies / order) are UNCHANGED:
+  // localStorage.mizan_nav, ?tab= deep links, the nav_usage counters behind
+  // track="trade" and every data-tour hook are keyed on them.
+  const[sub,setSub]=useState("desk");
   // Holdings (with live prices merged) — needed by Screener + Rebalance. Same
   // derivation Portfolio uses, kept self-contained here.
   // The `merged` holdings IIFE lived here. Removed 2026-10-01: its only
@@ -7417,10 +7739,12 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     {/* Screener / Rebalance / Backtest are NOT duplicated here — they live in
         the Portfolio tab (one home each). Trade stays focused on the bot. */}
-    <TabBar track="trade" tabs={[["signals","Signals"],["strategies","Strategies"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    <TabBar track="trade" tabs={[["desk","Desk"],["signals","Signals"],["strategies","Strategies"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    {sub==="desk"&&<TradeDesk session={session} accounts={accounts} live={live} mapPosition={mapPosition}
+      onNav={onNav} onGoSignals={()=>setSub("signals")} demoMode={demoMode}/>}
     {/* Persistent reference: how brokerage connections map to trade features, and the
         reconnect-with-trade-permission requirement. Collapsed by default. */}
-    <TradeConnectionsPanel onConnectTrade={onConnectTrade}/>
+    {sub!=="desk"&&<TradeConnectionsPanel onConnectTrade={onConnectTrade}/>}
     {/* Bot panel, split into Strategies + Signals views (same component, shared state). */}
     {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
 
@@ -13471,6 +13795,90 @@ export default function Mizan(){
          Without width:100%, a display:flex container can size to its content
          and push past the viewport on some layout contexts. */
       .mz-tabbar-wrap{overflow:hidden;width:100%;}
+
+      /* ── Trade Lab cockpit ───────────────────────────────────────────────
+         A dark instrument panel inside a light app. The seam is deliberate:
+         full-bleed dark, hairline rules, no cards. Density and monospace do
+         the work a dark palette alone cannot. */
+      .mz-cockpit{
+        background:var(--mz-bg); color:var(--mz-text);
+        border:1px solid var(--mz-border); border-radius:var(--r-lg);
+        overflow:hidden; position:relative;
+      }
+      /* There was an "instrument grid" here — 96px graph-paper lines across
+         the whole cockpit. It was removed after looking at a screenshot: the
+         vertical rules ran straight down THROUGH the position tape, so every
+         number had a line crossing it and the panel read as a rendering
+         artifact rather than as texture. Depth on this surface comes from the
+         dark room sitting inside a light page, which is plenty. A decoration
+         that competes with a price is not texture, it is damage. */
+      .mz-cockpit::before{
+        content:""; position:absolute; inset:0 0 auto 0; height:120px;
+        pointer-events:none;
+        background:radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.045), transparent 70%);
+      }
+      .mz-cockpit > *{position:relative;}
+
+      /* The status rail. Sticky, because a trading surface should never make
+         you scroll to find out whether the market is open. */
+      .mz-rail{
+        position:sticky; top:0; z-index:4;
+        display:flex; align-items:stretch; flex-wrap:wrap;
+        background:var(--mz-surface);
+        border-bottom:1px solid var(--mz-borderHi);
+      }
+      .mz-rail-cell{
+        display:flex; flex-direction:column; justify-content:center; gap:2px;
+        padding:var(--s-2) var(--s-4);
+        border-right:1px solid var(--mz-border);
+        min-width:0; flex:0 0 auto;
+      }
+      .mz-rail-cell:last-child{border-right:0;}
+      /* The desk groups (PAPER / LIVE) get a heavier separator than the cells
+         inside them, so the eye reads two desks rather than six numbers. */
+      .mz-rail-desk{border-right:2px solid var(--mz-borderHi);}
+      .mz-rail-grow{flex:1 1 auto;}
+      @media (max-width:720px){
+        .mz-rail-cell{flex:1 1 50%; border-right:1px solid var(--mz-border);}
+        .mz-rail-desk{flex:1 1 100%; border-right:0; border-bottom:2px solid var(--mz-borderHi);}
+      }
+      /* Below ~420px a two-up rail put "LIVE · BROKERAGE" and "LIVE DAY" in
+         50% cells while both labels were nowrap, so each label ran out of its
+         own cell and over its neighbour. Flex reports honest, non-overlapping
+         rects while the TEXT inside paints on top of the next cell, so this is
+         invisible to an overflow check and had to be seen. One per row below
+         that width. */
+      @media (max-width:420px){
+        .mz-rail-cell{flex:1 1 100%; border-right:0; border-bottom:1px solid var(--mz-border);}
+        .mz-rail-cell:last-child{border-bottom:0;}
+      }
+
+      /* Data tape: rules, not cards. A card per row would triple the vertical
+         cost of a table whose whole purpose is letting you compare rows. */
+      .mz-tape{width:100%; border-collapse:collapse; font-family:var(--ff-mono,inherit);}
+      .mz-tape th{
+        text-align:right; font-weight:600; letter-spacing:.14em;
+        padding:var(--s-2) var(--s-3); color:var(--mz-muted);
+        border-bottom:1px solid var(--mz-borderHi); white-space:nowrap;
+      }
+      .mz-tape th:first-child, .mz-tape td:first-child{text-align:left;}
+      .mz-tape td{
+        text-align:right; padding:var(--s-2) var(--s-3);
+        border-bottom:1px solid var(--mz-border); font-variant-numeric:tabular-nums;
+        white-space:nowrap;
+      }
+      .mz-tape tbody tr:last-child td{border-bottom:0;}
+      .mz-tape tbody tr{transition:background var(--mz-dur,150ms) ease;}
+      .mz-tape tbody tr:hover{background:var(--mz-dim);}
+      /* Horizontal scroll rather than a squeezed table at 320px. A number
+         clipped to "1,2…" is worse than one you scroll to. */
+      .mz-tape-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+
+      /* Weight bar — the only chart in the tape. Inline so it reads as part
+         of the row rather than as a separate visualisation. */
+      .mz-wbar{display:inline-block; vertical-align:middle; width:88px; height:8px;
+        background:var(--mz-dim); border-radius:999px; overflow:hidden;}
+      .mz-wbar > span{display:block; height:100%; border-radius:999px;}
       .mz-tabbar{width:100%;}
 
       /* ── Responsive card tables ──────────────────────────────── */
