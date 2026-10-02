@@ -236,3 +236,42 @@ describe('Phase 0 wiring', () => {
     expect(SRC).not.toMatch(/fetchAlpacaBars\([^)]*feed = "iex"/s)
   })
 })
+
+describe('market data correctness', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+
+  it('fetches SPLIT-ADJUSTED bars, or momentum is a lie', () => {
+    // Alpaca defaults to adjustment=raw. On raw bars a 10-for-1 split reads
+    // as a -90% move, so a momentum ranking would dump every winner that
+    // split and never buy one back. Found by dry-running the real 214-name
+    // universe, not by reading the code.
+    const fn = SRC.slice(SRC.indexOf('async function fetchAlpacaBars'))
+    expect(fn.slice(0, 2000)).toMatch(/adjustment:\s*"all"/)
+  })
+})
+
+describe('rank_rebalance safety properties', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  const BRANCH = SRC.slice(SRC.indexOf('strategy_type === "rank_rebalance"'), SRC.indexOf('strategy_type === "rank_rebalance"') + 6000)
+
+  it('refuses any venue that is not paper', () => {
+    // The branch is paper-only BY CONSTRUCTION, not by configuration. This is
+    // what makes enabling it a bounded risk: a misconfigured strategy pointed
+    // at a funded brokerage does nothing instead of trading real money.
+    expect(BRANCH).toMatch(/if\s*\(!venue\.paper\)/)
+    expect(BRANCH).toMatch(/live_refused/)
+  })
+
+  it('only consumes the rebalance cadence when something was placed', () => {
+    // Advancing it after a run that placed nothing would skip a whole cycle
+    // because of one bad afternoon.
+    expect(BRANCH).toMatch(/placed/)
+  })
+
+  it('records a share count even for a notional order', () => {
+    // bookFromSignals sums qty. A 0 here makes a successful buy invisible, so
+    // the next rebalance thinks it owns nothing, never sells, and re-buys the
+    // same names forever.
+    expect(BRANCH).toMatch(/qty: o\.qty \?\?/)
+  })
+})

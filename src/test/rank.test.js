@@ -182,14 +182,39 @@ describe('rank_rebalance is shadow-only', () => {
     expect(guard, 'the live refusal must precede any order placement').toBeLessThan(firstOrder)
   })
 
-  it('does not run at all until fill reconciliation exists', () => {
-    // Codex returned "not safe to ship" on this branch. Two findings are
-    // structural: a 2xx from Alpaca means ACCEPTED not FILLED (a market order
-    // outside session hours is queued), and partial failure mid-loop leaves a
-    // half-rebalanced book with no rollback. Both are about whether the book
-    // is TRUE, which is the entire point of a forward test.
+  it('stays behind its gate, and the gate is only open BECAUSE reconciliation exists', () => {
+    // This test previously asserted the gate was hard-false. Codex had
+    // returned "not safe to ship" on two structural grounds, and the first —
+    // a 2xx from Alpaca means ACCEPTED, not FILLED — was the blocking one.
+    //
+    // It was opened on 2026-10-01 only after that precondition was actually
+    // met: every Alpaca execution writes `submitted`, and
+    // reconcileSubmittedSignals promotes it from the broker's own filled_qty.
+    // Verified against a real fill, not against a fixture.
+    //
+    // So the assertion is no longer "the gate is shut". It is "the gate may
+    // only be open while the thing that justified opening it is still there".
+    // Delete reconciliation and this test fails, which is the point.
     expect(branch).toMatch(/if \(!RANK_REBALANCE_ENABLED\) continue;/)
-    expect(SRC).toMatch(/const RANK_REBALANCE_ENABLED = false;/)
+    expect(SRC).toMatch(/const RANK_REBALANCE_ENABLED = true;/)
+    // Anchored with the opening paren. Without it, renaming the function to
+    // reconcileSubmittedSignalsXX still matched — the mutation survived and
+    // the test proved nothing.
+    expect(SRC, 'the gate rests on reconciliation existing')
+      .toMatch(/async function reconcileSubmittedSignals\(/)
+    expect(SRC, 'and on it actually being called')
+      .toMatch(/await reconcileSubmittedSignals\(\)/)
+    expect(SRC, 'and on paper executions landing as submitted, never executed')
+      .toMatch(/\? \{ status: "submitted" \}/)
+  })
+
+  it('the second Codex finding is MITIGATED, not solved, and says so', () => {
+    // Partial failure mid-loop still leaves a half-rebalanced book with no
+    // rollback. What makes that bounded is that rebalancePlan is idempotent —
+    // it recomputes the target against what is actually held — so the next
+    // run completes the job instead of compounding the gap. Recorded here so
+    // nobody later reads the open gate as "all findings were fixed".
+    expect(SRC).toMatch(/STILL TRUE, and mitigated rather than solved/)
   })
 
   it('records a notional buy as a SHARE COUNT, not zero', () => {
