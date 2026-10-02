@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-10-02
 
+### Added
+- **trade:** Performance attribution — the alpha number, including when it is bad (`6ae6e52`)
+
 ### Docs
 - Record migrations 030-032 and the first live paper rebalance (`db2b7b6`)
 
