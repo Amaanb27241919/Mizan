@@ -16,6 +16,7 @@ import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { deskSummary } from "../lib/deskSummary.js";
 import { toPoints, curvePath, curveChange, curveCoverage, pointAtX } from "../lib/equityCurve.js";
+import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/benchmarkAttribution.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
 import { useEthicalOverlay, ethicalFlag } from "../lib/ethicalOverlay.js";
 import Budgeting from "./Budgeting.jsx";
@@ -7555,6 +7556,122 @@ function EquityChart({demoMode}){
 }
 
 /**
+ * Performance — the strategy against its benchmark.
+ *
+ * The Trade Lab proposal is explicit (§16, §23): state the alpha even when it
+ * is negative, and never hide a losing strategy behind a flattering win rate.
+ * So the headline here is ALPHA, in percentage points, coloured by its own
+ * sign — and when the strategy is behind, the screen says so first.
+ *
+ * It also refuses to over-claim in the other direction. A few days of forward
+ * data cannot evidence an edge (§17), so every reading carries how long it has
+ * been measured and what that length is worth. "Up 0.6%" after one session is
+ * noise wearing the costume of a result.
+ */
+function PerformancePanelLab({demoMode}){
+  const{mask}=useHideValues();
+  const[range,setRange]=useState("1M");
+  const[equity,setEquity]=useState(null);
+  const[bench,setBench]=useState(null);
+  const[state,setState]=useState(demoMode?"idle":"loading");
+
+  useEffect(()=>{
+    if(demoMode){setState("idle");return;}
+    let cancelled=false;
+    setState(s=>s==="ready"?s:"loading");
+    (async()=>{
+      try{
+        const[e,b]=await Promise.all([
+          apiFetch(`/api/alpaca/portfolio-history?range=${encodeURIComponent(range)}`),
+          apiFetch(`/api/alpaca/benchmark?range=${encodeURIComponent(range)}&symbol=SPUS`),
+        ]);
+        if(!e.ok){if(!cancelled)setState("unavailable");return;}
+        const ej=await e.json().catch(()=>null);
+        const bj=b.ok?await b.json().catch(()=>null):null;
+        if(cancelled)return;
+        setEquity(ej); setBench(bj); setState("ready");
+      }catch{if(!cancelled)setState("unavailable");}
+    })();
+    return()=>{cancelled=true;};
+  },[range,demoMode]);
+
+  const att=useMemo(()=>benchmarkAttribution(
+    toPoints(equity),
+    Array.isArray(bench?.points)?bench.points:[],
+    {benchmarkName:bench?.symbol||"SPUS"},
+  ),[equity,bench]);
+  const conf=confidenceLabel(att.days);
+
+  const Row=({label,value,tone})=><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:T.s3,padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
+    <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em"}}>{label}</span>
+    <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,fontVariantNumeric:"tabular-nums",color:tone||T.textHi}}>{value}</span>
+  </div>;
+
+  return<section>
+    <SectionHead label="Performance"
+      hint="Your strategy against the index you would otherwise have held. Alpha is the difference in percentage points — if it is negative, doing nothing would have beaten this."
+      right={<div className="mz-chip-row" style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        {CURVE_RANGES.map(([id,label])=><button key={id} onClick={()=>setRange(id)} style={{
+          fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.1em",fontWeight:600,
+          padding:`4px ${T.s2}`,borderRadius:T.rSm,cursor:"pointer",
+          background:range===id?`${T.textHi}1a`:"transparent",
+          border:`1px solid ${range===id?T.borderHi:T.border}`,
+          color:range===id?T.textHi:T.muted,
+        }}>{label}</button>)}
+      </div>}
+      style={{marginBottom:T.s3}}/>
+
+    {state==="loading"&&<div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>LOADING…</div>}
+    {state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>Performance history is not available for this desk.</div>}
+    {state==="idle"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No performance history loaded.</div>}
+
+    {state==="ready"&&(!att.comparable
+      ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+         {/* Deliberately not a number. One aligned day is a point, not a
+             comparison, and inventing a figure here would be the exact
+             dishonesty this panel exists to prevent. */}
+         Not enough overlapping days to compare yet — the strategy and {att.benchmarkName} need at least two days measured over the same window. {att.days===1?"There is one so far.":"There are none so far."}
+       </div>
+      :<div style={{display:"grid",gap:T.s5,gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))"}}>
+        <div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",marginBottom:T.s2}}>
+            ALPHA VS {att.benchmarkName}
+          </div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-5xl)",fontWeight:600,letterSpacing:"-0.03em",lineHeight:1,
+            fontVariantNumeric:"tabular-nums",
+            color:att.alpha>0?T.gain:att.alpha<0?T.loss:T.muted}}>
+            {att.alpha>0?"+":att.alpha<0?"−":""}{Math.abs(att.alpha).toFixed(2)}
+            <span style={{fontFamily:FM,fontSize:"var(--fs-base)",fontWeight:600,marginLeft:6,letterSpacing:"0.06em"}}>pp</span>
+          </div>
+          {/* The sentence a losing strategy would rather not print. */}
+          <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:att.alpha<0?T.loss:T.muted,marginTop:T.s2,lineHeight:1.5,maxWidth:"34ch"}}>
+            {att.alpha<0
+              ?`Behind. Holding ${att.benchmarkName} would have returned more over this window.`
+              :att.alpha>0?`Ahead of ${att.benchmarkName} over this window.`
+              :`Level with ${att.benchmarkName}.`}
+          </div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginTop:T.s3}}>
+            {att.days} DAY{att.days===1?"":"S"} MEASURED · {conf.level.toUpperCase()}
+          </div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:4,maxWidth:"34ch",lineHeight:1.5}}>{conf.note}</div>
+        </div>
+
+        <div>
+          <Row label="STRATEGY" value={fp(att.strategyReturn)} tone={att.strategyReturn>=0?T.gain:T.loss}/>
+          <Row label={att.benchmarkName} value={fp(att.benchmarkReturn)} tone={att.benchmarkReturn>=0?T.gain:T.loss}/>
+          {/* Drawdown sits beside return on purpose: beating a benchmark on
+              twice its drawdown has not beaten it in any useful sense. */}
+          <Row label="STRATEGY DRAWDOWN" value={att.strategyDrawdown!=null?fp(att.strategyDrawdown):"—"}
+            tone={att.strategyDrawdown<0?T.loss:T.muted}/>
+          <Row label={`${att.benchmarkName} DRAWDOWN`} value={att.benchmarkDrawdown!=null?fp(att.benchmarkDrawdown):"—"}
+            tone={att.benchmarkDrawdown<0?T.loss:T.muted}/>
+          <Row label="WINDOW" value={att.window.from&&att.window.to?`${att.window.from} → ${att.window.to}`:"—"}/>
+        </div>
+      </div>)}
+  </section>;
+}
+
+/**
  * The Desk — the Trade Lab's landing view.
  *
  * Answers, in order: is the market open, what am I worth on each desk, is
@@ -7899,7 +8016,11 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     {/* Screener / Rebalance / Backtest are NOT duplicated here — they live in
         the Portfolio tab (one home each). Trade stays focused on the bot. */}
-    <TabBar track="trade" tabs={[["desk","Desk"],["signals","Signals"],["strategies","Strategies"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    {/* Toward the proposal's §23 destination list. "Desk" is the plan's
+        Command Center; Performance is added now because the strategy is live
+        and the alpha question is unanswered. The three original ids
+        (signals/strategies/order) are UNCHANGED for nav_usage continuity. */}
+    <TabBar track="trade" tabs={[["desk","Command Center"],["signals","Signals"],["strategies","Strategies"],["performance","Performance"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
     {/* ONE cockpit around every sub-tab, with the rail on top of all of them.
         The alternative — a dark Desk sitting beside two light pages — would
         make the dark read as an accident rather than as a room. */}
@@ -7910,9 +8031,13 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         armedVenue={sub==="order"?venue:null}/>
       <div style={{padding:T.s5}}>
         {sub==="desk"&&<TradeDesk desk={deskData} onGoSignals={()=>setSub("signals")} demoMode={demoMode}/>}
+        {sub==="performance"&&<PerformancePanelLab demoMode={demoMode}/>}
     {/* Persistent reference: how brokerage connections map to trade features, and the
         reconnect-with-trade-permission requirement. Collapsed by default. */}
-    {sub!=="desk"&&<TradeConnectionsPanel onConnectTrade={onConnectTrade}/>}
+    {/* Only where a broker connection is the thing you might need to fix.
+        It was rendering on every non-desk tab, which put a "reconnect for
+        trading" call-to-action under a performance report. */}
+    {(sub==="order"||sub==="strategies")&&<TradeConnectionsPanel onConnectTrade={onConnectTrade}/>}
     {/* Bot panel, split into Strategies + Signals views (same component, shared state). */}
         {/* The bot panel is UNTOUCHED. Its T.* tokens resolve dark by
             inheritance, which is the whole reason the cockpit re-declares

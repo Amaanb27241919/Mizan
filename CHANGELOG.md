@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-02
+
+### Docs
+- Record migrations 030-032 and the first live paper rebalance (`db2b7b6`)
+
 ## 2026-10-01
 
 ### Added

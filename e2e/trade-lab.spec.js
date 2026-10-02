@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { signedIn } from "./support/app.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+// NOT __dirname: these specs are ESM, where it does not exist. Vitest provides
+// a shim so src/test/*.test.js can use it; Playwright does not, and the only
+// symptom is a test that fails for a reason unrelated to what it tests.
+const HERE = fileURLToPath(new URL(".", import.meta.url));
 
 /**
  * MĪZAN TRADE LAB — the cockpit.
@@ -83,7 +89,7 @@ const gotoLab = async (page, opts = {}) => {
     storage: { mizan_nav: "trade", ...(opts.storage || {}) },
   });
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Desk", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Command Center", exact: true })).toBeVisible();
 };
 
 test.describe("Trade Lab cockpit", () => {
@@ -195,12 +201,22 @@ test.describe("Trade Lab cockpit", () => {
     await expect(page.locator(".mz-rail")).toContainText("PAPER CASH");
   });
 
-  test("keeps the three original sub-tab ids for nav_usage continuity", async ({ page }) => {
-    // mizan_nav, ?tab= deep links, nav_usage counters and data-tour hooks are
-    // all keyed on these. Renaming a label is free; renaming an id orphans
-    // every historical counter.
+  test("keeps the original sub-tab IDS, whatever the labels say", async ({ page }) => {
+    // This used to assert LABELS, and renaming "Desk" to "Command Center"
+    // turned 45 specs red while breaking nothing real. Labels are free to
+    // change. IDS are not: mizan_nav, the ?tab= reader, nav_usage counters and
+    // every data-tour hook are keyed on them, so renaming one silently orphans
+    // its historical counts. So the contract is asserted against the source,
+    // where the ids actually live, not against rendered text.
+    const src = readFileSync(HERE + "../src/components/MizanApp.jsx", "utf8")
+    const bar = src.slice(src.indexOf('TabBar track="trade"'))
+    const ids = [...bar.slice(0, 400).matchAll(/\["([a-z]+)","[^"]+"\]/g)].map(m => m[1])
+    for (const id of ["desk", "signals", "strategies", "order"]) {
+      expect(ids, `sub-tab id "${id}" must survive a rename`).toContain(id)
+    }
+    // And the labels still render, whatever they currently are.
     await gotoLab(page);
-    for (const label of ["Desk", "Signals", "Strategies", "Quick Trade"]) {
+    for (const label of ["Command Center", "Signals", "Strategies", "Quick Trade"]) {
       await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
     }
   });
@@ -259,7 +275,7 @@ test.describe("Trade Lab cockpit", () => {
       storage: { mizan_nav: "trade" },
     });
     await page.goto("/");
-    await expect(page.getByRole("button", { name: "Desk", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Command Center", exact: true })).toBeVisible();
     await expect(page.locator(".mz-cockpit")).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/SOMETHING WENT WRONG/i);
   });
@@ -277,6 +293,48 @@ test.describe("Trade Lab cockpit", () => {
     await expect(page.locator(".mz-rail-armed")).toContainText("ARMED");
     // Default venue is the LIVE brokerage, so that is what must be marked.
     await expect(page.locator(".mz-rail-armed")).toContainText("LIVE");
+  });
+
+  test("states the alpha even when it is NEGATIVE", async ({ page }) => {
+    // The proposal is explicit: never hide a losing strategy behind a
+    // flattering win rate. Real numbers from 2026-10-02 — strategy +0.604%,
+    // SPUS +1.474%, so the honest headline is a red -0.87pp.
+    await gotoLab(page, { fixtures: {
+      "/api/alpaca/portfolio-history": {
+        timestamp: [Date.parse("2026-10-01T20:00:00Z") / 1000, Date.parse("2026-10-02T20:00:00Z") / 1000],
+        equity: [100000, 100603.26], baseValue: 100000, timeframe: "1D", range: "1M",
+      },
+      "/api/alpaca/benchmark": { symbol: "SPUS", range: "1M", points: [
+        { t: Date.parse("2026-10-01T20:00:00Z"), v: 59.72 },
+        { t: Date.parse("2026-10-02T20:00:00Z"), v: 60.60 },
+      ] },
+    } });
+    await page.getByRole("button", { name: "Performance", exact: true }).click();
+    const perf = page.locator(".mz-cockpit");
+    await expect(perf).toContainText("0.87");
+    await expect(perf).toContainText(/behind/i);
+    // And it must not dress two days up as a result.
+    await expect(perf).toContainText(/noise, not evidence/i);
+  });
+
+  test("refuses to compute alpha from a single day", async ({ page }) => {
+    // One aligned day is a point, not a comparison. Inventing a number here is
+    // exactly the dishonesty the panel exists to prevent.
+    await gotoLab(page, { fixtures: {
+      "/api/alpaca/portfolio-history": {
+        timestamp: [Date.parse("2026-10-02T20:00:00Z") / 1000], equity: [100603.26],
+        baseValue: 100000, timeframe: "1D", range: "1M",
+      },
+      "/api/alpaca/benchmark": { symbol: "SPUS", range: "1M",
+        points: [{ t: Date.parse("2026-10-02T20:00:00Z"), v: 60.60 }] },
+    } });
+    await page.getByRole("button", { name: "Performance", exact: true }).click();
+    await expect(page.locator(".mz-cockpit")).toContainText(/not enough overlapping days/i);
+    // Specifically: no alpha FIGURE. The first version asserted the cockpit
+    // contained no "pp" at all, which the panel's own sentence ("not enough
+    // overlapping days") violates — a two-character substring is not an
+    // assertion, it is a coincidence waiting to happen.
+    await expect(page.locator(".mz-cockpit")).not.toContainText(/[+\u2212-]?\d+\.\d{2}\s*pp/);
   });
 
   test("no overflow at 320px", async ({ page }) => {
