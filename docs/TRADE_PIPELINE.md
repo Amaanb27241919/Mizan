@@ -13,6 +13,22 @@ returned 503. Quotes priced against an unverified inventory are wrong quotes.
 
 ## The finding that changes Phase 5
 
+> **SUPERSEDED 2026-10-01 — the engine CAN reach Alpaca now.** The section below
+> is kept as the record of what was true on 2026-09-29. Since then:
+> `executeStrategyOrder` (`lib/handlers.mjs:1722`) routes on `params.broker` via
+> `lib/trading/broker.mjs` — `alpaca_paper` → `placeAlpacaOrder`, absent or
+> `snaptrade` → `executeSnapTradeOrder`. A missing broker still defaults to
+> SnapTrade, so no pre-existing strategy changed venue. The rank-rebalance branch
+> refuses any non-paper venue **by construction** (`if (!venue.paper)` →
+> `bot.rank.live_refused`, `:8125`). Fills are reconciled by
+> `lib/trading/fills.mjs` (signals land `submitted`, flip to `executed`).
+>
+> **Forward paper testing per §17 has started.** Strategy
+> `97b5b48e-03b6-47b9-9fb5-8b05610bb1ec` (halal momentum, top 25 of 214 SPUS
+> constituents, inverse-vol, weekly) fired at the 2026-10-02 open: 25 signals at
+> 09:30:18 ET, all 25 Alpaca orders `filled`, $94,999.73 deployed on paper
+> account `PA3ME4FKSILU`, $4,999.95 cash left — matching the $95k allocation.
+
 **The strategy engine cannot place an Alpaca order. It has no code path to one.**
 
 `placeAlpacaOrder` (`lib/handlers.mjs:1417`) has exactly **one** call site:
@@ -120,8 +136,8 @@ anywhere, because there is no model in the loop yet.
 
 ## Known-stale claims to correct before pricing
 
-1. §2 "Alpaca paper trading" — the keys were unset until 2026-09-19; the engine
-   still cannot reach it.
+1. §2 "Alpaca paper trading" — the keys were unset until 2026-09-19, and the
+   engine could not reach it until 2026-10-01 (see the superseded note above).
 2. §15's "Robinhood's supported agent infrastructure" — through SnapTrade,
    Robinhood is `allows_trading: false`; a `connectionType:"trade"` login
    returns 400 code 1012.

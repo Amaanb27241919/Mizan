@@ -22,6 +22,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trading:** Correct fill reconciliation against the real Alpaca spec (`fbcc31d`)
 
 ### Docs
+- The engine can reach Alpaca now, and a strategy is live on paper (`f63be8e`)
 - **trade:** Phase 0 verified against a live Alpaca fill (`a87bd21`)
 - **trade:** The Trade Lab build plan (`b933868`)
 
