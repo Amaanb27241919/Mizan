@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-02
 
 ### Added
+- **ai:** The Market Packet — identical evidence, provably (`8ca1510`)
 - **ai:** The model-output contract — reject, never repair (`698b2fc`)
 - **trading:** Migration 033 — a signal becomes a complete trade intent (`f6a83a5`)
 - **trading:** SHADOW mode — propose without being able to trade (`eb9b5e4`)
