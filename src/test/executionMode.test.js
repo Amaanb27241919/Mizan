@@ -152,3 +152,56 @@ describe('execution refusal wiring', () => {
     expect(head).not.toMatch(/resolveMode\(strategy,\s*\{[^}]*fullAutoAllowed:\s*true/)
   })
 })
+
+describe('trade-intent completeness (migration 033)', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  const BRANCH = (() => {
+    const from = SRC.indexOf('strategy_type === "rank_rebalance"')
+    const to = SRC.indexOf('strategy_type === "dca"', from)
+    return SRC.slice(from, to)
+  })()
+
+  it('records WHY, not just what', () => {
+    // §31: "why did it buy COHR on 2026-10-02?" must be answerable later. The
+    // branch computed rank, momentum, volatility and target weight and threw
+    // them away at insert time.
+    expect(BRANCH).toMatch(/rationale:\s*rationaleFor\(/)
+    for (const field of ['rank', 'momentum', 'volatility', 'target_weight', 'reference_price']) {
+      expect(BRANCH, `rationale must carry ${field}`).toMatch(new RegExp(`${field}:`))
+    }
+  })
+
+  it('snapshots the PARAMS in force at decision time', () => {
+    // Without this, editing buy_top next month silently rewrites the stated
+    // reason for every trade already made.
+    // Anchored with the colon: `params_snapshot_x:` still contains
+    // `params_snapshot`, so the unanchored version survived its mutation.
+    // Third time a prefix match has made one of my assertions decorative.
+    expect(BRANCH).toMatch(/params_snapshot:\s*\{/)
+    for (const f of ['buy_top', 'hold_zone', 'momentum_days', 'universe_size']) {
+      expect(BRANCH, `snapshot must carry ${f}`).toMatch(new RegExp(`${f}:`))
+    }
+  })
+
+  it('never lets rationale influence a decision', () => {
+    // Descriptive only. If an execution path ever read it back, a malformed
+    // or absent rationale could change behaviour.
+    const reads = BRANCH.match(/\brationale\b/g) || []
+    expect(reads.length, 'rationale should be written, not read').toBeLessThanOrEqual(2)
+    expect(BRANCH).not.toMatch(/if\s*\([^)]*rationale/)
+  })
+
+  it('writes a SHADOW proposal as terminal, with a long expiry', () => {
+    // A 'pending' row would look actionable in the approval queue AND be swept
+    // to 'expired' within the hour — deleting the forward record the shadow
+    // run exists to build.
+    expect(BRANCH).toMatch(/status:\s*isShadow\s*\?\s*"shadow"\s*:\s*"pending"/)
+    expect(BRANCH).toMatch(/isShadow[\s\S]{0,200}365 \* 86400000/)
+  })
+
+  it('a shadow run does not call the broker at all', () => {
+    // The chokepoint would refuse it anyway; not calling keeps a shadow run
+    // from touching the broker even for a rejected request.
+    expect(BRANCH).toMatch(/if \(isShadow\) \{ placed\+\+; continue; \}/)
+  })
+})
