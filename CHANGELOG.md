@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-02
 
 ### Added
+- **trading:** Migration 033 — a signal becomes a complete trade intent (`f6a83a5`)
 - **trading:** SHADOW mode — propose without being able to trade (`eb9b5e4`)
 - **trading:** Protective stops — opt-in, ratcheting, re-armed every session (`d621141`)
 - **trade:** Performance attribution — the alpha number, including when it is bad (`6ae6e52`)
