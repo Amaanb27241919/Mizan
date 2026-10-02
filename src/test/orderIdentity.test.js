@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { clientOrderId, isFractional, stopOrderFor, needsRearm, MAX_CLIENT_ORDER_ID } from '../../lib/trading/orderIdentity.js'
+import { clientOrderId, isFractional, stopOrderFor, needsRearm, stopReference, MAX_CLIENT_ORDER_ID } from '../../lib/trading/orderIdentity.js'
 
 describe('clientOrderId', () => {
   it('is DETERMINISTIC — the same signal always yields the same id', () => {
@@ -198,5 +198,91 @@ describe('idempotency wiring', () => {
     // closes the overlapping-cron duplicate-execution races.
     expect(SRC).toMatch(/botClaimLeaseThresholdIso/)
     expect(SRC).toMatch(/\.lt\("updated_at", claimLeaseThresholdIso\)/)
+  })
+})
+
+describe('stopReference — the ratchet', () => {
+  it('NEVER moves down: a falling price cannot lower the stop', () => {
+    // The rule the whole emulation rests on. Re-arming from the current price
+    // alone would widen the loss on exactly the day protection matters.
+    expect(stopReference({ entryPrice: 100, currentPrice: 80 })).toBe(100)
+    expect(stopReference({ entryPrice: 100, currentPrice: 80, priorHighWater: 130 })).toBe(130)
+  })
+
+  it('ratchets UP as the position gains', () => {
+    expect(stopReference({ entryPrice: 100, currentPrice: 140 })).toBe(140)
+  })
+
+  it('falls back to whatever price it does have', () => {
+    expect(stopReference({ currentPrice: 50 })).toBe(50)
+    expect(stopReference({ entryPrice: 50 })).toBe(50)
+    expect(stopReference({})).toBeNull()
+    expect(stopReference()).toBeNull()
+    expect(stopReference({ entryPrice: 0, currentPrice: -5 })).toBeNull()
+  })
+})
+
+describe('stopOrderFor — immediate-trigger guard', () => {
+  it('REFUSES a stop that would fire the instant it is accepted', () => {
+    // High-water 200, 5% trail -> stop 190, but the price is already 150. The
+    // position is BELOW its stop; placing it is a market dump on a possibly
+    // stale quote, so it refuses and lets a human look.
+    const r = stopOrderFor({ symbol: 'X', qty: 1, referencePrice: 200, stopPct: 5, livePrice: 150 })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('would_trigger_immediately')
+    expect(r.stopPrice).toBeCloseTo(190, 2)
+    expect(r.livePrice).toBe(150)
+  })
+
+  it('places normally when the stop sits below the live price', () => {
+    const r = stopOrderFor({ symbol: 'X', qty: 1, referencePrice: 200, stopPct: 5, livePrice: 199 })
+    expect(r.ok).toBe(true)
+    expect(Number(r.order.stop_price)).toBeCloseTo(190, 2)
+  })
+
+  it('still works when no live price is supplied', () => {
+    // The guard is opt-in; absence of a quote must not block arming.
+    expect(stopOrderFor({ symbol: 'X', qty: 1, referencePrice: 200, stopPct: 5 }).ok).toBe(true)
+  })
+})
+
+describe('stop-arming wiring', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  const FN = SRC.slice(SRC.indexOf('async function armProtectiveStops'),
+                       SRC.indexOf('async function armProtectiveStops') + 4200)
+
+  it('is OPT-IN — no param, no stops', () => {
+    // The live rank strategy was designed with rank-based exits only.
+    // Attaching a stop to it mid-flight would change the experiment while it
+    // is being measured.
+    expect(FN).toMatch(/protective_stop_pct/)
+    expect(FN).toMatch(/not opted in/)
+  })
+
+  it('arms BEFORE the cadence check, because DAY stops expire nightly', () => {
+    const arm = SRC.indexOf('await armProtectiveStops(strat, armCreds)')
+    const cadence = SRC.indexOf('const cadenceDays = Math.max(1, Number(strat.params?.rebalance_days)')
+    expect(arm).toBeGreaterThan(-1)
+    expect(cadence).toBeGreaterThan(-1)
+    expect(arm, 'arming must not sit behind the weekly cadence gate').toBeLessThan(cadence)
+  })
+
+  it('sends the EXACT held qty from the broker, never a recomputed one', () => {
+    expect(FN).toMatch(/qty:\s*pos\.qty/)
+  })
+
+  it('uses the ratchet rather than the raw current price', () => {
+    expect(FN).toMatch(/stopReference\(/)
+    expect(FN).toMatch(/entryPrice:\s*Number\(pos\.avg_entry_price\)/)
+  })
+
+  it('is bounded so it cannot starve the live strategy sharing this cron', () => {
+    expect(SRC).toMatch(/ARM_SYMBOL_CAP\s*=\s*\d+/)
+    expect(SRC).toMatch(/ARM_MS_BUDGET/)
+    expect(FN).toMatch(/Date\.now\(\) > deadline/)
+  })
+
+  it('treats a duplicate client_order_id as already-armed, not an error', () => {
+    expect(FN).toMatch(/client_order_id must be unique/)
   })
 })

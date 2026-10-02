@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **trade:** Performance attribution — the alpha number, including when it is bad (`6ae6e52`)
 
+### Fixed
+- **trading:** Idempotency — a retried order can no longer become two orders (`33d26f1`)
+
 ### Docs
 - Record migrations 030-032 and the first live paper rebalance (`db2b7b6`)
 

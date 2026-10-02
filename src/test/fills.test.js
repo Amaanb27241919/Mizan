@@ -252,7 +252,16 @@ describe('market data correctness', () => {
 
 describe('rank_rebalance safety properties', () => {
   const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
-  const BRANCH = SRC.slice(SRC.indexOf('strategy_type === "rank_rebalance"'), SRC.indexOf('strategy_type === "rank_rebalance"') + 6000)
+  // Sliced to the NEXT branch, not to a magic character count. A fixed 6000
+  // broke the moment the branch grew by ten lines, failing for a reason that
+  // had nothing to do with what it asserts.
+  const BRANCH = (() => {
+    const from = SRC.indexOf('strategy_type === "rank_rebalance"')
+    const to = SRC.indexOf('strategy_type === "dca"', from)
+    expect(from, 'rank_rebalance branch must exist').toBeGreaterThan(-1)
+    expect(to, 'dca branch marks the end of it').toBeGreaterThan(from)
+    return SRC.slice(from, to)
+  })()
 
   it('refuses any venue that is not paper', () => {
     // The branch is paper-only BY CONSTRUCTION, not by configuration. This is
