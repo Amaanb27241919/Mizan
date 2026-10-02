@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-01
 
 ### Added
+- **trade:** Equity curve, and the whole tab moves into the cockpit (`4d4496f`)
 - **trade:** Mīzan Trade Lab — the cockpit (`fa674ce`)
 - **db:** Migration 032 — a submitted-but-unfilled signal status (`e777031`)
 - **trading:** Fill reconciliation — pure core (`12ea956`)

@@ -7265,9 +7265,11 @@ function RailClock(){
   return<span style={{fontVariantNumeric:"tabular-nums"}}>{txt} ET</span>;
 }
 
-function RailCell({label,children,desk=false,grow=false,title}){
-  return<div className={`mz-rail-cell${desk?" mz-rail-desk":""}${grow?" mz-rail-grow":""}`} title={title||undefined}>
-    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,whiteSpace:"nowrap"}}>{label}</div>
+function RailCell({label,children,desk=false,grow=false,title,armed=false}){
+  return<div className={`mz-rail-cell${desk?" mz-rail-desk":""}${grow?" mz-rail-grow":""}${armed?" mz-rail-armed":""}`} title={title||undefined}>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:armed?T.textHi:T.muted,letterSpacing:"0.16em",fontWeight:600,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:T.s2}}>
+      {label}{armed&&<span style={{color:T.gold,letterSpacing:"0.1em"}}>· ARMED</span>}
+    </div>
     <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{children}</div>
   </div>;
 }
@@ -7292,7 +7294,15 @@ function Signed({v,pct=null,mask=(x=>x),dash="—"}){
  * as a smaller-looking truth — see src/lib/deskSummary.js for why that
  * distinction is the whole point of the module.
  */
-function StatusRail({session,summary,mask}){
+/**
+ * `armedVenue` marks WHICH desk an order would actually hit — "alpaca" for the
+ * paper account, "snaptrade" for the live brokerage, null when no ticket is
+ * open. Added after looking at Quick Trade: the ticket was set to LIVE while
+ * the biggest number on the rail was the PAPER balance, and nothing on screen
+ * connected the two. On a surface that can place a real order, "which desk am
+ * I on" must never be something you infer.
+ */
+function StatusRail({session,summary,mask,armedVenue=null}){
   const sess=session?.session||null;
   const dot=sess==="regular"?T.gain:session?.tradeable?T.gold:T.slate;
   const p=summary.paper,l=summary.live;
@@ -7305,7 +7315,8 @@ function StatusRail({session,summary,mask}){
       </span>
     </RailCell>
 
-    <RailCell label="PAPER · ALPACA" desk title={p?.accountNumber?`Paper account ${p.accountNumber}`:"Alpaca paper account"}>
+    <RailCell label="PAPER · ALPACA" desk armed={armedVenue==="alpaca"}
+      title={p?.accountNumber?`Paper account ${p.accountNumber}`:"Alpaca paper account"}>
       {p?<span>{mask(f$(p.equity))} <Signed v={p.change} pct={p.changePct} mask={mask}/></span>
         :<span style={{color:T.muted}}>not connected</span>}
     </RailCell>
@@ -7313,7 +7324,8 @@ function StatusRail({session,summary,mask}){
       {p?mask(f$(p.cash)):<span style={{color:T.muted}}>—</span>}
     </RailCell>
 
-    <RailCell label="LIVE · BROKERAGE" title="Your connected brokerage accounts.">
+    <RailCell label="LIVE · BROKERAGE" armed={armedVenue==="snaptrade"}
+      title="Your connected brokerage accounts.">
       {l.equity>0?mask(f$(l.equity)):<span style={{color:T.muted}}>none linked</span>}
     </RailCell>
     <RailCell label="LIVE DAY"
@@ -7364,6 +7376,9 @@ function PositionTape({rows,mask,emptyNote}){
   </table></div>;
 }
 
+/** A list, or an empty one — never a truthy non-array that explodes on .map. */
+const asArray=v=>Array.isArray(v)?v:(Array.isArray(v?.positions)?v.positions:Array.isArray(v?.orders)?v.orders:[]);
+
 /** Reads the paper desk. Null while loading; null forever if Alpaca is not
  *  configured or the user is not on the trading allowlist — both of which are
  *  ordinary states that must render as "not connected", never as an error. */
@@ -7386,9 +7401,16 @@ function useAlpacaDesk(enabled){
         apiFetch("/api/alpaca/orders?status=open"),
       ]);
       if(!a.ok){setState("unavailable");setAccount(null);return;}
-      setAccount(await a.json().catch(()=>null));
-      setPositions(pos.ok?((await pos.json().catch(()=>[]))||[]):[]);
-      setOrders(ord.ok?((await ord.json().catch(()=>[]))||[]):[]);
+      const acct=await a.json().catch(()=>null);
+      setAccount(acct&&typeof acct==="object"&&!Array.isArray(acct)?acct:null);
+      // Array.isArray, NOT `|| []`. A truthy non-array — an error object served
+      // with a 200, which is exactly what an upstream hiccup looks like —
+      // passes `||` untouched and then explodes on .map, taking the whole
+      // Trade tab to the error boundary. That is not hypothetical: it
+      // white-screened this surface the first time a response came back as {}.
+      // Seventh time this codebase has hit this shape of bug.
+      setPositions(asArray(pos.ok?await pos.json().catch(()=>null):null));
+      setOrders(asArray(ord.ok?await ord.json().catch(()=>null):null));
       setState("ready");
     }catch{setState("unavailable");}
   },[enabled]);
@@ -7553,7 +7575,7 @@ function TradeDesk({desk,onGoSignals,demoMode}){
         const r=await apiFetch("/api/bot/signals");
         if(!r.ok)return;
         const d=await r.json();
-        if(!cancelled)setPending((d.signals||[]).filter(x=>x.status==="pending").length);
+        if(!cancelled)setPending(asArray(d?.signals).filter(x=>x?.status==="pending").length);
       }catch{/* the banner simply does not appear */}
     })();
     return()=>{cancelled=true;};
@@ -7561,7 +7583,7 @@ function TradeDesk({desk,onGoSignals,demoMode}){
 
   // Alpaca hands back strings for every numeric. Parsed once, here, so the
   // tape never has to think about it.
-  const paperRows=useMemo(()=>(desk.positions||[]).map(p=>{
+  const paperRows=useMemo(()=>asArray(desk.positions).map(p=>{
     const n=v=>(v===null||v===undefined||v===""?null:Number(v));
     const qty=n(p.qty),last=n(p.current_price),avg=n(p.avg_entry_price);
     return{
@@ -7574,7 +7596,7 @@ function TradeDesk({desk,onGoSignals,demoMode}){
     };
   }),[desk.positions]);
 
-  const openOrders=desk.orders||[];
+  const openOrders=asArray(desk.orders);
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s6}}>
       {/* Anything waiting on a human comes first. */}
@@ -7884,7 +7906,8 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     <div className="mz-cockpit" style={{padding:0}}>
       <StatusRail session={session}
         summary={deskSummary({paper:deskData.account,accounts,live,mapPosition})}
-        mask={maskValue}/>
+        mask={maskValue}
+        armedVenue={sub==="order"?venue:null}/>
       <div style={{padding:T.s5}}>
         {sub==="desk"&&<TradeDesk desk={deskData} onGoSignals={()=>setSub("signals")} demoMode={demoMode}/>}
     {/* Persistent reference: how brokerage connections map to trade features, and the
@@ -13988,6 +14011,13 @@ export default function Mizan(){
          inside them, so the eye reads two desks rather than six numbers. */
       .mz-rail-desk{border-right:2px solid var(--mz-borderHi);}
       .mz-rail-grow{flex:1 1 auto;}
+      /* The desk an order would actually hit. Gold, because this is the same
+         "pay attention" register the app uses for warnings — not green, which
+         would read as approval of the choice. */
+      .mz-rail-armed{
+        background:linear-gradient(to bottom, rgba(184,132,42,0.16), transparent);
+        box-shadow:inset 0 2px 0 0 var(--mz-armed, #b8842a);
+      }
       @media (max-width:720px){
         .mz-rail-cell{flex:1 1 50%; border-right:1px solid var(--mz-border);}
         .mz-rail-desk{flex:1 1 100%; border-right:0; border-bottom:2px solid var(--mz-borderHi);}

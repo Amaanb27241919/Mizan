@@ -231,6 +231,54 @@ test.describe("Trade Lab cockpit", () => {
     await expect(page.locator(".mz-cockpit")).not.toContainText("NaN");
   });
 
+  test("survives malformed Alpaca responses without white-screening", async ({ page }) => {
+    // THE BUG THIS EXISTS FOR. `(positions || [])` does not catch a truthy
+    // NON-array — an error object served with a 200 is exactly that shape —
+    // so .map threw and the whole Trade tab fell to the error boundary.
+    // Every other spec here passed throughout, because their fixtures were
+    // always well-formed arrays. A fixture that is too kind tests nothing.
+    await gotoLab(page, { fixtures: {
+      "/api/alpaca/positions": { error: "upstream hiccup" },   // object, not array
+      "/api/alpaca/orders": { message: "nope" },
+      "/api/bot/signals": { signals: "not-an-array" },
+      "/api/alpaca/account": [1, 2, 3],                        // array, not object
+    } });
+    await expect(page.locator(".mz-cockpit")).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/SOMETHING WENT WRONG/i);
+    await expect(page.locator(".mz-cockpit")).not.toContainText("NaN");
+    await expect(page.locator(".mz-cockpit")).not.toContainText("[object Object]");
+  });
+
+  test("renders with NO alpaca fixtures at all", async ({ page }) => {
+    // The default fixture layer answers an unstubbed /api/** with `{}`. That
+    // is the honest worst case for a user whose Alpaca is not configured, and
+    // it is what actually produced the white screen.
+    await signedIn(page, {
+      fixtures: { "/api/user/features": { trading_bot: true, full_auto: false, is_root: false,
+        trading_bot_consented: true, needs_name: false, first_name: "T", last_name: "U" } },
+      storage: { mizan_nav: "trade" },
+    });
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "Desk", exact: true })).toBeVisible();
+    await expect(page.locator(".mz-cockpit")).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/SOMETHING WENT WRONG/i);
+  });
+
+  test("names the desk an order would actually hit", async ({ page }) => {
+    // The ticket defaults to LIVE · SnapTrade while the rail's biggest number
+    // is the PAPER balance. Nothing connected the two, so "which desk am I
+    // on" was something you had to infer on a surface that can place a real
+    // order. The armed marker is only shown on the order ticket.
+    await gotoLab(page);
+    await expect(page.locator(".mz-rail-armed")).toHaveCount(0);   // not on the Desk
+
+    await page.getByRole("button", { name: "Quick Trade", exact: true }).click();
+    await expect(page.locator(".mz-rail-armed")).toHaveCount(1);
+    await expect(page.locator(".mz-rail-armed")).toContainText("ARMED");
+    // Default venue is the LIVE brokerage, so that is what must be marked.
+    await expect(page.locator(".mz-rail-armed")).toContainText("LIVE");
+  });
+
   test("no overflow at 320px", async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 720 });
     await gotoLab(page);
