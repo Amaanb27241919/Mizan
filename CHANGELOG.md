@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-02
 
 ### Added
+- **ai:** Wire the research panel — a committee that can only observe (`e81dbef`)
 - **ai:** The provider interface — two analysts, one shape, failure as data (`22b56d9`)
 - **ai:** The Market Packet — identical evidence, provably (`8ca1510`)
 - **ai:** The model-output contract — reject, never repair (`698b2fc`)
