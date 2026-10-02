@@ -137,12 +137,12 @@ test.describe("Trade Lab cockpit", () => {
     const banner = page.getByRole("button", { name: /SIGNAL AWAITING YOUR APPROVAL/i });
     await expect(banner).toBeVisible();
     await banner.click();
-    // The banner exists so a short approval window is not buried behind a tab.
-    await expect(page.getByRole("button", { name: "Signals", exact: true }))
-      .toHaveAttribute("aria-selected", /true/).catch(async () => {
-        // TabBar may not use aria-selected; fall back to the panel appearing.
-        await expect(page.locator(".mz-cockpit")).toHaveCount(0);
-      });
+    // Asserted by what actually LEAVES the screen. The first version of this
+    // used a try/catch with a fallback assertion, which is a test that cannot
+    // fail honestly — and its fallback (`.mz-cockpit` count 0) became
+    // permanently false once the cockpit wrapped every sub-tab.
+    await expect(page.getByText("EQUITY CURVE")).toHaveCount(0);
+    await expect(banner).toHaveCount(0);
   });
 
   test("weight bars are visibly different lengths AND visible at all", async ({ page }) => {
@@ -165,6 +165,25 @@ test.describe("Trade Lab cockpit", () => {
     const lum = c => { const m = c.match(/\d+/g).map(Number); return 0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]; };
     expect(Math.abs(lum(fill) - lum(track)),
       `fill ${fill} must stand off track ${track}`).toBeGreaterThan(60);
+  });
+
+  test("states the desk's value in exactly ONE place", async ({ page }) => {
+    // The rail owns "what it is worth" (from /account); the equity chart owns
+    // "how it moved" (from /portfolio/history). They are different endpoints
+    // and will drift, so only one may state a balance. They once rendered
+    // $101,842.17 and $104,202.02 side by side.
+    await gotoLab(page, { fixtures: {
+      "/api/alpaca/portfolio-history": {
+        timestamp: [1, 2, 3], equity: [100000, 100500, 104202.02],
+        baseValue: 100000, timeframe: "1D", range: "1M",
+      },
+    } });
+    const chart = page.locator("section", { has: page.locator("svg[aria-label*='equity' i]") });
+    await expect(chart).toBeVisible();
+    // The curve's own last value must NOT be presented as a balance.
+    await expect(chart).not.toContainText("$104,202.02");
+    // It states the change instead.
+    await expect(chart).toContainText("$4,202.02");
   });
 
   test("never shows margin buying power", async ({ page }) => {

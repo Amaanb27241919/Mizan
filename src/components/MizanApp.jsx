@@ -15,6 +15,7 @@ import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHist
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { deskSummary } from "../lib/deskSummary.js";
+import { toPoints, curvePath, curveChange, curveCoverage, pointAtX } from "../lib/equityCurve.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
 import { useEthicalOverlay, ethicalFlag } from "../lib/ethicalOverlay.js";
 import Budgeting from "./Budgeting.jsx";
@@ -7396,6 +7397,142 @@ function useAlpacaDesk(enabled){
 }
 
 /**
+ * The paper desk's equity curve.
+ *
+ * Inline SVG rather than a charting library: no new dependency (CLAUDE.md §8),
+ * and the geometry is already computed by src/lib/equityCurve.js, which is
+ * where the ways a chart can lie are guarded — holes plotted as zero, a flat
+ * series dividing by a zero range, parallel arrays zipped out of step.
+ *
+ * It plots equity and nothing else. No projection, no benchmark the user did
+ * not ask for, no annotation suggesting an action.
+ */
+const CURVE_RANGES=[["1D","1D"],["1W","1W"],["1M","1M"],["3M","3M"],["1Y","1Y"]];
+const CURVE_W=600,CURVE_H=150;
+
+function EquityChart({demoMode}){
+  const{mask}=useHideValues();
+  const[range,setRange]=useState("1M");
+  const[raw,setRaw]=useState(null);
+  const[state,setState]=useState(demoMode?"idle":"loading");
+  const[cursor,setCursor]=useState(null);
+
+  useEffect(()=>{
+    if(demoMode){setState("idle");return;}
+    let cancelled=false;
+    setState(s=>s==="ready"?s:"loading");
+    (async()=>{
+      try{
+        const r=await apiFetch(`/api/alpaca/portfolio-history?range=${encodeURIComponent(range)}`);
+        if(!r.ok){if(!cancelled)setState("unavailable");return;}
+        const d=await r.json();
+        if(!cancelled){setRaw(d);setState("ready");}
+      }catch{if(!cancelled)setState("unavailable");}
+    })();
+    return()=>{cancelled=true;};
+  },[range,demoMode]);
+
+  const points=useMemo(()=>toPoints(raw),[raw]);
+  const{line,area,xy}=useMemo(()=>curvePath(points,{w:CURVE_W,h:CURVE_H}),[points]);
+  const change=useMemo(()=>curveChange(points),[points]);
+  const coverage=useMemo(()=>curveCoverage(raw,points),[raw,points]);
+
+  const up=change.change!=null&&change.change>=0;
+  const stroke=change.change==null?T.slate:up?T.gain:T.loss;
+  const hovered=cursor?pointAtX(xy,cursor,CURVE_W):null;
+
+  const onMove=e=>{
+    const r=e.currentTarget.getBoundingClientRect();
+    if(!r.width)return;
+    setCursor(((e.clientX-r.left)/r.width)*CURVE_W);
+  };
+
+  return<section>
+    <SectionHead label="Equity curve"
+      hint="What the paper desk has been worth over time. The change is measured from the start of the window you pick — not from the account's opening balance, which would answer a different question."
+      right={<div className="mz-chip-row" style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        {CURVE_RANGES.map(([id,label])=><button key={id} onClick={()=>setRange(id)} style={{
+          fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.1em",fontWeight:600,
+          padding:`4px ${T.s2}`,borderRadius:T.rSm,cursor:"pointer",
+          background:range===id?`${T.textHi}1a`:"transparent",
+          border:`1px solid ${range===id?T.borderHi:T.border}`,
+          color:range===id?T.textHi:T.muted,
+        }}>{label}</button>)}
+      </div>}
+      style={{marginBottom:T.s3}}/>
+
+    {state==="loading"&&<div style={{height:CURVE_H,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>LOADING…</div>}
+    {state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>Equity history is not available for this desk.</div>}
+    {state==="idle"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No equity history loaded.</div>}
+
+    {state==="ready"&&(coverage.empty
+      ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+         No equity recorded in this window yet.
+       </div>
+      :<div>
+        {/* The headline is the CHANGE, not the balance.
+            It showed the balance first, and the rail showed the balance too —
+            sourced from /account while this came from the last point of
+            /portfolio/history. Two numbers on one screen, both claiming to be
+            the paper desk's value, differing by whatever lag sat between two
+            endpoints. Caught by looking at a screenshot where they read
+            $101,842.17 and $104,202.02 side by side.
+            Now the rail owns "what it is worth" and the chart owns "how it
+            moved", which is the question a curve is actually answering. On
+            hover it shows the value AT THAT MOMENT, a third, different
+            question, and says so with the timestamp beside it. */}
+        <div style={{display:"flex",alignItems:"baseline",gap:T.s3,flexWrap:"wrap",marginBottom:T.s2}}>
+          {hovered
+            ?<>
+              <span style={{fontFamily:FU,fontSize:"var(--fs-3xl)",color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.02em"}}>
+                {mask(f$(hovered.v))}
+              </span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em"}}>
+                AT {new Date(hovered.t).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}).toUpperCase()}
+              </span>
+            </>
+            :<>
+              <span style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.02em",
+                color:change.change==null?T.muted:change.change>0?T.gain:change.change<0?T.loss:T.muted}}>
+                {change.change==null?"—":`${change.change>0?"+":change.change<0?"−":""}${mask(f$(change.change))}`}
+              </span>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>
+                {change.changePct!=null?fp(change.changePct):""} OVER {range}
+              </span>
+            </>}
+          <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",marginLeft:"auto"}}>
+            {points.length} POINTS
+          </span>
+        </div>
+
+        <svg viewBox={`0 0 ${CURVE_W} ${CURVE_H}`} preserveAspectRatio="none"
+          onMouseMove={onMove} onMouseLeave={()=>setCursor(null)}
+          style={{width:"100%",height:CURVE_H,display:"block",cursor:"crosshair",overflow:"visible"}}
+          role="img" aria-label={`Paper account equity over ${range}`}>
+          <defs><linearGradient id="mzEqFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={stroke} stopOpacity="0.26"/>
+            <stop offset="100%" stopColor={stroke} stopOpacity="0"/>
+          </linearGradient></defs>
+          <path d={area} fill="url(#mzEqFill)"/>
+          <path d={line} fill="none" stroke={stroke} strokeWidth="1.75"
+            vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round"/>
+          {hovered&&<g>
+            <line x1={hovered.x} y1="0" x2={hovered.x} y2={CURVE_H} stroke={T.borderHi} strokeWidth="1" vectorEffect="non-scaling-stroke"/>
+            <circle cx={hovered.x} cy={hovered.y} r="3.5" fill={stroke} stroke={T.bg} strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>
+          </g>}
+        </svg>
+
+        {/* A 1D range asked for before the open returns a full timestamp set
+            with null equity against nearly all of it. Saying so beats drawing
+            two points and calling it a day. */}
+        {!coverage.complete&&coverage.have>0&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginTop:T.s2}}>
+          {coverage.have} OF {coverage.total} INTERVALS RECORDED
+        </div>}
+      </div>)}
+  </section>;
+}
+
+/**
  * The Desk — the Trade Lab's landing view.
  *
  * Answers, in order: is the market open, what am I worth on each desk, is
@@ -7404,9 +7541,8 @@ function useAlpacaDesk(enabled){
  * an approval window is short and a view you have to go looking for is a view
  * that expires.
  */
-function TradeDesk({session,accounts,live,mapPosition,onNav,onGoSignals,demoMode}){
+function TradeDesk({desk,onGoSignals,demoMode}){
   const{mask}=useHideValues();
-  const desk=useAlpacaDesk(!demoMode);
   const[pending,setPending]=useState(null);
 
   useEffect(()=>{
@@ -7422,8 +7558,6 @@ function TradeDesk({session,accounts,live,mapPosition,onNav,onGoSignals,demoMode
     })();
     return()=>{cancelled=true;};
   },[demoMode]);
-
-  const summary=useMemo(()=>deskSummary({paper:desk.account,accounts,live,mapPosition}),[desk.account,accounts,live,mapPosition]);
 
   // Alpaca hands back strings for every numeric. Parsed once, here, so the
   // tape never has to think about it.
@@ -7442,10 +7576,7 @@ function TradeDesk({session,accounts,live,mapPosition,onNav,onGoSignals,demoMode
 
   const openOrders=desk.orders||[];
 
-  return<div className="mz-cockpit" style={{display:"flex",flexDirection:"column"}}>
-    <StatusRail session={session} summary={summary} mask={mask}/>
-
-    <div style={{display:"flex",flexDirection:"column",gap:T.s6,padding:T.s5}}>
+  return<div style={{display:"flex",flexDirection:"column",gap:T.s6}}>
       {/* Anything waiting on a human comes first. */}
       {pending>0&&<button onClick={onGoSignals} className="mz-tap" style={{
         display:"flex",alignItems:"center",gap:T.s3,textAlign:"left",width:"100%",
@@ -7458,6 +7589,8 @@ function TradeDesk({session,accounts,live,mapPosition,onNav,onGoSignals,demoMode
         </span>
         <span style={{marginLeft:"auto",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>REVIEW →</span>
       </button>}
+
+      <EquityChart demoMode={demoMode}/>
 
       {/* Positions. */}
       <section>
@@ -7523,7 +7656,6 @@ function TradeDesk({session,accounts,live,mapPosition,onNav,onGoSignals,demoMode
           </div>)}
         </div>
       </section>
-    </div>
   </div>;
 }
 
@@ -7538,6 +7670,12 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   // localStorage.mizan_nav, ?tab= deep links, the nav_usage counters behind
   // track="trade" and every data-tour hook are keyed on them.
   const[sub,setSub]=useState("desk");
+  // The desk is read ONCE here, not per sub-tab: the status rail is a
+  // tab-level instrument and three sub-tabs each fetching their own copy of
+  // the same account would be three requests against a shared ~200/min
+  // Alpaca budget for one number.
+  const{mask:maskValue}=useHideValues();
+  const deskData=useAlpacaDesk(!demoMode&&isAdmin);
   // Holdings (with live prices merged) — needed by Screener + Rebalance. Same
   // derivation Portfolio uses, kept self-contained here.
   // The `merged` holdings IIFE lived here. Removed 2026-10-01: its only
@@ -7740,13 +7878,23 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     {/* Screener / Rebalance / Backtest are NOT duplicated here — they live in
         the Portfolio tab (one home each). Trade stays focused on the bot. */}
     <TabBar track="trade" tabs={[["desk","Desk"],["signals","Signals"],["strategies","Strategies"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
-    {sub==="desk"&&<TradeDesk session={session} accounts={accounts} live={live} mapPosition={mapPosition}
-      onNav={onNav} onGoSignals={()=>setSub("signals")} demoMode={demoMode}/>}
+    {/* ONE cockpit around every sub-tab, with the rail on top of all of them.
+        The alternative — a dark Desk sitting beside two light pages — would
+        make the dark read as an accident rather than as a room. */}
+    <div className="mz-cockpit" style={{padding:0}}>
+      <StatusRail session={session}
+        summary={deskSummary({paper:deskData.account,accounts,live,mapPosition})}
+        mask={maskValue}/>
+      <div style={{padding:T.s5}}>
+        {sub==="desk"&&<TradeDesk desk={deskData} onGoSignals={()=>setSub("signals")} demoMode={demoMode}/>}
     {/* Persistent reference: how brokerage connections map to trade features, and the
         reconnect-with-trade-permission requirement. Collapsed by default. */}
     {sub!=="desk"&&<TradeConnectionsPanel onConnectTrade={onConnectTrade}/>}
     {/* Bot panel, split into Strategies + Signals views (same component, shared state). */}
-    {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
+        {/* The bot panel is UNTOUCHED. Its T.* tokens resolve dark by
+            inheritance, which is the whole reason the cockpit re-declares
+            variables rather than hardcoding a palette. */}
+        {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
 
     {/* Quick Trade (ad-hoc order ticket) lives behind a Coming Soon banner for non-admin users. */}
     {/* The non-admin Order Ticket placeholder lived here. Removed 2026-10-01:
@@ -7908,6 +8056,8 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         </div>
       </BentoTile>
     </div>}
+      </div>
+    </div>
 
   </div>;
 }
