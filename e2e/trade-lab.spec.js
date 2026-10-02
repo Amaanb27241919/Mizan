@@ -337,6 +337,48 @@ test.describe("Trade Lab cockpit", () => {
     await expect(page.locator(".mz-cockpit")).not.toContainText(/[+\u2212-]?\d+\.\d{2}\s*pp/);
   });
 
+  test("AI committee shows each analyst separately and names disagreement", async ({ page }) => {
+    // The proposal's §23 in one line: never hide disagreement behind a single
+    // AI recommendation. BUY-vs-SELL is a contradiction; BUY-vs-HOLD is a
+    // difference of conviction. They must not render identically.
+    const per = (p, a, c) => ({ provider: p, model: p, action: a, confidence: c, risk_flags: [] });
+    await gotoLab(page, { fixtures: { "/api/ai/research": {
+      providers: [{ provider: "anthropic", model: "c", available: true },
+                  { provider: "google", model: "g", available: true }],
+      configured: 2, required: 2,
+      rows: [
+        { id: "1", ticker: "MU", at: "2026-10-02T13:35:00Z", price: 100, packet_hash: "abc123", missing: [],
+          ensemble: { ok: true, consensus: "HOLD", unanimous: false, opposed: true,
+                      per_model: [per("anthropic", "BUY", 0.64), per("google", "SELL", 0.58)] } },
+        { id: "2", ticker: "TER", at: "2026-10-02T13:35:00Z", price: 100, packet_hash: "abc123", missing: [],
+          ensemble: { ok: true, consensus: "HOLD", unanimous: false, opposed: false,
+                      per_model: [per("anthropic", "BUY", 0.70), per("google", "HOLD", 0.45)] } },
+      ],
+    } } });
+    await page.getByRole("button", { name: "AI Committee", exact: true }).click();
+    const t = page.locator(".mz-cockpit");
+    // Each analyst is its own column, by name.
+    await expect(t).toContainText("ANTHROPIC");
+    await expect(t).toContainText("GOOGLE");
+    // Contradiction and mere difference are labelled differently.
+    await expect(t).toContainText("OPPOSED");
+    await expect(t).toContainText("SPLIT");
+  });
+
+  test("says how many analysts are missing, rather than showing fewer quietly", async ({ page }) => {
+    // One model is not a committee. A panel running short must say so.
+    await gotoLab(page, { fixtures: { "/api/ai/research": {
+      providers: [{ provider: "anthropic", model: "c", available: true },
+                  { provider: "google", model: "g", available: false }],
+      configured: 1, required: 2, rows: [],
+    } } });
+    await page.getByRole("button", { name: "AI Committee", exact: true }).click();
+    const t = page.locator(".mz-cockpit");
+    await expect(t).toContainText("1 OF 2 ANALYSTS CONFIGURED");
+    await expect(t).toContainText(/one model is not a committee/i);
+    await expect(t).toContainText(/not configured: google/i);
+  });
+
   test("no overflow at 320px", async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 720 });
     await gotoLab(page);

@@ -7556,6 +7556,129 @@ function EquityChart({demoMode}){
 }
 
 /**
+ * AI Committee — each analyst, separately.
+ *
+ * ⚠️ OWNER-ONLY (root). The compliance verdict governing this output is in
+ * lib/ai/signalSchema.mjs: T2, permissible only because there is one user and
+ * that user is the operator.
+ *
+ * §23 is the design brief in one line — "never hide disagreement behind a
+ * single AI recommendation". So every model's verdict is a column, the
+ * consensus is a row BESIDE them rather than a replacement for them, and a
+ * panel that could not agree says so instead of rendering a tidier number.
+ *
+ * It also has to be honest before any data exists: a panel with one provider
+ * configured is not a committee, and the empty state says which analysts are
+ * missing rather than quietly showing fewer than the experiment claims.
+ */
+const ACTION_TONE = { BUY: "gain", SELL: "loss", HOLD: "muted", ABSTAIN: "slate", INSUFFICIENT_DATA: "slate" };
+
+function AiCommittee({demoMode}){
+  const{mask}=useHideValues();
+  const[data,setData]=useState(null);
+  const[state,setState]=useState(demoMode?"idle":"loading");
+
+  useEffect(()=>{
+    if(demoMode){setState("idle");return;}
+    let cancelled=false;
+    (async()=>{
+      try{
+        const r=await apiFetch("/api/ai/research?limit=60");
+        if(!r.ok){if(!cancelled)setState(r.status===403?"forbidden":"unavailable");return;}
+        const d=await r.json();
+        if(!cancelled){setData(d);setState("ready");}
+      }catch{if(!cancelled)setState("unavailable");}
+    })();
+    return()=>{cancelled=true;};
+  },[demoMode]);
+
+  const tone=a=>({gain:T.gain,loss:T.loss,muted:T.muted,slate:T.slate}[ACTION_TONE[a]||"slate"]);
+  const rows=Array.isArray(data?.rows)?data.rows:[];
+  const providers=Array.isArray(data?.providers)?data.providers:[];
+  const missing=providers.filter(p=>!p.available);
+
+  return<section>
+    <SectionHead label="AI committee"
+      hint="Each analyst's own verdict, side by side. They see identical evidence and never see each other's answers — the disagreement is the measurement, so it is never averaged away."
+      right={state==="ready"&&<Tag label={`${data.configured}/${data.required} ANALYSTS`}
+        color={data.configured>=data.required?T.gain:T.gold}/>}
+      style={{marginBottom:T.s3}}/>
+
+    {state==="loading"&&<div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>LOADING…</div>}
+    {state==="forbidden"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+      This surface is owner-only.
+    </div>}
+    {state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+      The research record is not available.
+    </div>}
+    {state==="idle"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+      Demo mode shows no research record.
+    </div>}
+
+    {state==="ready"&&<>
+      {/* Honest before there is data: which analysts are missing, by name. */}
+      {missing.length>0&&<div style={{padding:T.s4,marginBottom:T.s4,borderRadius:T.rMd,
+        background:`${T.gold}14`,border:`1px solid ${T.gold}44`}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.14em",color:T.gold,fontWeight:600,marginBottom:4}}>
+          {data.configured} OF {data.required} ANALYSTS CONFIGURED
+        </div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
+          Not configured: {missing.map(p=>p.provider).join(", ")}. A panel needs at least two —
+          one model is not a committee, and recording it as one would make the whole record misleading.
+        </div>
+      </div>}
+
+      {rows.length===0
+        ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd,lineHeight:1.6}}>
+           No rounds recorded yet. The panel runs during market hours and writes one round per
+           holding per day. Nothing it produces can place an order.
+         </div>
+        :<div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
+          <thead><tr>
+            <th style={{fontSize:"var(--fs-2xs)"}}>SYMBOL</th>
+            {providers.map(p=><th key={p.provider} style={{fontSize:"var(--fs-2xs)"}}>{p.provider.toUpperCase()}</th>)}
+            <th style={{fontSize:"var(--fs-2xs)"}}>CONSENSUS</th>
+            <th style={{fontSize:"var(--fs-2xs)"}}>EVIDENCE</th>
+          </tr></thead>
+          <tbody>{rows.map(r=>{
+            const e=r.ensemble||{};
+            const per=Array.isArray(e.per_model)?e.per_model:[];
+            return<tr key={r.id}>
+              <td style={{color:T.textHi,fontWeight:600}}>{r.ticker}</td>
+              {providers.map(p=>{
+                const m=per.find(x=>x.provider===p.provider);
+                if(!m)return<td key={p.provider} style={{color:T.muted}}>—</td>;
+                return<td key={p.provider} style={{color:tone(m.action)}}>
+                  {m.action}
+                  {m.confidence!=null&&<span style={{color:T.muted,fontWeight:400}}> {Math.round(m.confidence*100)}</span>}
+                </td>;
+              })}
+              <td>
+                {/* The consensus sits BESIDE the columns, never instead of
+                    them — and a panel that could not agree says so. */}
+                {e.ok
+                  ?<span style={{color:tone(e.consensus),fontWeight:600}}>
+                     {e.consensus}
+                     {e.opposed&&<span style={{color:T.loss,fontWeight:400}}> · OPPOSED</span>}
+                     {!e.unanimous&&!e.opposed&&<span style={{color:T.gold,fontWeight:400}}> · SPLIT</span>}
+                   </span>
+                  :<span style={{color:T.muted}}>no view · {String(e.code||"").replace(/_/g," ")}</span>}
+              </td>
+              <td style={{color:T.muted}}>
+                {/* What the packet could NOT see. A verdict formed without
+                    fundamentals is a different verdict, and hiding that would
+                    make the record look stronger than it is. */}
+                {r.missing?.length?`−${r.missing.length}`:"full"}
+                <span style={{opacity:.6}}> · {String(r.packet_hash||"").slice(0,6)}</span>
+              </td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+    </>}
+  </section>;
+}
+
+/**
  * Performance — the strategy against its benchmark.
  *
  * The Trade Lab proposal is explicit (§16, §23): state the alpha even when it
@@ -8020,7 +8143,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         Command Center; Performance is added now because the strategy is live
         and the alpha question is unanswered. The three original ids
         (signals/strategies/order) are UNCHANGED for nav_usage continuity. */}
-    <TabBar track="trade" tabs={[["desk","Command Center"],["signals","Signals"],["strategies","Strategies"],["performance","Performance"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    <TabBar track="trade" tabs={[["desk","Command Center"],["signals","Signals"],["strategies","Strategies"],["performance","Performance"],["committee","AI Committee"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
     {/* ONE cockpit around every sub-tab, with the rail on top of all of them.
         The alternative — a dark Desk sitting beside two light pages — would
         make the dark read as an accident rather than as a room. */}
@@ -8032,6 +8155,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
       <div style={{padding:T.s5}}>
         {sub==="desk"&&<TradeDesk desk={deskData} onGoSignals={()=>setSub("signals")} demoMode={demoMode}/>}
         {sub==="performance"&&<PerformancePanelLab demoMode={demoMode}/>}
+        {sub==="committee"&&<AiCommittee demoMode={demoMode}/>}
     {/* Persistent reference: how brokerage connections map to trade features, and the
         reconnect-with-trade-permission requirement. Collapsed by default. */}
     {/* Only where a broker connection is the thing you might need to fix.
