@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-02
 
 ### Added
+- **trade:** AI Committee surface — disagreement is the measurement (`f1ed500`)
 - **ai:** Attribution scoring — and a null-fuzz that found 9 latent crashes (`60c4cca`)
 - **ai:** Feed the packet fundamentals and news (`fb42b5a`)
 - **ai:** Wire the research panel — a committee that can only observe (`e81dbef`)

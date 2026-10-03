@@ -11764,8 +11764,19 @@ function Finances({onBankBalanceChange,demoMode=false,onNav,nicknames={},onSetNi
             borderRadius:T.rMd,
             position:"relative",
           }}>
-            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>{(a.subtype||a.type||"").toUpperCase()}{a.mask?` · ····${a.mask}`:""}</div>
-            {isInv&&<div style={{position:"absolute",top:T.s2,right:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.1em",fontWeight:600,padding:`1px ${T.s1}`,border:`1px solid ${T.gold}40`,borderRadius:T.rSm}}>INVESTMENT</div>}
+            {/* Eyebrow and badge share ONE flex row. The badge used to be
+                position:absolute top-right with no space reserved for it, so
+                a long eyebrow ("BROKERAGE · ····6473") ran straight underneath
+                and the two painted on top of each other. Reserving a fixed
+                paddingRight would only move the collision to a different
+                string length; putting the badge in flow makes the overlap
+                structurally impossible. The eyebrow truncates instead, which
+                is the right thing to lose — the last four digits matter less
+                than knowing the card is legible. */}
+            <div className="mz-acct-head" style={{display:"flex",alignItems:"center",gap:T.s2,marginBottom:T.s1,minWidth:0}}>
+              <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(a.subtype||a.type||"").toUpperCase()}{a.mask?` · ····${a.mask}`:""}</span>
+              {isInv&&<span style={{marginLeft:"auto",flexShrink:0,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.1em",fontWeight:600,padding:`1px ${T.s1}`,border:`1px solid ${T.gold}40`,borderRadius:T.rSm,whiteSpace:"nowrap"}}>INVESTMENT</span>}
+            </div>
             {/* Display name — nickname wins when set, broker default
                 becomes the smaller subtitle so users can still tell which
                 physical account this is. */}
