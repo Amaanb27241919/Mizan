@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-03
+
+### Fixed
+- **finances:** Account card painted its badge over its own eyebrow (`a80ad03`)
+
 ## 2026-10-02
 
 ### Added

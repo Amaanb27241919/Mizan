@@ -312,6 +312,12 @@ test.describe("information architecture", () => {
   // of its five unrelated contents. Flattened to one strip; nothing was removed
   // (21 destinations before and after), it just stopped being nested.
   test("no navigation is more than two levels deep", async ({ page }) => {
+    // This walks EVERY tab and EVERY sub-tab, clicking each and waiting for a
+    // render — roughly 25 destinations. It sat just under the 30s default and
+    // began timing out intermittently once the suite grew, failing for load
+    // rather than for anything it tests. A slow test that flakes gets muted,
+    // so it gets the time it genuinely needs instead.
+    test.setTimeout(120_000);
     await signedIn(page, { storage: { mizan_demo: "1" } });
     await page.goto("/");
     await appReady(page);

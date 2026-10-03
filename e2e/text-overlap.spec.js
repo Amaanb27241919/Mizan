@@ -85,14 +85,30 @@ const OVERLAP_PROBE = () => {
   return hits;
 };
 
+// Desktop project only. This spec sets its OWN viewport for each width, so
+// running it under all three Playwright projects would test 320px three times
+// for no extra signal — and it measurably slowed the suite enough to push the
+// slowest walk-every-tab specs past their timeouts when first added.
 for (const width of [1440, 768, 320]) {
   test(`account cards: no text paints over text at ${width}px`, async ({ page }) => {
+    test.skip(test.info().project.name !== "desktop", "sets its own viewport; one project is enough");
     await page.setViewportSize({ width, height: 900 });
     await signedIn(page, { fixtures, storage: { mizan_nav: "finances" } });
     await page.goto("/");
-    await page.waitForTimeout(1200);
+    // Wait for the thing being measured, not for a guessed duration.
+    await page.getByText("INVESTMENT", { exact: true }).first().waitFor();
 
-    const hits = await page.evaluate(OVERLAP_PROBE);
+    // Measure TWICE, and only report an overlap present in both. A layout
+    // defect persists; a rect captured mid-transition or while content is
+    // still settling does not. The first version used a fixed 1200ms wait and
+    // was flaky under parallel load — and a flaky guard gets disabled, which
+    // is worse than not having one.
+    const first = await page.evaluate(OVERLAP_PROBE);
+    await page.waitForTimeout(600);
+    const second = await page.evaluate(OVERLAP_PROBE);
+    const key = (h) => `${h.a}||${h.b}`;
+    const persistent = new Set(second.map(key));
+    const hits = first.filter((h) => persistent.has(key(h)));
     expect(
       hits,
       `text overlaps at ${width}px:\n` +
@@ -102,6 +118,7 @@ for (const width of [1440, 768, 320]) {
 }
 
 test("the INVESTMENT badge and the eyebrow never share space", async ({ page }) => {
+  test.skip(test.info().project.name !== "desktop", "sets its own viewport; one project is enough");
   // The specific regression, asserted directly rather than relying on the
   // generic probe to happen to notice it.
   await page.setViewportSize({ width: 420, height: 900 });   // narrow enough to force the collision
