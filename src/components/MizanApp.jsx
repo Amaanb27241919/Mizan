@@ -17,6 +17,8 @@ import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { deskSummary } from "../lib/deskSummary.js";
 import { toPoints, curvePath, curveChange, curveCoverage, pointAtX } from "../lib/equityCurve.js";
 import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/benchmarkAttribution.js";
+// Aliased: MizanApp already declares a STANDARDS of its own further down.
+import { complianceMatrix, STANDARDS as SCREEN_STANDARDS, STANDARD_LABELS } from "../lib/complianceMatrix.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
 import { useEthicalOverlay, ethicalFlag } from "../lib/ethicalOverlay.js";
 import Budgeting from "./Budgeting.jsx";
@@ -7556,6 +7558,127 @@ function EquityChart({demoMode}){
 }
 
 /**
+ * Compliance — every holding against every standard.
+ *
+ * This exists because on 2026-10-02 four live holdings turned out to pass
+ * AAOIFI, Dow Jones and S&P Shariah while failing FTSE, MSCI, SC Malaysia and
+ * IFSB — all four on the same Cash/Assets test. Finding that took a throwaway
+ * script. Sharia compliance is the product, so a disagreement between the
+ * standards belongs on a screen, not in a shell history.
+ *
+ * AAOIFI is the GOVERNING standard (owner decision, and what CLAUDE.md §1
+ * states as Mīzan's methodology). The other six are shown beside it so a
+ * divergence is visible rather than discovered.
+ *
+ * The hardest thing here is honest absence. A rate-limited screen returns
+ * pass:null for every standard, which renders as a wall of failures for names
+ * that were never actually evaluated — that nearly got a live portfolio
+ * rebuilt on nothing. NOT SCREENED is its own state, counted separately, and
+ * never styled like a fail.
+ */
+const MARK_GLYPH = { pass: "✓", fail: "✗", review: "~", no_data: "·" };
+
+function CompliancePanel({desk,demoMode}){
+  const{mask}=useHideValues();
+  const[verdicts,setVerdicts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
+  const[state,setState]=useState(demoMode?"idle":"loading");
+
+  const positions=useMemo(()=>asArray(desk?.positions).map(p=>({
+    symbol:String(p.symbol||"").toUpperCase(),
+    value:Number(p.market_value)||0,
+  })).filter(h=>h.symbol),[desk?.positions]);
+
+  useEffect(()=>{
+    if(demoMode){setState("idle");return;}
+    if(!positions.length){setState("empty");return;}
+    let cancelled=false;
+    (async()=>{
+      try{
+        // Batched server-side — screenBatch paces itself for the Finnhub free
+        // tier, which is the whole reason this is one request and not 25.
+        const r=await apiFetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({symbols:positions.map(p=>p.symbol)})});
+        if(!r.ok){if(!cancelled)setState("unavailable");return;}
+        const d=await r.json();
+        if(cancelled)return;
+        const merged={...verdicts,...(d.results||{})};
+        setVerdicts(merged);
+        // Shares the app's single screening cache rather than keeping a second
+        // one that could disagree with it (CLAUDE.md §4).
+        try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(merged));}catch{}
+        setState("ready");
+      }catch{if(!cancelled)setState("unavailable");}
+    })();
+    return()=>{cancelled=true;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[demoMode,positions.length]);
+
+  const m=useMemo(()=>complianceMatrix(positions,verdicts,{governing:"AAOIFI"}),[positions,verdicts]);
+  const total=positions.reduce((t,p)=>t+p.value,0);
+  const color=mk=>mk==="pass"?T.gain:mk==="fail"?T.loss:mk==="review"?T.gold:T.slate;
+
+  return<section>
+    <SectionHead label="Compliance"
+      hint="Every holding against all seven screening standards. AAOIFI governs — it is the methodology Mīzan states — and the rest are shown beside it so a disagreement between them is visible rather than something you have to go looking for."
+      right={state==="ready"&&<span style={{display:"inline-flex",gap:T.s2}}>
+        <Tag label={`${m.screened}/${m.total} SCREENED`} color={m.unscreened?T.gold:T.slate}/>
+        {m.divergent.length>0&&<Tag label={`${m.divergent.length} DIVERGENT`} color={T.gold}/>}
+      </span>}
+      style={{marginBottom:T.s3}}/>
+
+    {state==="loading"&&<div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>SCREENING…</div>}
+    {state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>Screening is unavailable right now. Nothing is inferred from that — a holding with no verdict is shown as not screened, never as failing.</div>}
+    {(state==="idle"||state==="empty")&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+      {state==="empty"?"No positions to screen yet.":"Demo mode shows no compliance record."}
+    </div>}
+
+    {state==="ready"&&<>
+      {m.divergent.length>0&&<div style={{padding:T.s4,marginBottom:T.s4,borderRadius:T.rMd,background:`${T.gold}14`,border:`1px solid ${T.gold}44`}}>
+        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.14em",color:T.gold,fontWeight:600,marginBottom:4}}>
+          {m.divergent.length} HOLDING{m.divergent.length===1?"":"S"} WHERE THE STANDARDS DISAGREE
+        </div>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55,maxWidth:"70ch"}}>
+          {m.divergent.join(", ")} — AAOIFI and the majority of the other standards point different
+          ways. Usually this is the Cash/Assets test: the market-cap-denominated standards and the
+          asset-denominated ones measure different things, so a name can genuinely pass one and fail
+          the other. AAOIFI governs here, so these are held.
+        </div>
+      </div>}
+
+      <div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
+        <thead><tr>
+          <th style={{fontSize:"var(--fs-2xs)"}}>SYMBOL</th>
+          <th style={{fontSize:"var(--fs-2xs)"}}>WEIGHT</th>
+          {SCREEN_STANDARDS.map(std=><th key={std} style={{fontSize:"var(--fs-2xs)",
+            color:std===m.governing?T.textHi:T.muted}}>{STANDARD_LABELS[std]}</th>)}
+        </tr></thead>
+        <tbody>{m.rows.map(r=>{
+          const w=total>0?(r.value/total)*100:0;
+          return<tr key={r.symbol} style={r.divergent?{background:`${T.gold}0f`}:undefined}>
+            <td style={{color:T.textHi,fontWeight:600}}>
+              {r.symbol}
+              {/* Never styled like a fail — it is an absence, not a verdict. */}
+              {r.unscreened&&<span style={{color:T.slate,fontWeight:400}}> · not screened</span>}
+            </td>
+            <td style={{color:T.muted}}>{w.toFixed(1)}%</td>
+            {SCREEN_STANDARDS.map(std=><td key={std} style={{
+              color:color(r.marks[std]),
+              fontWeight:std===m.governing?700:400,
+              fontSize:std===m.governing?"var(--fs-sm)":undefined,
+            }}>{MARK_GLYPH[r.marks[std]]}</td>)}
+          </tr>;
+        })}</tbody>
+      </table></div>
+
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginTop:T.s3}}>
+        ✓ PASS · ✗ FAIL · ~ INCONCLUSIVE · · NOT SCREENED
+        {m.unscreened>0&&<span style={{color:T.gold}}> — {m.unscreened} holding{m.unscreened===1?"":"s"} could not be screened; that is missing data, not a failed screen.</span>}
+      </div>
+    </>}
+  </section>;
+}
+
+/**
  * AI Committee — each analyst, separately.
  *
  * ⚠️ OWNER-ONLY (root). The compliance verdict governing this output is in
@@ -8143,7 +8266,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         Command Center; Performance is added now because the strategy is live
         and the alpha question is unanswered. The three original ids
         (signals/strategies/order) are UNCHANGED for nav_usage continuity. */}
-    <TabBar track="trade" tabs={[["desk","Command Center"],["signals","Signals"],["strategies","Strategies"],["performance","Performance"],["committee","AI Committee"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    <TabBar track="trade" tabs={[["desk","Command Center"],["signals","Signals"],["strategies","Strategies"],["performance","Performance"],["committee","AI Committee"],["compliance","Compliance"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
     {/* ONE cockpit around every sub-tab, with the rail on top of all of them.
         The alternative — a dark Desk sitting beside two light pages — would
         make the dark read as an accident rather than as a room. */}
@@ -8156,6 +8279,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         {sub==="desk"&&<TradeDesk desk={deskData} onGoSignals={()=>setSub("signals")} demoMode={demoMode}/>}
         {sub==="performance"&&<PerformancePanelLab demoMode={demoMode}/>}
         {sub==="committee"&&<AiCommittee demoMode={demoMode}/>}
+        {sub==="compliance"&&<CompliancePanel desk={deskData} demoMode={demoMode}/>}
     {/* Persistent reference: how brokerage connections map to trade features, and the
         reconnect-with-trade-permission requirement. Collapsed by default. */}
     {/* Only where a broker connection is the thing you might need to fix.

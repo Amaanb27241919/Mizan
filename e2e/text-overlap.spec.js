@@ -146,3 +146,109 @@ test("the INVESTMENT badge and the eyebrow never share space", async ({ page }) 
   expect(boxes.overlapX, `eyebrow "${boxes.eyebrow}" overlaps the badge by ${boxes.overlapX}px`)
     .toBeLessThanOrEqual(0);
 });
+
+/**
+ * Content hidden UNDER the floating dock.
+ *
+ * Sibling defect to the one above, and the probe deliberately cannot see it:
+ * the dock is position:fixed and skipped on purpose, because floating over the
+ * page is what it is for. The bug is not the float, it is that nothing
+ * reserved scroll room beneath it.
+ *
+ * This guard exists because of a FALSE ALARM that was nearly a real fix. I
+ * screenshotted the cockpit ELEMENT, saw the dock lying across the last rows,
+ * and concluded content had no scroll reserve — the two "main" rules that
+ * reserve room are both inside max-width media queries, which fitted the
+ * story perfectly. I added a base rule and it changed nothing, because main
+ * already carries an INLINE padding-bottom of 110px that beats any stylesheet.
+ * A fixed element paints into an element screenshot no matter where the page
+ * is scrolled; the page itself was always fine.
+ *
+ * What caught the mistake was mutation testing. Deleting the rule I had just
+ * added did not turn anything red — twice — and that refusal was the test
+ * telling me the truth while I kept trying to make it fire. Gutting the
+ * INLINE padding does turn it red ("main reserves 8px but the dock occupies
+ * 68px"), which is how we know the guard works and the rule was redundant.
+ */
+/**
+ * ⚠️ THE OBVIOUS VERSION OF THIS TEST PASSES VACUOUSLY.
+ *
+ * I first wrote it as "walk each tab, scroll to the bottom, assert no text
+ * sits under the dock". It passed — and it ALSO passed with the padding rule
+ * deleted, because at 1440x700 the demo content on most tabs never reaches
+ * the bottom, so nothing was under the dock either way. A test that passes
+ * identically with and without the thing it guards is not a test.
+ *
+ * So it asserts the INVARIANT instead: main must reserve at least as much
+ * bottom padding as the dock occupies. That cannot pass vacuously — delete
+ * the rule and the number goes to zero.
+ */
+const DOCK_GAP_MIN = 8;   // breathing room between content and the dock
+
+for (const width of [1440, 900, 390]) {
+  test(`content reserves room for the floating dock at ${width}px`, async ({ page }) => {
+    test.skip(test.info().project.name !== "desktop", "sets its own viewport");
+    await page.setViewportSize({ width, height: 760 });
+    await signedIn(page, { storage: { mizan_nav: "overview", mizan_demo: "1" } });
+    await page.goto("/");
+    await page.waitForTimeout(800);
+
+    const m = await page.evaluate(() => {
+      const dock = document.querySelector(".mz-dock");
+      const main = document.querySelector("main");
+      if (!dock || !main) return null;
+      const d = dock.getBoundingClientRect();
+      return {
+        // What the dock actually occupies from the bottom of the viewport up.
+        dockOccupies: Math.round(window.innerHeight - d.top),
+        reserved: Math.round(parseFloat(getComputedStyle(main).paddingBottom) || 0),
+      };
+    });
+
+    expect(m, "expected both a .mz-dock and a main").not.toBeNull();
+    expect(
+      m.reserved,
+      `main reserves ${m.reserved}px but the dock occupies ${m.dockOccupies}px at ` +
+      `${width}px wide — the last rows of a long surface will sit under it`,
+    ).toBeGreaterThanOrEqual(m.dockOccupies + DOCK_GAP_MIN);
+  });
+}
+
+/**
+ * And one real-content check, on a surface long enough to actually reach the
+ * bottom, so the invariant above is tied to an observable outcome.
+ */
+test("a long table scrolls clear of the dock", async ({ page }) => {
+  test.skip(test.info().project.name !== "desktop", "sets its own viewport");
+  await page.setViewportSize({ width: 1440, height: 640 });
+  await signedIn(page, { fixtures, storage: { mizan_nav: "finances", mizan_demo: "1" } });
+  await page.goto("/");
+  await page.waitForTimeout(900);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(400);
+
+  const covered = await page.evaluate(() => {
+    const dock = document.querySelector(".mz-dock");
+    if (!dock) return null;
+    const d = dock.getBoundingClientRect();
+    for (const el of document.querySelectorAll("main *")) {
+      const hasText = [...el.childNodes].some(
+        (n) => n.nodeType === 3 && n.textContent.trim().length > 1);
+      if (!hasText) continue;
+      let fixed = false;
+      for (let n = el; n && n !== document.body; n = n.parentElement) {
+        const p = getComputedStyle(n).position;
+        if (p === "fixed" || p === "sticky") { fixed = true; break; }
+      }
+      if (fixed) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      const ox = Math.min(r.right, d.right) - Math.max(r.left, d.left);
+      const oy = Math.min(r.bottom, d.bottom) - Math.max(r.top, d.top);
+      if (ox > 4 && oy > 4) return { depth: Math.round(oy), text: el.textContent.trim().slice(0, 50) };
+    }
+    return null;
+  });
+
+  expect(covered, covered && `"${covered.text}" sits ${covered.depth}px under the dock`).toBeNull();
+});

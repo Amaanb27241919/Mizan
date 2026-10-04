@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-03
 
 ### Fixed
+- **e2e:** Stabilise the overlap guard, and stop a slow walk from flaking (`fa5ca46`)
 - **finances:** Account card painted its badge over its own eyebrow (`a80ad03`)
 
 ## 2026-10-02
