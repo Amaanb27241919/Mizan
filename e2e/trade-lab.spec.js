@@ -389,3 +389,76 @@ test.describe("Trade Lab cockpit", () => {
     expect(overflow, "page must not overflow horizontally at 320px").toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * Risk — the tiles must carry FIGURES.
+ *
+ * All three first shipped rendering "—". <Signed/> takes a numeric `v` and
+ * silently falls back to its dash for anything else, and I passed it
+ * label/value/sub, which it ignores. Build passed, 1073 unit tests passed,
+ * and the headline numbers of the panel were three dashes. Only a screenshot
+ * showed it — so this asserts the rendered text, not the component tree.
+ */
+test.describe("Trade Lab risk", () => {
+  const BOOK = [
+    ["NVDA", 4100, "Semiconductors"], ["AMD", 3900, "Semiconductors"],
+    ["MU", 4200, "Semiconductors"], ["AVGO", 4000, "Semiconductors"],
+    ["COHR", 3800, "Semiconductors"], ["CRDO", 4100, "Semiconductors"],
+    ["STX", 3950, "Computer Hardware"], ["NTAP", 4050, "Computer Hardware"],
+    ["TGT", 3900, "Retail"], ["ZZZZ", 900, null],
+  ];
+  const riskFixtures = {
+    "/api/alpaca/positions": BOOK.map(([symbol, mv]) => ({
+      symbol, qty: "1", avg_entry_price: "1", current_price: "1",
+      market_value: String(mv), unrealized_pl: "0", unrealized_plpc: "0" })),
+    "/api/alpaca/portfolio-history": { points: Array.from({ length: 22 }, (_, i) => ({
+      date: `2026-09-${String(i + 10).padStart(2, "0")}`,
+      equity: 100000 + (i < 8 ? i * 900 : i < 14 ? 7200 - (i - 8) * 1400 : -1200 + (i - 14) * 700) })) },
+    "/api/screen": { provider: "finnhub", results: Object.fromEntries(
+      BOOK.filter((b) => b[2]).map(([s2, , ind]) =>
+        [s2, { tk: s2, status: "halal", industry: ind, byStandard: {} }])) },
+  };
+
+  const openRisk = async (page, extra = {}) => {
+    await gotoLab(page, { fixtures: { ...riskFixtures, ...extra } });
+    await page.getByRole("button", { name: "Risk", exact: true }).click();
+    await page.waitForTimeout(1500);
+    return page.locator(".mz-cockpit").innerText();
+  };
+
+  test("every headline tile shows a figure, never a dash", async ({ page }) => {
+    const txt = await openRisk(page);
+    for (const label of ["EFFECTIVE NAMES", "TOP 5 WEIGHT", "MAX DRAWDOWN"]) {
+      const v = new RegExp(`${label}\\s*\\n\\s*([^\\n]+)`).exec(txt)?.[1]?.trim();
+      expect(v, `${label} rendered as "${v}"`).toBeTruthy();
+      expect(v, `${label} fell back to a dash`).not.toBe("—");
+      expect(v, `${label} is not a figure`).toMatch(/[0-9]/);
+    }
+  });
+
+  test("states industry coverage instead of hiding unclassified names", async ({ page }) => {
+    const txt = await openRisk(page);
+    // 9 of 10 carry an industry; the panel must say so rather than quietly
+    // computing shares over 90% of the book and presenting them as the whole.
+    expect(txt).toContain("90% CLASSIFIED");
+    expect(txt).toMatch(/1 could not be classified/);
+    expect(txt).not.toMatch(/\bOther\b/);     // no catch-all bucket
+  });
+
+  test("reports concentration the even weights hide", async ({ page }) => {
+    const txt = await openRisk(page);
+    expect(txt).toContain("Semiconductors");
+    // Six of ten names, one bet — the number that justifies the screen.
+    expect(txt).toMatch(/66\.9%/);
+  });
+
+  test("says NOT YET rather than 0% when history is too short", async ({ page }) => {
+    // A new account has not had a 0% drawdown; it has had no measurable one.
+    const txt = await openRisk(page, {
+      "/api/alpaca/portfolio-history": { points: [{ date: "2026-10-01", equity: 100000 }] },
+    });
+    const v = /MAX DRAWDOWN\s*\n\s*([^\n]+)/.exec(txt)?.[1]?.trim();
+    expect(v).toBe("not yet");
+    expect(txt).toMatch(/not the same as a 0% drawdown/);
+  });
+});

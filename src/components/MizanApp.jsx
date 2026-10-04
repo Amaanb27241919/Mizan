@@ -19,6 +19,7 @@ import { toPoints, curvePath, curveChange, curveCoverage, pointAtX } from "../li
 import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/benchmarkAttribution.js";
 // Aliased: MizanApp already declares a STANDARDS of its own further down.
 import { complianceMatrix, STANDARDS as SCREEN_STANDARDS, STANDARD_LABELS } from "../lib/complianceMatrix.js";
+import { concentration, groupExposure, maxDrawdown } from "../lib/riskMetrics.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
 import { useEthicalOverlay, ethicalFlag } from "../lib/ethicalOverlay.js";
 import Budgeting from "./Budgeting.jsx";
@@ -7557,6 +7558,160 @@ function EquityChart({demoMode}){
   </section>;
 }
 
+/** Label over value over caption. The Trade Lab's one labelled-stat shape. */
+function Stat({label,value,sub}){
+  return<div>
+    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>{label}</div>
+    <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",color:T.textHi,lineHeight:1.1,margin:"6px 0 2px",fontVariantNumeric:"tabular-nums"}}>{value}</div>
+    {sub&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em"}}>{sub}</div>}
+  </div>;
+}
+
+/**
+ * Risk — what the book is actually betting on.
+ *
+ * The live halal momentum book holds 25 names and about sixteen of them are
+ * the same bet: AI datacentre hardware. Inverse-vol sizing makes the position
+ * WEIGHTS look even, and that evenness is exactly what hides it — twenty-five
+ * tidy 4% slices of one trade still behave like one trade. Nothing in the app
+ * said so until this screen.
+ *
+ * It states properties of a book the user already holds and stops there. No
+ * risk score, no rating, no "consider trimming". "Your top 5 are 38% of the
+ * book" is arithmetic about their own position (Tier 1 / ACCOUNT_SERVICING);
+ * "you are over-concentrated, sell NVDA" is a recommendation and is the RIA
+ * line. See docs/COMPLIANCE.md and CLAUDE.md §1.
+ *
+ * Industry comes from the SAME cached screening verdicts Compliance uses, so
+ * this costs no extra upstream calls — and when some names have no industry,
+ * the coverage is shown rather than the gap being quietly folded into an
+ * "Other" bucket that then competes with the real ones.
+ */
+function RiskPanel({desk,demoMode}){
+  const{mask}=useHideValues();
+  const[verdicts,setVerdicts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
+  const[hist,setHist]=useState(null);
+  const[state,setState]=useState(demoMode?"idle":"loading");
+
+  const positions=useMemo(()=>asArray(desk?.positions).map(p=>({
+    symbol:String(p.symbol||"").toUpperCase(),
+    value:Number(p.market_value)||0,
+  })).filter(h=>h.symbol&&h.value>0),[desk?.positions]);
+
+  useEffect(()=>{
+    if(demoMode){setState("idle");return;}
+    if(!positions.length){setState("empty");return;}
+    let cancelled=false;
+    (async()=>{
+      // Both are optional: a missing screen costs the industry grouping, a
+      // missing history costs the drawdown. Neither should blank the page.
+      const[sr,hr]=await Promise.all([
+        apiFetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({symbols:positions.map(p=>p.symbol)})}).catch(()=>null),
+        apiFetch("/api/alpaca/portfolio-history?range=1M").catch(()=>null),
+      ]);
+      if(cancelled)return;
+      if(sr&&sr.ok){
+        try{
+          const d=await sr.json();
+          const merged={...verdicts,...(d.results||{})};
+          setVerdicts(merged);
+          try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(merged));}catch{}
+        }catch{}
+      }
+      if(hr&&hr.ok){try{setHist(await hr.json());}catch{}}
+      if(!cancelled)setState("ready");
+    })();
+    return()=>{cancelled=true;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[demoMode,positions.length]);
+
+  const conc=useMemo(()=>concentration(positions,{topK:5}),[positions]);
+  const byIndustry=useMemo(()=>groupExposure(positions,
+    sym=>verdicts[sym]&&verdicts[sym].industry),[positions,verdicts]);
+  const dd=useMemo(()=>maxDrawdown(asArray(hist&&hist.points).map(p=>({
+    date:p.date,value:Number(p.equity ?? p.value)}))),[hist]);
+
+  const pct=n=>n==null?"—":`${(n*100).toFixed(1)}%`;
+
+  if(state==="loading")return<section><SectionHead label="Risk" style={{marginBottom:T.s3}}/>
+    <div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>MEASURING…</div></section>;
+  if(state!=="ready")return<section><SectionHead label="Risk" style={{marginBottom:T.s3}}/>
+    <div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+      {state==="empty"?"No positions to measure.":"Demo mode shows no risk record."}</div></section>;
+
+  return<section>
+    <SectionHead label="Risk"
+      hint="What the book is betting on, stated as properties of the positions you hold. No score and no suggestion — these are measurements, not judgments."
+      style={{marginBottom:T.s3}}/>
+
+    {/* A labelled stat is spelled out here rather than reusing <Signed/>:
+        that component renders a signed NUMBER (v/pct/mask/dash) and silently
+        shows its dash for anything else, which is how all three tiles first
+        rendered as "—". Caught by screenshotting, not by any test. */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s3,marginBottom:T.s5}}>
+      <BentoTile>
+        <Stat label="EFFECTIVE NAMES"
+          value={conc.effectiveNames==null?"—":String(conc.effectiveNames)}
+          sub={`${conc.count} positions held`}/>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,marginTop:T.s2}}>
+          How many independent bets the weights really amount to. It equals the position count only when every slice is identical.
+        </div>
+      </BentoTile>
+      <BentoTile>
+        <Stat label="TOP 5 WEIGHT" value={pct(conc.topWeight)}
+          sub={conc.top.map(r=>r.symbol).join(" · ")}/>
+      </BentoTile>
+      <BentoTile>
+        <Stat label="MAX DRAWDOWN"
+          value={dd.measurable?pct(dd.depth):"not yet"}
+          sub={dd.measurable
+            ?(dd.depth>0?`${dd.peak?.date||""} → ${dd.trough?.date||""}`:"no decline on record")
+            :`${dd.points} day${dd.points===1?"":"s"} of history`}/>
+        {!dd.measurable&&<div style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,marginTop:T.s2}}>
+          Too little history to measure — which is not the same as a 0% drawdown.
+        </div>}
+      </BentoTile>
+    </div>
+
+    <SectionHead label="Where the book is concentrated"
+      right={byIndustry.coverage<1&&<Tag label={`${Math.round(byIndustry.coverage*100)}% CLASSIFIED`} color={T.gold}/>}
+      style={{marginBottom:T.s3}}/>
+
+    {byIndustry.groups.length===0
+      ? <div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
+          No industry data on the cached screens, so the book cannot be grouped. Nothing is inferred from that.
+        </div>
+      : <>
+          <div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
+            <thead><tr>
+              <th style={{fontSize:"var(--fs-2xs)"}}>INDUSTRY</th>
+              <th style={{fontSize:"var(--fs-2xs)"}}>NAMES</th>
+              <th style={{fontSize:"var(--fs-2xs)"}}>SHARE</th>
+              <th style={{fontSize:"var(--fs-2xs)",width:"34%"}}></th>
+            </tr></thead>
+            <tbody>{byIndustry.groups.map(g=><tr key={g.label}>
+              <td style={{color:T.textHi,fontWeight:600}}>{g.label}</td>
+              <td style={{color:T.muted}}>{g.symbols.length}</td>
+              <td style={{color:T.textHi}}>{pct(g.share)}</td>
+              <td>
+                {/* Slate, not a semantic colour: a big bucket is a fact about
+                    the book, not a warning. Red here would be a judgment. */}
+                <div style={{height:6,borderRadius:3,background:`${T.slate}22`,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${Math.max(2,g.share*100)}%`,background:T.slate,borderRadius:3}}/>
+                </div>
+              </td>
+            </tr>)}</tbody>
+          </table></div>
+          <div style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.55,marginTop:T.s3,maxWidth:"74ch"}}>
+            Shares are of the {byIndustry.labelled} position{byIndustry.labelled===1?"":"s"} that carry an industry on their
+            screen{byIndustry.unknown>0&&<span style={{color:T.gold}}> — {byIndustry.unknown} could not be classified and {byIndustry.unknown===1?"is":"are"} excluded from these percentages</span>}.
+            Even position weights can still be one bet: inverse-volatility sizing evens the slices, not the exposure.
+          </div>
+        </>}
+  </section>;
+}
+
 /**
  * Compliance — every holding against every standard.
  *
@@ -8266,7 +8421,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         Command Center; Performance is added now because the strategy is live
         and the alpha question is unanswered. The three original ids
         (signals/strategies/order) are UNCHANGED for nav_usage continuity. */}
-    <TabBar track="trade" tabs={[["desk","Command Center"],["signals","Signals"],["strategies","Strategies"],["performance","Performance"],["committee","AI Committee"],["compliance","Compliance"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
+    <TabBar track="trade" tabs={[["desk","Command Center"],["signals","Signals"],["strategies","Strategies"],["performance","Performance"],["committee","AI Committee"],["compliance","Compliance"],["risk","Risk"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
     {/* ONE cockpit around every sub-tab, with the rail on top of all of them.
         The alternative — a dark Desk sitting beside two light pages — would
         make the dark read as an accident rather than as a room. */}
@@ -8280,6 +8435,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         {sub==="performance"&&<PerformancePanelLab demoMode={demoMode}/>}
         {sub==="committee"&&<AiCommittee demoMode={demoMode}/>}
         {sub==="compliance"&&<CompliancePanel desk={deskData} demoMode={demoMode}/>}
+        {sub==="risk"&&<RiskPanel desk={deskData} demoMode={demoMode}/>}
     {/* Persistent reference: how brokerage connections map to trade features, and the
         reconnect-with-trade-permission requirement. Collapsed by default. */}
     {/* Only where a broker connection is the thing you might need to fix.
