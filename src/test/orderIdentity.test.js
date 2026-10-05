@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { clientOrderId, isFractional, stopOrderFor, needsRearm, stopReference, MAX_CLIENT_ORDER_ID } from '../../lib/trading/orderIdentity.js'
+import { clientOrderId, isFractional, stopOrderFor, needsRearm, stopReference, MAX_CLIENT_ORDER_ID, scopeStopsToStrategy, stopTag } from '../../lib/trading/orderIdentity.js'
 
 describe('clientOrderId', () => {
   it('is DETERMINISTIC — the same signal always yields the same id', () => {
@@ -284,5 +284,49 @@ describe('stop-arming wiring', () => {
 
   it('treats a duplicate client_order_id as already-armed, not an error', () => {
     expect(FN).toMatch(/client_order_id must be unique/)
+  })
+})
+
+// Two strategies share one Alpaca paper account. A stop pass that read the
+// whole account would arm stops on the OTHER strategy's shares — the live
+// momentum book had no stops by design, and a stopped variant beside it would
+// have quietly given it some. Found 2026-10-04 before the variant existed.
+describe('scopeStopsToStrategy', () => {
+  const positions = [
+    { symbol: 'ADI', qty: '20', avg_entry_price: '400', current_price: '410' },
+    { symbol: 'NUE', qty: '27.3', avg_entry_price: '240', current_price: '241' },
+  ]
+  const tag = stopTag('abcdef12-0000-0000-0000-000000000000')
+
+  it('keeps only symbols this strategy holds, at no more than its own quantity', () => {
+    const out = scopeStopsToStrategy({ positions, openOrders: [], book: { ADI: 6.5 }, strategyId: 'abcdef12-0000' })
+    expect(out.positions).toHaveLength(1)
+    expect(out.positions[0]).toMatchObject({ symbol: 'ADI', qty: '6.5', avg_entry_price: '400' })
+  })
+
+  it('never claims more than the account actually holds', () => {
+    const out = scopeStopsToStrategy({ positions, openOrders: [], book: { ADI: 50 }, strategyId: 'abcdef12' })
+    expect(out.positions[0].qty).toBe('20')
+  })
+
+  it("counts only this strategy's own stops as coverage", () => {
+    const openOrders = [
+      { symbol: 'ADI', side: 'sell', type: 'stop', qty: '6.5', client_order_id: 'mz-stop-99999999-ADI-20261005' },
+      { symbol: 'ADI', side: 'sell', type: 'stop', qty: '2', client_order_id: `${tag}ADI-20261005` },
+    ]
+    const out = scopeStopsToStrategy({ positions, openOrders, book: { ADI: 6.5 }, strategyId: 'abcdef12-0000' })
+    expect(out.openOrders).toHaveLength(1)
+    expect(out.openOrders[0].qty).toBe('2')
+  })
+
+  it('an empty book arms nothing — a strategy with no shares protects no shares', () => {
+    const out = scopeStopsToStrategy({ positions, openOrders: [], book: {}, strategyId: 'abcdef12' })
+    expect(out.positions).toEqual([])
+  })
+
+  it('survives malformed input', () => {
+    expect(scopeStopsToStrategy(null)).toEqual({ positions: [], openOrders: [] })
+    expect(scopeStopsToStrategy({ positions: { e: 1 }, openOrders: null, book: null, strategyId: null }))
+      .toEqual({ positions: [], openOrders: [] })
   })
 })

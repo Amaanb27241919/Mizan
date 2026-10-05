@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-10-04
 
+### Added
+- **trade:** Closed-trades sheet with estimated tax and Zakat per sale (`648dd50`)
+
 ### Fixed
 - **trading:** Say why a strategy is failing, and alert when it keeps failing (`c1d8930`)
 
