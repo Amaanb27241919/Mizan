@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-03
 
 ### Added
+- **trade:** Risk — the concentration that even weights hide (`4d1e4be`)
 - **trade:** Compliance — where the seven standards disagree (`3dd52ba`)
 
 ### Fixed
