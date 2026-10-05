@@ -7436,7 +7436,6 @@ function useAlpacaDesk(enabled){
 const CURVE_RANGES=[["1D","1D"],["1W","1W"],["1M","1M"],["3M","3M"],["1Y","1Y"]];
 const CURVE_W=600,CURVE_H=150;
 
-function EquityChart({demoMode}){
 // Realized-trade sheet: one row per closed lot with gain, term, estimated tax
 // and a Zakat estimate. The math and every assumption live server-side in
 // lib/trading/closedLots.mjs and are written INTO the file, so the sheet still
@@ -7483,6 +7482,7 @@ function ClosedTradesExport(){
   </section>;
 }
 
+function EquityChart({demoMode}){
   const{mask}=useHideValues();
   const[range,setRange]=useState("1M");
   const[raw,setRaw]=useState(null);
@@ -8178,9 +8178,9 @@ function TradeDesk({desk,onGoSignals,demoMode}){
 
       <EquityChart demoMode={demoMode}/>
 
-      {/* Positions. */}
       {!demoMode&&<ClosedTradesExport/>}
 
+      {/* Positions. */}
       <section>
         <SectionHead label="Paper positions"
           hint="What the paper desk holds right now. AVG is what you paid, LAST is what it is worth, WEIGHT is each holding's share of this desk — not a view on any of them."
