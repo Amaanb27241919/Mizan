@@ -80,6 +80,20 @@ describe('handlers — the credential never round-trips to the client', () => {
     expect(beforeSharedFallback).toMatch(/return null/)
   })
 
+  it('only a ROOT user may fall back to the shared account', () => {
+    // The shared pair is the paper account the live momentum strategy trades.
+    // On 2026-10-04 two non-root testers were enabled to bring their OWN paper
+    // accounts; until they paste keys, the old fallback would have put their
+    // Order Ticket orders and strategies onto that account, contaminating the
+    // forward test. No key of your own means no Alpaca, not someone else's.
+    const fn = handlers.slice(handlers.indexOf('async function getAlpacaCreds'))
+    const body = fn.slice(0, fn.indexOf('\n}\n'))
+    const beforeShared = body.slice(0, body.indexOf('source: "shared"'))
+    const tail = beforeShared.slice(beforeShared.lastIndexOf('source: "user"'))
+    expect(tail).toMatch(/isRootUser\(/)
+    expect(tail).toMatch(/return null/)
+  })
+
   it('verifies credentials against the PAPER endpoint before storing', () => {
     expect(handlers).toContain('async function verifyAlpacaCreds')
     expect(handlers).toMatch(/ALPACA_BASE\s*=\s*"https:\/\/paper-api\.alpaca\.markets/)

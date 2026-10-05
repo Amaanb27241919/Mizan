@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade:** Closed-trades sheet with estimated tax and Zakat per sale (`648dd50`)
 
 ### Fixed
+- **build:** Repair two files mangled by partial staging (`79b0980`)
 - **trading:** A strategy's stops protect only its own shares (`d5aeef2`)
 - **trading:** Say why a strategy is failing, and alert when it keeps failing (`c1d8930`)
 
