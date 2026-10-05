@@ -205,3 +205,37 @@ describe('trade-intent completeness (migration 033)', () => {
     expect(BRANCH).toMatch(/if \(isShadow\) \{ placed\+\+; continue; \}/)
   })
 })
+
+// The cron's own autonomy flag must agree with this module. resolveMode has
+// always said paper executes without a human, but the legacy momentum/
+// breakout/DCA branches computed isFullAuto from the LIVE-money gates only
+// (mode=full + profile allowlist + per-account switch), so a paper swing
+// strategy would have sat waiting for approval taps. Owner decision
+// 2026-10-04: Alpaca paper is full-auto for every trading-enabled user; live
+// money keeps its allowlist.
+import { readFileSync as _read } from 'node:fs'
+import { fileURLToPath as _url } from 'node:url'
+import { dirname as _dir, join as _join } from 'node:path'
+describe('cron autonomy agrees with resolveMode', () => {
+  const src = _read(_join(_dir(_url(import.meta.url)), '..', '..', 'lib', 'handlers.mjs'), 'utf8')
+  const decl = src.slice(src.indexOf('const isFullAuto ='), src.indexOf('const isFullAuto =') + 400)
+
+  it('lets a PAPER strategy run without approval', () => {
+    expect(decl).toMatch(/resolveMode\(strat\)\s*===\s*MODES\.PAPER/)
+  })
+
+  it('still requires all three live gates for anything else', () => {
+    expect(decl).toMatch(/fullAutoByUser/)
+    expect(decl).toMatch(/accountFullAutoEnabled/)
+  })
+
+  it('resolveMode never yields PAPER for a SnapTrade strategy, so live money cannot ride the paper exemption', () => {
+    expect(resolveMode({ enabled: true, mode: 'full', params: { layer: 'full' } })).not.toBe(MODES.PAPER)
+    expect(resolveMode({ enabled: true, mode: 'full', params: { layer: 'full', broker: 'snaptrade' } })).not.toBe(MODES.PAPER)
+  })
+
+  it('a paper strategy set to shadow or manual is still NOT autonomous', () => {
+    expect(resolveMode({ enabled: true, mode: 'full', params: { broker: 'alpaca_paper', layer: 'shadow' } })).toBe(MODES.SHADOW)
+    expect(resolveMode({ enabled: true, mode: 'semi', params: { broker: 'alpaca_paper', layer: 'manual' } })).toBe(MODES.READ_ONLY)
+  })
+})
