@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-04
+
+### Fixed
+- **trading:** Say why a strategy is failing, and alert when it keeps failing (`c1d8930`)
+
 ## 2026-10-03
 
 ### Added

@@ -125,6 +125,33 @@ test.describe("Trade Lab cockpit", () => {
     if (body !== null) expect(body, "body must stay on the paper canvas").toBeGreaterThan(600);
   });
 
+  test("downloads the closed-trades tax & Zakat sheet at the rates the user set", async ({ page }) => {
+    await gotoLab(page);
+    let asked = null;
+    await page.route("**/api/alpaca/closed-trades.csv**", (route) => {
+      asked = new URL(route.request().url()).searchParams;
+      return route.fulfill({ status: 200, contentType: "text/csv", body: "symbol,qty\r\nTOTAL,\r\n" });
+    });
+    await expect(page.getByText("Closed trades — tax & Zakat sheet")).toBeVisible();
+    await page.getByLabel("SHORT-TERM tax rate percent").fill("32");
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: /DOWNLOAD SHEET/ }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/^mizan-closed-trades-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(asked.get("short")).toBe("32");
+    expect(asked.get("long")).toBe("15");
+  });
+
+  test("says so, with a retry, when the sheet cannot be built", async ({ page }) => {
+    await gotoLab(page);
+    await page.route("**/api/alpaca/closed-trades.csv**", (route) =>
+      route.fulfill({ status: 502, contentType: "application/json", body: '{"error":"x"}' }));
+    await page.getByRole("button", { name: /DOWNLOAD SHEET/ }).click();
+    await expect(page.getByRole("alert")).toContainText("could not be built");
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+
   test("parses Alpaca's string numerics into real figures", async ({ page }) => {
     await gotoLab(page);
     const tape = page.locator(".mz-tape").first();

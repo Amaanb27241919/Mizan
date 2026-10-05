@@ -7437,6 +7437,52 @@ const CURVE_RANGES=[["1D","1D"],["1W","1W"],["1M","1M"],["3M","3M"],["1Y","1Y"]]
 const CURVE_W=600,CURVE_H=150;
 
 function EquityChart({demoMode}){
+// Realized-trade sheet: one row per closed lot with gain, term, estimated tax
+// and a Zakat estimate. The math and every assumption live server-side in
+// lib/trading/closedLots.mjs and are written INTO the file, so the sheet still
+// explains itself after it leaves the app.
+function ClosedTradesExport(){
+  const[rates,setRates]=useState({short:"22",long:"15"});
+  const[state,setState]=useState("idle");
+  const download=async()=>{
+    setState("busy");
+    try{
+      const qs=new URLSearchParams({short:rates.short,long:rates.long});
+      const r=await apiFetch(`/api/alpaca/closed-trades.csv?${qs}`);
+      if(!r.ok){setState("error");return;}
+      const url=URL.createObjectURL(await r.blob());
+      const a=document.createElement("a");
+      a.href=url;a.download=`mizan-closed-trades-${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);a.click();
+      setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},100);
+      setState("idle");
+    }catch{setState("error");}
+  };
+  const rateInput=(key,label)=><label style={{display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em"}}>
+    {label}
+    <input className="field" inputMode="decimal" value={rates[key]} aria-label={`${label} tax rate percent`}
+      onChange={e=>setRates(r=>({...r,[key]:e.target.value.replace(/[^0-9.]/g,"").slice(0,4)}))}
+      style={{width:56,padding:`4px ${T.s2}`,borderRadius:T.rSm,border:`1px solid ${T.border}`,background:"transparent",color:T.textHi,fontFamily:FM,fontVariantNumeric:"tabular-nums"}}/>%
+  </label>;
+  return<section>
+    <SectionHead label="Closed trades — tax & Zakat sheet"
+      hint="Every sold position, matched first-in-first-out to what it cost, with an estimated tax at the rates you set and 2.5% of the proceeds as a Zakat estimate. Opens in Excel. Estimates only — not tax or religious advice."
+      style={{marginBottom:T.s3}}/>
+    <div className="mz-ctrl-row" style={{display:"flex",alignItems:"center",gap:T.s4,flexWrap:"wrap"}}>
+      {rateInput("short","SHORT-TERM")}
+      {rateInput("long","LONG-TERM")}
+      <button onClick={download} disabled={state==="busy"} className="mz-tap" style={{
+        fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.08em",
+        padding:`6px ${T.s3}`,borderRadius:T.rMd,cursor:state==="busy"?"wait":"pointer",
+        background:"transparent",border:`1px solid ${T.border}`,color:T.textHi,
+      }}>{state==="busy"?"PREPARING…":"↓ DOWNLOAD SHEET (.CSV)"}</button>
+      {state==="error"&&<span role="alert" style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.loss}}>
+        The sheet could not be built. <button onClick={download} style={{background:"none",border:"none",color:T.blue,cursor:"pointer",fontFamily:FP,fontSize:"inherit",padding:0,textDecoration:"underline"}}>Try again</button>
+      </span>}
+    </div>
+  </section>;
+}
+
   const{mask}=useHideValues();
   const[range,setRange]=useState("1M");
   const[raw,setRaw]=useState(null);
@@ -8133,6 +8179,8 @@ function TradeDesk({desk,onGoSignals,demoMode}){
       <EquityChart demoMode={demoMode}/>
 
       {/* Positions. */}
+      {!demoMode&&<ClosedTradesExport/>}
+
       <section>
         <SectionHead label="Paper positions"
           hint="What the paper desk holds right now. AVG is what you paid, LAST is what it is worth, WEIGHT is each holding's share of this desk — not a view on any of them."
