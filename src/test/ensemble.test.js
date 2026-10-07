@@ -214,3 +214,16 @@ describe('research panel wiring', () => {
     expect(FN).toMatch(/gte\("created_at"/)
   })
 })
+
+describe('research panel tick budget', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  it('never starts a panel late in a cron tick, and never runs past the tick deadline', () => {
+    // Every strategy shares one ~300s serverless invocation. Two panels at
+    // 120s each plus rebalances could be killed mid-order (found 2026-10-06,
+    // before the AI-gated strategy first ran).
+    const calls = SRC.match(/await runResearchPanel\(strat,[^\n]*/g) || []
+    expect(calls.length).toBeGreaterThanOrEqual(2)
+    for (const c of calls) expect(c).toMatch(/deadlineAt: claimNowMs \+ PANEL_TICK_DEADLINE_MS/)
+    expect(SRC).toMatch(/Math\.min\(Date\.now\(\) \+ PANEL_MS_BUDGET, deadlineAt\)/)
+  })
+})

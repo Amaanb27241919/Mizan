@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-06
+
+### Fixed
+- **trading:** Rank strategies spend their own cash, never margin; add earnings filter, AI gate and SPSK sweep (`1537d1c`)
+
 ## 2026-10-04
 
 ### Added
