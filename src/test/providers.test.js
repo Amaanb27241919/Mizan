@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  isTransient, googleProvider, anthropicProvider, buildPanel, runPanel,
+  isTransient, googleProvider, anthropicProvider, openrouterProvider, buildPanel, runPanel,
   SYSTEM_INSTRUCTION, RESPONSE_SCHEMA, TRANSIENT_STATUSES,
 } from '../../lib/ai/providers.mjs'
 
@@ -192,7 +192,7 @@ describe('buildPanel', () => {
     // The UI must be able to say "not configured" instead of silently running
     // fewer analysts than the experiment claims.
     const panel = buildPanel({ ANTHROPIC_KEY: 'k' })
-    expect(panel.map(p => p.provider).sort()).toEqual(['anthropic', 'google'])
+    expect(panel.map(p => p.provider).sort()).toEqual(['anthropic', 'google', 'openrouter'])
     expect(panel.find(p => p.provider === 'anthropic').available).toBe(true)
     expect(panel.find(p => p.provider === 'google').available).toBe(false)
   })
@@ -222,5 +222,51 @@ describe('the shared instruction carries the boundaries', () => {
 
   it('says absent data is not zero', () => {
     expect(SYSTEM_INSTRUCTION).toMatch(/not zero and it is not good news/)
+  })
+})
+
+// OpenRouter (2026-10-07): one key, many model families. OpenAI-compatible
+// chat completions; the verdict is choices[0].message.content. Shape taken
+// from openrouter.ai/docs/quickstart, not from memory.
+describe('openrouterProvider', () => {
+  const orOk = ok({ choices: [{ message: { role: 'assistant', content: JSON.stringify(VERDICT) } }] })
+
+  it('returns a validated signal from a good response', async () => {
+    const r = await openrouterProvider({ apiKey: 'k', fetchImpl: mockFetch(() => orOk) }).analyze('packet')
+    expect(r).toMatchObject({ ok: true, provider: 'openrouter' })
+    expect(r.signal).toMatchObject({ action: 'BUY', directional: true })
+  })
+
+  it('calls the documented endpoint with a bearer key and the same instruction as the others', async () => {
+    let url, init, body
+    await openrouterProvider({ apiKey: 'sk-or-x', fetchImpl: mockFetch((u, i) => { url = u; init = i; body = JSON.parse(i.body); return orOk }) }).analyze('P')
+    expect(url).toBe('https://openrouter.ai/api/v1/chat/completions')
+    expect(init.headers.Authorization).toBe('Bearer sk-or-x')
+    expect(body.messages[0]).toEqual({ role: 'system', content: SYSTEM_INSTRUCTION })
+    expect(body.messages[1]).toEqual({ role: 'user', content: 'P' })
+    expect(body.temperature).toBe(0)
+  })
+
+  it('constrains the reply to the verdict schema, and only routes to hosts that honour it', async () => {
+    let body
+    await openrouterProvider({ apiKey: 'k', fetchImpl: mockFetch((u, i) => { body = JSON.parse(i.body); return orOk }) }).analyze('P')
+    expect(body.response_format.type).toBe('json_schema')
+    expect(body.response_format.json_schema.strict).toBe(true)
+    expect(body.response_format.json_schema.schema.type).toBe('object')   // lowercased JSON Schema
+    expect(body.provider).toMatchObject({ require_parameters: true })
+  })
+
+  it('takes the model from config, with a default from a DIFFERENT family than the other two', async () => {
+    expect(openrouterProvider({ apiKey: 'k', model: 'mistralai/mistral-nemo' }).model).toBe('mistralai/mistral-nemo')
+    const def = openrouterProvider({ apiKey: 'k' }).model
+    expect(def).not.toMatch(/^(anthropic|google)\//)
+    const panel = buildPanel({ OPENROUTER_API_KEY: 'k', OPENROUTER_RESEARCH_MODEL: 'qwen/x' })
+    expect(panel.find(p => p.provider === 'openrouter')).toMatchObject({ model: 'qwen/x', available: true })
+  })
+
+  it('reports not_configured without a key, and a spent credit limit as data, not an exception', async () => {
+    expect(await openrouterProvider({ apiKey: null }).analyze('x')).toMatchObject({ ok: false, code: 'not_configured' })
+    const r = await openrouterProvider({ apiKey: 'k', fetchImpl: mockFetch(() => bad(402, '{"error":{"message":"Key limit exceeded"}}')) }).analyze('P')
+    expect(r).toMatchObject({ ok: false, code: 'http_402' })
   })
 })
