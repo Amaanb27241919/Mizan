@@ -496,3 +496,44 @@ test.describe("Trade Lab risk", () => {
     expect(txt).toMatch(/not the same as a 0% drawdown/);
   });
 });
+
+// The scoreboard. A strategy card must answer "is this beating SPUS?" and must
+// never report an unfunded strategy as a total loss — before 2026-10-07 it
+// computed (stock value − capital), so every new strategy read −100%.
+test.describe("Trade Lab strategy scoreboard", () => {
+  const base = { mode: "semi", enabled: true, ticker: "SPUS", account_id: "alpaca-paper", strategy_type: "rank_rebalance",
+    stop_loss_pct: 15, profit_target_pct: null, time_horizon_days: 180, max_trades_per_day: 30 };
+  const strategies = { strategies: [
+    { ...base, id: "s-traded", capital_allocated: 95000,
+      params: { broker: "alpaca_paper", rebalance_days: 7, universe_tickers: ["ADI", "MU"] },
+      progress: { paper: true, current_value: 97113.79, cash: 0.27, equity: 97114.06, started_at: "2026-10-02T13:30:18Z",
+        return_pct: 2.2253, bench_return_pct: 1.8255, alpha_pct: 0.3998, benchmark: "SPUS",
+        trades_executed: 25, days_elapsed: 5, days_horizon: 180, holdings_count: 25, unpriced: [] } },
+    { ...base, id: "s-new", capital_allocated: 250000,
+      params: { broker: "alpaca_paper", rebalance_days: 30, universe_tickers: ["ADI", "MU"] },
+      progress: { paper: true, current_value: 0, cash: 250000, equity: 250000, started_at: null,
+        return_pct: null, bench_return_pct: null, alpha_pct: null, trades_executed: 0, days_elapsed: 0, days_horizon: 180 } },
+  ] };
+
+  const openStrategies = async (page) => {
+    await gotoLab(page, { fixtures: { "/api/bot/strategies": strategies } });
+    await page.getByRole("button", { name: "Strategies", exact: true }).click();
+  };
+
+  test("an unfunded strategy says so instead of showing a −100% loss", async ({ page }) => {
+    await openStrategies(page);
+    await expect(page.getByText("NOT TRADED YET")).toBeVisible();
+    const txt = await page.locator(".mz-cockpit").innerText();
+    expect(txt).not.toMatch(/−\$?250,000|-100\.00%|−100/);
+  });
+
+  test("a traded strategy states its return against SPUS over the same window", async ({ page }) => {
+    await openStrategies(page);
+    const row = page.getByTestId("strategy-vs-bench");
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText("VS SPUS");
+    await expect(row).toContainText("+2.23%");
+    await expect(row).toContainText("+1.83%");
+    await expect(row).toContainText("+0.40 pp");
+  });
+});

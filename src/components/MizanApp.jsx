@@ -5977,11 +5977,19 @@ function StrategyReality({strat}){
 const isPaperStrategy=(s)=>s?.params?.broker==="alpaca_paper";
 
 function StrategyProgressCard({strat}){
+  const{mask}=useHideValues();
   const p=strat&&strat.progress;
   const capital=Number(strat?.capital_allocated)||0;
-  const current=p&&p.current_value!=null?Number(p.current_value):null;
-  const pnl=current!=null?current-capital:null;
-  const pnlPct=current!=null&&capital>0?(pnl/capital)*100:null;
+  // EQUITY = market value + the strategy's own cash (server: strategyScore).
+  // It used to be (value − capital), so an unfunded strategy read −100% and a
+  // swing that had just sold read as a total loss. Before the first fill there
+  // is no return to show, and none is shown.
+  const started=!!(p&&p.started_at);
+  const current=p&&p.equity!=null?Number(p.equity):(p&&p.current_value!=null&&started?Number(p.current_value):null);
+  const pnl=started&&current!=null?current-capital:null;
+  const pnlPct=p&&p.return_pct!=null?Number(p.return_pct):(pnl!=null&&capital>0?(pnl/capital)*100:null);
+  const benchPct=p&&p.bench_return_pct!=null?Number(p.bench_return_pct):null;
+  const alphaPct=p&&p.alpha_pct!=null?Number(p.alpha_pct):null;
   const pctToTarget=p&&p.pct_to_target!=null?Math.max(0,Math.min(100,Number(p.pct_to_target))):null;
   const daysElapsed=p&&p.days_elapsed!=null?Number(p.days_elapsed):null;
   const daysHorizon=p&&p.days_horizon!=null?Number(p.days_horizon):(Number(strat?.time_horizon_days)||null);
@@ -6021,12 +6029,13 @@ function StrategyProgressCard({strat}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
         <div>
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>ALLOCATED</div>
-          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{f$(capital,0)}</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{mask(f$(capital,0))}</div>
         </div>
         <div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>CURRENT VALUE</div>
-          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:pnl!=null?fc(pnl):T.textHi,fontVariantNumeric:"tabular-nums"}}>{current!=null?f$(current,0):"—"}</div>
-          {pnl!=null&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:fc(pnl),fontWeight:600,fontVariantNumeric:"tabular-nums",marginTop:2}}>{pnl>=0?"+":"−"}{f$(pnl,0)} ({fp(pnlPct)})</div>}
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:3}} title="Stock value plus this strategy's own uninvested cash">EQUITY</div>
+          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:pnl!=null?fc(pnl):T.textHi,fontVariantNumeric:"tabular-nums"}}>{current!=null?mask(f$(current,0)):started?"—":mask(f$(capital,0))}</div>
+          {pnl!=null?<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:fc(pnl),fontWeight:600,fontVariantNumeric:"tabular-nums",marginTop:2}}>{pnl>=0?"+":"−"}{mask(f$(Math.abs(pnl),0))} ({fp(pnlPct)})</div>
+            :<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2,letterSpacing:"0.06em"}}>NOT TRADED YET</div>}
         </div>
       </div>
       <div>
@@ -6045,6 +6054,17 @@ function StrategyProgressCard({strat}){
       {realized!=null&&closedCount>0&&<div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:"var(--fs-xs)",fontVariantNumeric:"tabular-nums"}}>
         <span style={{color:T.muted}}>Realized ({closedCount} closed)</span>
         <span style={{color:fc(realized),fontWeight:600}}>{`${realized>=0?"+":"−"}${f$(realized,0)}`}</span>
+      </div>}
+      {started&&<div data-testid="strategy-vs-bench" style={{display:"flex",justifyContent:"space-between",gap:T.s2,flexWrap:"wrap",fontFamily:FM,fontSize:"var(--fs-xs)",fontVariantNumeric:"tabular-nums",borderTop:`1px solid ${T.border}`,paddingTop:T.s2}}>
+        <span style={{color:T.muted}} title="Over the same window: from the close before this strategy's first fill">
+          VS {p.benchmark||"SPUS"} · since {new Date(p.started_at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+        </span>
+        <span>
+          <span style={{color:pnlPct!=null?fc(pnlPct):T.muted,fontWeight:600}}>{pnlPct!=null?fp(pnlPct):"—"}</span>
+          <span style={{color:T.muted}}> vs </span>
+          <span style={{color:benchPct!=null?fc(benchPct):T.muted}}>{benchPct!=null?fp(benchPct):"—"}</span>
+          {alphaPct!=null&&<span style={{color:fc(alphaPct),fontWeight:600}}>{` · ${alphaPct>=0?"+":"−"}${Math.abs(alphaPct).toFixed(2)} pp`}</span>}
+        </span>
       </div>}
     </>}
   </BentoTile>;

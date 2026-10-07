@@ -28,6 +28,15 @@ returned 503. Quotes priced against an unverified inventory are wrong quotes.
 > constituents, inverse-vol, weekly) fired at the 2026-10-02 open: 25 signals at
 > 09:30:18 ET, all 25 Alpaca orders `filled`, $94,999.73 deployed on paper
 > account `PA3ME4FKSILU`, $4,999.95 cash left — matching the $95k allocation.
+>
+> **2026-10-07.** Several strategies now share ONE Alpaca account, so each has
+> a SLEEVE (`lib/trading/sleeve.mjs`): it spends only its own cash, capped by
+> the account's real cash — the allocator budget was `capital_allocated`, which
+> would have re-bought the whole book on 4× paper margin (`1537d1c`). Optional
+> per-strategy filters: `earnings_filter_days`, `ai_gate` (paper only, with a
+> pre-market review 08:00–09:29 ET), `cash_sweep`. Swing exits can rest at the
+> broker as bracket legs (`params.broker_exits`). Experiments A–D run on a
+> separate user's own $1M paper account; see CLAUDE.md §10 item 9.
 
 **The strategy engine cannot place an Alpaca order. It has no code path to one.**
 

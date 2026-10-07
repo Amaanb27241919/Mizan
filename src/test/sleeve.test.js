@@ -167,3 +167,50 @@ describe('valueBook', () => {
     expect(valueBook(null, null)).toEqual({ value: 0, priced: 0, missing: [] })
   })
 })
+
+import { strategyScore } from '../../lib/trading/sleeve.mjs'
+
+// The scoreboard the Trade Lab exists for: is a strategy beating simply
+// holding SPUS over the SAME window? The card used to compute P&L as
+// (stock value − capital), ignoring the strategy's cash, so every unfunded
+// strategy read "−100%" and a swing that had just sold read as a total loss.
+describe('strategyScore', () => {
+  const sig = (side, qty, price, at, status = 'executed') => ({ side, qty, suggested_price: price, status, executed_at: at })
+
+  it('equity is stock value PLUS the strategy\'s own cash', () => {
+    const s = strategyScore({ capital: 1000, ledger: [sig('buy', 5, 100, '2026-10-02T13:30:00Z')], marketValue: 550 })
+    expect(s.cash).toBe(500)
+    expect(s.equity).toBe(1050)
+    expect(s.returnPct).toBeCloseTo(5, 9)
+  })
+
+  it('a strategy that has not traded has NO return yet — never −100%', () => {
+    expect(strategyScore({ capital: 250000, ledger: [], marketValue: 0 })).toMatchObject({ equity: 250000, returnPct: null, startedAt: null })
+  })
+
+  it('a swing that sold everything keeps its proceeds', () => {
+    const s = strategyScore({ capital: 1000, ledger: [
+      sig('buy', 10, 100, '2026-10-02T13:30:00Z'), sig('sell', 10, 105, '2026-10-05T15:00:00Z'),
+    ], marketValue: 0 })
+    expect(s.equity).toBe(1050)
+    expect(s.returnPct).toBeCloseTo(5, 9)
+    expect(s.startedAt).toBe('2026-10-02T13:30:00Z')
+  })
+
+  it('compares against SPUS over the same window, and states the difference', () => {
+    const s = strategyScore({ capital: 1000, ledger: [sig('buy', 5, 100, '2026-10-02T13:30:00Z')], marketValue: 550,
+      benchStart: 60, benchNow: 61.2 })
+    expect(s.benchReturnPct).toBeCloseTo(2, 9)
+    expect(s.alphaPct).toBeCloseTo(3, 9)
+  })
+
+  it('reports no comparison rather than a fake one when the benchmark is missing', () => {
+    const s = strategyScore({ capital: 1000, ledger: [sig('buy', 5, 100, '2026-10-02T13:30:00Z')], marketValue: 550, benchStart: null, benchNow: 61 })
+    expect(s.benchReturnPct).toBe(null)
+    expect(s.alphaPct).toBe(null)
+  })
+
+  it('survives malformed input', () => {
+    expect(strategyScore(null)).toMatchObject({ equity: 0, returnPct: null, benchReturnPct: null })
+  })
+})
