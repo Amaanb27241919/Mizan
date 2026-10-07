@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { dayKey, alignSeries, pctReturn, maxDrawdown, attribution, confidenceLabel } from '../lib/benchmarkAttribution.js'
 
-const D = (iso) => new Date(iso + 'T00:00:00Z').getTime()
+// Midday UTC = the morning of the same New York trading day, so each date in
+// these tests means its own session under dayKey's market-time keying.
+const D = (iso) => new Date(iso + 'T12:00:00Z').getTime()
 const pts = (pairs) => pairs.map(([d, v]) => ({ t: D(d), v }))
 
 describe('alignSeries', () => {
@@ -138,5 +140,52 @@ describe('confidenceLabel', () => {
   it('handles garbage as the shortest possible record', () => {
     expect(confidenceLabel(null).level).toBe('none')
     expect(confidenceLabel('x').level).toBe('none')
+  })
+})
+
+// Real stamps from 2026-10-06. Alpaca daily EQUITY points are stamped 00:00Z
+// (= 20:00 ET the evening of that trading day); SPUS daily BARS are stamped
+// 04:00Z (= 00:00 ET of their own day). Keyed by UTC date, Monday's equity
+// close landed on Tuesday and was compared with Tuesday's SPUS bar.
+describe('day alignment in market time (America/New_York)', () => {
+  const T = (iso) => Date.parse(iso)
+
+  it('keys an equity close and its SPUS bar to the SAME trading day', () => {
+    expect(dayKey(T('2026-10-03T00:00:00Z'))).toBe('2026-10-02') // Friday close
+    expect(dayKey(T('2026-10-02T04:00:00Z'))).toBe('2026-10-02') // Friday SPUS bar
+    expect(dayKey(T('2026-10-06T00:00:00Z'))).toBe('2026-10-05') // Monday close
+  })
+
+  it('aligns the real 2026-10-06 series day for day', () => {
+    const equity = [
+      { t: T('2026-10-02T00:00:00Z'), v: 100000 },
+      { t: T('2026-10-03T00:00:00Z'), v: 100721.89 },
+      { t: T('2026-10-06T00:00:00Z'), v: 101191.65 },
+    ]
+    const spus = [
+      { t: T('2026-10-01T04:00:00Z'), v: 59.72 },
+      { t: T('2026-10-02T04:00:00Z'), v: 60.33 },
+      { t: T('2026-10-05T04:00:00Z'), v: 60.81 },
+      { t: T('2026-10-06T04:00:00Z'), v: 61.15 },
+    ]
+    const a = alignSeries(equity, spus)
+    expect(a.days).toEqual(['2026-10-01', '2026-10-02', '2026-10-05'])
+    expect(a.benchmark).toEqual([59.72, 60.33, 60.81])
+  })
+
+  it('starts the window when the account first moved, not during idle weeks of cash', () => {
+    const flat = (d) => ({ t: T(`2026-09-${d}T00:00:00Z`), v: 100000 })
+    const equity = [flat(10), flat(17), flat(24), { t: T('2026-10-02T00:00:00Z'), v: 100000 },
+      { t: T('2026-10-03T00:00:00Z'), v: 101000 }]
+    const spus = [
+      { t: T('2026-09-09T04:00:00Z'), v: 50 }, { t: T('2026-09-16T04:00:00Z'), v: 52 },
+      { t: T('2026-09-23T04:00:00Z'), v: 55 }, { t: T('2026-10-01T04:00:00Z'), v: 59 },
+      { t: T('2026-10-02T04:00:00Z'), v: 60 },
+    ]
+    const r = attribution(equity, spus)
+    expect(r.window.from).toBe('2026-10-01')        // the last idle close, right before trading
+    // pctReturn reports PERCENT (1 = 1%).
+    expect(r.strategyReturn).toBeCloseTo(1, 9)
+    expect(r.benchmarkReturn).toBeCloseTo((60 / 59 - 1) * 100, 9)
   })
 })

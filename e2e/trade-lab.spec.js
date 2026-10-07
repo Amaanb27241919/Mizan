@@ -70,7 +70,7 @@ function labFixtures(over = {}) {
     "/api/alpaca/orders": ORDERS,
     "/api/bot/signals": SIGNALS,
     "/api/bot/strategies": { strategies: [] },
-    "/api/bot/activity": { activity: [] },
+    "/api/bot/activity": { items: [] },
     "/api/bot/trades": { trades: [] },
     "/api/bot/full-auto-accounts": { accounts: [] },
     ...over,
@@ -328,12 +328,15 @@ test.describe("Trade Lab cockpit", () => {
     // SPUS +1.474%, so the honest headline is a red -0.87pp.
     await gotoLab(page, { fixtures: {
       "/api/alpaca/portfolio-history": {
-        timestamp: [Date.parse("2026-10-01T20:00:00Z") / 1000, Date.parse("2026-10-02T20:00:00Z") / 1000],
+        // Real stamps: an equity close lands at 00:00Z the NEXT UTC day
+        // (20:00 ET); a SPUS bar at 04:00Z of its own day (00:00 ET). The old
+        // 20:00Z fixture hid a one-day misalignment in production.
+        timestamp: [Date.parse("2026-10-02T00:00:00Z") / 1000, Date.parse("2026-10-03T00:00:00Z") / 1000],
         equity: [100000, 100603.26], baseValue: 100000, timeframe: "1D", range: "1M",
       },
       "/api/alpaca/benchmark": { symbol: "SPUS", range: "1M", points: [
-        { t: Date.parse("2026-10-01T20:00:00Z"), v: 59.72 },
-        { t: Date.parse("2026-10-02T20:00:00Z"), v: 60.60 },
+        { t: Date.parse("2026-10-01T04:00:00Z"), v: 59.72 },
+        { t: Date.parse("2026-10-02T04:00:00Z"), v: 60.60 },
       ] },
     } });
     await page.getByRole("button", { name: "Performance", exact: true }).click();
@@ -438,9 +441,13 @@ test.describe("Trade Lab risk", () => {
     "/api/alpaca/positions": BOOK.map(([symbol, mv]) => ({
       symbol, qty: "1", avg_entry_price: "1", current_price: "1",
       market_value: String(mv), unrealized_pl: "0", unrealized_plpc: "0" })),
-    "/api/alpaca/portfolio-history": { points: Array.from({ length: 22 }, (_, i) => ({
-      date: `2026-09-${String(i + 10).padStart(2, "0")}`,
-      equity: 100000 + (i < 8 ? i * 900 : i < 14 ? 7200 - (i - 8) * 1400 : -1200 + (i - 14) * 700) })) },
+    // The REAL server shape: { timestamp[] (unix s), equity[] }. The previous
+    // fixture used { points:[{date,equity}] } — the same wrong shape the panel
+    // read, so this passed while production always showed "not yet".
+    "/api/alpaca/portfolio-history": {
+      timestamp: Array.from({ length: 22 }, (_, i) => Date.parse(`2026-09-${String(i + 10).padStart(2, "0")}T00:00:00Z`) / 1000),
+      equity: Array.from({ length: 22 }, (_, i) => 100000 + (i < 8 ? i * 900 : i < 14 ? 7200 - (i - 8) * 1400 : -1200 + (i - 14) * 700)),
+      baseValue: 100000, timeframe: "1D", range: "1M" },
     "/api/screen": { provider: "finnhub", results: Object.fromEntries(
       BOOK.filter((b) => b[2]).map(([s2, , ind]) =>
         [s2, { tk: s2, status: "halal", industry: ind, byStandard: {} }])) },
@@ -482,7 +489,7 @@ test.describe("Trade Lab risk", () => {
   test("says NOT YET rather than 0% when history is too short", async ({ page }) => {
     // A new account has not had a 0% drawdown; it has had no measurable one.
     const txt = await openRisk(page, {
-      "/api/alpaca/portfolio-history": { points: [{ date: "2026-10-01", equity: 100000 }] },
+      "/api/alpaca/portfolio-history": { timestamp: [Date.parse("2026-10-01T00:00:00Z") / 1000], equity: [100000], baseValue: 100000, timeframe: "1D", range: "1M" },
     });
     const v = /MAX DRAWDOWN\s*\n\s*([^\n]+)/.exec(txt)?.[1]?.trim();
     expect(v).toBe("not yet");

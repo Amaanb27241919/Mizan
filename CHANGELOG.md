@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-10-06
 
+### Added
+- **trading:** Pre-market AI review, broker-side swing stops, and three swing exit fixes (`7697e86`)
+
 ### Fixed
 - **trading:** Bound AI panel work to the cron tick so rebalances are never starved (`ea4b643`)
 - **trading:** Rank strategies spend their own cash, never margin; add earnings filter, AI gate and SPSK sweep (`1537d1c`)

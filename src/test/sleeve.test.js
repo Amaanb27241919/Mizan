@@ -147,3 +147,23 @@ describe('aiGateDecision', () => {
     expect(aiGateDecision(null)).toMatchObject({ vetoed: [], passed: [], unreviewed: [], ready: true })
   })
 })
+
+import { valueBook } from '../../lib/trading/sleeve.mjs'
+
+// Found 2026-10-06 by the Trade Lab audit: the strategy card summed the share
+// counts of all 25 different tickers (386.57) and priced the total at ONE
+// ticker's quote, showing ~$162k / +71% for a ~$97k book.
+describe('valueBook', () => {
+  it('prices every ticker separately', () => {
+    expect(valueBook({ ADI: 2, SNDK: 1 }, { ADI: 420, SNDK: 1750 })).toEqual({ value: 2590, priced: 2, missing: [] })
+  })
+
+  it('reports tickers it could not price instead of silently valuing them at zero', () => {
+    expect(valueBook({ ADI: 2, ZZZ: 5 }, { ADI: 420 })).toEqual({ value: 840, priced: 1, missing: ['ZZZ'] })
+  })
+
+  it('accepts string prices and survives malformed input', () => {
+    expect(valueBook({ ADI: '2' }, { ADI: '420.5' }).value).toBe(841)
+    expect(valueBook(null, null)).toEqual({ value: 0, priced: 0, missing: [] })
+  })
+})

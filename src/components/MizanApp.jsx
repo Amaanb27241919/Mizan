@@ -6015,7 +6015,7 @@ function StrategyProgressCard({strat}){
             P&L gets rendered as real. */}
         {(p?.paper||isPaperStrategy(strat))&&<Tag label="PAPER" color={T.gold}/>}
       </div>
-      <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em"}}>{isDca?`ACCUMULATE · ${cadence}D`:`TARGET ${strat.profit_target_pct}%`}</span>
+      <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em"}}>{isDca?`ACCUMULATE · ${cadence}D`:strat.profit_target_pct!=null?`TARGET ${strat.profit_target_pct}%`:strat.strategy_type==="rank_rebalance"?`REBALANCE · ${Number(strat.params?.rebalance_days)||30}D`:"NO TARGET"}</span>
     </div>
     {noData?<div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted}}>Progress data not available yet — check back after the next bot run.</div>:<>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
@@ -6805,7 +6805,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       };
       const labelFor=a=>(a.status==="approved"&&a.error_msg)?{label:"FAILED",color:T.loss}:(META[a.status]||{label:(a.status||"—").toUpperCase(),color:T.muted});
       const stratLabel=id=>{const s=strategies.find(x=>x.id===id);if(!s)return null;const c=Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[];return c.length>1?`${c.length} halal names`:(c[0]||s.ticker);};
-      return<CollapsibleTile title="BOT ACTIVITY · ALL ACTIONS" subtitle="Every signal the bot generated + its outcome" storageKey="bot_activity">
+      return<CollapsibleTile title="BOT ACTIVITY · ALL ACTIONS" subtitle="Every signal the bot generated + its outcome" storageKey="bot_activity" defaultOpen>
         <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",marginBottom:T.s3}}>
           <button onClick={loadActivity} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingActivity?"Loading…":"Refresh"}</button>
         </div>
@@ -7675,8 +7675,11 @@ function RiskPanel({desk,demoMode}){
   const conc=useMemo(()=>concentration(positions,{topK:5}),[positions]);
   const byIndustry=useMemo(()=>groupExposure(positions,
     sym=>verdicts[sym]&&verdicts[sym].industry),[positions,verdicts]);
-  const dd=useMemo(()=>maxDrawdown(asArray(hist&&hist.points).map(p=>({
-    date:p.date,value:Number(p.equity ?? p.value)}))),[hist]);
+  // The server sends {timestamp[], equity[]} (see /api/alpaca/portfolio-history).
+  // This read hist.points, which never exists, so MAX DRAWDOWN said "not yet"
+  // for every real account while a fixture in the same wrong shape passed.
+  const dd=useMemo(()=>maxDrawdown(toPoints(hist).map(p=>({
+    date:new Date(p.t).toISOString().slice(0,10),value:p.v}))),[hist]);
 
   const pct=n=>n==null?"—":`${(n*100).toFixed(1)}%`;
 

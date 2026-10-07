@@ -25,12 +25,36 @@ const num = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** A day key (YYYY-MM-DD) in UTC, so two series bucket identically. */
+/**
+ * The TRADING day (YYYY-MM-DD, America/New_York) a timestamp belongs to.
+ *
+ * NOT the UTC date. Alpaca stamps a daily equity point at 00:00Z — 20:00 ET
+ * the evening of that session — while SPUS daily bars are stamped 04:00Z,
+ * 00:00 ET of their own day. Keyed by UTC, every equity close landed one day
+ * late and was compared with the NEXT day's SPUS bar (found 2026-10-06 on the
+ * live account). In market time both land on the session they describe.
+ */
+const NY_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
 export function dayKey(ms) {
   const n = num(ms);
   if (n === null) return null;
   const d = new Date(n);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  return Number.isNaN(d.getTime()) ? null : NY_DAY.format(d);
+}
+
+/**
+ * Drop the idle run before the account first moved, keeping its last point
+ * as the baseline. A paper account funded weeks before its first trade sits
+ * flat at the deposit, and measuring "strategy since then" against "SPUS
+ * since then" credits the benchmark with weeks the strategy did not exist.
+ */
+export function trimIdleStart(points) {
+  const pts = (Array.isArray(points) ? points : []).filter((p) => num(p?.t) !== null && num(p?.v) !== null)
+    .sort((a, b) => num(a.t) - num(b.t));
+  if (pts.length < 2) return pts;
+  const first = num(pts[0].v);
+  const moved = pts.findIndex((p) => num(p.v) !== first);
+  return moved <= 0 ? pts : pts.slice(moved - 1);
 }
 
 /**
@@ -111,7 +135,7 @@ export function maxDrawdown(values) {
  * able to tell those apart.
  */
 export function attribution(strategyPoints, benchmarkPoints, { benchmarkName = "SPUS" } = {}) {
-  const aligned = alignSeries(strategyPoints, benchmarkPoints);
+  const aligned = alignSeries(trimIdleStart(strategyPoints), benchmarkPoints);
   const n = aligned.days.length;
 
   const sRet = pctReturn(aligned.strategy);
