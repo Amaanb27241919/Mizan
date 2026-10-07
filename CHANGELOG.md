@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-04
 
 ### Added
+- **trading:** Alpaca paper strategies run full-auto for every trading user (`44dce95`)
 - **trade:** Closed-trades sheet with estimated tax and Zakat per sale (`648dd50`)
 
 ### Fixed

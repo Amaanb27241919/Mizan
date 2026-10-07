@@ -1,0 +1,149 @@
+import { describe, it, expect } from 'vitest'
+import {
+  sleeveCash, rankDeployBudget, earningsExclusions, withCashSweep, aiGateDecision,
+} from '../../lib/trading/sleeve.mjs'
+
+const sig = (side, qty, price, status = 'executed') => ({ side, qty: String(qty), suggested_price: String(price), status })
+
+// The defect that prompted this module: rank_rebalance handed the basket
+// allocator `capital_allocated` as NEW money every rebalance. The allocator
+// treats its budget as a contribution, so the live $95k strategy would have
+// bought ~$95k more on its 2026-10-09 rebalance with ~$5k of cash — on margin.
+describe('sleeveCash', () => {
+  it('is capital minus what was bought plus what was sold', () => {
+    expect(sleeveCash({ capital: 1000, signals: [sig('buy', 2, 300), sig('sell', 1, 350)] })).toBeCloseTo(750, 6)
+  })
+
+  it('reserves cash for buys still in flight (submitted), so a tick cannot spend it twice', () => {
+    expect(sleeveCash({ capital: 1000, signals: [sig('buy', 1, 400, 'submitted')] })).toBeCloseTo(600, 6)
+  })
+
+  it('ignores records that never became orders', () => {
+    const noise = ['shadow', 'rejected', 'expired', 'pending'].map((s) => sig('buy', 10, 100, s))
+    expect(sleeveCash({ capital: 1000, signals: noise })).toBe(1000)
+  })
+
+  it('the live strategy after its first rebalance has almost nothing left to deploy', () => {
+    // Shape of 97b5b48e on 2026-10-02: $95,000 capital, $94,999.73 bought.
+    expect(sleeveCash({ capital: 95000, signals: [sig('buy', 1, 94999.73)] })).toBeCloseTo(0.27, 2)
+  })
+
+  it('survives malformed input', () => {
+    expect(sleeveCash(null)).toBe(0)
+    expect(sleeveCash({ capital: 'x', signals: { e: 1 } })).toBe(0)
+  })
+})
+
+describe('rankDeployBudget', () => {
+  it('adds the proceeds of this rebalance\'s sells to the sleeve', () => {
+    expect(rankDeployBudget({ sleeve: 100, sells: [{ qty: 2, price: 50 }], accountCash: 10000 })).toBe(200)
+  })
+
+  it('NEVER exceeds the account\'s real cash — margin is riba', () => {
+    expect(rankDeployBudget({ sleeve: 95000, sells: [], accountCash: 5000 })).toBe(5000)
+    expect(rankDeployBudget({ sleeve: 95000, sells: [{ qty: 10, price: 100 }], accountCash: 5000 })).toBe(6000)
+  })
+
+  it('is zero, not negative, when the sleeve is overspent', () => {
+    expect(rankDeployBudget({ sleeve: -50, sells: [], accountCash: 1e6 })).toBe(0)
+  })
+
+  it('refuses to guess when the account cash is unknown', () => {
+    expect(rankDeployBudget({ sleeve: 1000, sells: [], accountCash: null })).toBe(0)
+  })
+})
+
+describe('earningsExclusions', () => {
+  const cal = [
+    { symbol: 'MU', date: '2026-09-30' },
+    { symbol: 'KLAC', date: '2026-10-28' },
+    { symbol: 'LRCX', date: '2026-10-07' },
+    { symbol: 'ZZZZ', date: '2026-10-07' },
+  ]
+  const universe = ['MU', 'KLAC', 'LRCX', 'ADI']
+
+  it('blocks universe names reporting within the window (inclusive)', () => {
+    expect(earningsExclusions(cal, universe, { asOf: '2026-09-28', days: 3 })).toEqual(['MU'])
+    expect(earningsExclusions(cal, universe, { asOf: '2026-10-05', days: 3 })).toEqual(['LRCX'])
+  })
+
+  it('ignores names outside the universe and dates already past', () => {
+    expect(earningsExclusions(cal, universe, { asOf: '2026-10-08', days: 3 })).toEqual([])
+  })
+
+  it('is off when days is 0 and survives malformed input', () => {
+    expect(earningsExclusions(cal, universe, { asOf: '2026-09-28', days: 0 })).toEqual([])
+    expect(earningsExclusions(null, null, null)).toEqual([])
+    expect(earningsExclusions({ earningsCalendar: cal }, universe, { asOf: '2026-09-28', days: 3 })).toEqual(['MU'])
+  })
+})
+
+describe('withCashSweep', () => {
+  it('puts the empty slots into the sweep ticker', () => {
+    const out = withCashSweep({ A: 0.5, B: 0.5 }, { buyTop: 4, targetCount: 2, ticker: 'SPSK' })
+    expect(out).toEqual({ A: 0.25, B: 0.25, SPSK: 0.5 })
+  })
+
+  it('adds nothing when every slot is filled', () => {
+    expect(withCashSweep({ A: 0.5, B: 0.5 }, { buyTop: 2, targetCount: 2, ticker: 'SPSK' })).toEqual({ A: 0.5, B: 0.5 })
+  })
+
+  it('weights still sum to 1', () => {
+    const out = withCashSweep({ A: 0.2, B: 0.3, C: 0.5 }, { buyTop: 15, targetCount: 3, ticker: 'SPSK' })
+    expect(Object.values(out).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9)
+  })
+
+  it('is a no-op without a ticker, and survives malformed input', () => {
+    expect(withCashSweep({ A: 1 }, { buyTop: 5, targetCount: 1, ticker: null })).toEqual({ A: 1 })
+    expect(withCashSweep(null, null)).toEqual({})
+  })
+})
+
+describe('aiGateDecision', () => {
+  const row = (ticker, ensemble) => ({ ticker, rationale: { kind: 'ai_panel', ensemble } })
+  const SELL2 = { ok: true, consensus: 'SELL', unanimous: true, votes: 2 }
+  const HOLD = { ok: true, consensus: 'HOLD', unanimous: false, votes: 2 }
+  const DECLINED = { ok: false, code: 'insufficient_votes' }
+
+  it('blocks only a name the panel agreed to SELL', () => {
+    const d = aiGateDecision({ candidates: ['A', 'B', 'C'], reviews: [row('A', SELL2), row('B', HOLD), row('C', DECLINED)] })
+    expect(d.vetoed).toEqual(['A'])
+    expect(d.passed).toEqual(['B', 'C'])
+    expect(d.unreviewed).toEqual([])
+    expect(d.ready).toBe(true)
+  })
+
+  it('waits while a candidate has not been reviewed yet', () => {
+    const d = aiGateDecision({ candidates: ['A', 'B'], reviews: [row('A', HOLD)] })
+    expect(d.unreviewed).toEqual(['B'])
+    expect(d.ready).toBe(false)
+  })
+
+  it('after the cutoff, unreviewed names proceed — a vendor outage must not freeze the book', () => {
+    const d = aiGateDecision({ candidates: ['A', 'B'], reviews: [row('A', HOLD)], pastCutoff: true })
+    expect(d.ready).toBe(true)
+    expect(d.passed).toEqual(['A', 'B'])
+    expect(d.unreviewedAtCutoff).toEqual(['B'])
+  })
+
+  it("blocks a name Mizan's own screen rates haram, whatever the models said", () => {
+    const haram = { ticker: 'X', rationale: { kind: 'ai_panel', screen_only: true, sharia_verdict: 'haram', ensemble: { ok: false } } }
+    const d = aiGateDecision({ candidates: ['X'], reviews: [haram] })
+    expect(d.vetoed).toEqual(['X'])
+  })
+
+  it('a screen-only row for a "review" verdict counts as reviewed and passes', () => {
+    const rev = { ticker: 'Y', rationale: { kind: 'ai_panel', screen_only: true, sharia_verdict: 'review', ensemble: { ok: false } } }
+    const d = aiGateDecision({ candidates: ['Y'], reviews: [rev] })
+    expect(d).toMatchObject({ vetoed: [], passed: ['Y'], ready: true })
+  })
+
+  it('ignores reviews that are not AI panel rows', () => {
+    const d = aiGateDecision({ candidates: ['A'], reviews: [{ ticker: 'A', rationale: { kind: 'rank', ensemble: SELL2 } }] })
+    expect(d.unreviewed).toEqual(['A'])
+  })
+
+  it('survives malformed input', () => {
+    expect(aiGateDecision(null)).toMatchObject({ vetoed: [], passed: [], unreviewed: [], ready: true })
+  })
+})

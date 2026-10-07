@@ -157,17 +157,21 @@ describe('research panel wiring', () => {
   const FN = SRC.slice(SRC.indexOf('async function runResearchPanel'),
                        SRC.indexOf('// Bounds for the stop-arming pass.'))
 
-  it('is opt-in TWICE — shadow mode AND an explicit param', () => {
+  it('is opt-in TWICE — a mode AND an explicit param, in both ways in', () => {
     // Neither alone is enough, so no existing strategy can start calling
-    // models because of a config typo.
-    expect(FN).toMatch(/params\?\.research_panel !== true/)
-    expect(FN).toMatch(/resolveMode\(strategy\) !== MODES\.SHADOW/)
+    // models because of a config typo. Two doors since 2026-10-06: SHADOW +
+    // research_panel (records only), PAPER + ai_gate (may block a paper buy).
+    expect(FN).toMatch(/research_panel === true && mode === MODES\.SHADOW/)
+    expect(FN).toMatch(/ai_gate === true && mode === MODES\.PAPER/)
+    expect(FN).toMatch(/if \(!shadowPanel && !paperGate\)/)
   })
 
-  it('refuses to run at all for a strategy that COULD trade', () => {
-    // The chokepoint already blocks execution; this blocks the research from
-    // even happening, so a tradeable strategy never acquires AI verdicts.
-    expect(FN).toMatch(/ai\.panel\.refused_non_shadow/)
+  it('never runs for a LIVE-money strategy', () => {
+    // The doors are SHADOW and PAPER only. resolveMode never returns PAPER
+    // for a SnapTrade strategy (executionMode.test.js), so live money cannot
+    // acquire AI verdicts that steer it.
+    expect(FN).not.toMatch(/MODES\.LIVE_(AUTO|CONFIRM)/)
+    expect(FN).toMatch(/ai\.panel\.refused_mode/)
   })
 
   it('refuses to call one model a committee', () => {

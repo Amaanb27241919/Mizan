@@ -229,9 +229,19 @@ describe('rank_rebalance is shadow-only', () => {
     expect(branch).toMatch(/placed > 0 \? \{ \.\.\.\(strat\.params/)
   })
 
-  it('records that the earnings filter is not yet applied', () => {
-    // The reference config skips names reporting within 3 days. We do not do
-    // that yet. Saying so in code beats implying it by omission.
-    expect(branch).toMatch(/Not applied yet/i)
+  it('applies the earnings filter when configured, and fails closed without the calendar', () => {
+    // The reference config skips names reporting within 3 days. Built
+    // 2026-10-06; a strategy that promises the filter must not rebalance
+    // blind when the calendar is unreachable.
+    expect(branch).toMatch(/earningsExclusions\(cal, universe/)
+    expect(branch).toMatch(/if \(!cal\) \{[^}]*earnings_unavailable[^}]*\}\);? continue; \}|earnings_unavailable", \{ strategy_id: strat\.id \}\); continue; \}/)
+  })
+
+  it('sizes buys from the sleeve and the account cash, never capital_allocated alone', () => {
+    // capital_allocated passed as the allocator budget re-bought the whole
+    // book on margin every rebalance (found 2026-10-06, before the second
+    // rebalance of the live strategy).
+    expect(branch).toMatch(/rankDeployBudget\(/)
+    expect(branch).not.toMatch(/const budget = Math\.max\(0, Number\(strat\.capital_allocated\)/)
   })
 })
