@@ -233,8 +233,13 @@ describe('rank_rebalance is shadow-only', () => {
     // The reference config skips names reporting within 3 days. Built
     // 2026-10-06; a strategy that promises the filter must not rebalance
     // blind when the calendar is unreachable.
-    expect(branch).toMatch(/earningsExclusions\(cal, universe/)
-    expect(branch).toMatch(/if \(!cal\) \{[^}]*earnings_unavailable[^}]*\}\);? continue; \}|earnings_unavailable", \{ strategy_id: strat\.id \}\); continue; \}/)
+    // The plan is built in prepareRankPlan (shared with the pre-market
+    // review); the branch must use it and bail out on its skip.
+    const prep = SRC.slice(SRC.indexOf('async function prepareRankPlan'), SRC.indexOf('async function runAiGate'))
+    expect(prep).toMatch(/earningsExclusions\(cal, universe/)
+    expect(prep).toMatch(/if \(!cal\) \{ warn\("bot\.rank\.earnings_unavailable"[^}]*\}\); return \{ skip: "earnings_unavailable" \}; \}/)
+    expect(branch).toMatch(/const prep = await prepareRankPlan\(strat/)
+    expect(branch).toMatch(/if \(prep\.skip\) continue;/)
   })
 
   it('sizes buys from the sleeve and the account cash, never capital_allocated alone', () => {

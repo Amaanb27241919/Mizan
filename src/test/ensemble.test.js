@@ -227,3 +227,30 @@ describe('research panel tick budget', () => {
     expect(SRC).toMatch(/Math\.min\(Date\.now\(\) \+ PANEL_MS_BUDGET, deadlineAt\)/)
   })
 })
+
+describe('pre-market AI gate review', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  const fnOf = (name) => SRC.slice(SRC.indexOf(`async function ${name}`), SRC.indexOf('\n}\n', SRC.indexOf(`async function ${name}`)))
+  const PRE = fnOf('premarketGateReviews')
+  const GATE = fnOf('runAiGate')
+
+  it('never places, inserts or approves an order — review only', () => {
+    // Outside regular hours a market order is QUEUED to the open at a price
+    // nobody saw. The pre-market pass may only write the panel's own
+    // shadow opinions (inside runResearchPanel).
+    for (const body of [PRE, GATE]) {
+      expect(body).not.toMatch(/executeStrategyOrder|placeAlpacaOrder|executeSnapTradeOrder/)
+      expect(body).not.toMatch(/\.insert\(|\.update\(/)
+    }
+  })
+
+  it('only runs for AI-gated PAPER strategies that are due', () => {
+    expect(PRE).toMatch(/ai_gate !== true \|\| resolveMode\(strat\) !== MODES\.PAPER/)
+    expect(PRE).toMatch(/if \(!rankDue\(strat\)\) continue;/)
+    expect(PRE).toMatch(/pastCutoff: false/)
+  })
+
+  it('is reached only from the market-closed path, inside the review window', () => {
+    expect(SRC).toMatch(/if \(inPremarketReviewWindow\(\)\) \{\s*try \{ premarket = await premarketGateReviews\(\); \}/)
+  })
+})

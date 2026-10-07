@@ -260,8 +260,11 @@ describe('stop-arming wiring', () => {
   })
 
   it('arms BEFORE the cadence check, because DAY stops expire nightly', () => {
-    const arm = SRC.indexOf('await armProtectiveStops(strat, armCreds)')
-    const cadence = SRC.indexOf('const cadenceDays = Math.max(1, Number(strat.params?.rebalance_days)')
+    // The cadence check moved into rankDue() (2026-10-06); what matters is
+    // that the rank branch CALLS it after arming.
+    const BR = SRC.slice(SRC.indexOf('if (strat.strategy_type === "rank_rebalance")'))
+    const arm = BR.indexOf('await armProtectiveStops(strat, armCreds)')
+    const cadence = BR.indexOf('if (!rankDue(strat)) continue;')
     expect(arm).toBeGreaterThan(-1)
     expect(cadence).toBeGreaterThan(-1)
     expect(arm, 'arming must not sit behind the weekly cadence gate').toBeLessThan(cadence)

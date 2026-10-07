@@ -16,6 +16,7 @@ import {
   SESSION_BOUNDS,
   MARKET_HOLIDAYS,
   EARLY_CLOSES,
+  inPremarketReviewWindow,
 } from '../../lib/market/sessions.mjs'
 
 // 2026-08-25 is a Tuesday in EDT (-04:00); 2026-01-13 a Tuesday in EST (-05:00).
@@ -219,5 +220,33 @@ describe('MARKET_HOLIDAYS — 2027 was seven days short', () => {
     // regeneration, the table is short — re-run the recipe in sessions.mjs.
     expect([...MARKET_HOLIDAYS].filter((d) => d.startsWith('2026'))).toHaveLength(10)
     expect([...MARKET_HOLIDAYS].filter((d) => d.startsWith('2027'))).toHaveLength(10)
+  })
+})
+
+// The AI gate's pre-market pass (2026-10-06): review buy candidates against
+// overnight news BEFORE the open, so a gated strategy trades at 09:30 instead
+// of 15-30 minutes later. Review only — orders still wait for the regular
+// session.
+describe('inPremarketReviewWindow', () => {
+  it.each([
+    ['07:59', false], ['08:00', true], ['09:15', true], ['09:29', true], ['09:30', false], ['12:00', false],
+  ])('EDT %s -> %s', (t, want) => {
+    expect(inPremarketReviewWindow(edt(t))).toBe(want)
+  })
+
+  it('works across the DST change', () => {
+    expect(inPremarketReviewWindow(est('08:30'))).toBe(true)
+    expect(inPremarketReviewWindow(est('07:30'))).toBe(false)
+  })
+
+  it('never on weekends or market holidays', () => {
+    expect(inPremarketReviewWindow(new Date('2026-08-29T08:30:00-04:00'))).toBe(false) // Saturday
+    const holiday = [...MARKET_HOLIDAYS][0]
+    expect(inPremarketReviewWindow(new Date(`${holiday}T08:30:00-05:00`))).toBe(false)
+  })
+
+  it('accepts a custom start, clamped inside pre-market', () => {
+    expect(inPremarketReviewWindow(edt('07:00'), { startMinutes: 7 * 60 })).toBe(true)
+    expect(inPremarketReviewWindow(edt('03:00'), { startMinutes: 0 })).toBe(false)
   })
 })
