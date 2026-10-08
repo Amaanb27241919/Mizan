@@ -50,6 +50,9 @@ const MODULES = [
   '../lib/deskBlotter.js',
   '../lib/committee.js',
   '../lib/strategyColors.js',
+  '../lib/deskPipeline.js',
+  '../lib/sparkline.js',
+  '../../lib/trading/curve.mjs',
   '../../lib/trading/journal.mjs',
 ]
 

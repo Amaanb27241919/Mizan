@@ -15,7 +15,9 @@ import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHist
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { deskSummary } from "../lib/deskSummary.js";
-import { blotterRows, allocationSegments, tapeRows, groupTotals, strategyLabel } from "../lib/deskBlotter.js";
+import { blotterRows, allocationSegments, tapeRows, groupTotals, strategyLabel, MODE_LADDER } from "../lib/deskBlotter.js";
+import { deskPipeline, latestRoundAnswering, MARK_GLYPH as PIPE_GLYPH } from "../lib/deskPipeline.js";
+import { sparkPaths, pinToday } from "../lib/sparkline.js";
 import { committeeStats } from "../lib/committee.js";
 import { STRATEGY_PALETTE, strategyColorKey } from "../lib/strategyColors.js";
 import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity } from "../lib/equityCurve.js";
@@ -88,7 +90,7 @@ const T = {
   rSm:"var(--r-sm)", rMd:"var(--r-md)", rLg:"var(--r-lg)",
 };
 const THEME_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap');
 
   :root, :root[data-theme="light"] {
     /* Paper-canvas light theme — primary brand face */
@@ -111,14 +113,10 @@ const THEME_CSS = `
     --mz-tile-fill: rgba(255,255,255,0.74);
     color-scheme: light;
   }
-  /* The Trade Lab cockpit re-declares the SAME dark variables on itself, so a
-     dark instrument panel works while the rest of the app stays on the paper
-     canvas. It is one selector added to the existing block, deliberately NOT a
-     second copy of the palette — two lists of fifteen hex values drift, and
-     this codebase has already paid for duplicated definitions twice (two
-     net-worth series, two Sharia verdicts). Everything inside resolves its
-     T.* tokens dark by ordinary CSS inheritance. */
-  :root[data-theme="dark"], .mz-cockpit {
+  /* The Trade Lab used to force this dark palette on itself (.mz-cockpit).
+     Since the broadsheet redesign (2026-10-08) it follows the app's theme
+     like every other surface: paper by default, midnight when chosen. */
+  :root[data-theme="dark"] {
     /* Midnight-navy dark theme — the cool inverse of the warm paper light face,
        built on the brand navy accent (not the old warm "ink" brown). */
     --mz-bg: #0e1626; --mz-surface: #16213a; --mz-card: #1c2945;
@@ -7275,11 +7273,11 @@ function AlpacaKeysPanel({onChanged}){
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MĪZAN TRADE LAB — the cockpit
+   MĪZAN TRADE LAB — shared pieces (rail, tapes, panels)
    ═══════════════════════════════════════════════════════════════════════════
-   A dark instrument panel inside a light app. The dark comes from `.mz-cockpit`
-   re-declaring the dark theme's OWN variables (see THEME_CSS), so every T.*
-   token inside resolves dark by inheritance and no second palette exists.
+   These were built for the dark "cockpit", retired 2026-10-08 for the
+   broadsheet (see the block before TradeBot). They render on the app's own
+   theme now; the rules below still hold.
 
    House rules this surface keeps, because they are what make it readable:
      · every label FM, every number FM + tabular-nums
@@ -7727,7 +7725,7 @@ function useScreenVerdicts(symbols,demoMode){
   return{verdicts,phase};
 }
 
-function RiskPanel({desk,demoMode}){
+function RiskPanel({desk,demoMode,screen}){
   const{mask}=useHideValues();
   const[hist,setHist]=useState(null);
   const[state,setState]=useState(demoMode?"idle":"loading");
@@ -7738,7 +7736,9 @@ function RiskPanel({desk,demoMode}){
   })).filter(h=>h.symbol&&h.value>0),[desk?.positions]);
   // The screen only feeds the industry grouping, so it fills in as it arrives
   // and never holds the page; the drawdown waits only for its own history.
-  const{verdicts}=useScreenVerdicts(useMemo(()=>positions.map(p=>p.symbol),[positions]),demoMode);
+  // `screen` is the Trade tab's shared read; standalone, it screens itself.
+  const ownScreen=useScreenVerdicts(useMemo(()=>screen?[]:positions.map(p=>p.symbol),[positions,screen]),demoMode);
+  const{verdicts}=screen||ownScreen;
 
   useEffect(()=>{
     if(demoMode){setState("idle");return;}
@@ -7851,7 +7851,7 @@ function RiskPanel({desk,demoMode}){
  */
 const MARK_GLYPH = { pass: "✓", fail: "✗", review: "~", no_data: "·" };
 
-function CompliancePanel({desk,demoMode}){
+function CompliancePanel({desk,demoMode,screen}){
   const{mask}=useHideValues();
 
   const positions=useMemo(()=>asArray(desk?.positions).map(p=>({
@@ -7859,7 +7859,8 @@ function CompliancePanel({desk,demoMode}){
     value:Number(p.market_value)||0,
   })).filter(h=>h.symbol),[desk?.positions]);
   // Shares the app's single screening cache (CLAUDE.md §4) via useScreenVerdicts.
-  const{verdicts,phase}=useScreenVerdicts(useMemo(()=>positions.map(p=>p.symbol),[positions]),demoMode);
+  const ownScreen=useScreenVerdicts(useMemo(()=>screen?[]:positions.map(p=>p.symbol),[positions,screen]),demoMode);
+  const{verdicts,phase}=screen||ownScreen;
 
   const m=useMemo(()=>complianceMatrix(positions,verdicts,{governing:"AAOIFI"}),[positions,verdicts]);
   const passing=m.screened-m.failingGoverning.length;
@@ -8438,15 +8439,370 @@ function ActivityTape({items,strategies,state}){
   </section>;
 }
 
-function TradeDesk({desk,onGoSignals,demoMode,book}){
+/** Orders sent to the broker that have not finished. Lives in Orders. */
+function WorkingOrders({desk}){
   const{mask}=useHideValues();
-  const[pending,setPending]=useState(null);
-  const[feed,setFeed]=useState({state:demoMode?"idle":"loading",items:[]});
+  const open=asArray(desk.orders);
+  return<section>
+    <LabHead title="Working orders" note="Sent to the broker and not finished. An order placed outside market hours waits here for the next session — it is not a fill until the broker says so."/>
+    {desk.state!=="ready"?<p className="mz-col-empty">{desk.state==="loading"?"Loading…":"The paper desk is not reachable."}</p>
+      :open.length===0?<p className="mz-col-empty">No working orders.</p>
+      :<div className="mz-tape-wrap"><table className="mz-news">
+        <thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th style={{textAlign:"right"}}>Qty</th><th style={{textAlign:"right"}}>Filled</th><th style={{textAlign:"right"}}>Status</th></tr></thead>
+        <tbody>{open.map(o=><tr key={o.id}>
+          <td><b>{o.symbol}</b></td>
+          <td style={{color:o.side==="buy"?T.gain:T.loss}}>{o.side==="buy"?"Buy":"Sell"}</td>
+          <td className="mz-news-dim">{String(o.type||"").replace(/_/g," ")}</td>
+          <td style={{textAlign:"right"}}>{o.qty??(o.notional?mask(f$(Number(o.notional))):"—")}</td>
+          <td style={{textAlign:"right"}}>{o.filled_qty??"0"}</td>
+          <td style={{textAlign:"right"}}><b style={{color:T.gold}} aria-hidden="true">◐</b> {String(o.status||"").replace(/_/g," ")}</td>
+        </tr>)}</tbody>
+      </table></div>}
+  </section>;
+}
 
-  // The tape is read once per visit; the book comes from the Trade tab
-  // (useStrategyBook), shared with Performance and AI Committee.
+/* ═══════════════════════════════════════════════════════════════════════════
+   MĪZAN TRADE LAB — the broadsheet (2026-10-08, owner's pick)
+   ═══════════════════════════════════════════════════════════════════════════
+   Replaced the dark cockpit after the owner rejected three dashboard looks as
+   "very AI". The direction he chose reads like a newspaper's markets page:
+   Mizan's own paper and ink, hairline rules instead of a wall of tiles,
+   charts before numbers, status as a coloured mark inside a sentence.
+
+   Newsreader (a typeface designed for news) is the Trade Lab's display face —
+   an explicit owner exception to the fixed font stack (CLAUDE.md §8), scoped
+   to Trade so the lab stands apart from the rest of Mizan. Tables and labels
+   stay IBM Plex.
+
+   Twelve proposal sections (§23) became eight: Desk · Strategies · Portfolio
+   · Orders · Research · Compliance & Risk · Performance · Journal. The ids are
+   the OLD ids where one existed (signals → Orders, committee → Research,
+   compliance → Compliance & Risk) so nav_usage counters and stored state
+   carry over. Nothing was removed; see the Index board of the design canvas.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const FN="'Newsreader','Georgia','Times New Roman',serif";
+
+/** Section identity colours — owner-approved with the hybrid mockup. They
+ *  mark WHERE you are (a square in the nav, a rule under the heading) and
+ *  never tint a number. Distinct from the strategy palette on purpose. */
+const LAB_SECTIONS=[
+  ["desk","Desk",T.blue],
+  ["strategies","Strategies","#8a5a3c"],
+  // "Positions", not "Portfolio": the app's main nav already has a Portfolio.
+  ["positions","Positions","#1a8a8a"],
+  ["signals","Orders",T.gold],
+  ["committee","Research",T.violet],
+  ["compliance","Compliance & Risk",T.gain],
+  ["performance","Performance","#2d5fb3"],
+  ["journal","Journal",T.slate],
+];
+/** Old ids that were folded into a section, and where they now live. */
+const LAB_REDIRECT={order:"signals",risk:"compliance"};
+const MARK_TONE={ok:T.gain,warn:T.gold,block:T.loss,off:T.slate,unknown:T.muted};
+
+/** The section nav. Built on the .mz-tabbar contract (buttons as direct
+ *  children) so the responsive guards walk it like every other strip, and it
+ *  records nav_usage like <TabBar track>. Styled as a newspaper's section rule. */
+function LabNav({active,onChange}){
+  return<div className="mz-tabbar-wrap"><nav className="mz-tabbar mz-labnav" aria-label="Trade Lab sections">
+    {LAB_SECTIONS.map(([id,label,color])=><button key={id} data-tour={`tab-${id}`} aria-current={active===id?"page":undefined}
+      className={active===id?"on":undefined}
+      onClick={()=>{recordNavView(`trade/${id}`);onChange(id);}}>
+      <span aria-hidden="true" className="mz-labnav-sq" style={{background:color}}/>{label}
+    </button>)}
+  </nav></div>;
+}
+
+/** Section heading: Newsreader, with the section's colour as a short rule. */
+function LabHead({title,note,right,id}){
+  return<div className="mz-lab-head">
+    <div style={{minWidth:0}}>
+      <h2 id={id} style={{fontFamily:FN}}>{title}</h2>
+      {note&&<p style={{fontFamily:FP}}>{note}</p>}
+    </div>
+    {right&&<div className="mz-lab-head-r">{right}</div>}
+  </div>;
+}
+
+const nyDate=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"long",month:"long",day:"numeric",year:"numeric"});
+const nyToday=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+
+function LabMasthead({session}){
+  const sess=session?.session||null;
+  const tone=sess==="regular"?T.gain:session?.tradeable?T.gold:T.slate;
+  const state=!session?"session unknown":sess==="regular"?"Market open":session.tradeable?String(session.label||"Extended hours"):"Market closed";
+  return<header className="mz-mast">
+    <div style={{minWidth:0}}>
+      <div className="mz-mast-kicker" style={{fontFamily:FP}}>MĪZAN</div>
+      <h1 style={{fontFamily:FN}}>The Trade Lab</h1>
+    </div>
+    <div className="mz-mast-date" style={{fontFamily:FP}}>
+      <div>{nyDate.format(new Date())} · <RailClock/></div>
+      <div><b style={{color:tone}} aria-hidden="true">●</b> {state} · <span style={{color:T.blue,fontWeight:600}}>Paper desk</span></div>
+    </div>
+  </header>;
+}
+
+/** One line: every gate an order passes, each with its mark. */
+function PipelineStrip({pipeline}){
+  const{stages,pauses}=pipeline;
+  return<div className="mz-pipe" data-testid="order-pipeline" style={{fontFamily:FP}}>
+    <span className="mz-pipe-lead">Every order passes</span>
+    {stages.map((s,i)=><React.Fragment key={s.key}>
+      {i>0&&<span className="mz-pipe-arrow" aria-hidden="true">→</span>}
+      <span className="mz-pipe-stage" data-mark={s.mark} title={`${s.label}: ${s.detail}`}>
+        <b style={{color:MARK_TONE[s.mark]}} aria-hidden="true">{PIPE_GLYPH[s.mark]}</b> {s.label} <span className="mz-pipe-detail" style={{color:s.mark==="warn"?T.gold:s.mark==="block"?T.loss:T.muted}}>{s.detail}</span>
+      </span>
+    </React.Fragment>)}
+    <span className="mz-pipe-end" data-mark={pauses.mark}><b style={{color:MARK_TONE[pauses.mark]}} aria-hidden="true">{PIPE_GLYPH[pauses.mark]}</b> {pauses.detail}</span>
+  </div>;
+}
+
+/** The four figures, ruled columns, no cards. */
+function DeskFigures({account,pending,mask,state}){
+  const n=v=>(v===null||v===undefined||v===""||!Number.isFinite(Number(v))?null:Number(v));
+  const eq=n(account?.equity),last=n(account?.last_equity),cash=n(account?.cash);
+  const chg=eq!=null&&last!=null?eq-last:null;
+  const chgPct=chg!=null&&last>0?(chg/last)*100:null;
+  const inv=eq>0&&cash!=null?Math.max(0,Math.min(100,((eq-cash)/eq)*100)):null;
+  const dash=<span style={{color:T.muted}}>—</span>;
+  const unread=state!=="ready";
+  return<div className="mz-figs" data-testid="desk-figures">
+    <div><div className="mz-fig-l">Paper portfolio</div>
+      <div className="mz-fig-v" style={{fontFamily:FN}}>{eq!=null?mask(f$(eq,0)):dash}</div>
+      <div className="mz-fig-s">{chg!=null?<Signed v={chg} pct={chgPct} mask={mask}/>:unread?"paper desk not read":"no change on record"} <span style={{color:T.muted}}>today</span></div></div>
+    <div><div className="mz-fig-l">Cash</div>
+      <div className="mz-fig-v" style={{fontFamily:FN}}>{cash!=null?mask(f$(cash,0)):dash}</div>
+      <div className="mz-fig-s">the buying limit — no margin</div></div>
+    <div><div className="mz-fig-l">Invested</div>
+      <div className="mz-fig-v" style={{fontFamily:FN}}>{inv!=null?`${inv.toFixed(0)}%`:dash}</div>
+      <div className="mz-fig-bar" aria-hidden="true"><span style={{width:`${inv??0}%`}}/></div></div>
+    <div><div className="mz-fig-l">Waiting on you</div>
+      <div className="mz-fig-v" style={{fontFamily:FN,color:pending>0?T.gold:undefined}}>{pending==null?dash:pending}</div>
+      <div className="mz-fig-s">{pending>0?"signals need your approval":"no signals need approval"}</div></div>
+  </div>;
+}
+
+/** /api/bot/curves — each strategy's daily return vs SPUS. */
+function useStrategyCurves(enabled){
+  const[res,setRes]=useState({state:enabled?"loading":"idle",curves:{}});
+  useEffect(()=>{
+    if(!enabled){setRes({state:"idle",curves:{}});return;}
+    let cancelled=false;
+    (async()=>{
+      try{
+        const r=await apiFetch("/api/bot/curves");
+        const d=r.ok?await r.json().catch(()=>null):null;
+        const c=d&&typeof d.curves==="object"&&d.curves&&!Array.isArray(d.curves)?d.curves:null;
+        if(!cancelled)setRes(c?{state:"ready",curves:c}:{state:"unavailable",curves:{}});
+      }catch{if(!cancelled)setRes({state:"unavailable",curves:{}});}
+    })();
+    return()=>{cancelled=true;};
+  },[enabled]);
+  return res;
+}
+
+/** /api/ai/research, read once by the desk for the pipeline + latest rounds.
+ *  A 403 is an ordinary state (not the operator) and reads as "no rounds". */
+function useResearchFeed(enabled){
+  const[res,setRes]=useState({state:enabled?"loading":"idle",rows:[],providers:[],configured:null});
+  useEffect(()=>{
+    if(!enabled){setRes({state:"idle",rows:[],providers:[],configured:null});return;}
+    let cancelled=false;
+    (async()=>{
+      try{
+        const r=await apiFetch("/api/ai/research?limit=60");
+        if(!r.ok){if(!cancelled)setRes({state:r.status===403?"forbidden":"unavailable",rows:[],providers:[],configured:null});return;}
+        const d=await r.json().catch(()=>null);
+        if(!cancelled)setRes({state:"ready",rows:asArray(d?.rows),providers:asArray(d?.providers),configured:Number.isFinite(Number(d?.configured))?Number(d.configured):null});
+      }catch{if(!cancelled)setRes({state:"unavailable",rows:[],providers:[],configured:null});}
+    })();
+    return()=>{cancelled=true;};
+  },[enabled]);
+  return res;
+}
+
+const MODE_TONE={paper:T.blue,auto:T.loss,semi:T.textHi,confirm:T.textHi,shadow:T.textHi};
+function ModeLadder({mode}){
+  if(mode==="halted")return<div className="mz-ladder"><b style={{color:T.loss}}>halted</b></div>;
+  return<div className="mz-ladder" aria-label={`Execution mode: ${mode}`}>
+    {MODE_LADDER.map((m,i)=><React.Fragment key={m}>{i>0&&" · "}{m===mode?<b style={{color:MODE_TONE[m]||T.textHi}}>{m}</b>:<span>{m}</span>}</React.Fragment>)}
+  </div>;
+}
+
+/** One strategy as a small chart: its line in its own colour, SPUS in grey,
+ *  on one shared scale. Before a strategy trades there is nothing to plot,
+ *  so the box says what will happen instead. */
+function StrategyMultiple({row,curve,mask,today}){
+  const live=row.traded&&row.returnPct!=null?{returnPct:row.returnPct,benchPct:row.benchPct}:null;
+  const pts=pinToday(curve?.points,today,live);
+  const g=sparkPaths(pts,{w:280,h:64,pad:4});
+  const ret=row.returnPct,a=row.alphaPct;
+  const tone=v=>v==null?T.muted:v>0?T.gain:v<0?T.loss:T.muted;
+  const days=Math.max(0,pts.length-1);
+  return<article className="mz-mult" data-testid="strategy-multiple" style={{"--strat":row.color||T.slate}}>
+    <header>
+      <b><span className="mz-mult-key" aria-hidden="true"/>{row.code?`${row.code} · `:""}{row.name}</b>
+      <span style={{color:tone(ret)}}>{row.unpriced?<span style={{color:T.gold}}>price n/a</span>:!row.traded?<span style={{color:T.muted}}>not traded</span>:ret==null?"—":mask(fp(ret))}</span>
+    </header>
+    {g?<svg viewBox={`0 0 ${g.w} ${g.h}`} preserveAspectRatio="none" role="img"
+        aria-label={`${row.code||row.name} against SPUS over ${days} trading day${days===1?"":"s"}`}>
+        <line x1="0" x2={g.w} y1={g.zeroY} y2={g.zeroY} className="mz-mult-zero"/>
+        {g.bench&&<polyline points={g.bench} className="mz-mult-bench"/>}
+        {g.strategy&&<polyline points={g.strategy} style={{stroke:row.color||T.textHi}} className="mz-mult-line"/>}
+      </svg>
+      :<div className="mz-mult-empty">{row.mode==="shadow"?"records opinions · never orders"
+        :!row.traded?"no fills yet":"the daily line starts after its second close"}</div>}
+    <footer>
+      <span style={{color:tone(a)}}>{a==null?<span style={{color:T.muted}}>vs SPUS —</span>:mask(`${a>0?"+":""}${a.toFixed(2)} pts vs SPUS`)}</span>
+      <span>{row.sleeve>0?mask(f$(row.sleeve,0)):""}{row.holdings?` · ${row.holdings} held`:""}</span>
+    </footer>
+    <div className="mz-mult-status" style={{color:row.status?.tone==="warn"?T.gold:T.muted}}>{row.status?.text}</div>
+    <ModeLadder mode={row.mode}/>
+  </article>;
+}
+
+/** Latest orders, a plain ruled list. */
+function LatestOrders({items,strategies,state,onMore}){
+  const rows=useMemo(()=>tapeRows(items,strategies,5),[items,strategies]);
+  const chips=useMemo(()=>chipMap(strategies),[strategies]);
+  const mark=s=>s==="executed"?["●",T.gain,"Filled"]:s==="rejected"||s==="expired"?["■",T.loss,s==="rejected"?"Rejected":"Expired"]:["◐",T.gold,s.charAt(0).toUpperCase()+s.slice(1)];
+  return<section className="mz-col" data-testid="latest-orders">
+    <h3 style={{fontFamily:FN}}>Latest orders</h3>
+    {state!=="ready"?<p className="mz-col-empty">{state==="loading"?"Loading…":"Orders are not available right now."}</p>
+      :!rows.length?<p className="mz-col-empty">No orders yet.</p>
+      :<table className="mz-news"><tbody>{rows.map(r=>{const c=chips.get(r.strategyId);const[g,col,txt]=mark(r.status);return<tr key={r.id} title={r.error||undefined}>
+        <td className="mz-news-dim">{nyStamp(r.at)}</td>
+        <td><span className="mz-key" style={{background:c?.color||T.slate}} aria-hidden="true"/>{c?.label||r.code}</td>
+        <td><b style={{color:r.side==="sell"?T.loss:T.gain}}>{r.side==="sell"?"Sell":"Buy"}</b> {r.qty!=null?(Number.isInteger(r.qty)?r.qty:r.qty.toFixed(2)):""} {r.ticker}</td>
+        <td style={{textAlign:"right"}}><b style={{color:col}} aria-hidden="true">{g}</b> {txt}</td>
+      </tr>;})}</tbody></table>}
+    <button className="mz-more mz-tap" onClick={onMore}>All orders →</button>
+  </section>;
+}
+
+const ANALYST_NAME={anthropic:"Claude",google:"Gemini",openrouter:"DeepSeek"};
+/** The last three research rounds, one column per analyst. */
+function CommitteeLatest({feed,onMore}){
+  const providers=feed.providers.filter(p=>p?.available);
+  const rows=feed.rows.filter(r=>r&&!r.screen_only).slice(0,3);
+  const cell=(r,p)=>{
+    const m=asArray(r?.ensemble?.per_model).find(x=>x?.provider===p.provider);
+    if(m){const c=m.action==="BUY"?T.gain:m.action==="SELL"?T.loss:T.slate;
+      return<><b style={{color:c}}>{String(m.action||"").charAt(0)+String(m.action||"").slice(1).toLowerCase().replace(/_/g," ")}</b>{m.confidence!=null&&<span className="mz-news-dim"> {Math.round(m.confidence*100)}</span>}</>;}
+    const f=asArray(r?.failures).find(x=>x?.provider===p.provider);
+    return f?<span style={{color:T.gold}}>◐ no answer</span>:<span className="mz-news-dim">—</span>;
+  };
+  return<section className="mz-col" data-testid="committee-latest">
+    <h3 style={{fontFamily:FN}}>AI committee</h3>
+    {feed.state==="forbidden"?<p className="mz-col-empty">The research panel is visible to the operator's accounts only.</p>
+      :feed.state!=="ready"?<p className="mz-col-empty">{feed.state==="loading"?"Loading…":"Research is not available right now."}</p>
+      :!rows.length||!providers.length?<p className="mz-col-empty">No research rounds yet.</p>
+      :<table className="mz-news">
+        <thead><tr><th/>{providers.map(p=><th key={p.provider}>{ANALYST_NAME[p.provider]||p.provider}</th>)}</tr></thead>
+        <tbody>{rows.map(r=><tr key={r.id}><td><b>{r.ticker}</b></td>{providers.map(p=><td key={p.provider}>{cell(r,p)}</td>)}</tr>)}</tbody>
+      </table>}
+    <button className="mz-more mz-tap" onClick={onMore}>Every round in Research →</button>
+  </section>;
+}
+
+/** A vs B is the AI question: same system, one with the AI gate. Stated with
+ *  how long it has been measured, because a few days is noise. */
+function AiQuestion({rows,curves,mask}){
+  const A=rows.find(r=>r.code==="A"),B=rows.find(r=>r.code==="B");
+  const days=Math.max(0,asArray(curves?.[A?.id]?.points).length-1);
+  let body;
+  if(!A||!B)body=<p>Experiments A and B are not both running, so there is nothing to compare.</p>;
+  else if(A.returnPct==null||B.returnPct==null)body=<p>A (with the AI gate) and B (the same system without it) have not both traded yet.</p>;
+  else{const d=A.returnPct-B.returnPct;
+    body=<><p>A, with the AI gate, is {d>=0?"ahead of":"behind"} B, the same system without it, by <b style={{color:d>0?T.gain:d<0?T.loss:T.muted}}>{mask(`${Math.abs(d).toFixed(2)} pts`)}</b>.</p>
+      <p className="mz-news-dim">Measured over {days||"under one"} trading day{days===1?"":"s"}. Anything shorter than several weeks is noise, not a verdict.</p></>;}
+  return<section className="mz-col" data-testid="ai-question"><h3 style={{fontFamily:FN}}>Does the AI help?</h3>{body}</section>;
+}
+
+/** The Desk: masthead, pipeline, figures, strategies as small charts, then
+ *  three short columns. Everything else lives one section away. */
+function BroadsheetDesk({desk,book,session,demoMode,onGo,screen}){
+  const{mask}=useHideValues();
+  const curves=useStrategyCurves(!demoMode);
+  const research=useResearchFeed(!demoMode);
+  const[pending,setPending]=useState(demoMode?0:null);
+  const[feed,setFeed]=useState({state:demoMode?"idle":"loading",items:[]});
   useEffect(()=>{
     if(demoMode)return;
+    let cancelled=false;
+    (async()=>{
+      const[ar,sr]=await Promise.all([apiFetch("/api/bot/activity").catch(()=>null),apiFetch("/api/bot/signals").catch(()=>null)]);
+      if(cancelled)return;
+      try{const d=ar&&ar.ok?await ar.json():null;setFeed(d?{state:"ready",items:asArray(d?.items)}:{state:"unavailable",items:[]});}
+      catch{setFeed({state:"unavailable",items:[]});}
+      try{const d=sr&&sr.ok?await sr.json():null;if(!cancelled&&d)setPending(asArray(d?.signals).filter(x=>x?.status==="pending").length);}
+      catch{/* the figure stays a dash — unknown, not zero */}
+    })();
+    return()=>{cancelled=true;};
+  },[demoMode]);
+
+  const chips=useMemo(()=>chipMap(book.strategies),[book.strategies]);
+  const rows=useMemo(()=>blotterRows(book.strategies).map(r=>{const c=chips.get(r.id);return c?{...r,code:r.code||c.label,color:c.color}:r;}),[book.strategies,chips]);
+  const symbols=useMemo(()=>asArray(desk.positions).map(p=>String(p?.symbol||"").toUpperCase()).filter(Boolean),[desk.positions]);
+  const{verdicts}=screen;
+  const compliance=useMemo(()=>{
+    if(desk.state!=="ready")return null;
+    const m=complianceMatrix(symbols.map(s=>({symbol:s,value:0})),verdicts,{governing:"AAOIFI"});
+    return{total:m.total,screened:m.screened,failing:m.failingGoverning};
+  },[desk.state,symbols,verdicts]);
+  const committee=useMemo(()=>research.state==="ready"?latestRoundAnswering(research.rows,research.providers,research.configured):null,[research]);
+  const pipeline=useMemo(()=>deskPipeline({session,committee,rows,bookState:book.state,compliance,account:desk.account,deskState:desk.state}),[session,committee,rows,book.state,compliance,desk.account,desk.state]);
+  const today=nyToday();
+
+  return<div className="mz-desk" data-testid="broadsheet-desk">
+    <PipelineStrip pipeline={pipeline}/>
+    {pending>0&&<button className="mz-approve mz-tap" onClick={()=>onGo("signals")}>
+      <b style={{color:T.gold}} aria-hidden="true">◐</b> {pending} signal{pending===1?"":"s"} awaiting your approval <span>Review →</span>
+    </button>}
+    <DeskFigures account={desk.account} pending={pending} mask={mask} state={desk.state}/>
+
+    <LabHead title="Strategies against SPUS" note={<>Each line from the strategy's first fill. <span className="mz-key mz-key-bench" aria-hidden="true"/> grey is SPUS over the same days. The ladder shows how much control the bot has.</>}/>
+    {book.state==="loading"&&<p className="mz-col-empty">Loading strategies…</p>}
+    {book.state==="unavailable"&&<p className="mz-col-empty">The strategy list could not be loaded.</p>}
+    {book.state==="ready"&&!rows.length&&<p className="mz-col-empty">No strategies yet. Build one in Strategies.</p>}
+    {rows.length>0&&<div className="mz-multis">{rows.map(r=><StrategyMultiple key={r.id} row={r} curve={curves.curves[r.id]} mask={mask} today={today}/>)}</div>}
+
+    <div className="mz-cols">
+      <LatestOrders items={feed.items} strategies={book.strategies} state={feed.state} onMore={()=>onGo("signals")}/>
+      <CommitteeLatest feed={research} onMore={()=>onGo("committee")}/>
+      <AiQuestion rows={rows} curves={curves.curves} mask={mask}/>
+    </div>
+  </div>;
+}
+
+/** Portfolio: how the pot is split, then every paper position. */
+function LabPortfolio({desk,book}){
+  const{mask}=useHideValues();
+  const paperRows=useMemo(()=>asArray(desk.positions).map(p=>{
+    const n=v=>(v===null||v===undefined||v===""?null:Number(v));
+    const qty=n(p.qty);
+    return{sym:String(p.symbol||"—"),qty:qty!=null?(Math.abs(qty)<1?qty.toFixed(4):String(qty)):"—",
+      avg:n(p.avg_entry_price),last:n(p.current_price),value:n(p.market_value)||0,pl:n(p.unrealized_pl),
+      plPct:n(p.unrealized_plpc)!=null?n(p.unrealized_plpc)*100:null};
+  }),[desk.positions]);
+  return<div className="mz-lab-stack">
+    <StrategyBlotter strategies={book.strategies} state={book.state} accountEquity={desk?.account?.equity} mask={mask}/>
+    <section>
+      <LabHead title="Paper positions" note="What the paper desk holds right now, across every strategy. Weight is each holding's share of the desk — a fact, not a view on it."/>
+      {desk.state==="loading"&&<p className="mz-col-empty">Loading…</p>}
+      {desk.state==="unavailable"&&<p className="mz-col-empty">The paper desk is not reachable. Add your Alpaca paper keys in Orders → Place an order by hand, or ask the owner to enable trading for this account.</p>}
+      {desk.state==="idle"&&<p className="mz-col-empty">The paper desk is not loaded.</p>}
+      {desk.state==="ready"&&<PositionTape rows={paperRows} mask={mask} emptyNote="Nothing held yet. A strategy's first fill will appear here."/>}
+    </section>
+  </div>;
+}
+
+/** Journal: the record. Each strategy's full journal as a download, the
+ *  latest activity, and what the lab is for. */
+function LabJournal({book}){
+  const[feed,setFeed]=useState({state:"loading",items:[]});
+  useEffect(()=>{
     let cancelled=false;
     (async()=>{
       const ar=await apiFetch("/api/bot/activity").catch(()=>null);
@@ -8455,128 +8811,38 @@ function TradeDesk({desk,onGoSignals,demoMode,book}){
       catch{setFeed({state:"unavailable",items:[]});}
     })();
     return()=>{cancelled=true;};
-  },[demoMode]);
-
-  useEffect(()=>{
-    if(demoMode){setPending(0);return;}
-    let cancelled=false;
-    (async()=>{
-      try{
-        const r=await apiFetch("/api/bot/signals");
-        if(!r.ok)return;
-        const d=await r.json();
-        if(!cancelled)setPending(asArray(d?.signals).filter(x=>x?.status==="pending").length);
-      }catch{/* the banner simply does not appear */}
-    })();
-    return()=>{cancelled=true;};
-  },[demoMode]);
-
-  // Alpaca hands back strings for every numeric. Parsed once, here, so the
-  // tape never has to think about it.
-  const paperRows=useMemo(()=>asArray(desk.positions).map(p=>{
-    const n=v=>(v===null||v===undefined||v===""?null:Number(v));
-    const qty=n(p.qty),last=n(p.current_price),avg=n(p.avg_entry_price);
-    return{
-      sym:String(p.symbol||"—"),
-      qty:qty!=null?(Math.abs(qty)<1?qty.toFixed(4):String(qty)):"—",
-      avg,last,
-      value:n(p.market_value)||0,
-      pl:n(p.unrealized_pl),
-      plPct:n(p.unrealized_plpc)!=null?n(p.unrealized_plpc)*100:null,
-    };
-  }),[desk.positions]);
-
-  const openOrders=asArray(desk.orders);
-
-  return<div style={{display:"flex",flexDirection:"column",gap:T.s6}}>
-      {/* Anything waiting on a human comes first. */}
-      {pending>0&&<button onClick={onGoSignals} className="mz-tap" style={{
-        display:"flex",alignItems:"center",gap:T.s3,textAlign:"left",width:"100%",
-        padding:`${T.s3} ${T.s4}`,borderRadius:T.rMd,cursor:"pointer",
-        background:`${T.gold}1a`,border:`1px solid ${T.gold}55`,color:T.textHi,
-      }}>
-        <span style={{width:7,height:7,borderRadius:999,background:T.gold,boxShadow:`0 0 8px ${T.gold}`,flexShrink:0}}/>
-        <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",letterSpacing:"0.08em",fontWeight:600}}>
-          {pending} SIGNAL{pending===1?"":"S"} AWAITING YOUR APPROVAL
-        </span>
-        <span style={{marginLeft:"auto",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>REVIEW →</span>
-      </button>}
-
-      {!demoMode&&<StrategyBlotter strategies={book.strategies} state={book.state} accountEquity={desk?.account?.equity} mask={mask}/>}
-
-      {/* Desk grid: the account's curve beside the order tape on a wide
-          screen, stacked on a narrow one (.mz-desk-grid). */}
-      <div className="mz-desk-grid">
-        <EquityChart demoMode={demoMode} liveEquity={desk?.account?.equity}/>
-        {!demoMode&&<ActivityTape items={feed.items} strategies={book.strategies} state={feed.state}/>}
+  },[]);
+  const chips=useMemo(()=>chipMap(book.strategies),[book.strategies]);
+  const rows=useMemo(()=>blotterRows(book.strategies),[book.strategies]);
+  const[busy,setBusy]=useState(null);const[err,setErr]=useState(null);
+  const get=async r=>{
+    setBusy(r.id);setErr(null);
+    try{await downloadCsv(`/api/bot/journal.csv?strategy_id=${encodeURIComponent(r.id)}`,`mizan-journal-${(r.code||r.id.slice(0,8)).replace(/[^\w-]/g,"")}-${nyToday()}.csv`);}
+    catch{setErr(r.id);}
+    finally{setBusy(null);}
+  };
+  return<div className="mz-lab-stack">
+    <section>
+      <LabHead title="Strategy journals" note="Every order, AI review and screen each strategy recorded, as a spreadsheet you can keep. Nothing here is deleted when a strategy is retired."/>
+      {book.state!=="ready"?<p className="mz-col-empty">{book.state==="loading"?"Loading…":"The strategy list is not available."}</p>
+        :<table className="mz-news"><tbody>{rows.map(r=>{const c=chips.get(r.id);return<tr key={r.id}>
+          <td><span className="mz-key" style={{background:c?.color||T.slate}} aria-hidden="true"/><b>{r.code||c?.label||""}</b> {r.name}</td>
+          <td className="mz-news-dim">{r.status.text}</td>
+          <td style={{textAlign:"right"}}><button className="mz-more mz-tap" onClick={()=>get(r)} disabled={busy===r.id}>{busy===r.id?"Preparing…":err===r.id?"Retry download":"Download journal (.csv)"}</button></td>
+        </tr>;})}</tbody></table>}
+      {err&&<p role="alert" style={{color:T.loss,fontFamily:FP}}>That journal could not be downloaded. Press retry.</p>}
+    </section>
+    <ActivityTape items={feed.items} strategies={book.strategies} state={feed.state}/>
+    <ClosedTradesExport/>
+    <section>
+      <LabHead title="What this lab is for"/>
+      <div className="mz-notes">
+        {[["Paper first, for months not days","Fills here are simulated. Paper proves a strategy's logic — that it buys what it meant to, sizes correctly, and exits when it said it would. It cannot prove returns. Months of data is evidence; a good week is noise."],
+          ["Cash is the ceiling, always","A broker will quote buying power several times your cash. That is margin, and margin is riba. The order path refuses it, so the only number that limits a trade is cash on hand."],
+          ["Nothing here is a recommendation","Strategies follow rules you chose. The desk shows the market's own facts and your own positions; the judgment stays yours."]]
+          .map(([h,b])=><div key={h}><h3 style={{fontFamily:FN}}>{h}</h3><p style={{fontFamily:FP}}>{b}</p></div>)}
       </div>
-
-      {/* Positions. */}
-      <section>
-        <SectionHead label="Paper positions"
-          hint="What the paper desk holds right now. AVG is what you paid, LAST is what it is worth, WEIGHT is each holding's share of this desk — not a view on any of them."
-          right={desk.state==="ready"&&<Tag label={`${paperRows.length} HELD`} color={T.slate}/>}
-          style={{marginBottom:T.s3}}/>
-        {desk.state==="loading"&&<div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>LOADING…</div>}
-        {desk.state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
-          The paper desk is not reachable. Add your own Alpaca paper keys in Quick Trade, or ask the owner to enable trading for this account.
-        </div>}
-        {/* "idle" = the desk was never asked for. Unreachable through the nav
-            today, since demo mode removes Trade from it entirely (verified in
-            e2e/trade-lab.spec.js), but the hook still has to have an answer
-            for enabled:false rather than rendering a blank area. Deliberately
-            NOT demo-specific copy — that would be prose nobody can reach. */}
-        {desk.state==="idle"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
-          The paper desk is not loaded.
-        </div>}
-        {desk.state==="ready"&&<PositionTape rows={paperRows} mask={mask}
-          emptyNote="Nothing held yet. A strategy's first fill, or an order from Quick Trade, will appear here."/>}
-      </section>
-
-      {/* Working orders. */}
-      <section>
-        <SectionHead label="Working orders"
-          hint="Orders sent to the broker that have not finished. An order placed outside market hours sits here until the next session — it is not a fill until the broker says so."
-          right={openOrders.length>0&&<Tag label={`${openOrders.length} OPEN`} color={T.gold}/>}
-          style={{marginBottom:T.s3}}/>
-        {openOrders.length===0
-          ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No working orders.</div>
-          :<div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
-            <thead><tr>
-              <th style={{fontSize:"var(--fs-2xs)"}}>SYMBOL</th><th style={{fontSize:"var(--fs-2xs)"}}>SIDE</th>
-              <th style={{fontSize:"var(--fs-2xs)"}}>TYPE</th><th style={{fontSize:"var(--fs-2xs)"}}>QTY</th>
-              <th style={{fontSize:"var(--fs-2xs)"}}>FILLED</th><th style={{fontSize:"var(--fs-2xs)"}}>STATUS</th>
-            </tr></thead>
-            <tbody>{openOrders.map(o=><tr key={o.id}>
-              <td style={{color:T.textHi,fontWeight:600}}>{o.symbol}</td>
-              <td style={{color:o.side==="buy"?T.gain:T.loss}}>{String(o.side||"").toUpperCase()}</td>
-              <td style={{color:T.muted}}>{String(o.type||"").toUpperCase()}</td>
-              <td style={{color:T.text}}>{o.qty??(o.notional?mask(f$(Number(o.notional))):"—")}</td>
-              <td style={{color:T.text}}>{o.filled_qty??"0"}</td>
-              <td><Tag label={String(o.status||"").replace(/_/g," ").toUpperCase()} color={T.slate}/></td>
-            </tr>)}</tbody>
-          </table></div>}
-      </section>
-
-      {!demoMode&&<ClosedTradesExport/>}
-
-      {/* The owner asked for something that helps a person learn. This is that,
-          and it is deliberately honest about what paper proves. */}
-      <section>
-        <SectionHead label="Lab notes"
-          hint="What this place is for, in plain terms."
-          style={{marginBottom:T.s3}}/>
-        <div style={{display:"grid",gap:T.s3,gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))"}}>
-          {[
-            ["Paper first, for months not days","Fills here are simulated. Paper proves a strategy's LOGIC — that it buys what it meant to, sizes correctly, and exits when it said it would. It cannot prove returns, because a simulated fill never moves the market. Months of data is evidence; a good week is noise."],
-            ["Cash is the ceiling, always","Your broker will quote a buying power several times your cash. That is margin, and margin is riba. The order path here refuses it, so the only number that limits a trade is cash on hand."],
-            ["You approve every order","Strategies propose; you decide. Nothing on this desk is a recommendation to buy or sell anything — it shows the market's own facts and your own positions, and the judgment stays yours."],
-          ].map(([h,b])=><div key={h} style={{padding:T.s4,border:`1px solid ${T.border}`,borderRadius:T.rMd,background:T.tileFill}}>
-            <div style={{fontFamily:FU,fontSize:"var(--fs-base)",color:T.textHi,fontWeight:600,marginBottom:T.s2,lineHeight:1.25}}>{h}</div>
-            <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55}}>{b}</div>
-          </div>)}
-        </div>
-      </section>
+    </section>
   </div>;
 }
 
@@ -8590,7 +8856,13 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   // The three original ids (signals / strategies / order) are UNCHANGED:
   // localStorage.mizan_nav, ?tab= deep links, the nav_usage counters behind
   // track="trade" and every data-tour hook are keyed on them.
-  const[sub,setSub]=useState("desk");
+  const[sub,setSubRaw]=useState("desk");
+  // Quick Trade is a disclosure inside Orders now (12 → 8 sections). The old
+  // "order"/"risk" ids still resolve — a Rebalancer "Copy to Order" lands on
+  // Orders with the ticket open.
+  const[ticketOpen,setTicketOpen]=useState(false);
+  const setSub=v=>{if(v==="order")setTicketOpen(true);setSubRaw(LAB_REDIRECT[v]||v);};
+  const goSection=v=>{setSub(v);try{window.scrollTo({top:0,behavior:"smooth"});}catch{}};
   // The desk is read ONCE here, not per sub-tab: the status rail is a
   // tab-level instrument and three sub-tabs each fetching their own copy of
   // the same account would be three requests against a shared ~200/min
@@ -8598,6 +8870,11 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   const{mask:maskValue}=useHideValues();
   const deskData=useAlpacaDesk(!demoMode&&isAdmin);
   const book=useStrategyBook(!demoMode&&isAdmin);
+  // ONE screening read for the whole tab. The Desk, Compliance and Risk each
+  // used to screen the same holdings themselves; on the merged Compliance &
+  // Risk page that was two concurrent screens against Finnhub's 60/min.
+  const heldSymbols=useMemo(()=>asArray(deskData.positions).map(p=>String(p?.symbol||"").toUpperCase()).filter(Boolean),[deskData.positions]);
+  const screen=useScreenVerdicts(heldSymbols,demoMode||!isAdmin);
   // Holdings (with live prices merged) — needed by Screener + Rebalance. Same
   // derivation Portfolio uses, kept self-contained here.
   // The `merged` holdings IIFE lived here. Removed 2026-10-01: its only
@@ -8799,6 +9076,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   // shows it and setNav bounces them, but this guarantees the surface renders
   // nothing even if a tampered client forces nav==="trade".
   if(!isAdmin)return null;
+  const showTicket=sub==="signals"&&ticketOpen;
 
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
     {/* Screener / Rebalance / Backtest are NOT duplicated here — they live in
@@ -8807,47 +9085,43 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         Command Center; Performance is added now because the strategy is live
         and the alpha question is unanswered. The three original ids
         (signals/strategies/order) are UNCHANGED for nav_usage continuity. */}
-    <TabBar track="trade" tabs={[["desk","Command Center"],["signals","Signals"],["strategies","Strategies"],["performance","Performance"],["committee","AI Committee"],["compliance","Compliance"],["risk","Risk"],["order","Quick Trade"]]} active={sub} onChange={setSub}/>
-    {/* ONE cockpit around every sub-tab, with the rail on top of all of them.
-        The alternative — a dark Desk sitting beside two light pages — would
-        make the dark read as an accident rather than as a room. */}
-    <div className="mz-cockpit" style={{padding:0}}>
-      <StatusRail session={session}
-        summary={deskSummary({paper:deskData.account,accounts,live,mapPosition})}
-        mask={maskValue}
-        armedVenue={sub==="order"?venue:null}/>
-      <div style={{padding:T.s5}}>
-        {sub==="desk"&&<TradeDesk desk={deskData} onGoSignals={()=>setSub("signals")} demoMode={demoMode} book={book}/>}
+    <div className="mz-lab">
+      <LabMasthead session={session}/>
+      <LabNav active={sub} onChange={goSection}/>
+      <div className="mz-lab-body">
+        {sub==="desk"&&<BroadsheetDesk desk={deskData} book={book} session={session} demoMode={demoMode} onGo={goSection} screen={screen}/>}
+        {sub==="positions"&&<><div style={{marginBottom:T.s6}}><EquityChart demoMode={demoMode} liveEquity={deskData?.account?.equity}/></div><LabPortfolio desk={deskData} book={book}/></>}
         {sub==="performance"&&<PerformancePanelLab demoMode={demoMode} book={book} liveEquity={deskData?.account?.equity}/>}
         {sub==="committee"&&<AiCommittee demoMode={demoMode} book={book}/>}
-        {sub==="compliance"&&<CompliancePanel desk={deskData} demoMode={demoMode}/>}
-        {sub==="risk"&&<RiskPanel desk={deskData} demoMode={demoMode}/>}
-    {/* Persistent reference: how brokerage connections map to trade features, and the
-        reconnect-with-trade-permission requirement. Collapsed by default. */}
-    {/* Only where a broker connection is the thing you might need to fix.
-        It was rendering on every non-desk tab, which put a "reconnect for
-        trading" call-to-action under a performance report. */}
-    {sub==="order"&&<TradeConnectionsPanel onConnectTrade={onConnectTrade}/>}
-    {/* Bot panel, split into Strategies + Signals views (same component, shared state). */}
-        {/* The bot panel is UNTOUCHED. Its T.* tokens resolve dark by
-            inheritance, which is the whole reason the cockpit re-declares
-            variables rather than hardcoding a palette. */}
+        {sub==="compliance"&&<div className="mz-lab-stack"><CompliancePanel desk={deskData} demoMode={demoMode} screen={screen}/><RiskPanel desk={deskData} demoMode={demoMode} screen={screen}/></div>}
+        {sub==="journal"&&<LabJournal book={book}/>}
+        {/* The bot panel is UNTOUCHED — Strategies and the signal queue. */}
         {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
-        {/* Broker setup is reference, not the reason you opened Strategies —
-            it sits under the strategies there, and above the ticket in Quick
-            Trade where a connection is what you might need to fix first. */}
         {sub==="strategies"&&<div style={{marginTop:T.s5}}><TradeConnectionsPanel onConnectTrade={onConnectTrade}/></div>}
+        {sub==="signals"&&<div className="mz-lab-stack" style={{marginTop:T.s6}}>
+          <WorkingOrders desk={deskData}/>
+          <section>
+            <LabHead title="Place an order by hand" note="A one-off order outside any strategy. Paper by default; a live order needs the venue switched deliberately."
+              right={<button className="mz-more mz-tap" aria-expanded={ticketOpen} onClick={()=>setTicketOpen(o=>!o)}>{ticketOpen?"Close the ticket":"Open the ticket"}</button>}/>
+          </section>
+        </div>}
+        {/* Which desk an order would hit, above the ticket — "which desk am I
+            on" must never be inferred on a surface that can place a real order. */}
+        {showTicket&&<div style={{marginBottom:T.s5}}><StatusRail session={session}
+          summary={deskSummary({paper:deskData.account,accounts,live,mapPosition})}
+          mask={maskValue} armedVenue={venue}/></div>}
+    {showTicket&&<TradeConnectionsPanel onConnectTrade={onConnectTrade}/>}
 
     {/* Quick Trade (ad-hoc order ticket) lives behind a Coming Soon banner for non-admin users. */}
     {/* The non-admin Order Ticket placeholder lived here. Removed 2026-10-01:
         TradeBot returns null for !isAdmin above, so a block guarded on
         !isAdmin could never render. Verified before deleting. */}
-    {sub==="order"&&isAdmin&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
+    {showTicket&&isAdmin&&impactPreview&&<OrderPreviewModal preview={impactPreview} onConfirm={placeOrder} onCancel={cancelPreview} busy={orderBusy} side={side} sym={sym} qty={qty}/>}
     {/* Whose paper account this ticket acts on. Above the ticket deliberately:
         a tester needs to know they're on the shared blotter BEFORE they place
         an order, not after they can't find their fill. */}
-    {sub==="order"&&isAdmin&&venue==="alpaca"&&!demoMode&&<AlpacaKeysPanel/>}
-    {sub==="order"&&isAdmin&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
+    {showTicket&&isAdmin&&venue==="alpaca"&&!demoMode&&<AlpacaKeysPanel/>}
+    {showTicket&&isAdmin&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
       {/* ─── Order Ticket bento ────────────────────────── */}
       <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
@@ -14898,24 +15172,96 @@ export default function Mizan(){
          A dark instrument panel inside a light app. The seam is deliberate:
          full-bleed dark, hairline rules, no cards. Density and monospace do
          the work a dark palette alone cannot. */
-      .mz-cockpit{
-        background:var(--mz-bg); color:var(--mz-text);
-        border:1px solid var(--mz-border); border-radius:var(--r-lg);
-        overflow:hidden; position:relative;
-      }
-      /* There was an "instrument grid" here — 96px graph-paper lines across
-         the whole cockpit. It was removed after looking at a screenshot: the
-         vertical rules ran straight down THROUGH the position tape, so every
-         number had a line crossing it and the panel read as a rendering
-         artifact rather than as texture. Depth on this surface comes from the
-         dark room sitting inside a light page, which is plenty. A decoration
-         that competes with a price is not texture, it is damage. */
-      .mz-cockpit::before{
-        content:""; position:absolute; inset:0 0 auto 0; height:120px;
-        pointer-events:none;
-        background:radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.045), transparent 70%);
-      }
-      .mz-cockpit > *{position:relative;}
+      /* ── Trade Lab broadsheet (2026-10-08) ──────────────────────────────
+         A financial newspaper's markets page on Mizan's own paper: hairline
+         rules, no tile walls, charts before numbers. Newsreader is the lab's
+         display face (owner exception, Trade only). */
+      .mz-lab{color:var(--mz-text);}
+      .mz-mast{display:flex; align-items:flex-end; justify-content:space-between; gap:var(--s-4); flex-wrap:wrap;
+        padding-bottom:var(--s-2); border-bottom:3px double var(--mz-textHi);}
+      .mz-mast h1{margin:0; font-size:var(--fs-5xl); font-weight:600; letter-spacing:-.02em; line-height:1; color:var(--mz-textHi);}
+      .mz-mast-kicker{font-size:var(--fs-2xs); letter-spacing:.08em; color:var(--mz-muted);}
+      .mz-mast-date{text-align:right; font-size:var(--fs-sm); color:var(--mz-text); line-height:1.6; font-variant-numeric:tabular-nums;}
+      @media (max-width:640px){ .mz-mast-date{text-align:left;} }
+      .mz-labnav{display:flex; gap:var(--s-5); padding:0; border-bottom:1px solid var(--mz-border); overflow-x:auto;
+        scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch; margin-bottom:0;}
+      .mz-labnav > button{background:none; border:0; border-bottom:2px solid transparent; padding:var(--s-3) 0 calc(var(--s-3) - 2px);
+        font-family:${FP}; font-size:var(--fs-md); color:var(--mz-muted); cursor:pointer; white-space:nowrap; flex:0 0 auto;
+        scroll-snap-align:start; display:inline-flex; align-items:center; gap:7px; transition:color var(--mz-dur,150ms) ease;}
+      .mz-labnav > button:hover{color:var(--mz-textHi);}
+      .mz-labnav > button.on{color:var(--mz-textHi); font-weight:600; border-bottom-color:var(--mz-textHi);}
+      .mz-labnav > button:focus-visible{outline:2px solid var(--mz-textHi); outline-offset:2px;}
+      .mz-labnav-sq{display:inline-block; width:7px; height:7px; flex:0 0 auto;}
+      .mz-lab-body{padding-top:var(--s-5);}
+      .mz-lab-stack{display:flex; flex-direction:column; gap:var(--s-8);}
+      .mz-lab-head{display:flex; align-items:flex-end; justify-content:space-between; gap:var(--s-3); flex-wrap:wrap;
+        border-bottom:1px solid var(--mz-textHi); padding-bottom:var(--s-2); margin:var(--s-6) 0 var(--s-3);}
+      .mz-lab-head h2{margin:0; font-size:var(--fs-2xl); font-weight:600; color:var(--mz-textHi); letter-spacing:-.01em;}
+      .mz-lab-head p{margin:4px 0 0; font-size:var(--fs-sm); color:var(--mz-muted); max-width:72ch; line-height:1.5;}
+      .mz-lab-head-r{flex:0 0 auto;}
+      .mz-lab-stack > section > .mz-lab-head:first-child, .mz-lab-stack > .mz-lab-head:first-child{margin-top:0;}
+      /* Pipeline: one sentence of status marks. */
+      .mz-pipe{display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 0; padding:var(--s-3) 0; border-bottom:1px solid var(--mz-border);
+        font-size:var(--fs-sm); color:var(--mz-text);}
+      .mz-pipe-lead{color:var(--mz-muted); margin-right:var(--s-3);}
+      .mz-pipe-arrow{color:var(--mz-borderHi); margin:0 var(--s-2);}
+      .mz-pipe-stage{white-space:nowrap;}
+      .mz-pipe-detail{margin-left:2px;}
+      .mz-pipe-end{margin-left:auto; padding-left:var(--s-4); white-space:nowrap; color:var(--mz-muted);}
+      @media (max-width:720px){ .mz-pipe-stage,.mz-pipe-end{white-space:normal;} .mz-pipe-end{margin-left:0; padding-left:0; flex:1 0 100%;} }
+      .mz-approve{display:flex; width:100%; align-items:center; gap:var(--s-2); margin-top:var(--s-3); padding:var(--s-3) var(--s-4);
+        background:transparent; border:1px solid var(--mz-borderHi); border-left:3px solid ${T.gold}; cursor:pointer; text-align:left;
+        font-family:${FP}; font-size:var(--fs-md); color:var(--mz-textHi);}
+      .mz-approve span{margin-left:auto; color:var(--mz-muted);}
+      /* Figures: ruled columns. */
+      .mz-figs{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding:var(--s-5) 0; border-bottom:1px solid var(--mz-border);}
+      .mz-figs > div{padding:0 var(--s-5); border-left:1px solid var(--mz-border); min-width:0;}
+      .mz-figs > div:first-child{padding-left:0; border-left:0;}
+      .mz-fig-l{font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-muted);}
+      .mz-fig-v{font-size:var(--fs-4xl); font-weight:500; line-height:1.1; color:var(--mz-textHi); font-variant-numeric:tabular-nums lining-nums; overflow-wrap:anywhere;}
+      .mz-fig-s{font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      .mz-fig-bar{height:4px; background:var(--mz-dim); margin-top:var(--s-3);}
+      .mz-fig-bar > span{display:block; height:100%; background:var(--mz-textHi);}
+      @media (max-width:900px){ .mz-figs{grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:var(--s-5);} .mz-figs > div:nth-child(3){padding-left:0; border-left:0;} }
+      @media (max-width:420px){ .mz-figs{grid-template-columns:minmax(0,1fr);} .mz-figs > div{padding-left:0; border-left:0;} }
+      /* Small multiples: one chart per strategy, ruled grid. */
+      .mz-multis{display:grid; grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr)); border-top:1px solid var(--mz-textHi);}
+      .mz-mult{padding:var(--s-3) var(--s-4) var(--s-4) 0; border-bottom:1px solid var(--mz-border); min-width:0;}
+      .mz-mult header{display:flex; justify-content:space-between; gap:var(--s-2); font-family:${FP}; font-size:var(--fs-md); font-variant-numeric:tabular-nums;}
+      .mz-mult header b{color:var(--mz-textHi); font-weight:600; min-width:0; overflow-wrap:anywhere;}
+      .mz-mult-key{display:inline-block; width:16px; height:3px; background:var(--strat); vertical-align:middle; margin-right:7px;}
+      .mz-mult svg{display:block; width:100%; height:64px; margin:var(--s-2) 0 var(--s-1); overflow:visible;}
+      .mz-mult-zero{stroke:var(--mz-border); stroke-width:1; vector-effect:non-scaling-stroke;}
+      .mz-mult-bench{fill:none; stroke:var(--mz-muted); stroke-opacity:.55; stroke-width:2; vector-effect:non-scaling-stroke; stroke-linejoin:round;}
+      .mz-mult-line{fill:none; stroke-width:2; vector-effect:non-scaling-stroke; stroke-linejoin:round; stroke-linecap:round;}
+      .mz-mult-empty{height:64px; margin:var(--s-2) 0 var(--s-1); display:flex; align-items:center; padding:0 var(--s-3);
+        font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-muted);
+        background:repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--mz-dim) 55%, transparent) 6px 7px);}
+      .mz-mult footer{display:flex; justify-content:space-between; gap:var(--s-2); flex-wrap:wrap; font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      .mz-mult-status{font-family:${FP}; font-size:var(--fs-xs); margin-top:2px;}
+      .mz-ladder{font-family:${FP}; font-size:var(--fs-2xs); color:var(--mz-muted); margin-top:var(--s-2); opacity:.85;}
+      .mz-ladder b{font-weight:700; opacity:1;}
+      /* The three short columns under the charts. */
+      .mz-cols{display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,.8fr); gap:var(--s-8);
+        margin-top:var(--s-6); padding-top:var(--s-5); border-top:1px solid var(--mz-textHi);}
+      @media (max-width:1000px){ .mz-cols{grid-template-columns:minmax(0,1fr); gap:var(--s-6);} }
+      .mz-col h3{margin:0 0 var(--s-2); font-size:var(--fs-xl); font-weight:600; color:var(--mz-textHi);}
+      .mz-col p{font-family:${FP}; font-size:var(--fs-sm); line-height:1.55; margin:0 0 var(--s-2); color:var(--mz-text);}
+      .mz-col-empty{font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-muted); padding:var(--s-3) 0; margin:0;}
+      .mz-news{width:100%; border-collapse:collapse; font-family:${FP}; font-size:var(--fs-sm); font-variant-numeric:tabular-nums;}
+      .mz-news th{font-weight:500; color:var(--mz-muted); text-align:left; padding:var(--s-1) var(--s-2) var(--s-1) 0; border-bottom:1px solid var(--mz-textHi); white-space:nowrap;}
+      .mz-news td{padding:var(--s-2) var(--s-2) var(--s-2) 0; border-bottom:1px solid var(--mz-border); color:var(--mz-text); vertical-align:baseline;}
+      .mz-news tr:last-child td{border-bottom:0;}
+      .mz-news b{color:var(--mz-textHi); font-weight:600;}
+      .mz-news-dim{color:var(--mz-muted);}
+      .mz-key{display:inline-block; width:10px; height:3px; vertical-align:middle; margin-right:6px;}
+      .mz-key-bench{width:14px; background:var(--mz-muted); opacity:.55;}
+      .mz-more{background:none; border:0; padding:var(--s-2) 0; color:${T.blue}; font-family:${FP}; font-size:var(--fs-sm); cursor:pointer; text-decoration:underline; text-underline-offset:3px;}
+      :root[data-theme="dark"] .mz-more{color:var(--mz-textHi);}
+      .mz-more:disabled{opacity:.6; cursor:wait;}
+      .mz-notes{display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:var(--s-6);}
+      .mz-notes h3{margin:0 0 var(--s-2); font-size:var(--fs-lg); font-weight:600; color:var(--mz-textHi);}
+      .mz-notes p{margin:0; font-size:var(--fs-sm); color:var(--mz-muted); line-height:1.55;}
 
       /* The status rail. Sticky, because a trading surface should never make
          you scroll to find out whether the market is open. */
@@ -15046,10 +15392,10 @@ export default function Mizan(){
          Inside the cockpit every tile is a ruled desk panel: tight radius, no
          lift, no glow. The bento hover-lift belongs to the app's light pages;
          on a trading desk a panel that moves under the cursor reads as noise.
-         Scoped to .mz-cockpit so the rest of the app is untouched. */
-      .mz-cockpit .bento-tile{border-radius:8px!important; box-shadow:none!important; background:var(--mz-surface)!important;}
-      .mz-cockpit .bento-tile:hover{transform:none!important; box-shadow:none!important; border-color:var(--mz-borderHi)!important;}
-      .mz-cockpit .bento-tile--click:active{transform:none!important;}
+         Scoped to .mz-lab so the rest of the app is untouched. */
+      .mz-lab .bento-tile{border-radius:8px!important; box-shadow:none!important; background:var(--mz-surface)!important;}
+      .mz-lab .bento-tile:hover{transform:none!important; box-shadow:none!important; border-color:var(--mz-borderHi)!important;}
+      .mz-lab .bento-tile--click:active{transform:none!important;}
 
       /* Weight bar — the only chart in the tape. Inline so it reads as part
          of the row rather than as a separate visualisation. */

@@ -50,6 +50,23 @@ export function strategyStatus(strat, now = new Date()) {
   return { text: "watching for an entry", tone: "muted" };
 }
 
+/**
+ * Where a strategy sits on the proposal's execution ladder (§13):
+ *   shadow → paper → confirm (manual) → semi → auto (full) · halted.
+ * Same precedence as the cron: params.layer first, the DB mode column for
+ * strategies older than layers. Paper wins over the layer because no real
+ * money is reachable there (resolveMode). Display only — never a gate.
+ */
+export const MODE_LADDER = ["shadow", "paper", "confirm", "semi", "auto"];
+export function strategyMode(strat) {
+  const s = obj(strat) || {}, p = obj(s.params) || {}, pr = obj(s.progress) || {};
+  if (s.enabled === false) return "halted";
+  if (p.layer === "shadow") return "shadow";
+  if (pr.paper || p.broker === "alpaca_paper") return "paper";
+  const layer = ["manual", "semi", "full"].includes(p.layer) ? p.layer : s.mode === "full" ? "full" : "semi";
+  return layer === "full" ? "auto" : layer === "manual" ? "confirm" : "semi";
+}
+
 const codeOrder = (c) => (c ? c : "￿");
 
 /** Strategies → blotter rows, sorted by experiment code (unlabeled last). */
@@ -72,6 +89,7 @@ export function blotterRows(strategies, now = new Date()) {
       traded: Number(pr.trades_executed) > 0,
       unpriced,
       status: strategyStatus(st, now),
+      mode: strategyMode(st),
     };
   }).sort((a, b) => codeOrder(a.code).localeCompare(codeOrder(b.code)) || a.name.localeCompare(b.name));
 }

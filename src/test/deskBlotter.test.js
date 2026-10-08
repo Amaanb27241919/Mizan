@@ -111,3 +111,19 @@ describe('tapeRows ordering', () => {
     expect(rows.map((r) => r.id)).toEqual(['early-created-late-fill', 'late-created-early-fill'])
   })
 })
+
+describe("strategyMode", () => {
+  it("places each strategy on the execution ladder", async () => {
+    const { strategyMode, MODE_LADDER } = await import("../lib/deskBlotter.js");
+    expect(MODE_LADDER).toEqual(["shadow", "paper", "confirm", "semi", "auto"]);
+    expect(strategyMode({ params: { layer: "shadow", broker: "alpaca_paper" } })).toBe("shadow");
+    expect(strategyMode({ params: { broker: "alpaca_paper", layer: "full" } })).toBe("paper");
+    expect(strategyMode({ progress: { paper: true } })).toBe("paper");
+    expect(strategyMode({ params: { layer: "full" } })).toBe("auto");
+    expect(strategyMode({ params: { layer: "manual" } })).toBe("confirm");
+    expect(strategyMode({ mode: "full" })).toBe("auto");
+    expect(strategyMode({})).toBe("semi");
+    expect(strategyMode({ enabled: false, params: { layer: "full" } })).toBe("halted");
+    expect(strategyMode(null)).toBe("semi");
+  });
+});

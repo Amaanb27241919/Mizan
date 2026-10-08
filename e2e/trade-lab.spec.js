@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 
 /**
- * MĪZAN TRADE LAB — the cockpit.
+ * MĪZAN TRADE LAB — the broadsheet (was the dark cockpit until 2026-10-08).
  *
  * The Trade tab had NO e2e coverage until now, for a mundane reason: the
  * default fixture sets `trading_bot: false`, and `TradeBot` returns null for a
@@ -88,45 +88,62 @@ const gotoLab = async (page, opts = {}) => {
     theme: opts.theme || "light",
     storage: { mizan_nav: "trade", ...(opts.storage || {}) },
   });
+  // Routes a spec must own from the FIRST request (registered after the
+  // fixture layer, so they win) — the Desk screens holdings on load.
+  if (opts.before) await opts.before(page);
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Command Center", exact: true })).toBeVisible();
+  await expect(labNav(page)).toBeVisible();
+};
+
+// Twelve sections became eight (2026-10-08). Specs written against the old
+// names go through here, so a rename is one table rather than forty edits.
+const labNav = (page) => page.getByRole("navigation", { name: "Trade Lab sections" });
+const SECTION = { "Command Center": "Desk", Signals: "Orders", "Quick Trade": "Orders", "AI Committee": "Research",
+  Risk: "Compliance & Risk", Compliance: "Compliance & Risk", Portfolio: "Positions" };
+const openSection = async (page, name) => {
+  await labNav(page).getByRole("button", { name: SECTION[name] || name, exact: true }).click();
+  if (name === "Quick Trade") await page.getByRole("button", { name: "Open the ticket" }).click();
 };
 
 test.describe("Trade Lab cockpit", () => {
-  test("renders the dark cockpit with both desks on the rail", async ({ page }) => {
+  test("opens on the Desk: masthead, order pipeline, figures", async ({ page }) => {
     await gotoLab(page);
-
-    // The rail states the session, and both desks, at once.
-    await expect(page.locator(".mz-rail")).toBeVisible();
-    await expect(page.getByText("PAPER · ALPACA")).toBeVisible();
-    await expect(page.getByText("LIVE · BROKERAGE")).toBeVisible();
-    await expect(page.locator(".mz-rail").getByText("$99,999.72").first()).toBeVisible();
-
-    // The cockpit really is dark, whatever the app theme is. Asserted by
-    // COMPUTED colour rather than by class, because a class present with its
-    // variables unresolved is the exact bug worth catching here.
-    const bg = await page.locator(".mz-cockpit").evaluate(
-      el => getComputedStyle(el).backgroundColor);
-    const [r, g, b] = bg.match(/\d+/g).map(Number);
-    expect(r + g + b, `cockpit should be dark, got ${bg}`).toBeLessThan(180);
+    await expect(page.getByRole("heading", { name: "The Trade Lab" })).toBeVisible();
+    const pipe = page.getByTestId("order-pipeline");
+    for (const gate of ["Market", "AI committee", "Strategies", "Sharia gate", "Cash", "Brokers"]) await expect(pipe).toContainText(gate);
+    await expect(pipe).toContainText("no margin");
+    // The paper equity, from /account, rounded to dollars on the desk.
+    await expect(page.getByTestId("desk-figures")).toContainText("$100,000");
+    await expect(page.getByTestId("desk-figures")).toContainText("the buying limit");
   });
 
-  test("stays dark while the rest of the page stays light", async ({ page }) => {
-    // The whole premise of the design: a dark instrument panel inside a light
-    // app. If the cockpit's variables leaked upward, body would darken too.
-    await gotoLab(page, { theme: "light" });
+  test("follows the app theme instead of forcing a dark room", async ({ page }) => {
+    // The cockpit forced dark on itself; the broadsheet is Mizan's paper.
     const sum = async (sel) => {
       const c = await page.locator(sel).first().evaluate(el => getComputedStyle(el).backgroundColor);
       const m = c.match(/\d+/g);
       return m ? m.slice(0, 3).map(Number).reduce((a, x) => a + x, 0) : null;
     };
-    expect(await sum(".mz-cockpit")).toBeLessThan(180);
-    const body = await sum("body");
-    if (body !== null) expect(body, "body must stay on the paper canvas").toBeGreaterThan(600);
+    const ink = async () => {
+      const c = await page.locator(".mz-mast h1").evaluate(el => getComputedStyle(el).color);
+      return c.match(/\d+/g).slice(0, 3).map(Number).reduce((a, x) => a + x, 0);
+    };
+    await gotoLab(page, { theme: "light" });
+    expect(await sum("body"), "light theme keeps the paper canvas").toBeGreaterThan(600);
+    expect(await ink(), "ink on paper").toBeLessThan(200);
+    await gotoLab(page, { theme: "dark" });
+    expect(await ink(), "light ink on the dark theme").toBeGreaterThan(500);
+  });
+
+  test("the masthead uses the newspaper face, and only the lab does", async ({ page }) => {
+    await gotoLab(page);
+    const ff = await page.locator(".mz-mast h1").evaluate(el => getComputedStyle(el).fontFamily);
+    expect(ff).toMatch(/Newsreader/);
   });
 
   test("downloads the closed-trades tax & Zakat sheet at the rates the user set", async ({ page }) => {
     await gotoLab(page);
+    await openSection(page, "Journal");
     let asked = null;
     await page.route("**/api/alpaca/closed-trades.csv**", (route) => {
       asked = new URL(route.request().url()).searchParams;
@@ -147,6 +164,7 @@ test.describe("Trade Lab cockpit", () => {
     await gotoLab(page);
     await page.route("**/api/alpaca/closed-trades.csv**", (route) =>
       route.fulfill({ status: 502, contentType: "application/json", body: '{"error":"x"}' }));
+    await openSection(page, "Journal");
     await page.getByRole("button", { name: /DOWNLOAD SHEET/ }).click();
     await expect(page.getByRole("alert")).toContainText("could not be built");
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
@@ -154,15 +172,16 @@ test.describe("Trade Lab cockpit", () => {
 
   test("parses Alpaca's string numerics into real figures", async ({ page }) => {
     await gotoLab(page);
+    await openSection(page, "Portfolio");
     const tape = page.locator(".mz-tape").first();
     await expect(tape.getByText("SPUS")).toBeVisible();
     await expect(tape.getByText("SPSK")).toBeVisible();
     // 0.00885 -> +0.89%, which only appears if the string was multiplied by 100.
     await expect(tape.getByText("+0.89%")).toBeVisible();
     // Nothing anywhere may render as a parse failure.
-    await expect(page.locator(".mz-cockpit")).not.toContainText("NaN");
-    await expect(page.locator(".mz-cockpit")).not.toContainText("undefined");
-    await expect(page.locator(".mz-cockpit")).not.toContainText("[object Object]");
+    await expect(page.locator(".mz-lab")).not.toContainText("NaN");
+    await expect(page.locator(".mz-lab")).not.toContainText("undefined");
+    await expect(page.locator(".mz-lab")).not.toContainText("[object Object]");
   });
 
   test("surfaces a pending approval on the desk and routes to Signals", async ({ page }) => {
@@ -172,10 +191,11 @@ test.describe("Trade Lab cockpit", () => {
     await banner.click();
     // Asserted by what actually LEAVES the screen. The first version of this
     // used a try/catch with a fallback assertion, which is a test that cannot
-    // fail honestly — and its fallback (`.mz-cockpit` count 0) became
+    // fail honestly — and its fallback (`.mz-lab` count 0) became
     // permanently false once the cockpit wrapped every sub-tab.
-    await expect(page.getByText("EQUITY CURVE")).toHaveCount(0);
+    await expect(page.getByTestId("broadsheet-desk")).toHaveCount(0);
     await expect(banner).toHaveCount(0);
+    await expect(labNav(page).getByRole("button", { name: "Orders" })).toHaveAttribute("aria-current", "page");
   });
 
   test("weight bars are visibly different lengths AND visible at all", async ({ page }) => {
@@ -183,6 +203,7 @@ test.describe("Trade Lab cockpit", () => {
     // navy fill on a navy track, so three very different weights looked the
     // same. Width alone would have passed; contrast is the other half.
     await gotoLab(page);
+    await openSection(page, "Portfolio");
     const bars = page.locator(".mz-wbar > span");
     // Derived from the fixture, never a literal — I wrote 3 here while the
     // fixture held 2 and spent a run finding out.
@@ -214,6 +235,7 @@ test.describe("Trade Lab cockpit", () => {
       // two can no longer drift apart — and the chart still states only the change.
       "/api/alpaca/account": { ...PAPER, equity: 104202.02 },
     } });
+    await openSection(page, "Portfolio");
     const chart = page.locator("section", { has: page.locator("svg[aria-label*='equity' i]") });
     await expect(chart).toBeVisible();
     // The curve's own last value must NOT be presented as a balance.
@@ -227,6 +249,8 @@ test.describe("Trade Lab cockpit", () => {
     // path refuses it, so a rail advertising it would lie in the user's
     // favour — the worst direction for a trading surface to lie in.
     await gotoLab(page);
+    await expect(page.locator(".mz-lab")).not.toContainText(/buying power/i);
+    await openSection(page, "Quick Trade");
     await expect(page.locator(".mz-rail")).not.toContainText(/buying power/i);
     await expect(page.locator(".mz-rail")).toContainText("PAPER CASH");
   });
@@ -239,15 +263,16 @@ test.describe("Trade Lab cockpit", () => {
     // its historical counts. So the contract is asserted against the source,
     // where the ids actually live, not against rendered text.
     const src = readFileSync(HERE + "../src/components/MizanApp.jsx", "utf8")
-    const bar = src.slice(src.indexOf('TabBar track="trade"'))
-    const ids = [...bar.slice(0, 400).matchAll(/\["([a-z]+)","[^"]+"\]/g)].map(m => m[1])
-    for (const id of ["desk", "signals", "strategies", "order"]) {
-      expect(ids, `sub-tab id "${id}" must survive a rename`).toContain(id)
+    const table = src.slice(src.indexOf("const LAB_SECTIONS=["), src.indexOf("const LAB_SECTIONS=[") + 600)
+    const ids = [...table.matchAll(/\["([a-z]+)","[^"]+"/g)].map(m => m[1])
+    for (const id of ["desk", "signals", "strategies", "committee", "compliance", "performance"]) {
+      expect(ids, `section id "${id}" must survive a rename`).toContain(id)
     }
-    // And the labels still render, whatever they currently are.
+    // Folded sections still resolve, so stored state and deep links land somewhere.
+    expect(src).toMatch(/LAB_REDIRECT=\{order:"signals",risk:"compliance"\}/)
     await gotoLab(page);
-    for (const label of ["Command Center", "Signals", "Strategies", "Quick Trade"]) {
-      await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
+    for (const label of ["Desk", "Orders", "Strategies", "Research", "Compliance & Risk", "Journal"]) {
+      await expect(labNav(page).getByRole("button", { name: label, exact: true })).toBeVisible();
     }
   });
 
@@ -266,15 +291,16 @@ test.describe("Trade Lab cockpit", () => {
     await page.goto("/");
     await expect(page.getByRole("button", { name: "Overview", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Trade", exact: true })).toHaveCount(0);
-    await expect(page.locator(".mz-cockpit")).toHaveCount(0);
+    await expect(page.locator(".mz-lab")).toHaveCount(0);
   });
 
   test("handles an unreachable paper desk without an error state", async ({ page }) => {
     // 403 is ORDINARY here: a user not on the trading allowlist. It must read
     // as "not connected", never as a crash.
     await gotoLab(page, { fixtures: { "/api/alpaca/account": { __status: 403, error: "trading_not_enabled" } } });
-    await expect(page.locator(".mz-rail")).toContainText(/not connected/i);
-    await expect(page.locator(".mz-cockpit")).not.toContainText("NaN");
+    await expect(page.getByTestId("order-pipeline")).toContainText("Alpaca unreachable");
+    await expect(page.getByTestId("desk-figures")).toContainText("paper desk not read");
+    await expect(page.locator(".mz-lab")).not.toContainText("NaN");
   });
 
   test("survives malformed Alpaca responses without white-screening", async ({ page }) => {
@@ -289,10 +315,10 @@ test.describe("Trade Lab cockpit", () => {
       "/api/bot/signals": { signals: "not-an-array" },
       "/api/alpaca/account": [1, 2, 3],                        // array, not object
     } });
-    await expect(page.locator(".mz-cockpit")).toBeVisible();
+    await expect(page.locator(".mz-lab")).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/SOMETHING WENT WRONG/i);
-    await expect(page.locator(".mz-cockpit")).not.toContainText("NaN");
-    await expect(page.locator(".mz-cockpit")).not.toContainText("[object Object]");
+    await expect(page.locator(".mz-lab")).not.toContainText("NaN");
+    await expect(page.locator(".mz-lab")).not.toContainText("[object Object]");
   });
 
   test("renders with NO alpaca fixtures at all", async ({ page }) => {
@@ -305,8 +331,8 @@ test.describe("Trade Lab cockpit", () => {
       storage: { mizan_nav: "trade" },
     });
     await page.goto("/");
-    await expect(page.getByRole("button", { name: "Command Center", exact: true })).toBeVisible();
-    await expect(page.locator(".mz-cockpit")).toBeVisible();
+    await expect(labNav(page)).toBeVisible();
+    await expect(page.locator(".mz-lab")).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/SOMETHING WENT WRONG/i);
   });
 
@@ -317,8 +343,10 @@ test.describe("Trade Lab cockpit", () => {
     // order. The armed marker is only shown on the order ticket.
     await gotoLab(page);
     await expect(page.locator(".mz-rail-armed")).toHaveCount(0);   // not on the Desk
+    await openSection(page, "Signals");
+    await expect(page.locator(".mz-rail-armed")).toHaveCount(0);   // nor in Orders until the ticket opens
 
-    await page.getByRole("button", { name: "Quick Trade", exact: true }).click();
+    await openSection(page, "Quick Trade");
     await expect(page.locator(".mz-rail-armed")).toHaveCount(1);
     await expect(page.locator(".mz-rail-armed")).toContainText("ARMED");
     // Default venue is PAPER (owner, 2026-10-08), so that is what must be marked.
@@ -327,7 +355,7 @@ test.describe("Trade Lab cockpit", () => {
 
   test("an explicit LIVE choice is remembered; the default is never live", async ({ page }) => {
     await gotoLab(page, { storage: { mizan_trade_venue: "snaptrade" } });
-    await page.getByRole("button", { name: "Quick Trade", exact: true }).click();
+    await openSection(page, "Quick Trade");
     await expect(page.locator(".mz-rail-armed")).toContainText("LIVE");
   });
 
@@ -348,8 +376,8 @@ test.describe("Trade Lab cockpit", () => {
         { t: Date.parse("2026-10-02T04:00:00Z"), v: 60.60 },
       ] },
     } });
-    await page.getByRole("button", { name: "Performance", exact: true }).click();
-    const perf = page.locator(".mz-cockpit");
+    await openSection(page, "Performance");
+    const perf = page.locator(".mz-lab");
     await expect(perf).toContainText("0.87");
     await expect(perf).toContainText(/behind/i);
     // And it must not dress two days up as a result.
@@ -367,13 +395,13 @@ test.describe("Trade Lab cockpit", () => {
       "/api/alpaca/benchmark": { symbol: "SPUS", range: "1M",
         points: [{ t: Date.parse("2026-10-02T20:00:00Z"), v: 60.60 }] },
     } });
-    await page.getByRole("button", { name: "Performance", exact: true }).click();
-    await expect(page.locator(".mz-cockpit")).toContainText(/not enough overlapping days/i);
+    await openSection(page, "Performance");
+    await expect(page.locator(".mz-lab")).toContainText(/not enough overlapping days/i);
     // Specifically: no alpha FIGURE. The first version asserted the cockpit
     // contained no "pp" at all, which the panel's own sentence ("not enough
     // overlapping days") violates — a two-character substring is not an
     // assertion, it is a coincidence waiting to happen.
-    await expect(page.locator(".mz-cockpit")).not.toContainText(/[+\u2212-]?\d+\.\d{2}\s*pp/);
+    await expect(page.locator(".mz-lab")).not.toContainText(/[+\u2212-]?\d+\.\d{2}\s*pp/);
   });
 
   test("AI committee shows each analyst separately and names disagreement", async ({ page }) => {
@@ -394,8 +422,8 @@ test.describe("Trade Lab cockpit", () => {
                       per_model: [per("anthropic", "BUY", 0.70), per("google", "HOLD", 0.45)] } },
       ],
     } } });
-    await page.getByRole("button", { name: "AI Committee", exact: true }).click();
-    const t = page.locator(".mz-cockpit");
+    await openSection(page, "AI Committee");
+    const t = page.locator(".mz-lab");
     // Each analyst is its own column, by the name a person knows (2026-10-08:
     // provider names became analyst names — CLAUDE, not ANTHROPIC).
     await expect(t).toContainText("CLAUDE");
@@ -412,8 +440,8 @@ test.describe("Trade Lab cockpit", () => {
                   { provider: "google", model: "g", available: false }],
       configured: 1, required: 2, rows: [],
     } } });
-    await page.getByRole("button", { name: "AI Committee", exact: true }).click();
-    const t = page.locator(".mz-cockpit");
+    await openSection(page, "AI Committee");
+    const t = page.locator(".mz-lab");
     await expect(t).toContainText("1 OF 2 ANALYSTS CONFIGURED");
     await expect(t).toContainText(/one model is not a committee/i);
     await expect(t).toContainText(/not configured: google/i);
@@ -465,9 +493,9 @@ test.describe("Trade Lab risk", () => {
 
   const openRisk = async (page, extra = {}) => {
     await gotoLab(page, { fixtures: { ...riskFixtures, ...extra } });
-    await page.getByRole("button", { name: "Risk", exact: true }).click();
+    await openSection(page, "Risk");
     await page.waitForTimeout(1500);
-    return page.locator(".mz-cockpit").innerText();
+    return page.locator(".mz-lab").innerText();
   };
 
   test("every headline tile shows a figure, never a dash", async ({ page }) => {
@@ -527,13 +555,13 @@ test.describe("Trade Lab strategy scoreboard", () => {
 
   const openStrategies = async (page) => {
     await gotoLab(page, { fixtures: { "/api/bot/strategies": strategies } });
-    await page.getByRole("button", { name: "Strategies", exact: true }).click();
+    await openSection(page, "Strategies");
   };
 
   test("an unfunded strategy says so instead of showing a −100% loss", async ({ page }) => {
     await openStrategies(page);
     await expect(page.getByText("NOT TRADED YET")).toBeVisible();
-    const txt = await page.locator(".mz-cockpit").innerText();
+    const txt = await page.locator(".mz-lab").innerText();
     expect(txt).not.toMatch(/−\$?250,000|-100\.00%|−100/);
   });
 
@@ -563,36 +591,41 @@ test.describe("Trade Lab compliance", () => {
     current_price: "1", market_value: "1000", unrealized_pl: "0", unrealized_plpc: "0" }));
 
   test("fills in holdings the server marked pending, without a reload", async ({ page }) => {
-    await gotoLab(page, { fixtures: { "/api/alpaca/positions": positions } });
     let calls = 0;
-    await page.route("**/api/screen", (route) => {
+    let release;
+    const held = new Promise((r) => { release = r; });
+    await gotoLab(page, { fixtures: { "/api/alpaca/positions": positions }, before: (pg) => pg.route("**/api/screen", async (route) => {
       calls++;
+      // The second round waits until the first one has been seen rendered.
+      if (calls === 2) await held;
       const asked = JSON.parse(route.request().postData() || "{}").symbols || [];
       const results = Object.fromEntries(asked.map((tk) => [tk,
         calls === 1 && tk !== "STX" ? { tk, status: "unknown", reason: "pending" } : verdict(tk)]));
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ provider: "finnhub", results }) });
-    });
-    await page.getByRole("button", { name: "Compliance", exact: true }).click();
-    const cockpit = page.locator(".mz-cockpit");
+    }) });
+    await openSection(page, "Compliance");
+    const cockpit = page.locator(".mz-lab");
     await expect(cockpit).toContainText("1/3 SCREENED");          // renders what it has at once
     await expect(cockpit).not.toContainText("could not be screened"); // not while still asking
+    release();
     await expect(cockpit).toContainText("3/3 SCREENED", { timeout: 10000 });
+    // One screening read for the whole tab: the Desk and this page share it,
+    // so the pending names are asked for exactly once more — not once per panel.
     expect(calls).toBe(2);
   });
 
   test("renders today's cached verdicts at once and never re-asks for them", async ({ page }) => {
     const cache = { STX: verdict("STX"), TER: verdict("TER") };
-    await gotoLab(page, { fixtures: { "/api/alpaca/positions": positions },
-      storage: { mizan_aaoifi_cache: JSON.stringify(cache) } });
     const asked = [];
-    await page.route("**/api/screen", (route) => {
-      asked.push(...(JSON.parse(route.request().postData() || "{}").symbols || []));
-      // Throttled — must not erase the cached verdicts.
-      route.fulfill({ status: 200, contentType: "application/json",
-        body: JSON.stringify({ provider: "finnhub", results: { MU: { tk: "MU", status: "unknown", reason: "finnhub_unavailable:429" } } }) });
-    });
-    await page.getByRole("button", { name: "Compliance", exact: true }).click();
-    await expect(page.locator(".mz-cockpit")).toContainText("2/3 SCREENED");
+    await gotoLab(page, { fixtures: { "/api/alpaca/positions": positions },
+      storage: { mizan_aaoifi_cache: JSON.stringify(cache) }, before: (pg) => pg.route("**/api/screen", (route) => {
+        asked.push(...(JSON.parse(route.request().postData() || "{}").symbols || []));
+        // Throttled — must not erase the cached verdicts.
+        route.fulfill({ status: 200, contentType: "application/json",
+          body: JSON.stringify({ provider: "finnhub", results: { MU: { tk: "MU", status: "unknown", reason: "finnhub_unavailable:429" } } }) });
+      }) });
+    await openSection(page, "Compliance");
+    await expect(page.locator(".mz-lab")).toContainText("2/3 SCREENED");
     expect(asked.every((tk) => tk === "MU")).toBe(true);
   });
 
@@ -601,14 +634,14 @@ test.describe("Trade Lab compliance", () => {
     // screens sat in the cache stamped today, so 7 holdings stayed blank.
     const today = new Date().toISOString().slice(0, 10);
     const stale = Object.fromEntries(["STX", "TER", "MU"].map((tk) => [tk, { tk, status: "review", asOf: today, byStandard: {} }]));
-    await gotoLab(page, { fixtures: { "/api/alpaca/positions": positions }, storage: { mizan_aaoifi_cache: JSON.stringify(stale) } });
-    await page.route("**/api/screen", (route) => {
-      const asked = JSON.parse(route.request().postData() || "{}").symbols || [];
-      route.fulfill({ status: 200, contentType: "application/json",
-        body: JSON.stringify({ provider: "finnhub", results: Object.fromEntries(asked.map((tk) => [tk, verdict(tk)])) }) });
-    });
-    await page.getByRole("button", { name: "Compliance", exact: true }).click();
-    await expect(page.locator(".mz-cockpit")).toContainText("3/3 SCREENED");
+    await gotoLab(page, { fixtures: { "/api/alpaca/positions": positions }, storage: { mizan_aaoifi_cache: JSON.stringify(stale) },
+      before: (pg) => pg.route("**/api/screen", (route) => {
+        const asked = JSON.parse(route.request().postData() || "{}").symbols || [];
+        route.fulfill({ status: 200, contentType: "application/json",
+          body: JSON.stringify({ provider: "finnhub", results: Object.fromEntries(asked.map((tk) => [tk, verdict(tk)])) }) });
+      }) });
+    await openSection(page, "Compliance");
+    await expect(page.locator(".mz-lab")).toContainText("3/3 SCREENED");
   });
 });
 
@@ -621,7 +654,8 @@ test("equity curve measures from funding, not from the zero days before it", asy
     timestamp: [day(3), day(4), day(5), day(6), day(7)], equity: [0, 0, 0, 1000000, 1006000],
     baseValue: 0, timeframe: "1D", range: "1M" },
     "/api/alpaca/account": { ...PAPER, equity: 1006000 } } });
-  const cockpit = page.locator(".mz-cockpit");
+  await openSection(page, "Portfolio");
+  const cockpit = page.locator(".mz-lab");
   await expect(cockpit).toContainText("+$6,000.00");
   await expect(cockpit).not.toContainText("1,000,000.00 OVER");
   await expect(cockpit).not.toContainText("INTERVALS RECORDED");
@@ -634,7 +668,8 @@ test("equity curve ends at the desk's live equity when history lags a session", 
   await gotoLab(page, { fixtures: {
     "/api/alpaca/portfolio-history": { timestamp: [day(6), day(7)], equity: [1000000, 1000000], baseValue: 1000000, timeframe: "1D", range: "1M" },
     "/api/alpaca/account": { ...PAPER, equity: 1006181.11 } } });
-  await expect(page.locator(".mz-cockpit")).toContainText("+$6,181.11");
+  await openSection(page, "Portfolio");
+  await expect(page.locator(".mz-lab")).toContainText("+$6,181.11");
 });
 
 /**
@@ -668,8 +703,11 @@ test.describe("Trade Lab strategy book", () => {
     { id: "r1", strategy_id: STRATS[4].id, ticker: "COHR", side: "buy", qty: 0, status: "shadow", created_at: "2026-10-07T17:46:33Z" },
     { id: "o2", strategy_id: STRATS[1].id, ticker: "ISRG", side: "buy", qty: 361, status: "executed", created_at: "2026-10-07T14:00:07Z" },
   ] };
-  const open = (page) => gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: STRATS }, "/api/bot/activity": ACTIVITY,
-    "/api/alpaca/account": { ...PAPER, equity: 1000000 } } });
+  const open = async (page, section = "Portfolio") => {
+    await gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: STRATS }, "/api/bot/activity": ACTIVITY,
+      "/api/alpaca/account": { ...PAPER, equity: 1000000 } } });
+    if (section) await openSection(page, section);
+  };
 
   test("names every strategy and states its return against SPUS", async ({ page }) => {
     await open(page);
@@ -701,7 +739,7 @@ test.describe("Trade Lab strategy book", () => {
   });
 
   test("the activity tape shows orders by strategy code and leaves AI reviews out", async ({ page }) => {
-    await open(page);
+    await open(page, "Journal");
     const tape = page.getByTestId("activity-tape");
     await expect(tape).toContainText("MU");
     await expect(tape).toContainText("ISRG");
@@ -710,7 +748,7 @@ test.describe("Trade Lab strategy book", () => {
 
   test("strategy cards are titled by strategy, not by universe size", async ({ page }) => {
     await open(page);
-    await page.getByRole("button", { name: "Strategies", exact: true }).click();
+    await openSection(page, "Strategies");
     await expect(page.getByTestId("strategy-card-title").first()).toBeVisible();
     const titles = await page.getByTestId("strategy-card-title").allInnerTexts();
     expect(titles.some((t) => t.includes("A · Reference system + AI gate"))).toBe(true);
@@ -728,8 +766,8 @@ test.describe("Trade Lab strategy book", () => {
 
   test("the Strategies list names each strategy and never prints undefined% / null%", async ({ page }) => {
     await open(page);
-    await page.getByRole("button", { name: "Strategies", exact: true }).click();
-    const cockpit = page.locator(".mz-cockpit");
+    await openSection(page, "Strategies");
+    const cockpit = page.locator(".mz-lab");
     await expect(cockpit).toContainText("A · Reference system + AI gate");
     await expect(cockpit).toContainText("Rebalance every 30d");
     await expect(cockpit).not.toContainText("undefined%");
@@ -738,8 +776,8 @@ test.describe("Trade Lab strategy book", () => {
 
   test("Signals never prints Invalid Date or a $0.00 price for missing data", async ({ page }) => {
     await open(page);
-    await page.getByRole("button", { name: "Signals", exact: true }).click();
-    const cockpit = page.locator(".mz-cockpit");
+    await openSection(page, "Signals");
+    const cockpit = page.locator(".mz-lab");
     await expect(cockpit).toContainText("MU");
     await expect(cockpit).not.toContainText("Invalid Date");
     await expect(cockpit).not.toContainText("~$0.00");
@@ -762,7 +800,10 @@ test.describe("Trade Lab strategy book", () => {
   });
 
   test("the desk never overflows the page", async ({ page }) => {
-    await open(page);
+    await open(page, null);
+    await expect(page.getByTestId("strategy-multiple").first()).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await openSection(page, "Portfolio");
     await expect(page.getByTestId("strategy-book")).toContainText("Reference system");
     const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(over).toBeLessThanOrEqual(0);
@@ -788,7 +829,7 @@ test("AI committee names the strategy, the failure reason, and each analyst's re
         ensemble: { ok: true, consensus: "HOLD", unanimous: true, per_model: [per("anthropic", "HOLD"), per("google", "HOLD"), per("openrouter", "HOLD")] }, failures: [] },
       { id: "3", strategy_id: A.id, ticker: "STX", at: "2026-10-07T13:30:00Z", screen_only: true, sharia_verdict: "haram", ensemble: { ok: false }, failures: [] },
     ] } } });
-  await page.getByRole("button", { name: "AI Committee", exact: true }).click();
+  await openSection(page, "AI Committee");
   const stats = page.getByTestId("committee-stats");
   await expect(stats).toContainText("CLAUDE");
   await expect(stats).toContainText("1/2");            // Claude: answered 1 of 2 asked
@@ -820,11 +861,95 @@ test("performance ranks each strategy against SPUS and measures the account to n
     "/api/alpaca/benchmark": { symbol: "SPUS", range: "1M", points: [
       { t: Date.parse("2026-10-06T04:00:00Z"), v: 60 }, { t: Date.parse("2026-10-07T04:00:00Z"), v: 60.3 }, { t: Date.now(), v: 60.6 } ] },
   } });
-  await page.getByRole("button", { name: "Performance", exact: true }).click();
+  await openSection(page, "Performance");
   const lb = page.getByTestId("perf-leaderboard");
   await expect(page.getByTestId("perf-row")).toHaveCount(2);     // F has not traded: not on the board
   await expect(lb).toContainText("Reference system + AI gate");
   await expect(lb).toContainText("+1.12 pts");
   await expect(lb).toContainText("-0.27 pts");
   await expect(page.getByTestId("perf-stats")).toContainText("+0.40%");  // 1,000,000 → live 1,004,000
+});
+
+/**
+ * The broadsheet Desk (2026-10-08): every strategy as a small chart against
+ * SPUS, the order pipeline, and the A-vs-B question — each asserted against
+ * what the fixture can only produce one way.
+ */
+test.describe("Trade Lab desk", () => {
+  const s = (id, experiment, cap, pr, params = {}) => ({ id, enabled: true, strategy_type: "rank_rebalance", capital_allocated: String(cap),
+    params: { experiment, broker: "alpaca_paper", ...params }, progress: { paper: true, ...pr } });
+  const traded = (ret, bench) => ({ trades_executed: 12, return_pct: ret, bench_return_pct: bench, alpha_pct: ret - bench, equity: 1 });
+  const STRATS = [
+    s("aaaaaaaa-0000-0000-0000-000000000001", "A: reference system + AI gate", 250000, traded(1.02, -0.1)),
+    s("bbbbbbbb-0000-0000-0000-000000000002", "B: reference system, no AI", 250000, traded(0.61, -0.1)),
+    s("ffffffff-0000-0000-0000-000000000006", "F: small account", 300, { trades_executed: 0 }),
+  ];
+  const curve = (pts) => ({ startedOn: "2026-10-07", points: pts.map(([day, r, b]) => ({ day, returnPct: r, benchPct: b })) });
+  const CURVES = { curves: {
+    [STRATS[0].id]: curve([["2026-10-06", 0, 0], ["2026-10-07", 0.4, -0.2]]),
+    [STRATS[1].id]: curve([["2026-10-06", 0, 0], ["2026-10-07", 0.2, -0.2]]),
+  } };
+  const RESEARCH = { configured: 3, required: 2,
+    providers: [{ provider: "anthropic", available: true }, { provider: "google", available: true }, { provider: "openrouter", available: true }],
+    rows: [
+      { id: "1", ticker: "LRCX", at: "2026-10-08T12:30:00Z", ensemble: { ok: false, per_model: [{ provider: "google", action: "BUY", confidence: 0.72 }] },
+        failures: [{ provider: "anthropic", code: "http_400" }, { provider: "openrouter", code: "schema_invalid" }] },
+      { id: "2", ticker: "COHR", at: "2026-10-08T12:32:00Z", ensemble: { ok: true, unanimous: true,
+        per_model: [{ provider: "google", action: "HOLD" }, { provider: "anthropic", action: "HOLD" }, { provider: "openrouter", action: "HOLD" }] }, failures: [] },
+    ] };
+  const open = (page, over = {}) => gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: STRATS },
+    "/api/bot/curves": CURVES, "/api/ai/research": RESEARCH, "/api/bot/signals": { signals: [] }, ...over } });
+
+  test("draws a chart per traded strategy, ending on the return printed beside it", async ({ page }) => {
+    await open(page);
+    const a = page.getByTestId("strategy-multiple").filter({ hasText: "Reference system + AI gate" });
+    await expect(a).toContainText("+1.02%");
+    await expect(a).toContainText("+1.12 pts vs SPUS");
+    // Two lines: the strategy in its identity colour, SPUS in grey.
+    await expect(a.locator("polyline")).toHaveCount(2);
+    await expect(a.locator("polyline.mz-mult-line")).toHaveCSS("stroke", "rgb(57, 135, 229)");
+    // Three points: two daily closes + today's live score pinned on the end.
+    const pts = await a.locator("polyline.mz-mult-line").getAttribute("points");
+    expect(pts.trim().split(/\s+/)).toHaveLength(3);
+    await expect(a).toContainText("paper");
+  });
+
+  test("an untraded strategy says so instead of drawing a flat line", async ({ page }) => {
+    await open(page);
+    const f = page.getByTestId("strategy-multiple").filter({ hasText: "Small account" });
+    await expect(f).toContainText("not traded");
+    await expect(f).toContainText("no fills yet");
+    await expect(f.locator("svg")).toHaveCount(0);
+  });
+
+  test("counts AI answers per review — one complete review is not a full committee", async ({ page }) => {
+    await open(page);
+    await expect(page.getByTestId("order-pipeline")).toContainText("1 of 2 reviews missing an analyst");
+    const c = page.getByTestId("committee-latest");
+    await expect(c).toContainText("no answer");
+    await expect(c).toContainText("Buy");
+  });
+
+  test("states A against B with how long it has been measured", async ({ page }) => {
+    await open(page);
+    const q = page.getByTestId("ai-question");
+    await expect(q).toContainText("ahead of");
+    await expect(q).toContainText("0.41 pts");
+    await expect(q).toContainText(/noise, not a verdict/);
+  });
+
+  test("still renders when the curves endpoint fails", async ({ page }) => {
+    await open(page, { "/api/bot/curves": { __status: 500, error: "db_error" } });
+    const a = page.getByTestId("strategy-multiple").filter({ hasText: "Reference system + AI gate" });
+    await expect(a).toContainText("+1.02%");
+    await expect(page.locator(".mz-lab")).not.toContainText("NaN");
+  });
+
+  test("the old Quick Trade id lands on Orders with the ticket open", async ({ page }) => {
+    await open(page, {});
+    await page.evaluate(() => localStorage.setItem("mizan_pending_order", JSON.stringify({ sym: "SPUS", side: "buy", qty: 2 })));
+    await page.reload();
+    await expect(labNav(page).getByRole("button", { name: "Orders" })).toHaveAttribute("aria-current", "page");
+    await expect(page.locator(".mz-rail-armed")).toContainText("PAPER");
+  });
 });
