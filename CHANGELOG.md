@@ -17,6 +17,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **sharia:** Every strategy screens by AAOIFI; Compliance/Risk stop blanking (`6040450`)
 - **ai:** Claude never answered the research panel; strict verdict schema (`f86dede`)
 
+### Docs
+- AAOIFI screening, verdict cache, DCA cash cap; evict old verdict rows (`2235c96`)
+
 ## 2026-10-06
 
 ### Added

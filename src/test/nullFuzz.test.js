@@ -44,6 +44,7 @@ const MODULES = [
   '../../lib/trading/sleeve.mjs',
   '../../lib/trading/position.mjs',
   '../../lib/trading/screenGate.mjs',
+  '../../lib/ownerBrief.mjs',
 ]
 
 /** What a broken upstream actually hands you. `null` is the headline case. */
