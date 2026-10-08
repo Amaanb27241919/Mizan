@@ -129,3 +129,16 @@ describe('strategy progress keeps the venue it was seeded with', () => {
     expect(f).not.toMatch(/out\.paper = !!pos\.paper;/)
   })
 })
+
+import { groupBrief } from '../../lib/ownerBrief.mjs'
+describe('groupBrief — Experiment E is two sleeves, reported as one', () => {
+  const core = { id: 'c', capital: 70000, score: { equity: 71400 } }
+  const swing = { id: 's', capital: 30000, score: { equity: 29700 } }
+  it('sums equity and states the return on the combined capital', () => {
+    expect(groupBrief('E', [core, swing])).toEqual({ name: 'E', members: ['c', 's'], capital: 100000, equity: 101100, returnPct: 1.1 })
+  })
+  it('a member without an equity makes the total unknown, not partial', () => {
+    expect(groupBrief('E', [core, { id: 's', capital: 30000, score: { equity: null } }])).toMatchObject({ equity: null, returnPct: null })
+  })
+  it('survives junk', () => { expect(groupBrief('E', null)).toBeNull(); expect(groupBrief(null, [core])).toBeNull() })
+})

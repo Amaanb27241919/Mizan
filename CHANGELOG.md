@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-07
 
 ### Added
+- **trade-lab:** Small-account mode for Experiment E (whole shares only) (`e825069`)
 - **trade-lab:** Owner morning-brief endpoint for the 8:30 ET Lima brief (`bf431ed`)
 
 ### Fixed

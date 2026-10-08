@@ -250,3 +250,13 @@ describe('inPremarketReviewWindow', () => {
     expect(inPremarketReviewWindow(edt('03:00'), { startMinutes: 0 })).toBe(false)
   })
 })
+
+import { etDateKey, minutesSinceOpen } from '../../lib/market/sessions.mjs'
+describe('etDateKey / minutesSinceOpen', () => {
+  it('reads New York wall-clock time, across the UTC date line', () => {
+    const t = new Date('2026-10-09T01:30:00Z') // 21:30 ET on Oct 8
+    expect(etDateKey(t)).toBe('2026-10-08')
+    expect(minutesSinceOpen(new Date('2026-10-08T14:45:00Z'))).toBe(75) // 10:45 ET (EDT)
+    expect(minutesSinceOpen(new Date('2026-10-08T13:00:00Z'))).toBe(-30)
+  })
+})
