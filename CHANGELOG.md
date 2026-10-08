@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-06
 
 ### Added
+- **ai:** OpenRouter as a third research-panel provider (`f94c0fe`)
 - **trade-lab:** Per-strategy scoreboard vs SPUS, and docs brought up to date (`5696f22`)
 - **trading:** Pre-market AI review, broker-side swing stops, and three swing exit fixes (`7697e86`)
 

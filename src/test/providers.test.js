@@ -16,7 +16,9 @@ const ok = (payload) => ({ ok: true, status: 200, text: async () => JSON.stringi
 const bad = (status, body = '') => ({ ok: false, status, text: async () => body })
 
 const geminiOk = ok({ candidates: [{ content: { parts: [{ text: JSON.stringify(VERDICT) }] } }] })
-const claudeOk = ok({ content: [{ type: 'tool_use', name: 'record_verdict', input: VERDICT }] })
+// Structured outputs: the verdict arrives as JSON in a text block, after any
+// (empty, display-omitted) thinking block the model emits first.
+const claudeOk = ok({ content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify(VERDICT) }] })
 
 describe('isTransient — what measurement taught us', () => {
   it('treats a ZERO-BYTE 404 as transient, not as a dead model', () => {
@@ -75,12 +77,14 @@ describe('providers share one shape', () => {
     expect(aBody.system).toBe(SYSTEM_INSTRUCTION)
   })
 
-  it('pin temperature to 0, because reproducibility beats variety here', async () => {
+  it('pin temperature to 0 where the model allows it — and never send it to current Claude models', async () => {
+    // Claude Sonnet 5.5 / Opus 5.5 reject non-default sampling with a 400, so
+    // the reproducibility knob exists only on the providers that accept it.
     let gBody, aBody
     await googleProvider({ apiKey: 'k', fetchImpl: mockFetch((u, i) => { gBody = JSON.parse(i.body); return geminiOk }) }).analyze('P')
     await anthropicProvider({ apiKey: 'k', fetchImpl: mockFetch((u, i) => { aBody = JSON.parse(i.body); return claudeOk }) }).analyze('P')
     expect(gBody.generationConfig.temperature).toBe(0)
-    expect(aBody.temperature).toBe(0)
+    expect(aBody).not.toHaveProperty('temperature')
   })
 
   it('take the model id from CONFIG, never a hardcoded constant', async () => {
@@ -97,14 +101,25 @@ describe('providers share one shape', () => {
     expect(body.generationConfig.responseMimeType).toBe('application/json')
   })
 
-  it('force a tool call for Anthropic, and lowercase the schema types', async () => {
+  it('constrain Claude with structured outputs, NOT a forced tool call', async () => {
+    // Measured 2026-10-07: claude-sonnet-5-5 answers a forced tool_choice with
+    // 400 "tool_choice: type tool and any are not supported for this model" —
+    // every Claude round of the research panel failed on it.
     let body
     await anthropicProvider({ apiKey: 'k', fetchImpl: mockFetch((u, i) => { body = JSON.parse(i.body); return claudeOk }) }).analyze('P')
-    expect(body.tool_choice).toEqual({ type: 'tool', name: 'record_verdict' })
-    // Gemini uppercases types; JSON Schema does not. Sending OBJECT would be
-    // rejected.
-    expect(body.tools[0].input_schema.type).toBe('object')
-    expect(body.tools[0].input_schema.properties.action.type).toBe('string')
+    expect(body).not.toHaveProperty('tool_choice')
+    expect(body).not.toHaveProperty('tools')
+    expect(body.output_config.format.type).toBe('json_schema')
+    // Gemini uppercases types; JSON Schema does not. Structured outputs also
+    // require additionalProperties:false on every object.
+    expect(body.output_config.format.schema.type).toBe('object')
+    expect(body.output_config.format.schema.properties.action.type).toBe('string')
+    expect(body.output_config.format.schema.additionalProperties).toBe(false)
+  })
+
+  it('reads the verdict from the TEXT block, skipping a leading thinking block', async () => {
+    const r = await anthropicProvider({ apiKey: 'k', fetchImpl: mockFetch(() => claudeOk) }).analyze('P')
+    expect(r).toMatchObject({ ok: true, provider: 'anthropic' })
   })
 })
 
@@ -268,5 +283,32 @@ describe('openrouterProvider', () => {
     expect(await openrouterProvider({ apiKey: null }).analyze('x')).toMatchObject({ ok: false, code: 'not_configured' })
     const r = await openrouterProvider({ apiKey: 'k', fetchImpl: mockFetch(() => bad(402, '{"error":{"message":"Key limit exceeded"}}')) }).analyze('P')
     expect(r).toMatchObject({ ok: false, code: 'http_402' })
+  })
+})
+
+// Strict JSON Schema (structured outputs, OpenRouter strict mode) wants EVERY
+// property listed in `required`, with optional ones nullable. The verdict
+// schema listed only 4 of 11, so a model could legally omit horizon_days /
+// expected_return_pct / downside_pct on a BUY — which validateModelSignal then
+// rejects. DeepSeek's rounds failed "schema_invalid" all day on 2026-10-07.
+describe('strict verdict schema for JSON-Schema providers', () => {
+  it('requires every field, and lets the formerly-optional ones be null', async () => {
+    let a, o
+    await anthropicProvider({ apiKey: 'k', fetchImpl: mockFetch((u, i) => { a = JSON.parse(i.body); return claudeOk }) }).analyze('P')
+    await openrouterProvider({ apiKey: 'k', fetchImpl: mockFetch((u, i) => { o = JSON.parse(i.body); return ok({ choices: [{ message: { content: JSON.stringify(VERDICT) } }] }) }) }).analyze('P')
+    for (const schema of [a.output_config.format.schema, o.response_format.json_schema.schema]) {
+      expect([...schema.required].sort()).toEqual(Object.keys(schema.properties).sort())
+      expect(schema.properties.horizon_days.type).toEqual(['integer', 'null'])
+      expect(schema.properties.downside_pct.type).toEqual(['number', 'null'])
+      expect(schema.properties.action.type).toBe('string')            // originally required: stays non-null
+      expect(schema.properties.thesis.type).toBe('array')
+      expect(schema.additionalProperties).toBe(false)
+    }
+  })
+
+  it('leaves Gemini on its native schema, unchanged', async () => {
+    let g
+    await googleProvider({ apiKey: 'k', fetchImpl: mockFetch((u, i) => { g = JSON.parse(i.body); return geminiOk }) }).analyze('P')
+    expect(g.generationConfig.responseSchema).toEqual(RESPONSE_SCHEMA)
   })
 })

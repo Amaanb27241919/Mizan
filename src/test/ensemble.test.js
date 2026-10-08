@@ -254,3 +254,12 @@ describe('pre-market AI gate review', () => {
     expect(SRC).toMatch(/if \(inPremarketReviewWindow\(\)\) \{\s*try \{ premarket = await premarketGateReviews\(\); \}/)
   })
 })
+
+describe('panel failure records', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  it('keep the provider\'s error MESSAGE, not just its code', () => {
+    // A stored "schema_invalid" could not say which field was wrong, so a
+    // whole day of DeepSeek rejections was undiagnosable (2026-10-07).
+    expect(SRC).toMatch(/failures: round\.failures\.map\(\(f\) => \(\{[^}]*detail: String\(f\.detail/)
+  })
+})
