@@ -250,3 +250,13 @@ describe('rank_rebalance is shadow-only', () => {
     expect(branch).not.toMatch(/const budget = Math\.max\(0, Number\(strat\.capital_allocated\)/)
   })
 })
+
+describe('rebalancePlan — forceSell (holdings that fail the Sharia standard)', () => {
+  const ranked = ['A', 'B', 'C', 'D', 'E'].map((symbol) => ({ symbol }))
+  it('sells a held name inside the hold zone, and never re-buys it', () => {
+    const p = rebalancePlan({ ranked, held: ['A', 'B'], buyTop: 3, holdZone: 5, forceSell: ['a'] })
+    expect(p.sell).toEqual(['A'])
+    expect(p.keep).toEqual(['B'])
+    expect(p.buy).toEqual(['C'])
+  })
+})

@@ -21,6 +21,7 @@ import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/ben
 import { complianceMatrix, STANDARDS as SCREEN_STANDARDS, STANDARD_LABELS } from "../lib/complianceMatrix.js";
 import { concentration, groupExposure, maxDrawdown } from "../lib/riskMetrics.js";
 import { useScreenStandard, statusForStandard } from "../lib/shariaStatus.js";
+import { mergeVerdicts, symbolsToScreen, isSettledVerdict } from "../lib/shariaVerdict.js";
 import { useEthicalOverlay, ethicalFlag } from "../lib/ethicalOverlay.js";
 import Budgeting from "./Budgeting.jsx";
 import { moneyWeightedReturn } from "../lib/performance.js";
@@ -7653,9 +7654,54 @@ function Stat({label,value,sub}){
  * the coverage is shown rather than the gap being quietly folded into an
  * "Other" bucket that then competes with the real ones.
  */
+/**
+ * Screen verdicts for a list of holdings, shared by the Risk and Compliance
+ * panels. Renders today's cached verdicts at once and asks the server only for
+ * the rest. /api/screen answers within a time budget and marks what it did not
+ * reach "pending", so this re-asks until everything settles. Both panels used
+ * to re-screen every holding on every visit and wait for all of it, and a
+ * throttled answer overwrote a good cached verdict (2026-10-07: SCREENING… for
+ * 15s+, then 7 of 27 holdings blank).
+ */
+const SCREEN_POLL_ROUNDS=8, SCREEN_POLL_MS=4000;
+function useScreenVerdicts(symbols,demoMode){
+  const[verdicts,setVerdicts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
+  const[phase,setPhase]=useState("idle"); // idle | screening | done | failed
+  const key=symbols.join(",");
+  useEffect(()=>{
+    if(demoMode||!symbols.length){setPhase("idle");return;}
+    let cancelled=false;
+    (async()=>{
+      const today=new Date().toISOString().slice(0,10);
+      let cache=verdicts;
+      let todo=symbolsToScreen(symbols,cache,today);
+      if(!todo.length){setPhase("done");return;}
+      setPhase("screening");
+      for(let round=0;round<SCREEN_POLL_ROUNDS&&todo.length&&!cancelled;round++){
+        let results=null;
+        try{
+          const r=await apiFetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbols:todo})});
+          if(r.ok){const d=await r.json();results=d&&typeof d.results==="object"&&d.results?d.results:null;}
+        }catch{results=null;}
+        if(cancelled)return;
+        if(results){
+          cache=mergeVerdicts(cache,results);
+          setVerdicts(cache);
+          try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(cache));}catch{}
+        }
+        todo=todo.filter(tk=>!isSettledVerdict(cache[tk]));
+        if(todo.length&&round<SCREEN_POLL_ROUNDS-1)await new Promise(res=>setTimeout(res,SCREEN_POLL_MS));
+      }
+      if(!cancelled)setPhase(symbols.some(tk=>isSettledVerdict(cache[tk]))?"done":"failed");
+    })();
+    return()=>{cancelled=true;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[demoMode,key]);
+  return{verdicts,phase};
+}
+
 function RiskPanel({desk,demoMode}){
   const{mask}=useHideValues();
-  const[verdicts,setVerdicts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
   const[hist,setHist]=useState(null);
   const[state,setState]=useState(demoMode?"idle":"loading");
 
@@ -7663,28 +7709,17 @@ function RiskPanel({desk,demoMode}){
     symbol:String(p.symbol||"").toUpperCase(),
     value:Number(p.market_value)||0,
   })).filter(h=>h.symbol&&h.value>0),[desk?.positions]);
+  // The screen only feeds the industry grouping, so it fills in as it arrives
+  // and never holds the page; the drawdown waits only for its own history.
+  const{verdicts}=useScreenVerdicts(useMemo(()=>positions.map(p=>p.symbol),[positions]),demoMode);
 
   useEffect(()=>{
     if(demoMode){setState("idle");return;}
     if(!positions.length){setState("empty");return;}
     let cancelled=false;
     (async()=>{
-      // Both are optional: a missing screen costs the industry grouping, a
-      // missing history costs the drawdown. Neither should blank the page.
-      const[sr,hr]=await Promise.all([
-        apiFetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({symbols:positions.map(p=>p.symbol)})}).catch(()=>null),
-        apiFetch("/api/alpaca/portfolio-history?range=1M").catch(()=>null),
-      ]);
+      const hr=await apiFetch("/api/alpaca/portfolio-history?range=1M").catch(()=>null);
       if(cancelled)return;
-      if(sr&&sr.ok){
-        try{
-          const d=await sr.json();
-          const merged={...verdicts,...(d.results||{})};
-          setVerdicts(merged);
-          try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(merged));}catch{}
-        }catch{}
-      }
       if(hr&&hr.ok){try{setHist(await hr.json());}catch{}}
       if(!cancelled)setState("ready");
     })();
@@ -7804,40 +7839,18 @@ const MARK_GLYPH = { pass: "✓", fail: "✗", review: "~", no_data: "·" };
 
 function CompliancePanel({desk,demoMode}){
   const{mask}=useHideValues();
-  const[verdicts,setVerdicts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
-  const[state,setState]=useState(demoMode?"idle":"loading");
 
   const positions=useMemo(()=>asArray(desk?.positions).map(p=>({
     symbol:String(p.symbol||"").toUpperCase(),
     value:Number(p.market_value)||0,
   })).filter(h=>h.symbol),[desk?.positions]);
-
-  useEffect(()=>{
-    if(demoMode){setState("idle");return;}
-    if(!positions.length){setState("empty");return;}
-    let cancelled=false;
-    (async()=>{
-      try{
-        // Batched server-side — screenBatch paces itself for the Finnhub free
-        // tier, which is the whole reason this is one request and not 25.
-        const r=await apiFetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({symbols:positions.map(p=>p.symbol)})});
-        if(!r.ok){if(!cancelled)setState("unavailable");return;}
-        const d=await r.json();
-        if(cancelled)return;
-        const merged={...verdicts,...(d.results||{})};
-        setVerdicts(merged);
-        // Shares the app's single screening cache rather than keeping a second
-        // one that could disagree with it (CLAUDE.md §4).
-        try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(merged));}catch{}
-        setState("ready");
-      }catch{if(!cancelled)setState("unavailable");}
-    })();
-    return()=>{cancelled=true;};
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[demoMode,positions.length]);
+  // Shares the app's single screening cache (CLAUDE.md §4) via useScreenVerdicts.
+  const{verdicts,phase}=useScreenVerdicts(useMemo(()=>positions.map(p=>p.symbol),[positions]),demoMode);
 
   const m=useMemo(()=>complianceMatrix(positions,verdicts,{governing:"AAOIFI"}),[positions,verdicts]);
+  // Rows render as soon as ANY holding has a verdict; the rest fill in.
+  const anySettled=positions.some(p=>isSettledVerdict(verdicts[p.symbol]));
+  const state=demoMode?"idle":!positions.length?"empty":anySettled?"ready":phase==="failed"?"unavailable":"loading";
   const total=positions.reduce((t,p)=>t+p.value,0);
   const color=mk=>mk==="pass"?T.gain:mk==="fail"?T.loss:mk==="review"?T.gold:T.slate;
 
@@ -7846,6 +7859,7 @@ function CompliancePanel({desk,demoMode}){
       hint="Every holding against all seven screening standards. AAOIFI governs — it is the methodology Mīzan states — and the rest are shown beside it so a disagreement between them is visible rather than something you have to go looking for."
       right={state==="ready"&&<span style={{display:"inline-flex",gap:T.s2}}>
         <Tag label={`${m.screened}/${m.total} SCREENED`} color={m.unscreened?T.gold:T.slate}/>
+        {phase==="screening"&&m.unscreened>0&&<Tag label="SCREENING…" color={T.slate}/>}
         {m.divergent.length>0&&<Tag label={`${m.divergent.length} DIVERGENT`} color={T.gold}/>}
       </span>}
       style={{marginBottom:T.s3}}/>
@@ -7896,7 +7910,7 @@ function CompliancePanel({desk,demoMode}){
 
       <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginTop:T.s3}}>
         ✓ PASS · ✗ FAIL · ~ INCONCLUSIVE · · NOT SCREENED
-        {m.unscreened>0&&<span style={{color:T.gold}}> — {m.unscreened} holding{m.unscreened===1?"":"s"} could not be screened; that is missing data, not a failed screen.</span>}
+        {m.unscreened>0&&phase!=="screening"&&<span style={{color:T.gold}}> — {m.unscreened} holding{m.unscreened===1?"":"s"} could not be screened; that is missing data, not a failed screen.</span>}
       </div>
     </>}
   </section>;

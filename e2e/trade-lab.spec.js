@@ -537,3 +537,52 @@ test.describe("Trade Lab strategy scoreboard", () => {
     await expect(row).toContainText("+0.40 pp");
   });
 });
+
+/**
+ * Compliance, 2026-10-07: the tab sat on SCREENING… for 15s+ and then showed
+ * 7 of 27 holdings blank. It re-screened every holding on every visit and
+ * waited for all of it, and a throttled answer overwrote good cached verdicts.
+ * Now: today's cache renders at once, only the rest is asked for, and what the
+ * server marks "pending" is asked for again until it settles.
+ */
+test.describe("Trade Lab compliance", () => {
+  const verdict = (tk, aaoifi = true) => ({ tk, status: "halal", asOf: new Date().toISOString().slice(0, 10),
+    byStandard: { AAOIFI: { pass: aaoifi }, DJIM: { pass: true }, SP_SHARIAH: { pass: true }, FTSE_SHARIAH: { pass: true },
+      MSCI_ISLAMIC: { pass: true }, SC_MALAYSIA: { pass: true }, IFSB: { pass: true } } });
+  const positions = ["STX", "TER", "MU"].map((symbol) => ({ symbol, qty: "1", avg_entry_price: "1",
+    current_price: "1", market_value: "1000", unrealized_pl: "0", unrealized_plpc: "0" }));
+
+  test("fills in holdings the server marked pending, without a reload", async ({ page }) => {
+    await gotoLab(page, { fixtures: { "/api/alpaca/positions": positions } });
+    let calls = 0;
+    await page.route("**/api/screen", (route) => {
+      calls++;
+      const asked = JSON.parse(route.request().postData() || "{}").symbols || [];
+      const results = Object.fromEntries(asked.map((tk) => [tk,
+        calls === 1 && tk !== "STX" ? { tk, status: "unknown", reason: "pending" } : verdict(tk)]));
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ provider: "finnhub", results }) });
+    });
+    await page.getByRole("button", { name: "Compliance", exact: true }).click();
+    const cockpit = page.locator(".mz-cockpit");
+    await expect(cockpit).toContainText("1/3 SCREENED");          // renders what it has at once
+    await expect(cockpit).not.toContainText("could not be screened"); // not while still asking
+    await expect(cockpit).toContainText("3/3 SCREENED", { timeout: 10000 });
+    expect(calls).toBe(2);
+  });
+
+  test("renders today's cached verdicts at once and never re-asks for them", async ({ page }) => {
+    const cache = { STX: verdict("STX"), TER: verdict("TER") };
+    await gotoLab(page, { fixtures: { "/api/alpaca/positions": positions },
+      storage: { mizan_aaoifi_cache: JSON.stringify(cache) } });
+    const asked = [];
+    await page.route("**/api/screen", (route) => {
+      asked.push(...(JSON.parse(route.request().postData() || "{}").symbols || []));
+      // Throttled — must not erase the cached verdicts.
+      route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ provider: "finnhub", results: { MU: { tk: "MU", status: "unknown", reason: "finnhub_unavailable:429" } } }) });
+    });
+    await page.getByRole("button", { name: "Compliance", exact: true }).click();
+    await expect(page.locator(".mz-cockpit")).toContainText("2/3 SCREENED");
+    expect(asked.every((tk) => tk === "MU")).toBe(true);
+  });
+});

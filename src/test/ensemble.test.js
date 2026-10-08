@@ -244,8 +244,9 @@ describe('pre-market AI gate review', () => {
     }
   })
 
-  it('only runs for AI-gated PAPER strategies that are due', () => {
-    expect(PRE).toMatch(/ai_gate !== true \|\| resolveMode\(strat\) !== MODES\.PAPER/)
+  it('plans every due PAPER strategy (warms Sharia screens), reviews only AI-gated ones', () => {
+    expect(PRE).toMatch(/if \(resolveMode\(strat\) !== MODES\.PAPER\) continue;/)
+    expect(PRE).toMatch(/if \(strat\.params\?\.ai_gate !== true\) \{ out\.ready\+\+; continue; \}/)
     expect(PRE).toMatch(/if \(!rankDue\(strat\)\) continue;/)
     expect(PRE).toMatch(/pastCutoff: false/)
   })

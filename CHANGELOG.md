@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-07
+
+### Fixed
+- **ai:** Claude never answered the research panel; strict verdict schema (`f86dede`)
+
 ## 2026-10-06
 
 ### Added
