@@ -560,7 +560,7 @@ test.describe("Trade Lab strategy scoreboard", () => {
 
   test("an unfunded strategy says so instead of showing a −100% loss", async ({ page }) => {
     await openStrategies(page);
-    await expect(page.getByText("NOT TRADED YET")).toBeVisible();
+    await expect(page.getByTestId("strategy-row").filter({ hasNotText: "+2.23%" })).toContainText("not traded yet");
     const txt = await page.locator(".mz-lab").innerText();
     expect(txt).not.toMatch(/−\$?250,000|-100\.00%|−100/);
   });
@@ -569,10 +569,9 @@ test.describe("Trade Lab strategy scoreboard", () => {
     await openStrategies(page);
     const row = page.getByTestId("strategy-vs-bench");
     await expect(row).toHaveCount(1);
-    await expect(row).toContainText("VS SPUS");
     await expect(row).toContainText("+2.23%");
-    await expect(row).toContainText("+1.83%");
-    await expect(row).toContainText("+0.40 pp");
+    await expect(row).toContainText("SPUS +1.83%");
+    await expect(row).toContainText("+0.40 pts vs SPUS");
   });
 });
 
@@ -769,7 +768,7 @@ test.describe("Trade Lab strategy book", () => {
     await openSection(page, "Strategies");
     const cockpit = page.locator(".mz-lab");
     await expect(cockpit).toContainText("A · Reference system + AI gate");
-    await expect(cockpit).toContainText("Rebalance every 30d");
+    await expect(cockpit).toContainText("rebalances monthly");
     await expect(cockpit).not.toContainText("undefined%");
     await expect(cockpit).not.toContainText("null%");
   });
@@ -1009,4 +1008,53 @@ test("the equity headline is measured from the starting balance on every range",
   // The range's own change is still stated, underneath — and it differs.
   await page.getByRole("button", { name: "1D", exact: true }).click();
   await expect(head).toContainText("1D: +$1,392.10");
+});
+
+// Strategies (broadsheet pass, 2026-10-08): one table, controls unchanged.
+test.describe("Trade Lab strategies section", () => {
+  const strat = (id, experiment, params, extra = {}) => ({ id, enabled: true, mode: "semi", strategy_type: "rank_rebalance", capital_allocated: "250000",
+    stop_loss_pct: "15", params: { experiment, broker: "alpaca_paper", buy_top: 15, hold_zone: 25, rebalance_days: 30, ...params },
+    progress: { paper: true, trades_executed: 0 }, ...extra });
+  const open = async (page) => {
+    await gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: [
+      strat("aaaaaaaa-0000-0000-0000-000000000001", "A: reference system + AI gate", { ai_gate: true }),
+      strat("dddddddd-0000-0000-0000-000000000009", "", { layer: "shadow", research_panel: true }, { nl_description: "SHADOW research panel." }),
+    ] } } });
+    await openSection(page, "Strategies");
+  };
+
+  test("lists each strategy once, in one table", async ({ page }) => {
+    await open(page);
+    await expect(page.getByTestId("strategy-row")).toHaveCount(2);
+    await expect(page.getByTestId("automation-status")).toContainText("Automation running");
+  });
+
+  test("the shadow panel gets no mode switch — it could overwrite the gate that keeps it from trading", async ({ page }) => {
+    await open(page);
+    const shadow = page.getByTestId("strategy-row").filter({ hasText: "SHADOW" });
+    await expect(shadow.getByTestId("shadow-mode")).toContainText("records only");
+    await expect(shadow.getByRole("button", { name: "Manual" })).toHaveCount(0);
+  });
+
+  test("changing a strategy's mode still asks for confirmation first", async ({ page }) => {
+    await open(page);
+    let patched = false;
+    await page.route("**/api/bot/strategies/**", (r) => { if (r.request().method() !== "GET") patched = true; r.fulfill({ status: 200, body: "{}" }); });
+    const a = page.getByTestId("strategy-row").filter({ hasText: "Reference system + AI gate" });
+    await a.getByRole("button", { name: "Manual" }).click();
+    // The gate names the STRATEGY (it used to name the ticker, "SPUS", for every rank strategy).
+    await expect(page.getByTestId("layer-modal-strategy")).toHaveText("A · Reference system + AI gate");
+    await expect(page.getByRole("button", { name: "Set Manual" })).toBeDisabled();
+    expect(patched, "nothing may be sent before the user confirms").toBe(false);
+  });
+
+  test("the builder is folded until asked for", async ({ page }) => {
+    await open(page);
+    const b = page.getByTestId("strategy-builder");
+    await expect(b).not.toHaveAttribute("open", "");
+    const preset = b.getByText("Halal Bogleheads", { exact: true }).first();
+    await expect(preset).toBeHidden();
+    await b.locator("summary").click();
+    await expect(preset).toBeVisible();
+  });
 });

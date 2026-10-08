@@ -35,6 +35,12 @@ describe("explainStrategy", () => {
     expect(explainStrategy(C, ALL).oneLine).toBe("The 25 strongest halal stocks, rebalanced weekly, with a 15% stop.");
   });
 
+  it("never pairs with the shadow panel, which trades nothing", () => {
+    const SH = rank("s", { layer: "shadow", research_panel: true });
+    expect(explainStrategy(B, [B, SH]).tests).toBeNull();
+    expect(explainStrategy(SH, [B, SH]).tests).toBeNull();
+  });
+
   it("ignores bookkeeping (dates, labels) when pairing, and does not pair across two differences", () => {
     const X = rank("x", { ai_gate: true, whole_shares: true });
     expect(explainStrategy(X, [X, B]).tests).toBeNull();

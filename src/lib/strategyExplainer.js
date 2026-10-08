@@ -67,6 +67,9 @@ const isPaperish = (s) => obj(s?.params)?.broker === "alpaca_paper" || obj(s?.pr
 /** The one rule two strategies differ by, or null when it is more than one. */
 function soleDifference(a, b) {
   if (!a || !b || a.strategy_type !== b.strategy_type || a.id === b.id) return null;
+  // A shadow panel never trades, so it is nobody's control and tests nothing
+  // by comparison — "the control for Shadow" was the first render of this.
+  if (obj(a.params)?.layer === "shadow" || obj(b.params)?.layer === "shadow") return null;
   const pa = obj(a.params) || {}, pb = obj(b.params) || {};
   const keys = new Set([...Object.keys(pa), ...Object.keys(pb)].filter((k) => !BOOKKEEPING.has(k)));
   const diff = [...keys].filter((k) => JSON.stringify(pa[k] ?? null) !== JSON.stringify(pb[k] ?? null));

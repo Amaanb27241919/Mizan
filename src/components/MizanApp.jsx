@@ -5981,111 +5981,6 @@ function StrategyReality({strat}){
 // run is labelled before its first fill rather than after.
 const isPaperStrategy=(s)=>s?.params?.broker==="alpaca_paper";
 
-function StrategyProgressCard({strat}){
-  const{mask}=useHideValues();
-  const p=strat&&strat.progress;
-  const capital=Number(strat?.capital_allocated)||0;
-  // EQUITY = market value + the strategy's own cash (server: strategyScore).
-  // It used to be (value − capital), so an unfunded strategy read −100% and a
-  // swing that had just sold read as a total loss. Before the first fill there
-  // is no return to show, and none is shown.
-  const started=!!(p&&p.started_at);
-  // A holding that could not be priced makes the value UNKNOWN. Falling back to
-  // current_value here (0 for the unpriced name) drew a −100% card for a
-  // ~$150k position (2026-10-08).
-  const unpriced=Array.isArray(p?.unpriced)&&p.unpriced.length>0;
-  const current=unpriced?null:p&&p.equity!=null?Number(p.equity):(p&&p.current_value!=null&&started?Number(p.current_value):null);
-  const pnl=started&&current!=null?current-capital:null;
-  const pnlPct=p&&p.return_pct!=null?Number(p.return_pct):(pnl!=null&&capital>0?(pnl/capital)*100:null);
-  const benchPct=p&&p.bench_return_pct!=null?Number(p.bench_return_pct):null;
-  const alphaPct=p&&p.alpha_pct!=null?Number(p.alpha_pct):null;
-  const pctToTarget=p&&p.pct_to_target!=null?Math.max(0,Math.min(100,Number(p.pct_to_target))):null;
-  const daysElapsed=p&&p.days_elapsed!=null?Number(p.days_elapsed):null;
-  const daysHorizon=p&&p.days_horizon!=null?Number(p.days_horizon):(Number(strat?.time_horizon_days)||null);
-  const trades=p&&p.trades_executed!=null?Number(p.trades_executed):null;
-  const realized=p&&p.realized_pnl!=null?Number(p.realized_pnl):null;
-  const closedCount=p&&p.closed_count!=null?Number(p.closed_count):0;
-  const noData=current==null&&pctToTarget==null&&trades==null;
-  const lyr=["manual","semi","full"].includes(strat.params?.layer)?strat.params.layer:(strat.mode==="full"?"full":"semi");
-  const lyrColor=lyr==="full"?T.loss:lyr==="semi"?T.gold:T.blue;
-  // Show the ticker the bot actually holds when there's an open position;
-  // otherwise the universe it's screening.
-  const held=p&&p.held_ticker;
-  const cands=Array.isArray(strat.params?.universe_tickers)?strat.params.universe_tickers:[];
-  // The card is named after the STRATEGY ("A · Reference system + AI gate"),
-  // not its universe — six cards all titled "214 halal names" were
-  // indistinguishable. The held name / universe size moves to the subline.
-  const lbl=strategyLabel(strat);
-  const headline=lbl.code?`${lbl.code} · ${lbl.name}`:lbl.name;
-  const subject=held?`holding ${held}`:(cands.length>1?`${cands.length} halal names`:(cands[0]||strat.ticker||""));
-  // DCA (accumulation) strategies have no profit target / stop / horizon — read
-  // them as "deploy & hold" instead of showing meaningless 0% values.
-  const isDca=strat.strategy_type==="dca";
-  const cadence=Number(strat.params?.dca_cadence_days)||7;
-  const barLabel=isDca?"CAPITAL DEPLOYED":"PROGRESS TO TARGET";
-  const barPct=isDca?(capital>0&&current!=null?Math.max(0,Math.min(100,(current/capital)*100)):0):pctToTarget;
-  // The accent bar is the strategy's IDENTITY colour (strategyColors.js); its
-  // gain/loss is carried by the numbers below, not by the card's edge.
-  const identity=stratChip(strat);
-  return<BentoTile accent={identity.color||(pnl!=null?(pnl>=0?T.gain:T.loss):T.blue)} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-    <div style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,lineHeight:1.3}} data-testid="strategy-card-title">{headline}</div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
-      <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap",minWidth:0}}>
-        {subject&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em"}}>{String(subject).toUpperCase()}</span>}
-        <Tag label={lyr.toUpperCase()} color={lyrColor}/>
-        {isDca&&<Tag label="DCA" color={T.gain}/>}
-        {/* Paper fills are labelled at the point the money is shown. Carried
-            from pending_signals.paper (migration 030) all the way through the
-            API — computing it and dropping it server-side is how a simulated
-            P&L gets rendered as real. */}
-        {(p?.paper||isPaperStrategy(strat))&&<Tag label="PAPER" color={T.gold}/>}
-      </div>
-      <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em"}}>{isDca?`ACCUMULATE · ${cadence}D`:strat.profit_target_pct!=null?`TARGET ${strat.profit_target_pct}%`:strat.strategy_type==="rank_rebalance"?`REBALANCE · ${Number(strat.params?.rebalance_days)||30}D`:"NO TARGET"}</span>
-    </div>
-    {noData?<div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted}}>Progress data not available yet — check back after the next bot run.</div>:<>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:T.s2}}>
-        <div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:3}}>ALLOCATED</div>
-          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{mask(f$(capital,0))}</div>
-        </div>
-        <div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:3}} title="Stock value plus this strategy's own uninvested cash">EQUITY</div>
-          <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:pnl!=null?fc(pnl):T.textHi,fontVariantNumeric:"tabular-nums"}}>{current!=null?mask(f$(current,0)):started?"—":mask(f$(capital,0))}</div>
-          {pnl!=null?<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:fc(pnl),fontWeight:600,fontVariantNumeric:"tabular-nums",marginTop:2}}>{pnl>=0?"+":"−"}{mask(f$(Math.abs(pnl),0))} ({fp(pnlPct)})</div>
-            :<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:unpriced?T.gold:T.muted,marginTop:2,letterSpacing:"0.06em"}}>{unpriced?"PRICE UNAVAILABLE — NOT A LOSS":"NOT TRADED YET"}</div>}
-        </div>
-      </div>
-      <div>
-        <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginBottom:4,fontVariantNumeric:"tabular-nums"}}>
-          <span style={{letterSpacing:"0.08em"}}>{barLabel}</span>
-          <span style={{color:T.textHi,fontWeight:600}}>{barPct!=null?`${barPct.toFixed(0)}%`:"—"}</span>
-        </div>
-        <div style={{height:8,background:T.surface,borderRadius:999,overflow:"hidden",border:`1px solid ${T.border}`}}>
-          <div style={{height:"100%",width:`${barPct||0}%`,background:`linear-gradient(90deg, ${T.gain}, ${T.blue})`,borderRadius:999,transition:"width 300ms cubic-bezier(0.16,1,0.3,1)"}}/>
-        </div>
-      </div>
-      <div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums",borderTop:`1px solid ${T.border}`,paddingTop:T.s2}}>
-        <span>{isDca?`Accumulate · hold (no auto-sell)`:`${daysElapsed!=null?`Day ${daysElapsed}`:"Day —"}${daysHorizon!=null?` of ${daysHorizon}`:""}`}</span>
-        <span>{trades!=null?`${trades} ${isDca?"buy":"trade"}${trades===1?"":"s"}${isDca?"":" executed"}`:"— trades"}</span>
-      </div>
-      {realized!=null&&closedCount>0&&<div style={{display:"flex",justifyContent:"space-between",fontFamily:FM,fontSize:"var(--fs-xs)",fontVariantNumeric:"tabular-nums"}}>
-        <span style={{color:T.muted}}>Realized ({closedCount} closed)</span>
-        <span style={{color:fc(realized),fontWeight:600}}>{`${realized>=0?"+":"−"}${f$(realized,0)}`}</span>
-      </div>}
-      {started&&<div data-testid="strategy-vs-bench" style={{display:"flex",justifyContent:"space-between",gap:T.s2,flexWrap:"wrap",fontFamily:FM,fontSize:"var(--fs-xs)",fontVariantNumeric:"tabular-nums",borderTop:`1px solid ${T.border}`,paddingTop:T.s2}}>
-        <span style={{color:T.muted}} title="Over the same window: from the close before this strategy's first fill">
-          VS {p.benchmark||"SPUS"} · since {new Date(p.started_at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
-        </span>
-        <span>
-          <span style={{color:pnlPct!=null?fc(pnlPct):T.muted,fontWeight:600}}>{pnlPct!=null?fp(pnlPct):"—"}</span>
-          <span style={{color:T.muted}}> vs </span>
-          <span style={{color:benchPct!=null?fc(benchPct):T.muted}}>{benchPct!=null?fp(benchPct):"—"}</span>
-          {alphaPct!=null&&<span style={{color:fc(alphaPct),fontWeight:600}}>{` · ${alphaPct>=0?"+":"−"}${Math.abs(alphaPct).toFixed(2)} pp`}</span>}
-        </span>
-      </div>}
-    </>}
-  </BentoTile>;
-}
 
 function HistoricalBacktest(){
   const[symbol,setSymbol]=useState("AAPL");
@@ -6190,6 +6085,73 @@ const LAYER_META={
   semi:{label:"Semi-auto",short:"S",color:T.gold,icon:"cpu",blurb:"The bot picks the full trade and sends you a push to approve. One tap approves and places it at your broker. Still never executes without your tap."},
   full:{label:"Full-auto",short:"F",color:T.loss,icon:"bolt",blurb:"The bot picks AND executes autonomously within your stop-loss, max-drawdown, daily cap, and the Sharia gate. Requires the per-account AUTO ON toggle below — off by default even here."},
 };
+
+/**
+ * "Your strategies" — one ruled table (2026-10-08 broadsheet pass). It replaced
+ * the progress cards AND the separate list, which showed the same strategies
+ * twice. Every control keeps the handler it had: the mode switch still opens
+ * the acknowledgment gate (requestLayer), Edit/Pause/Delete are unchanged.
+ */
+function StrategyTable({strategies,loading,onRefresh,layers,layerOf,requestLayer,openEdit,toggleStrategy,deleteStrategy}){
+  const{mask}=useHideValues();
+  const pctOr=(v,none)=>v!=null&&v!==""&&Number.isFinite(Number(v))?`${Number(v)}%`:none;
+  const cad=d=>{const n=Number(d)||30;return n<=1?"daily":n===7?"weekly":n>=28&&n<=31?"monthly":`every ${n} days`;};
+  const sign=v=>`${v>0?"+":v<0?"−":""}${Math.abs(v).toFixed(2)}`;
+  return<section data-testid="strategy-table">
+    <LabHead title="Your strategies" note="Each one with its money, its rules and how much control the bot has. Changing the mode asks you to confirm what that mode does."
+      right={<button className="mz-more mz-tap" onClick={onRefresh}>{loading?"Loading…":"Refresh"}</button>}/>
+    {loading&&!strategies.length?<p className="mz-col-empty">Loading…</p>
+      :!strategies.length?<p className="mz-col-empty">No strategies yet. Build one below.</p>
+      :<ol className="mz-stable">{strategies.map(st=>{
+        const lyr=layerOf(st);
+        const pr=st.progress||{};
+        const sl=strategyLabel(st);
+        const chip=stratChip(st);
+        const paper=pr.paper||isPaperStrategy(st);
+        const traded=Number(pr.trades_executed)>0;
+        const unpriced=Array.isArray(pr.unpriced)&&pr.unpriced.length>0;
+        const ret=unpriced?null:pr.return_pct!=null?Number(pr.return_pct):null;
+        const bench=pr.bench_return_pct!=null?Number(pr.bench_return_pct):null;
+        const alpha=unpriced?null:pr.alpha_pct!=null?Number(pr.alpha_pct):null;
+        const tone=v=>v==null?T.muted:v>0?T.gain:v<0?T.loss:T.muted;
+        const rules=st.strategy_type==="dca"?`buys every ${Number(st.params?.dca_cadence_days)||7} days · never sells`
+          :st.strategy_type==="rank_rebalance"?`rebalances ${cad(st.params?.rebalance_days)} · stop ${pctOr(st.params?.protective_stop_pct,"none")}`
+          :`target ${pctOr(st.profit_target_pct,"none")} · stop ${pctOr(st.stop_loss_pct,"none")}`;
+        const held=pr.held_ticker?`holding ${pr.held_ticker}`:Number(pr.holdings_count)>0?`${pr.holdings_count} held`:null;
+        const toTarget=st.strategy_type!=="rank_rebalance"&&st.strategy_type!=="dca"&&pr.pct_to_target!=null&&Number(st.profit_target_pct)>0&&pr.held_ticker
+          ?`${Math.round(Number(pr.pct_to_target))}% of the way to its +${Number(st.profit_target_pct)}% target`:null;
+        const realized=Number(pr.closed_count)>0&&pr.realized_pnl!=null?Number(pr.realized_pnl):null;
+        return<li key={st.id} data-testid="strategy-row" className={st.enabled?undefined:"is-paused"}>
+          <div className="mz-st-who">
+            <div className="mz-st-name"><span className="mz-key" style={{background:chip.color||T.slate,width:16}} aria-hidden="true"/>
+              <b data-testid="strategy-card-title">{sl.code?`${sl.code} · ${sl.name}`:sl.name}</b>
+              {!st.enabled&&<span className="mz-st-flag">paused</span>}</div>
+            <div className="mz-st-meta">{mask(`$${Number(st.capital_allocated||0).toLocaleString()}`)} {paper?"paper":"real money"} · {rules}{held?` · ${held}`:""}{traded?` · ${pr.trades_executed} trades`:""}</div>
+            {(toTarget||realized!=null)&&<div className="mz-st-meta">{toTarget}{toTarget&&realized!=null?" · ":""}{realized!=null&&<>realized <span style={{color:tone(realized)}}>{mask(f$(realized))}</span> over {pr.closed_count} closed</>}</div>}
+          </div>
+          <div className="mz-st-perf" data-testid={traded&&ret!=null?"strategy-vs-bench":undefined}>
+            {unpriced?<span style={{color:T.gold}}>a holding can't be priced — value unknown, not zero</span>
+              :!traded||ret==null?<span className="mz-news-dim">not traded yet</span>
+              :<><b style={{color:tone(ret)}}>{mask(`${sign(ret)}%`)}</b> <span className="mz-news-dim">SPUS {bench!=null?`${sign(bench)}%`:"—"}</span>
+                {alpha!=null&&<div style={{color:tone(alpha)}}>{mask(`${sign(alpha)} pts vs SPUS`)}</div>}</>}
+          </div>
+          {st.params?.layer==="shadow"
+            // No mode switch for the shadow panel: picking Manual or Semi here
+            // would overwrite layer=shadow, one of the two gates that keep it
+            // from ever placing an order.
+            ?<div className="mz-st-mode-ro" data-testid="shadow-mode">shadow · records only</div>
+            :<div className="mz-st-mode" role="group" aria-label={`Execution mode for ${sl.code||sl.name}`}>
+            {layers.map(k=><button key={k} className={lyr===k?"on":undefined} aria-pressed={lyr===k} onClick={()=>requestLayer(st,k)} title={LAYER_META[k].blurb}
+              style={lyr===k?{color:LAYER_META[k].color,borderColor:LAYER_META[k].color}:undefined}>{LAYER_META[k].label}</button>)}
+          </div>}
+          <div className="mz-st-act">
+            <button className="mz-more mz-tap" onClick={()=>openEdit(st)}>Edit</button>
+            <button className="mz-more mz-tap" onClick={()=>toggleStrategy(st.id,st.enabled)}>{st.enabled?"Pause":"Resume"}</button>
+            <button className="mz-more mz-tap" style={{color:T.loss}} onClick={()=>deleteStrategy(st.id)}>Delete</button>
+          </div>
+        </li>;})}</ol>}
+  </section>;
+}
 
 function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,isRoot=false,consented=false,snapAccounts=[],demoMode=false,onNav}){
   const showStrat=view==="strategies";
@@ -6554,29 +6516,16 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
 
   // ── ADMIN VIEW ─────────────────────────────────────────────────────────────
   return<div style={{display:"flex",flexDirection:"column",gap:T.s5}}>
-    {/* Kill Switch */}
-    <BentoTile accent={allPaused?T.loss:T.gain} style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:T.s3}}>
-      <div>
-        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:4}}>AUTOMATION STATUS</div>
-        <div style={{display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:"var(--fs-lg)",fontWeight:600,color:allPaused?T.loss:T.gain}}>
-          {strategies.length===0?"No strategies configured":allPaused?<><Icon name="pause" size={14} color={T.loss}/>All automation paused</>:<><Icon name="play" size={14} color={T.gain}/>Automation running</>}
-        </div>
-      </div>
-      <div style={{display:"flex",gap:T.s3,alignItems:"center"}}>
-        {killSwitchMsg&&<span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{killSwitchMsg}</span>}
-        {strategies.some(s=>s.enabled)&&<button onClick={activateKillSwitch} disabled={killSwitchBusy} style={{display:"inline-flex",alignItems:"center",gap:6,padding:`8px ${T.s4}`,borderRadius:T.rMd,border:`1px solid ${T.loss}60`,background:`${T.loss}15`,color:T.loss,fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"0.08em",cursor:"pointer"}}><Icon name="stop" size={12} color={T.loss}/>PAUSE ALL</button>}
-      </div>
-    </BentoTile>
+    {/* Kill switch, as one status line (broadsheet pass). Same handler. */}
+    <div className="mz-pipe mz-autoline" data-testid="automation-status">
+      <span><b style={{color:strategies.length===0?T.slate:allPaused?T.loss:T.gain}} aria-hidden="true">{strategies.length===0?"○":allPaused?"■":"●"}</b> {strategies.length===0?"No strategies configured":allPaused?"All automation paused":"Automation running"}
+        {strategies.length>0&&!allPaused&&<span className="mz-news-dim"> · {strategies.filter(x=>x.enabled).length} active</span>}</span>
+      {killSwitchMsg&&<span className="mz-news-dim" style={{marginLeft:T.s3}}>{killSwitchMsg}</span>}
+      {strategies.some(x=>x.enabled)&&<button onClick={activateKillSwitch} disabled={killSwitchBusy} className="mz-more mz-tap" style={{marginLeft:"auto",color:T.loss}}>■ Pause all automation</button>}
+    </div>
 
     {/* First-use consent gate (beta / non-root). Until accepted, the builder and
         default-layer card are hidden — the server also blocks create/execute. */}
-    {/* Strategy Progress FIRST (2026-10-08): the cards are what you open Strategies to see; the builder tools follow */}
-    {showStrat&&strategies.some(s=>s.enabled)&&<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGY PROGRESS</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(260px, 100%), 1fr))",gap:T.s3}}>
-        {strategies.filter(s=>s.enabled).map(s=><StrategyProgressCard key={s.id} strat={s}/>)}
-      </div>
-    </div>}
 
     {showStrat&&needsConsent&&<BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
       <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BEFORE YOU START · BETA</div>
@@ -6586,6 +6535,14 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       <button onClick={acceptConsent} disabled={consentBusy} className="btn-primary" style={{fontSize:"var(--fs-xs)",opacity:consentBusy?0.6:1}}>{consentBusy?"Saving…":"I understand — enable Trade for my account"}</button>
     </BentoTile>}
 
+    {showStrat&&!needsConsent&&<StrategyTable strategies={strategies} loading={loadingStrats} onRefresh={loadStrategies} layers={LAYERS}
+      layerOf={layerOf} requestLayer={requestLayer} openEdit={openEdit} toggleStrategy={toggleStrategy} deleteStrategy={deleteStrategy}/>}
+
+    {/* Building a strategy is occasional; reading them is daily. The builder
+        tools sit behind one disclosure so the page opens on the strategies. */}
+    {showStrat&&!needsConsent&&<details className="mz-build" data-testid="strategy-builder">
+      <summary><span style={{fontFamily:FN}}>Build a new strategy</span><span className="mz-news-dim">default mode, the Halal Bogleheads preset, or describe one in plain English</span></summary>
+      <div className="mz-build-body">
     {/* Execution Layer — the 3-layer premise, front and center. Sets the default
         for NEW strategies; each strategy still overrides its own layer below. */}
     {showStrat&&!needsConsent&&<BentoTile>
@@ -6816,6 +6773,9 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       </div>;})()}
     </BentoTile>}
 
+      </div>
+    </details>}
+
     {/* Pending Signals — the Signals view. Always rendered here (with an empty state). */}
     {showSignals&&<BentoTile>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
@@ -6922,59 +6882,9 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       </CollapsibleTile>;
     })()}
 
-    {/* Strategy List */}
-    {showStrat&&<BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
-        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGIES ({strategies.length})</div>
-        <button onClick={loadStrategies} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingStrats?"Loading…":"Refresh"}</button>
-      </div>
-      {loadingStrats&&!strategies.length?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading…</div>:
-       strategies.length===0?<div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,textAlign:"center",padding:`${T.s5} 0`}}>No strategies configured yet. Use the builder above to create your first one.</div>:
-       strategies.map(s=>{
-        const lyr=layerOf(s);
-        const cands=Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[];
-        // Named by strategy — the row used to be titled by its universe
-        // ("A +213 more"), which said nothing about WHICH experiment it was.
-        const sl=strategyLabel(s);
-        const uniLabel=sl.code?`${sl.code} · ${sl.name}`:sl.name;
-        // A rank strategy has no profit target by design; its stop may be the
-        // broker-side protective stop. "Target: null%" was the old rendering.
-        const pctOr=(v,none)=>v!=null&&v!==""&&Number.isFinite(Number(v))?`${Number(v)}%`:none;
-        const exits=s.strategy_type==="rank_rebalance"
-          ?`Rebalance every ${Number(s.params?.rebalance_days)||30}d · Stop: ${pctOr(s.params?.protective_stop_pct,"none")}`
-          :`Target: ${pctOr(s.profit_target_pct,"none")} · Stop: ${pctOr(s.stop_loss_pct,"none")}`;
-        return<div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
-        <div style={{minWidth:200}}>
-          <div style={{display:"flex",gap:T.s2,alignItems:"center",marginBottom:4}}>
-            {(()=>{const c=stratChip(s).color;return c?<span aria-hidden="true" className="mz-swatch" style={{background:c,width:10,height:10}}/>:null;})()}
-            <span style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi}}>{uniLabel}</span>
-            <Tag label={LAYER_META[lyr].label.toUpperCase()} color={LAYER_META[lyr].color}/>
-            {s.strategy_type==="dca"&&<Tag label="DCA" color={T.gain}/>}
-            {!s.enabled&&<Tag label="PAUSED" color={T.muted}/>}
-          </div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}{`$${Number(s.capital_allocated).toLocaleString()}${isPaperStrategy(s)?" simulated":""} · `}{s.strategy_type==="dca"?`DCA · every ${Number(s.params?.dca_cadence_days)||7}d · holds (no auto-sell)`:exits}</div>
-        </div>
-        <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
-          {/* Layer selector — switching opens the acknowledgment gate */}
-          <div style={{display:"inline-flex",border:`1px solid ${T.border}`,borderRadius:999,overflow:"hidden"}}>
-            {LAYERS.map(k=>{const on=lyr===k;return(
-              <button key={k} onClick={()=>requestLayer(s,k)} title={LAYER_META[k].blurb} style={{
-                padding:`5px ${T.s2}`,border:"none",cursor:"pointer",
-                fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",
-                background:on?`${LAYER_META[k].color}1a`:"transparent",
-                color:on?LAYER_META[k].color:T.muted,
-              }}>{LAYER_META[k].label.toUpperCase()}</button>
-            );})}
-          </div>
-          <button onClick={()=>openEdit(s)} className="btn-ghost" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s2}`}}>Edit</button>
-          <button onClick={()=>toggleStrategy(s.id,s.enabled)} className="btn-ghost" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s2}`}}>{s.enabled?"Pause":"Resume"}</button>
-          <button onClick={()=>deleteStrategy(s.id)} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",padding:`5px ${T.s2}`,borderRadius:T.rSm,border:`1px solid ${T.loss}40`,background:"transparent",color:T.loss,cursor:"pointer"}}>Delete</button>
-        </div>
-      </div>;})}
-    </BentoTile>}
 
-    {showStrat&&fullAutoEnabled&&<BentoTile accent={T.loss}>
-      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>FULL-AUTO — PER-ACCOUNT OPT-IN</div>
+    {showStrat&&fullAutoEnabled&&<section>
+      <LabHead title="Full-auto accounts" note="Real-money automation is switched on per account, here, and is off by default."/>
       <p style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.6,margin:`0 0 ${T.s3}`}}>Autonomous execution runs <strong>only</strong> on accounts you turn on here. Each defaults to off. A full-mode strategy on an account that's off will still generate signals but never auto-execute.</p>
       {snapAccounts.length===0
         ?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>No connected accounts.</div>
@@ -6993,7 +6903,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             }}>{on?"● AUTO ON":"AUTO OFF"}</button>
           </div>
         );})}
-    </BentoTile>}
+    </section>}
 
     {/* Layer-change acknowledgment gate — you can't switch a strategy's layer
         without confirming you understand what that layer does. */}
@@ -7009,7 +6919,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
           </div>
           <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.65,margin:`0 0 ${T.s3}`}}>{m.blurb}</p>
           <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.6,marginBottom:T.s4}}>
-            Switching <span style={{color:T.textHi,fontWeight:600}}>{layerOf(layerModal.strat)===layerModal.target?m.label:LAYER_META[layerOf(layerModal.strat)].label}</span> → <span style={{color:m.color,fontWeight:600}}>{m.label}</span> for <span style={{color:T.textHi,fontWeight:600}}>{(Array.isArray(layerModal.strat.params?.universe_tickers)&&layerModal.strat.params.universe_tickers[0])||layerModal.strat.ticker}</span>. Stop-loss, max-drawdown, the daily cap, and the Sharia gate stay enforced on every layer.
+            Switching <span style={{color:T.textHi,fontWeight:600}}>{layerOf(layerModal.strat)===layerModal.target?m.label:LAYER_META[layerOf(layerModal.strat)].label}</span> → <span style={{color:m.color,fontWeight:600}}>{m.label}</span> for <span style={{color:T.textHi,fontWeight:600}} data-testid="layer-modal-strategy">{(()=>{const l=strategyLabel(layerModal.strat);return l.code?`${l.code} · ${l.name}`:l.name;})()}</span>. Stop-loss, max-drawdown, the daily cap, and the Sharia gate stay enforced on every layer.
             {layerModal.target==="full"&&<span style={{display:"block",marginTop:T.s2,color:T.loss}}>Full-auto also requires the per-account AUTO ON toggle (off by default) before anything executes on its own.</span>}
           </div>
           <label style={{display:"flex",gap:T.s2,alignItems:"flex-start",fontFamily:FM,fontSize:"var(--fs-xs)",color:T.text,cursor:"pointer",marginBottom:T.s4}}>
@@ -15305,6 +15215,39 @@ export default function Mizan(){
         background:repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--mz-dim) 55%, transparent) 6px 7px);}
       .mz-mult footer{display:flex; justify-content:space-between; gap:var(--s-2); flex-wrap:wrap; font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
       .mz-mult-status{font-family:${FP}; font-size:var(--fs-xs); margin-top:2px;}
+      .mz-autoline{align-items:center; font-family:${FP};}
+      .mz-st-mode-ro{font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); padding:5px 0;}
+      .mz-stable{list-style:none; margin:0; padding:0; border-top:1px solid var(--mz-textHi);}
+      .mz-stable > li{display:grid; grid-template-columns:minmax(0,2.4fr) minmax(0,1.1fr) auto auto; gap:var(--s-3) var(--s-5); align-items:center;
+        padding:var(--s-3) 0; border-bottom:1px solid var(--mz-border); font-family:${FP}; font-size:var(--fs-sm); font-variant-numeric:tabular-nums;}
+      .mz-stable > li.is-paused{opacity:.62;}
+      .mz-st-name{display:flex; align-items:center; gap:var(--s-2); flex-wrap:wrap;}
+      .mz-st-name b{color:var(--mz-textHi); font-weight:600; font-size:var(--fs-md);}
+      .mz-st-flag{font-size:var(--fs-xs); color:var(--mz-muted); border:1px solid var(--mz-border); padding:0 6px;}
+      .mz-st-meta{color:var(--mz-muted); margin-top:2px; line-height:1.45;}
+      .mz-st-perf{text-align:right; line-height:1.45;}
+      .mz-st-mode{display:inline-flex; border:1px solid var(--mz-border);}
+      .mz-st-mode > button{background:none; border:0; border-right:1px solid var(--mz-border); padding:5px 10px; cursor:pointer;
+        font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted);}
+      .mz-st-mode > button:last-child{border-right:0;}
+      .mz-st-mode > button.on{font-weight:600; box-shadow:inset 0 -2px 0 currentColor;}
+      .mz-st-act{display:inline-flex; gap:var(--s-3);}
+      @media (max-width:900px){
+        .mz-stable > li{grid-template-columns:minmax(0,1fr) auto;}
+        .mz-st-mode{grid-column:1 / 2;} .mz-st-act{grid-column:2 / 3; justify-self:end;}
+      }
+      @media (max-width:520px){
+        .mz-stable > li{grid-template-columns:minmax(0,1fr);}
+        .mz-st-perf{text-align:left;} .mz-st-act{grid-column:auto; justify-self:start;} .mz-st-mode{grid-column:auto; justify-self:start;}
+      }
+      @media (pointer:coarse){ .mz-st-mode > button{min-height:44px;} }
+      .mz-build{margin-top:var(--s-6); border-top:1px solid var(--mz-textHi); border-bottom:1px solid var(--mz-border);}
+      .mz-build > summary{font-family:${FP}; cursor:pointer; list-style:none; display:flex; align-items:baseline; gap:var(--s-3); flex-wrap:wrap; padding:var(--s-3) 0;}
+      .mz-build > summary::-webkit-details-marker{display:none;}
+      .mz-build > summary > span:first-child{font-size:var(--fs-2xl); font-weight:600; color:var(--mz-textHi);}
+      .mz-build > summary::after{content:"Open ▸"; margin-left:auto; font-family:${FP}; font-size:var(--fs-sm); color:${T.blue};}
+      .mz-build[open] > summary::after{content:"Close ▾";}
+      .mz-build-body{display:flex; flex-direction:column; gap:var(--s-5); padding-bottom:var(--s-5);}
       .mz-mult-what{font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-text); margin:4px 0 0; line-height:1.45;}
       .mz-about{font-family:${FP}; font-size:var(--fs-sm); margin-top:var(--s-2); color:var(--mz-text);}
       .mz-about summary, .mz-guide-item summary{cursor:pointer; color:${T.blue}; list-style:none;}
