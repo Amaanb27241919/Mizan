@@ -8584,7 +8584,11 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   const[impactPreview,setImpactPreview]=useState(null);
   // Venue selector — "snaptrade" = real broker preview/confirm flow,
   // "alpaca" = paper-trading single-shot order. Persists per-device.
-  const[venue,setVenueState]=useState(()=>{try{return localStorage.getItem("mizan_trade_venue")||"snaptrade";}catch{return"snaptrade";}});
+  // PAPER by default (owner, 2026-10-08): the Trade Lab is a paper lab, and a
+  // ticket that opened on the live brokerage made real money the path of
+  // least resistance. A stored choice is only ever written by a click, so an
+  // explicit LIVE selection is still remembered.
+  const[venue,setVenueState]=useState(()=>{try{return localStorage.getItem("mizan_trade_venue")||"alpaca";}catch{return"alpaca";}});
   const setVenue=v=>{setVenueState(v);try{localStorage.setItem("mizan_trade_venue",v);}catch{}};
   useEffect(()=>{if(!acctId&&accounts[0])setAcctId(accounts[0].accountId);},[accounts]);
 

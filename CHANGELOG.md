@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-08
+
+### Added
+- **trade-lab:** Redesign every Trade sub-tab as one desk (`54aca96`)
+
 ## 2026-10-07
 
 ### Added

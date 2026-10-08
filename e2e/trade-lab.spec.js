@@ -311,7 +311,7 @@ test.describe("Trade Lab cockpit", () => {
   });
 
   test("names the desk an order would actually hit", async ({ page }) => {
-    // The ticket defaults to LIVE · SnapTrade while the rail's biggest number
+    // The ticket used to default to LIVE · SnapTrade while the rail's biggest number
     // is the PAPER balance. Nothing connected the two, so "which desk am I
     // on" was something you had to infer on a surface that can place a real
     // order. The armed marker is only shown on the order ticket.
@@ -321,7 +321,13 @@ test.describe("Trade Lab cockpit", () => {
     await page.getByRole("button", { name: "Quick Trade", exact: true }).click();
     await expect(page.locator(".mz-rail-armed")).toHaveCount(1);
     await expect(page.locator(".mz-rail-armed")).toContainText("ARMED");
-    // Default venue is the LIVE brokerage, so that is what must be marked.
+    // Default venue is PAPER (owner, 2026-10-08), so that is what must be marked.
+    await expect(page.locator(".mz-rail-armed")).toContainText("PAPER");
+  });
+
+  test("an explicit LIVE choice is remembered; the default is never live", async ({ page }) => {
+    await gotoLab(page, { storage: { mizan_trade_venue: "snaptrade" } });
+    await page.getByRole("button", { name: "Quick Trade", exact: true }).click();
     await expect(page.locator(".mz-rail-armed")).toContainText("LIVE");
   });
 
