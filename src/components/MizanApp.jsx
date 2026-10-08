@@ -15,7 +15,7 @@ import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHist
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { deskSummary } from "../lib/deskSummary.js";
-import { toPoints, curvePath, curveChange, curveCoverage, pointAtX } from "../lib/equityCurve.js";
+import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity } from "../lib/equityCurve.js";
 import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/benchmarkAttribution.js";
 // Aliased: MizanApp already declares a STANDARDS of its own further down.
 import { complianceMatrix, STANDARDS as SCREEN_STANDARDS, STANDARD_LABELS } from "../lib/complianceMatrix.js";
@@ -7503,7 +7503,7 @@ function ClosedTradesExport(){
   </section>;
 }
 
-function EquityChart({demoMode}){
+function EquityChart({demoMode,liveEquity}){
   const{mask}=useHideValues();
   const[range,setRange]=useState("1M");
   const[raw,setRaw]=useState(null);
@@ -7525,10 +7525,12 @@ function EquityChart({demoMode}){
     return()=>{cancelled=true;};
   },[range,demoMode]);
 
-  const points=useMemo(()=>toPoints(raw),[raw]);
+  // History, then the broker's live equity as its last point (pinLiveEquity).
+  const history=useMemo(()=>toPoints(raw),[raw]);
+  const points=useMemo(()=>pinLiveEquity(history,liveEquity),[history,liveEquity]);
   const{line,area,xy}=useMemo(()=>curvePath(points,{w:CURVE_W,h:CURVE_H}),[points]);
   const change=useMemo(()=>curveChange(points),[points]);
-  const coverage=useMemo(()=>curveCoverage(raw,points),[raw,points]);
+  const coverage=useMemo(()=>curveCoverage(raw,history),[raw,history]);
 
   const up=change.change!=null&&change.change>=0;
   const stroke=change.change==null?T.slate:up?T.gain:T.loss;
@@ -8223,7 +8225,7 @@ function TradeDesk({desk,onGoSignals,demoMode}){
         <span style={{marginLeft:"auto",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>REVIEW →</span>
       </button>}
 
-      <EquityChart demoMode={demoMode}/>
+      <EquityChart demoMode={demoMode} liveEquity={desk?.account?.equity}/>
 
       {!demoMode&&<ClosedTradesExport/>}
 

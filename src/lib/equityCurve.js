@@ -147,3 +147,20 @@ export function curveCoverage(raw, points) {
   const total = Array.isArray(timestamp) ? timestamp.filter((t) => !(Number(t) < startT)).length : 0;
   return { have, total, complete: total > 0 && have === total, empty: have === 0 };
 }
+
+/**
+ * End the curve at the broker's live equity. Alpaca's daily history has no
+ * point for the session in progress (or just closed) until it rolls over, so
+ * a desk up $6,181 today charted "$0.00 OVER 1M" next to a header showing the
+ * gain. A live point within the last hour replaces the final point instead of
+ * crowding it. Non-finite or non-positive live values are ignored.
+ */
+const PIN_MERGE_MS = 3600 * 1000;
+export function pinLiveEquity(points, liveEquity, nowMs = Date.now()) {
+  const pts = Array.isArray(points) ? points : [];
+  const v = num(liveEquity);
+  if (!pts.length || v === null || v <= 0) return pts;
+  const last = pts[pts.length - 1];
+  if (nowMs - last.t < PIN_MERGE_MS) return [...pts.slice(0, -1), { t: last.t, v }];
+  return [...pts, { t: nowMs, v }];
+}

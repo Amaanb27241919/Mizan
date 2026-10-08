@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toPoints, curveChange, curveBounds, curvePath, pointAtX, curveCoverage } from '../lib/equityCurve.js'
+import { toPoints, curveChange, curveBounds, curvePath, pointAtX, curveCoverage, pinLiveEquity } from '../lib/equityCurve.js'
 
 const series = (equity, t0 = 1_700_000_000) => ({
   timestamp: equity.map((_, i) => t0 + i * 300),
@@ -179,5 +179,23 @@ describe('curveCoverage — unfunded days are not missing intervals', () => {
   it('still reports genuine holes after funding', () => {
     const raw = { timestamp: [1, 2, 3], equity: [100, null, 120] }
     expect(curveCoverage(raw, toPoints(raw))).toMatchObject({ have: 2, total: 3, complete: false })
+  })
+})
+
+describe('pinLiveEquity', () => {
+  const day = 86400000
+  const pts = [{ t: 0, v: 1000000 }, { t: day, v: 1000000 }]
+  it('appends the live value when the history has no point for today', () => {
+    const out = pinLiveEquity(pts, '1006181.11', 2 * day)
+    expect(out.at(-1)).toEqual({ t: 2 * day, v: 1006181.11 })
+    expect(curveChange(out).change).toBeCloseTo(6181.11)
+  })
+  it('replaces a final point from the last hour rather than crowding it', () => {
+    expect(pinLiveEquity(pts, 1000500, day + 60000)).toEqual([{ t: 0, v: 1000000 }, { t: day, v: 1000500 }])
+  })
+  it('ignores missing or junk live values and empty history', () => {
+    expect(pinLiveEquity(pts, null, 2 * day)).toBe(pts)
+    expect(pinLiveEquity(pts, '0', 2 * day)).toBe(pts)
+    expect(pinLiveEquity([], 5, 1)).toEqual([])
   })
 })

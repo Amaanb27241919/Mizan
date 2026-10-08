@@ -210,6 +210,9 @@ test.describe("Trade Lab cockpit", () => {
         timestamp: [1, 2, 3], equity: [100000, 100500, 104202.02],
         baseValue: 100000, timeframe: "1D", range: "1M",
       },
+      // The curve now ends at the rail's live equity (pinLiveEquity), so the
+      // two can no longer drift apart — and the chart still states only the change.
+      "/api/alpaca/account": { ...PAPER, equity: 104202.02 },
     } });
     const chart = page.locator("section", { has: page.locator("svg[aria-label*='equity' i]") });
     await expect(chart).toBeVisible();
@@ -609,9 +612,20 @@ test("equity curve measures from funding, not from the zero days before it", asy
   const day = (d) => Date.parse(`2026-10-0${d}T00:00:00Z`) / 1000;
   await gotoLab(page, { fixtures: { "/api/alpaca/portfolio-history": {
     timestamp: [day(3), day(4), day(5), day(6), day(7)], equity: [0, 0, 0, 1000000, 1006000],
-    baseValue: 0, timeframe: "1D", range: "1M" } } });
+    baseValue: 0, timeframe: "1D", range: "1M" },
+    "/api/alpaca/account": { ...PAPER, equity: 1006000 } } });
   const cockpit = page.locator(".mz-cockpit");
   await expect(cockpit).toContainText("+$6,000.00");
   await expect(cockpit).not.toContainText("1,000,000.00 OVER");
   await expect(cockpit).not.toContainText("INTERVALS RECORDED");
+});
+
+// Production, 2026-10-07 evening: Alpaca's daily history had no point for the
+// session just traded, so a desk up $6,181 charted "$0.00 OVER 1M".
+test("equity curve ends at the desk's live equity when history lags a session", async ({ page }) => {
+  const day = (d) => Date.parse(`2026-10-0${d}T00:00:00Z`) / 1000;
+  await gotoLab(page, { fixtures: {
+    "/api/alpaca/portfolio-history": { timestamp: [day(6), day(7)], equity: [1000000, 1000000], baseValue: 1000000, timeframe: "1D", range: "1M" },
+    "/api/alpaca/account": { ...PAPER, equity: 1006181.11 } } });
+  await expect(page.locator(".mz-cockpit")).toContainText("+$6,181.11");
 });
