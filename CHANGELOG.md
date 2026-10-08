@@ -22,6 +22,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **ai:** Claude never answered the research panel; strict verdict schema (`f86dede`)
 
 ### Docs
+- Record the owner morning-brief endpoint and its env vars (`981a3d1`)
 - AAOIFI screening, verdict cache, DCA cash cap; evict old verdict rows (`2235c96`)
 
 ## 2026-10-06
