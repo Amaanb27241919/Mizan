@@ -8276,7 +8276,7 @@ function StrategyBlotter({strategies,state,accountEquity,mask}){
             <td><span className="mz-code">{g.group}</span><span style={{color:T.textHi,fontWeight:600}}>Combined</span><span style={{color:T.muted,marginLeft:T.s2,fontSize:"var(--fs-2xs)"}}>{g.members} SLEEVES</span></td>
             <td style={{color:T.muted}}>{usd0(g.sleeve)}</td>
             <td style={{color:T.textHi}}>{usd0(g.equity)}</td>
-            <td>{pct(g.returnPct)}</td><td/><td/><td/><td/><td/>
+            <td>{g.traded?pct(g.returnPct):<span style={{color:T.muted}}>not traded</span>}</td><td/><td/><td/><td/><td/>
           </tr>)}
         </tbody>
       </table></div>
@@ -8289,7 +8289,7 @@ function StrategyBlotter({strategies,state,accountEquity,mask}){
           <div className="mz-bl-3"><span style={{color:tone(r.status.tone)}}>{r.status.text}{r.holdings?` · ${r.holdings} held`:""}</span>{journalBtn(r)}</div>
         </li>)}
         {groups.map(g=><li key={`g-${g.group}`} className="mz-book-total">
-          <div className="mz-bl-1">{code(g.group)}<span className="mz-bl-name">Combined · {g.members} sleeves</span><span className="mz-bl-ret">{pct(g.returnPct)}</span></div>
+          <div className="mz-bl-1">{code(g.group)}<span className="mz-bl-name">Combined · {g.members} sleeves</span><span className="mz-bl-ret">{g.traded?pct(g.returnPct):<span style={{color:T.muted}}>not traded</span>}</span></div>
           <div className="mz-bl-2"><span>{usd0(g.sleeve)} → {usd0(g.equity)}</span></div>
         </li>)}
       </ol>

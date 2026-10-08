@@ -26,7 +26,7 @@ describe('strategyStatus', () => {
     expect(strategyStatus(strat({ strategy_type: 'dca', params: { dca_waiting_for_funds: '2026-10-08' } }), now)).toEqual({ text: 'waiting for a deposit', tone: 'warn' })
   })
   it('a rank strategy states its next rebalance', () => {
-    expect(strategyStatus(strat(), now).text).toBe('next rebalance in 29d')
+    expect(strategyStatus(strat(), now).text).toBe('rebalance in 29d')
   })
   it('a rebalance waiting on the Sharia screen says so', () => {
     expect(strategyStatus(strat({ params: { last_screen: { date: '2026-10-08', waiting: true, unverified: ['X'] } } }), now)).toEqual({ text: 'screen pending (1)', tone: 'warn' })
@@ -90,11 +90,24 @@ describe('tapeRows — the activity tape', () => {
 import { groupTotals } from '../lib/deskBlotter.js'
 describe('groupTotals', () => {
   it('sums a multi-sleeve experiment into one line', () => {
-    expect(groupTotals([{ group: 'E', sleeve: 70000, equity: 71400 }, { group: 'E', sleeve: 30000, equity: 29700 }, { group: null, sleeve: 1, equity: 1 }]))
-      .toEqual([{ group: 'E', members: 2, sleeve: 100000, equity: 101100, returnPct: 1.1 }])
+    expect(groupTotals([{ group: 'E', sleeve: 70000, equity: 71400, traded: true }, { group: 'E', sleeve: 30000, equity: 29700, traded: true }, { group: null, sleeve: 1, equity: 1 }]))
+      .toEqual([{ group: 'E', members: 2, sleeve: 100000, equity: 101100, traded: true, returnPct: 1.1 }])
+  })
+  it('no return before any sleeve trades — not 0.00%', () => {
+    expect(groupTotals([{ group: 'E', sleeve: 70000, equity: 70000, traded: false }, { group: 'E', sleeve: 30000, equity: 30000, traded: false }])[0].returnPct).toBeNull()
   })
   it('unknown, not partial, when a member is unpriced', () => {
-    expect(groupTotals([{ group: 'E', sleeve: 1, equity: null }, { group: 'E', sleeve: 1, equity: 1 }])[0]).toMatchObject({ equity: null, returnPct: null })
+    expect(groupTotals([{ group: 'E', sleeve: 1, equity: null, traded: true }, { group: 'E', sleeve: 1, equity: 1, traded: true }])[0]).toMatchObject({ equity: null, returnPct: null })
   })
   it('a single-member group is not a group', () => { expect(groupTotals([{ group: 'X', sleeve: 1, equity: 1 }])).toEqual([]) })
+})
+
+describe('tapeRows ordering', () => {
+  it('sorts by the time it displays — the fill', () => {
+    const rows = tapeRows([
+      { id: 'late-created-early-fill', created_at: '2026-10-07T13:35:00Z', executed_at: '2026-10-07T13:33:10Z', status: 'executed' },
+      { id: 'early-created-late-fill', created_at: '2026-10-07T13:33:00Z', executed_at: '2026-10-07T13:34:30Z', status: 'executed' },
+    ], [])
+    expect(rows.map((r) => r.id)).toEqual(['early-created-late-fill', 'late-created-early-fill'])
+  })
 })

@@ -44,7 +44,7 @@ export function strategyStatus(strat, now = new Date()) {
     const last = p.last_rebalance ? Date.parse(p.last_rebalance) : NaN;
     if (!Number.isFinite(last)) return { text: "rebalance due", tone: "warn" };
     const left = Math.ceil(cadence - (now.getTime() - last) / DAY);
-    return left <= 0 ? { text: "rebalance due", tone: "warn" } : { text: `next rebalance in ${left}d`, tone: "ok" };
+    return left <= 0 ? { text: "rebalance due", tone: "warn" } : { text: `rebalance in ${left}d`, tone: "ok" };
   }
   if (pr.held_ticker) return { text: `holding ${pr.held_ticker}`, tone: "ok" };
   return { text: "watching for an entry", tone: "muted" };
@@ -97,7 +97,9 @@ export function tapeRows(items, strategies, limit = 12) {
   const codeById = new Map(arr(strategies).map((s) => [String(s?.id || ""), strategyLabel(s).code || strategyLabel(s).name]));
   return arr(items)
     .filter((i) => i && i.status !== "shadow")
-    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+    // Sorted by the time the tape SHOWS (fill, else creation). Sorting by
+    // creation while displaying fill time put 09:34 between two 09:33 rows.
+    .sort((a, b) => String(b.executed_at || b.created_at || "").localeCompare(String(a.executed_at || a.created_at || "")))
     .slice(0, limit)
     .map((i) => ({
       id: String(i.id || ""), at: i.executed_at || i.created_at || null,
@@ -118,7 +120,9 @@ export function groupTotals(rows) {
   return [...by].filter(([, m]) => m.length > 1).map(([group, m]) => {
     const sleeve = m.reduce((t, r) => t + (num(r.sleeve) || 0), 0);
     const known = m.every((r) => num(r.equity) !== null);
+    const traded = m.some((r) => r.traded);
     const equity = known ? Math.round(m.reduce((t, r) => t + num(r.equity), 0) * 100) / 100 : null;
-    return { group, members: m.length, sleeve, equity, returnPct: known && sleeve > 0 ? Math.round(((equity / sleeve) - 1) * 10000) / 100 : null };
+    // Before any sleeve trades there is no return — "0.00%" would read as a result.
+    return { group, members: m.length, sleeve, equity, traded, returnPct: traded && known && sleeve > 0 ? Math.round(((equity / sleeve) - 1) * 10000) / 100 : null };
   });
 }
