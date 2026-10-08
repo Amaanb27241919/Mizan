@@ -53,6 +53,15 @@ export function statusMapForStandard(results = {}, standard = DEFAULT_STANDARD) 
   return out;
 }
 
+/**
+ * Stamped on every verdict the server produces. Bump it whenever a change
+ * makes verdicts computed by older code untrustworthy: clients and the shared
+ * cache treat an entry with a different stamp as stale and re-screen it.
+ * v2 (2026-10-07): before it, a Finnhub 429 degraded a verdict to "review"
+ * (or a blank standard) that LOOKED settled and was cached for the day.
+ */
+export const SCREEN_ENGINE_VERSION = 2;
+
 /** A verdict that came from a completed screen (not a throttle, outage or "pending"). */
 export function isSettledVerdict(v) {
   return Boolean(v && typeof v === "object" && v.status && v.status !== "unknown");
@@ -78,5 +87,5 @@ export function symbolsToScreen(symbols, cache, today) {
   const c = cache && typeof cache === "object" ? cache : {};
   const list = Array.isArray(symbols) ? symbols : [];
   return [...new Set(list.map((s) => String(s || "").toUpperCase()).filter(Boolean))]
-    .filter((tk) => !isSettledVerdict(c[tk]) || c[tk].asOf !== today);
+    .filter((tk) => !isSettledVerdict(c[tk]) || c[tk].asOf !== today || c[tk].engine !== SCREEN_ENGINE_VERSION);
 }

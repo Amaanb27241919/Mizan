@@ -64,6 +64,18 @@ describe('screening under Finnhub throttling', () => {
     expect(v2.status).toBe('halal')
   })
 
+  it('stamps the engine version, and the shared cache ignores entries from an older engine', async () => {
+    const s = await freshSharia()
+    const { SCREEN_ENGINE_VERSION } = await import('../lib/shariaVerdict.js')
+    const fetchFn = finnhubStub()
+    s.setScreenCache({ get: async () => ({ status: 'review', byStandard: {} }), set: async () => {} }) // pre-v2 entry
+    vi.stubGlobal('fetch', fetchFn)
+    const v = await s.screenSymbol('TST')
+    expect(v.engine).toBe(SCREEN_ENGINE_VERSION)
+    expect(v.status).toBe('halal')          // re-screened, not served the stale "review"
+    expect(fetchFn).toHaveBeenCalled()
+  })
+
   it('reads the shared cache before calling Finnhub, and writes only good verdicts to it', async () => {
     const s = await freshSharia()
     const store = new Map()

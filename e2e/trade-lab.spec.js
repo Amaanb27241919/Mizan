@@ -546,7 +546,7 @@ test.describe("Trade Lab strategy scoreboard", () => {
  * server marks "pending" is asked for again until it settles.
  */
 test.describe("Trade Lab compliance", () => {
-  const verdict = (tk, aaoifi = true) => ({ tk, status: "halal", asOf: new Date().toISOString().slice(0, 10),
+  const verdict = (tk, aaoifi = true) => ({ tk, status: "halal", asOf: new Date().toISOString().slice(0, 10), engine: 2,
     byStandard: { AAOIFI: { pass: aaoifi }, DJIM: { pass: true }, SP_SHARIAH: { pass: true }, FTSE_SHARIAH: { pass: true },
       MSCI_ISLAMIC: { pass: true }, SC_MALAYSIA: { pass: true }, IFSB: { pass: true } } });
   const positions = ["STX", "TER", "MU"].map((symbol) => ({ symbol, qty: "1", avg_entry_price: "1",
@@ -584,5 +584,20 @@ test.describe("Trade Lab compliance", () => {
     await page.getByRole("button", { name: "Compliance", exact: true }).click();
     await expect(page.locator(".mz-cockpit")).toContainText("2/3 SCREENED");
     expect(asked.every((tk) => tk === "MU")).toBe(true);
+  });
+
+  test("re-screens a verdict cached by the old engine, even one dated today", async ({ page }) => {
+    // Production, 2026-10-07: degraded "review" verdicts from throttled
+    // screens sat in the cache stamped today, so 7 holdings stayed blank.
+    const today = new Date().toISOString().slice(0, 10);
+    const stale = Object.fromEntries(["STX", "TER", "MU"].map((tk) => [tk, { tk, status: "review", asOf: today, byStandard: {} }]));
+    await gotoLab(page, { fixtures: { "/api/alpaca/positions": positions }, storage: { mizan_aaoifi_cache: JSON.stringify(stale) } });
+    await page.route("**/api/screen", (route) => {
+      const asked = JSON.parse(route.request().postData() || "{}").symbols || [];
+      route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ provider: "finnhub", results: Object.fromEntries(asked.map((tk) => [tk, verdict(tk)])) }) });
+    });
+    await page.getByRole("button", { name: "Compliance", exact: true }).click();
+    await expect(page.locator(".mz-cockpit")).toContainText("3/3 SCREENED");
   });
 });

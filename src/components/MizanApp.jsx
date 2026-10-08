@@ -2663,13 +2663,13 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
   const runScreen=async(forceAll)=>{
     setBusy(true);
     const today=new Date().toISOString().slice(0,10);
-    const todo=tickers.filter(tk=>forceAll||!results[tk]||results[tk].asOf!==today);
+    const todo=forceAll?tickers:symbolsToScreen(tickers,results,today);
     let final=results;
     for(let i=0;i<todo.length;i+=4){
       const batch=todo.slice(i,i+4);
       const settled=await Promise.allSettled(batch.map(tk=>screenTicker(tk)));
-      const next={...final};
-      settled.forEach((s,j)=>{if(s.status==="fulfilled")next[batch[j]]={...s.value,asOf:today};});
+      // mergeVerdicts: a throttled answer never replaces a good verdict.
+      const next=mergeVerdicts(final,Object.fromEntries(settled.map((s,j)=>s.status==="fulfilled"?[batch[j],{...s.value,asOf:s.value.asOf||today}]:null).filter(Boolean)));
       final=next;
       setResults(next);
       try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(next));}catch{}
@@ -7664,6 +7664,31 @@ function Stat({label,value,sub}){
  * 15s+, then 7 of 27 holdings blank).
  */
 const SCREEN_POLL_ROUNDS=8, SCREEN_POLL_MS=4000;
+/**
+ * Ask /api/screen for `symbols` until every one settles or the rounds run out.
+ * Merges into `cache` with mergeVerdicts (a throttled or pending answer never
+ * replaces a good verdict), persists the shared mizan_aaoifi_cache, and hands
+ * each merged cache to onUpdate. Returns the final cache.
+ */
+async function screenUntilSettled(symbols,cache,{onUpdate,isCancelled=()=>false}={}){
+  let todo=symbols;
+  for(let round=0;round<SCREEN_POLL_ROUNDS&&todo.length&&!isCancelled();round++){
+    let results=null;
+    try{
+      const r=await apiFetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbols:todo})});
+      if(r.ok){const d=await r.json();results=d&&typeof d.results==="object"&&d.results?d.results:null;}
+    }catch{results=null;}
+    if(isCancelled())return cache;
+    if(results){
+      cache=mergeVerdicts(cache,results);
+      try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(cache));}catch{}
+      if(onUpdate)onUpdate(cache);
+    }
+    todo=todo.filter(tk=>!isSettledVerdict(cache[tk]));
+    if(todo.length&&round<SCREEN_POLL_ROUNDS-1)await new Promise(res=>setTimeout(res,SCREEN_POLL_MS));
+  }
+  return cache;
+}
 function useScreenVerdicts(symbols,demoMode){
   const[verdicts,setVerdicts]=useState(()=>{try{return JSON.parse(localStorage.getItem("mizan_aaoifi_cache")||"{}");}catch{return{};}});
   const[phase,setPhase]=useState("idle"); // idle | screening | done | failed
@@ -7673,25 +7698,10 @@ function useScreenVerdicts(symbols,demoMode){
     let cancelled=false;
     (async()=>{
       const today=new Date().toISOString().slice(0,10);
-      let cache=verdicts;
-      let todo=symbolsToScreen(symbols,cache,today);
+      const todo=symbolsToScreen(symbols,verdicts,today);
       if(!todo.length){setPhase("done");return;}
       setPhase("screening");
-      for(let round=0;round<SCREEN_POLL_ROUNDS&&todo.length&&!cancelled;round++){
-        let results=null;
-        try{
-          const r=await apiFetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbols:todo})});
-          if(r.ok){const d=await r.json();results=d&&typeof d.results==="object"&&d.results?d.results:null;}
-        }catch{results=null;}
-        if(cancelled)return;
-        if(results){
-          cache=mergeVerdicts(cache,results);
-          setVerdicts(cache);
-          try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(cache));}catch{}
-        }
-        todo=todo.filter(tk=>!isSettledVerdict(cache[tk]));
-        if(todo.length&&round<SCREEN_POLL_ROUNDS-1)await new Promise(res=>setTimeout(res,SCREEN_POLL_MS));
-      }
+      const cache=await screenUntilSettled(todo,verdicts,{onUpdate:setVerdicts,isCancelled:()=>cancelled});
       if(!cancelled)setPhase(symbols.some(tk=>isSettledVerdict(cache[tk]))?"done":"failed");
     })();
     return()=>{cancelled=true;};
@@ -13501,7 +13511,8 @@ export default function Mizan(){
     // coming back "unknown" (which previously let it fall through to auto-"halal").
     const heldMap=new Map();
     snapAccounts.forEach(a=>(a.positions||[]).forEach(p=>{const{tk,ty}=readSymbol(p);if(tk&&!heldMap.has(tk))heldMap.set(tk,ty);}));
-    const stale=tk=>!shariaScreen[tk]||shariaScreen[tk].asOf!==today;
+    const fresh=new Set([...heldMap.keys()].filter(tk=>!symbolsToScreen([tk],shariaScreen,today).length));
+    const stale=tk=>!fresh.has(tk);
     const isCryptoTy=t=>/crypto/i.test(String(t||""));
     // Force the crypto "review" verdict whenever the cached entry isn't ALREADY it —
     // regardless of freshness — so a stale/old cached "halal" (e.g. a DOGE that was
@@ -13517,20 +13528,14 @@ export default function Mizan(){
     const todo=[...heldMap].filter(([tk,ty])=>!isCryptoTy(ty)&&stale(tk)).map(([tk])=>tk);
     if(!todo.length)return;
     let cancelled=false;
+    // Polls what the server marks pending, and never lets a throttled answer
+    // replace a good verdict (screenUntilSettled → mergeVerdicts). Failures
+    // leave sh_ on its fallback — never throw.
     (async()=>{
-      try{
-        const r=await apiFetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbols:todo})});
-        if(!r.ok)return;
-        const d=await r.json();
-        const results=d.results||{};
-        if(cancelled||!Object.keys(results).length)return;
-        setShariaScreen(prev=>{
-          const next={...prev};
-          Object.entries(results).forEach(([tk,v])=>{next[tk]={...v,asOf:v.asOf||today};});
-          try{localStorage.setItem("mizan_aaoifi_cache",JSON.stringify(next));}catch{}
-          return next;
-        });
-      }catch{/* screen failures leave sh_ on its fallback — never throw */}
+      await screenUntilSettled(todo,shariaScreen,{
+        isCancelled:()=>cancelled,
+        onUpdate:merged=>setShariaScreen(prev=>mergeVerdicts(prev,Object.fromEntries(todo.map(tk=>[tk,merged[tk]]).filter(([,v])=>v)))),
+      });
     })();
     return()=>{cancelled=true;};
   // eslint-disable-next-line react-hooks/exhaustive-deps

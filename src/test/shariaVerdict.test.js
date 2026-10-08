@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { mergeVerdicts, symbolsToScreen, isSettledVerdict } from '../lib/shariaVerdict.js'
+import { mergeVerdicts, symbolsToScreen, isSettledVerdict, SCREEN_ENGINE_VERSION } from '../lib/shariaVerdict.js'
 
-const good = { status: 'halal', asOf: '2026-10-07', byStandard: { AAOIFI: { pass: true } } }
+const good = { status: 'halal', asOf: '2026-10-07', engine: SCREEN_ENGINE_VERSION, byStandard: { AAOIFI: { pass: true } } }
 const throttled = { status: 'unknown', reason: 'finnhub_unavailable:429' }
 
 describe('mergeVerdicts', () => {
@@ -25,6 +25,11 @@ describe('symbolsToScreen', () => {
   it('skips symbols screened today, re-asks stale or unsettled ones', () => {
     const cache = { STX: good, TER: throttled, MU: { ...good, asOf: '2026-10-06' } }
     expect(symbolsToScreen(['stx', 'TER', 'MU', 'NEW', 'NEW'], cache, '2026-10-07')).toEqual(['TER', 'MU', 'NEW'])
+  })
+  it('re-screens a verdict from an older engine, even if dated today', () => {
+    // A pre-v2 "review" was often a throttled screen in disguise.
+    const old = { ...good, status: 'review', engine: undefined }
+    expect(symbolsToScreen(['STX'], { STX: old }, '2026-10-07')).toEqual(['STX'])
   })
   it('survives junk', () => {
     expect(symbolsToScreen(null, null, 'x')).toEqual([])
