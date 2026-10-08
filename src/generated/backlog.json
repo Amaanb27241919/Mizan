@@ -56,6 +56,16 @@
           "done": true
         },
         {
+          "id": "F16",
+          "title": "`polygon_cache` bar rows are never evicted, but Data Retention says \"evicted by TTL\"",
+          "done": false
+        },
+        {
+          "id": "F17",
+          "title": "Compliance shows halal FUNDS as \"not screened\"",
+          "done": false
+        },
+        {
           "id": "F9",
           "title": "OpenBB fundamentals adapter for Sharia screening (PROTOTYPE built, promotion blocked on diff evidence)",
           "done": false
@@ -82,8 +92,8 @@
         }
       ],
       "archive": false,
-      "open": 8,
-      "total": 15
+      "open": 10,
+      "total": 17
     },
     {
       "key": "G",

@@ -184,6 +184,16 @@ The "something is wrong" bucket. Aligned with maintenance mode.
 - **Found** while generating PWA install screenshots — the shots rendered "Nisab unavailable" despite a fixture supplying live nisab values, which is what exposed it.
 - **Fix:** `serviceWorkers: "block"` in `playwright.config.js` `use`. All 7 screener tests pass immediately; no app change was needed. **Tradeoff:** the E2E suite no longer exercises the service worker, so SW caching/offline behaviour needs its own separate check if that ever matters.
 
+### F16 — `polygon_cache` bar rows are never evicted, but Data Retention says "evicted by TTL"
+
+- **Status:** open, small · **Effort:** S · **User value:** low (policy accuracy + table hygiene) · **Autonomous:** yes
+- Found 2026-10-07. `src/components/DataRetention.jsx` lists `polygon_cache` as a "rolling cache, evicted by TTL", and the 24h TTL is enforced only at READ time — nothing deletes rows. Bar rows date back to 2026-06-24. The Sharia verdict rows that now share the table (`timespan='sharia_verdict_v1'`) ARE evicted after 7 days by `/api/cron/cleanup` (`c1cf6d0`+); extend the same delete to bar rows older than ~30 days, or reword the policy. Contains no consumer identifiers either way.
+
+### F17 — Compliance shows halal FUNDS as "not screened"
+
+- **Status:** open, small · **Effort:** S · **User value:** low-medium · **Autonomous:** yes (display only)
+- SPSK (and any halal ETF) has no company balance sheet, so the ratio engine returns `review` with no AAOIFI pass and the Trade Lab Compliance matrix counts it as NOT SCREENED (26/27 on 2026-10-07). The strategies already treat these as eligible by construction (`HALAL_FUNDS` in `lib/trading/screenGate.mjs`). A distinct "fund — screened by issuer" state would be more accurate than "missing data". Must not become a blanket halal stamp for any ETF — only the named Sharia-screened funds.
+
 ### F9 — OpenBB fundamentals adapter for Sharia screening (PROTOTYPE built, promotion blocked on diff evidence)
 
 - **Status:** prototype merged, DORMANT · **Effort:** M · **User value:** HIGH (screening correctness) · **Autonomous:** no — promotion is an owner call

@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-07
 
 ### Fixed
+- **dca:** Wait for a deposit instead of ordering into an empty live account (`c1cf6d0`)
 - **trade-lab:** Equity curve ends at the desk's live equity (`59a6637`)
 - **trade-lab:** Equity curve measured the opening deposit as gain (`3bcdb92`)
 - **sharia:** Re-screen verdicts cached by the pre-fix engine; poll pending everywhere (`52f4f37`)

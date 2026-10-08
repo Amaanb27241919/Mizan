@@ -109,12 +109,20 @@ Phase 5, and it should be priced there.
    user **AND** per-account opt-in (`accountFullAutoEnabled`). This is the RIA
    line; it is owner-allowlist-only and must not be extended to beta users.
 6. **Sharia** — `HARAM_TICKERS` blocklist, server-side, non-negotiable
-   (`:1401`). Also re-checked inside basket leg selection.
+   (`:1401`). Also re-checked inside basket leg selection. **Since 2026-10-07
+   every strategy also screens by AAOIFI** (`lib/trading/screenGate.mjs`):
+   rank plans screen their hold zone + holdings (exclude failing buys, sell
+   failing holdings, WAIT on unverified until the cutoff), and the entry
+   engine and AI panel use `tradeEligibility`. Halal funds pass by
+   construction. Never the server's cross-standard `status` vote.
 7. **Session** — `validateSessionOrder` for extended hours; a market order
    outside regular hours is refused rather than queued, because Alpaca queues
    it and the user fills hours later at a price they never saw.
 8. **Cash ceiling (Alpaca path only)** — order value ≤ settled cash, never
-   `buying_power`. Margin is riba; see `lib/market/orders.mjs`.
+   `buying_power`. Margin is riba; see `lib/market/orders.mjs`. **Live DCA**
+   (SnapTrade) is capped by the account's `/balances` cash before a signal
+   is written (`dcaAffordableQty`); below one share it waits for a deposit
+   instead of producing a rejection.
 
 ## Audit trail
 

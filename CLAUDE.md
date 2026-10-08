@@ -201,7 +201,23 @@ lib/trading/sleeve.mjs         — Pure per-strategy money for SHARED accounts: 
                                  (capped by REAL account cash — margin is riba),
                                  earningsExclusions, withCashSweep (SPSK), aiGateDecision,
                                  valueBook (per-ticker book value), strategyScore (equity =
-                                 value + own cash; return vs SPUS over the same window).
+                                 value + own cash; return vs SPUS over the same window),
+                                 dcaAffordableQty (LIVE DCA buys capped by the account's real
+                                 /balances cash; below one share it WAITS — logs
+                                 bot.dca.waiting_for_funds, no rejected order, no stuck alert.
+                                 Unreadable balance ⇒ null ⇒ order proceeds so a broken
+                                 connection still surfaces. `c1cf6d0`, after the owner stopped
+                                 funding the E*TRADE account).
+lib/trading/screenGate.mjs     — Pure: EVERY strategy screens by AAOIFI (owner decision
+                                 2026-10-07). tradeEligibility → eligible | blocked |
+                                 unverified; screenPlanInputs → excludeBuys / forceSells /
+                                 waiting. Halal funds (SPUS/HLAL/UMMA/SPSK/SPWO/SPTE/SPRE) pass
+                                 by construction. Unverified never buys (rank waits until the
+                                 cutoff, then excludes); a holding is sold ONLY when screened
+                                 and FAILING, never for a data gap. Wired into prepareRankPlan,
+                                 runResearchPanel and the entry engine; params.screen_standard
+                                 can name another standard. rebalancePlan does not reach past
+                                 buyTop to replace an excluded name (same as earnings).
 lib/trading/position.mjs       — Pure single-position swing bookkeeping: openPosition (open
                                  position only — the old helper blended every past buy),
                                  bracketLegsFor / bracketExitState (Alpaca bracket exits).
@@ -290,7 +306,7 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 
 ### Verification (what actually proves the app works)
 ```
-npm test              — Vitest, 703 unit tests. Pure functions + static contracts. Fast (~10s).
+npm test              — Vitest, 1,229 unit tests passed on 2026-10-07. Pure functions + static contracts. Fast (~15s).
 npm run test:e2e      — Playwright. Renders the real production build. NOT in `npm run build`.
 npm run test:all      — both
 npm run lint          — crash-focused ESLint (config/eslint.mjs). Wired INTO `npm run build`.
@@ -439,6 +455,8 @@ Understanding these concepts is required to work on Mizan correctly. Financial e
   2. **Financial ratio screen**: Is the company's debt ratio below the AAOIFI threshold (debt/market cap < 33%)? Impermissible income ratio < 5%?
 - **`h.sh_` field** in holdings state = Sharia status: `"halal"` / `"review"` / `"haram"` / `"unlisted"`
 - **Single screening source of truth**: `h.sh_` is governed by the server screening service (`lib/sharia.mjs` via `/api/screen` — provider-dispatched: Finnhub now, Zoya when `ZOYA_API_KEY` is set). A root effect screens real holdings into `shariaScreen` state; `mapPosition` reads the live verdict (hardcoded `SHARIA_MAP` is only the instant fallback while it loads). Screener tab, Overview compliance, Rebalancer halal-mode, and Purification all read this one verdict — no more divergence.
+- **Screening under the Finnhub free tier (2026-10-07, `6040450` + `52f4f37`).** A 429 used to read as "no data": the verdict degraded to `review` (or a blank standard), was cached for the day, and the Trade Lab Compliance tab showed 7 of 27 holdings unscreened while STX/TER flipped between runs. Now: `fhGet` paces at 50/min across the instance, retries 429/5xx with backoff, and THROWS on a persistent failure → an honest `unknown` that is **never cached**. Verdicts are shared across instances in `polygon_cache` under `timespan='sharia_verdict_v1'` (no migration; evicted after 7 days by the daily cleanup). `/api/screen` POST answers within 15s and marks the rest `{status:'unknown', reason:'pending'}`. Every verdict carries **`SCREEN_ENGINE_VERSION`** (`src/lib/shariaVerdict.js`) — **bump it whenever older verdicts become untrustworthy**; clients and the shared cache re-screen any other stamp. Client merges MUST go through `mergeVerdicts` / `symbolsToScreen` / `screenUntilSettled` (never `{...cache, ...incoming}`, which let a throttled answer erase a good verdict). `statusForStandard` lives in the pure `shariaVerdict.js` so the SERVER uses the exact rule the app shows (`shariaStatus.js` re-exports it).
+- **Strategies screen by AAOIFI, not the vote** — see `lib/trading/screenGate.mjs` in §2. The server's top-level `status` is a cross-standard VOTE (halal at ≥5 of 7, haram at ≥4 fails); strategy A's AI gate read it and dropped STX/CRWD/FTNT (pass AAOIFI + S&P, fail FTSE/MSCI/SC/IFSB) while B/C/live held them, confounding the AI-vs-no-AI comparison. Never gate a trade on `verdict.status`.
 - **Crypto is never auto-classified.** `screenSymbol` returns `review` (not `halal`) for known tokens with NO standard marked pass, because the AAOIFI ratio engine has nothing to evaluate on an asset with no balance sheet. It used to return `halal` with all seven standards green; the client masked that for HELD crypto only, so any path without connector data (the ad-hoc lookup) saw the raw verdict. Fixed at the source 2026-08-10 — don't reintroduce a client-side-only override. Per-token verdicts are BACKLOG N6.
 - **The Screener screens ANY ticker, not just holdings** (2026-08-10, from user feedback). `/api/screen?symbol=` has always taken an arbitrary symbol; the Screener tab now has a lookup box for symbols the user doesn't own. It is IMPERSONAL (Tier 1) and must stay that way: **one symbol in, one verdict out.** Never add ranking, sorting by desirability, or a curated "picks" list — that converts an impersonal fact into a personalized recommendation and crosses the RIA line. Lookup results are deliberately kept OUT of the holdings `results` cache (it feeds the freshness label and the compliance-change notification baseline).
 
@@ -781,7 +799,7 @@ These are documented constraints, not undiscovered issues:
 | Plaid | Bank accounts + transactions | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | access_token server-only, never reaches browser |
 | Anthropic | AI Advisor chat | `ANTHROPIC_KEY` | claude-sonnet-4-6, 60/hr rate limit, streaming |
 | Stooq | Gold/silver spot prices | None (free) | CSV proxy — no API key needed |
-| Finnhub | News, earnings, profile, dividends, quote (incl. `/api/market/quote` chart live-line), **Sharia screening fundamentals** | `FINNHUB_KEY` / `VITE_FINNHUB_KEY` | 60 req/min free tier. **No `/stock/candle`** on free tier → the price chart uses Polygon for OHLC |
+| Finnhub | News, earnings, profile, dividends, quote (incl. `/api/market/quote` chart live-line), **Sharia screening fundamentals** | `FINNHUB_KEY` / `VITE_FINNHUB_KEY` | 60 req/min free tier — screening costs 3 calls/symbol, paced at 50/min in `lib/sharia.mjs` (a cold 27-holding screen ≈ 100s; the shared verdict cache makes it once a day). **No `/stock/candle`** on free tier → the price chart uses Polygon for OHLC |
 | Zoya | Sharia screening (optional provider — overrides Finnhub when keyed) | `ZOYA_API_KEY`, `ZOYA_API_BASE` (opt) | NOT yet provisioned. When set, `lib/sharia.mjs` routes screening to Zoya (adds non-permissible-income test + direct verdict); falls back to Finnhub on any error. Adapter response-mapping must be verified against the live API. |
 | Polygon | OHLC bars — backtester (`/api/polygon/bars`) **+ holdings price chart** (`/api/market/candles`, auth-gated + IMPERSONAL); both share `getPolygonBars()` (24h `polygon_cache` + backoff + stale-on-failure) | `POLYGON_KEY` | 5 req/min free, 2yr history |
 | Alpha Vantage | ETF constituent holdings (ETF Overlap Analyzer) | `ALPHAVANTAGE_KEY` | **LIVE (set in Vercel 2026-07-05, verified — HLAL returned 210 holdings).** Free tier **25 req/day** → fetch server-side ONLY + cache ~24h in `etf_holdings_cache` (7 halal ETFs = 7 calls/day). The overlap route fetches symbols **sequentially** (concurrent bursts get throttled → curated fallback). `ETF_PROFILE` returns full holdings + weights + sectors. **ETF-only** (Amana mutual funds use curated snapshots in `lib/etfHoldings.mjs`; all 7 ETFs also curated-seeded as fallback). Stored **Sensitive**, so `vercel env pull` shows it empty — verify via `etf_holdings_cache.source`. |

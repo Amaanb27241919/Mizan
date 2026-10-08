@@ -85,3 +85,13 @@ describe('every strategy path screens by AAOIFI (handlers.mjs wiring)', () => {
     expect(fn('runAiGate')).toMatch(/rebalancePlan\(\{[^}]*forceSell/)
   })
 })
+
+describe('verdict cache retention', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  it('the daily cleanup evicts old verdict rows (Data Retention promises TTL eviction)', () => {
+    const at = SRC.indexOf('if (pathname === "/api/cron/cleanup")')
+    const c = SRC.slice(at, SRC.indexOf('checkDataFeeds(sbAdmin', at))
+    expect(c.length).toBeGreaterThan(100)
+    expect(c).toMatch(/from\("polygon_cache"\)\s*\.delete\([^)]*\)\.eq\("timespan", SCREEN_CACHE_SPAN\)\.lt\("from_date"/)
+  })
+})
