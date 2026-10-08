@@ -214,3 +214,40 @@ describe('strategyScore', () => {
     expect(strategyScore(null)).toMatchObject({ equity: 0, returnPct: null, benchReturnPct: null })
   })
 })
+
+import { dcaAffordableQty } from '../../lib/trading/sleeve.mjs'
+describe('dcaAffordableQty — the account\'s real cash caps a DCA buy', () => {
+  // 2026-10-07: the owner stopped depositing into the E*TRADE account. The DCA
+  // budget was capital_allocated minus deployed, so it would have placed (and
+  // had rejected) one order every weekday for an account with no money in it.
+  it('caps whole shares at the cash on hand', () => {
+    expect(dcaAffordableQty({ budget: 50, price: 34.51, cash: 40 })).toBe(1)
+    expect(dcaAffordableQty({ budget: 200, price: 34.51, cash: 80 })).toBe(2)
+  })
+  it('returns 0 when the account cannot afford one share — wait, do not order', () => {
+    expect(dcaAffordableQty({ budget: 50, price: 34.51, cash: 12.3 })).toBe(0)
+  })
+  it('falls back to the budget when cash could not be read, so a broken connection still surfaces', () => {
+    expect(dcaAffordableQty({ budget: 50, price: 34.51, cash: null })).toBe(1)
+  })
+  it('survives junk', () => {
+    expect(dcaAffordableQty(null)).toBe(0)
+    expect(dcaAffordableQty({ budget: 50, price: 0, cash: 100 })).toBe(0)
+  })
+})
+
+import { readFileSync as readSrc } from 'node:fs'
+import nodePath from 'node:path'
+describe('DCA branch wiring', () => {
+  const SRC = readSrc(nodePath.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  const dca = SRC.slice(SRC.indexOf('if (strat.strategy_type === "dca") {'), SRC.indexOf('signalsGenerated++;', SRC.indexOf('if (strat.strategy_type === "dca") {')))
+  it('reads live account cash and sizes with dcaAffordableQty BEFORE inserting a signal', () => {
+    expect(dca).toMatch(/snapAccountCash\(strat\.user_id, strat\.account_id\)/)
+    const sized = dca.indexOf('dcaAffordableQty(')
+    expect(sized).toBeGreaterThan(-1)
+    expect(sized).toBeLessThan(dca.indexOf('from("pending_signals").insert('))
+  })
+  it('only live venues are cash-checked (paper has its own sleeve accounting)', () => {
+    expect(dca).toMatch(/if \(venue && !venue\.paper\)/)
+  })
+})
