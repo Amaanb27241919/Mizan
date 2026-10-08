@@ -251,3 +251,31 @@ describe('DCA branch wiring', () => {
     expect(dca).toMatch(/if \(venue && !venue\.paper\)/)
   })
 })
+
+describe('strategyScore — an unpriced position is unknown, never a loss', () => {
+  // 2026-10-08: a rate-limited quote valued Experiment D's 361 ISRG at $0 and
+  // the card read "$176, −100.12% vs SPUS" for a position worth ~$149,600.
+  const ledger = [{ side: 'buy', qty: 361, suggested_price: 416, status: 'executed', executed_at: '2026-10-07T14:00:10Z' }]
+  it('reports cash but no equity or return when the holdings could not be priced', () => {
+    const s = strategyScore({ capital: 150000, ledger, marketValue: 0, priced: false, benchStart: 100, benchNow: 99.9 })
+    expect(s.cash).toBe(-176) // 361 × $416 filled $176 over the $150,000 capital
+    expect(s.equity).toBeNull()
+    expect(s.returnPct).toBeNull()
+    expect(s.alphaPct).toBeNull()
+  })
+  it('priced by default, so existing callers are unchanged', () => {
+    expect(strategyScore({ capital: 150000, ledger, marketValue: 149648.94 }).returnPct).toBeCloseTo(-0.35, 2)
+  })
+})
+
+describe('progress pricing wiring (handlers.mjs)', () => {
+  const SRC = readSrc(nodePath.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  const f = SRC.slice(SRC.indexOf('async function computeStrategyProgress('), SRC.indexOf('async function computeStrategyProgress(') + 9000)
+  it('prices a single position from Alpaca before Finnhub, and flags it when neither answers', () => {
+    expect(f).toMatch(/fetchLatestPrices\(\[out\.held_ticker\], pCreds\)/)
+    expect(f).toMatch(/if \(!quote\) out\.unpriced = \[out\.held_ticker\];/)
+  })
+  it('passes priced:false to the score when anything is unpriced', () => {
+    expect(f).toMatch(/strategyScore\(\{[^}]*priced \}\)/)
+  })
+})

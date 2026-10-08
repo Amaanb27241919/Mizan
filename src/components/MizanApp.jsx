@@ -15,6 +15,7 @@ import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHist
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { deskSummary } from "../lib/deskSummary.js";
+import { blotterRows, allocationSegments, tapeRows, groupTotals, strategyLabel } from "../lib/deskBlotter.js";
 import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity } from "../lib/equityCurve.js";
 import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/benchmarkAttribution.js";
 // Aliased: MizanApp already declares a STANDARDS of its own further down.
@@ -5986,7 +5987,11 @@ function StrategyProgressCard({strat}){
   // swing that had just sold read as a total loss. Before the first fill there
   // is no return to show, and none is shown.
   const started=!!(p&&p.started_at);
-  const current=p&&p.equity!=null?Number(p.equity):(p&&p.current_value!=null&&started?Number(p.current_value):null);
+  // A holding that could not be priced makes the value UNKNOWN. Falling back to
+  // current_value here (0 for the unpriced name) drew a −100% card for a
+  // ~$150k position (2026-10-08).
+  const unpriced=Array.isArray(p?.unpriced)&&p.unpriced.length>0;
+  const current=unpriced?null:p&&p.equity!=null?Number(p.equity):(p&&p.current_value!=null&&started?Number(p.current_value):null);
   const pnl=started&&current!=null?current-capital:null;
   const pnlPct=p&&p.return_pct!=null?Number(p.return_pct):(pnl!=null&&capital>0?(pnl/capital)*100:null);
   const benchPct=p&&p.bench_return_pct!=null?Number(p.bench_return_pct):null;
@@ -6004,7 +6009,12 @@ function StrategyProgressCard({strat}){
   // otherwise the universe it's screening.
   const held=p&&p.held_ticker;
   const cands=Array.isArray(strat.params?.universe_tickers)?strat.params.universe_tickers:[];
-  const headline=held||(cands.length>1?`${cands.length} halal names`:(cands[0]||strat.ticker));
+  // The card is named after the STRATEGY ("A · Reference system + AI gate"),
+  // not its universe — six cards all titled "214 halal names" were
+  // indistinguishable. The held name / universe size moves to the subline.
+  const lbl=strategyLabel(strat);
+  const headline=lbl.code?`${lbl.code} · ${lbl.name}`:lbl.name;
+  const subject=held?`holding ${held}`:(cands.length>1?`${cands.length} halal names`:(cands[0]||strat.ticker||""));
   // DCA (accumulation) strategies have no profit target / stop / horizon — read
   // them as "deploy & hold" instead of showing meaningless 0% values.
   const isDca=strat.strategy_type==="dca";
@@ -6012,10 +6022,10 @@ function StrategyProgressCard({strat}){
   const barLabel=isDca?"CAPITAL DEPLOYED":"PROGRESS TO TARGET";
   const barPct=isDca?(capital>0&&current!=null?Math.max(0,Math.min(100,(current/capital)*100)):0):pctToTarget;
   return<BentoTile accent={pnl!=null?(pnl>=0?T.gain:T.loss):T.blue} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-      <div style={{display:"flex",gap:T.s2,alignItems:"center"}}>
-        <span style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi}}>{headline}</span>
-        {held&&cands.length>1&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em"}}>HELD</span>}
+    <div style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,lineHeight:1.3}} data-testid="strategy-card-title">{headline}</div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap",minWidth:0}}>
+        {subject&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em"}}>{String(subject).toUpperCase()}</span>}
         <Tag label={lyr.toUpperCase()} color={lyrColor}/>
         {isDca&&<Tag label="DCA" color={T.gain}/>}
         {/* Paper fills are labelled at the point the money is shown. Carried
@@ -6036,7 +6046,7 @@ function StrategyProgressCard({strat}){
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginBottom:3}} title="Stock value plus this strategy's own uninvested cash">EQUITY</div>
           <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",fontWeight:700,color:pnl!=null?fc(pnl):T.textHi,fontVariantNumeric:"tabular-nums"}}>{current!=null?mask(f$(current,0)):started?"—":mask(f$(capital,0))}</div>
           {pnl!=null?<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:fc(pnl),fontWeight:600,fontVariantNumeric:"tabular-nums",marginTop:2}}>{pnl>=0?"+":"−"}{mask(f$(Math.abs(pnl),0))} ({fp(pnlPct)})</div>
-            :<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:2,letterSpacing:"0.06em"}}>NOT TRADED YET</div>}
+            :<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:unpriced?T.gold:T.muted,marginTop:2,letterSpacing:"0.06em"}}>{unpriced?"PRICE UNAVAILABLE — NOT A LOSS":"NOT TRADED YET"}</div>}
         </div>
       </div>
       <div>
@@ -7468,13 +7478,7 @@ function ClosedTradesExport(){
     setState("busy");
     try{
       const qs=new URLSearchParams({short:rates.short,long:rates.long});
-      const r=await apiFetch(`/api/alpaca/closed-trades.csv?${qs}`);
-      if(!r.ok){setState("error");return;}
-      const url=URL.createObjectURL(await r.blob());
-      const a=document.createElement("a");
-      a.href=url;a.download=`mizan-closed-trades-${new Date().toISOString().slice(0,10)}.csv`;
-      document.body.appendChild(a);a.click();
-      setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},100);
+      await downloadCsv(`/api/alpaca/closed-trades.csv?${qs}`,`mizan-closed-trades-${new Date().toISOString().slice(0,10)}.csv`);
       setState("idle");
     }catch{setState("error");}
   };
@@ -8176,9 +8180,169 @@ function PerformancePanelLab({demoMode}){
  * an approval window is short and a view you have to go looking for is a view
  * that expires.
  */
+/** Save an authenticated CSV response as a file. Shared by every Trade Lab export. */
+async function downloadCsv(url,filename){
+  const r=await apiFetch(url);
+  if(!r.ok)throw new Error(`HTTP ${r.status}`);
+  const href=URL.createObjectURL(await r.blob());
+  const a=document.createElement("a");
+  a.href=href;a.download=filename;
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(href);a.remove();},100);
+}
+
+const NY_STAMP=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false});
+const nyStamp=t=>{const ms=Date.parse(t);return Number.isFinite(ms)?NY_STAMP.format(new Date(ms)):"—";};
+
+/** How the pot is split across sleeves. Neutral fills: a share is a quantity, not a verdict. */
+function AllocationBar({segments,mask}){
+  if(!segments.length)return null;
+  const shade=[0.9,0.66,0.48,0.34,0.24];
+  let i=0;
+  return<div>
+    <div className="mz-alloc" role="img" aria-label={`Allocation: ${segments.map(s=>`${s.code} ${s.pct}%`).join(", ")}`}>
+      {segments.map(s=>s.code==="unallocated"
+        ?<span key={s.code} className="mz-alloc-free" style={{width:`${s.pct}%`}}/>
+        :<span key={s.code} style={{width:`${s.pct}%`,background:T.textHi,opacity:shade[(i++)%shade.length]}} title={`${s.code} · ${s.pct}%`}/>)}
+    </div>
+    <div className="mz-alloc-legend" style={{fontFamily:FM}}>
+      {segments.map(s=><span key={s.code}>
+        <b style={{color:s.code==="unallocated"?T.muted:T.textHi}}>{s.code==="unallocated"?"UNALLOCATED":s.code}</b> {mask(f$(s.amount,0))} <span style={{color:T.muted}}>· {s.pct.toFixed(1)}%</span>
+      </span>)}
+    </div>
+  </div>;
+}
+
+/**
+ * The strategy book. Several strategies share one paper account, each with
+ * its own sleeve, ledger and AI reviews; this is the one place they sit side
+ * by side. Figures pass through from the server scoreboard (deskBlotter.js).
+ */
+function StrategyBlotter({strategies,state,accountEquity,mask}){
+  const rows=useMemo(()=>blotterRows(strategies),[strategies]);
+  const groups=useMemo(()=>groupTotals(rows),[rows]);
+  const segs=useMemo(()=>allocationSegments(rows,accountEquity),[rows,accountEquity]);
+  const[busy,setBusy]=useState(null);
+  const[err,setErr]=useState(null);
+  const pct=v=>v==null?<span style={{color:T.muted}}>—</span>:<span style={{color:v>0?T.gain:v<0?T.loss:T.muted}}>{mask(fp(v))}</span>;
+  const tone=t=>t==="warn"?T.gold:t==="ok"?T.text:T.muted;
+  const code=c=>c?<span className="mz-code">{c}</span>:<span className="mz-code mz-code-none" aria-hidden="true">—</span>;
+  const usd0=v=>v!=null?mask(f$(v,0)):"—";
+  const alpha=r=>r.traded&&r.alphaPct!=null?<span style={{color:r.alphaPct>0?T.gain:r.alphaPct<0?T.loss:T.muted}}>{mask(`${r.alphaPct>0?"+":""}${r.alphaPct.toFixed(2)} pts`)}</span>:<span style={{color:T.muted}}>—</span>;
+  const equityCell=r=>r.unpriced?<span style={{color:T.gold}} title="A holding could not be priced, so the value is unknown — not zero.">PRICE N/A</span>:usd0(r.equity);
+  const journalBtn=r=><button className="mz-tap mz-icon-btn" onClick={()=>journal(r)} disabled={busy===r.id}
+    aria-label={`Download the ${r.code||r.name} journal`} title="Download this strategy's journal (CSV)">{busy===r.id?"…":err===r.id?"retry":"↓"}</button>;
+  const journal=async r=>{
+    setBusy(r.id);setErr(null);
+    try{await downloadCsv(`/api/bot/journal.csv?strategy_id=${encodeURIComponent(r.id)}`,`mizan-journal-${(r.code||r.id.slice(0,8)).replace(/[^\w-]/g,"")}-${new Date().toISOString().slice(0,10)}.csv`);}
+    catch{setErr(r.id);}
+    finally{setBusy(null);}
+  };
+  return<section data-testid="strategy-book">
+    <SectionHead label="Strategy book"
+      hint="Every strategy's sleeve of the paper pot, side by side. Returns run from each strategy's first fill; SPUS is measured over the same window. ↓ downloads a strategy's journal — every order, AI review and screen it recorded."
+      right={state==="ready"&&<Tag label={`${rows.length} STRATEGIES`} color={T.slate}/>}
+      style={{marginBottom:T.s3}}/>
+    {state==="loading"&&<div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>LOADING…</div>}
+    {state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>The strategy list could not be loaded. The Strategies tab shows each one.</div>}
+    {state==="ready"&&!rows.length&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No strategies yet. Build one in the Strategies tab.</div>}
+    {state==="ready"&&rows.length>0&&<>
+      <div style={{marginBottom:T.s4}}><AllocationBar segments={segs} mask={mask}/></div>
+      <div className="mz-tape-wrap mz-tbl-desktop"><table className="mz-tape mz-book" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
+        <thead><tr>
+          <th style={{fontSize:"var(--fs-2xs)"}}>STRATEGY</th><th style={{fontSize:"var(--fs-2xs)"}}>SLEEVE</th>
+          <th style={{fontSize:"var(--fs-2xs)"}}>EQUITY</th><th style={{fontSize:"var(--fs-2xs)"}}>RETURN</th>
+          <th style={{fontSize:"var(--fs-2xs)"}}>SPUS</th><th style={{fontSize:"var(--fs-2xs)"}}>VS SPUS</th>
+          <th style={{fontSize:"var(--fs-2xs)"}}>HELD</th><th style={{fontSize:"var(--fs-2xs)",textAlign:"left"}}>STATUS</th>
+          <th style={{fontSize:"var(--fs-2xs)"}} aria-label="Journal"/>
+        </tr></thead>
+        <tbody>
+          {rows.map(r=><tr key={r.id} data-testid="book-row">
+            <td style={{whiteSpace:"normal",minWidth:"14rem"}}>
+              {code(r.code)}
+              <span style={{color:T.textHi,fontWeight:600}}>{r.name}</span>
+              <span style={{color:T.muted,marginLeft:T.s2,fontSize:"var(--fs-2xs)",letterSpacing:".08em"}}>{r.venue.toUpperCase()}</span>
+            </td>
+            <td style={{color:T.muted}}>{usd0(r.sleeve)}</td>
+            <td style={{color:T.textHi}}>{equityCell(r)}</td>
+            <td>{r.traded?pct(r.returnPct):<span style={{color:T.muted}}>not traded</span>}</td>
+            <td>{r.traded?pct(r.benchPct):<span style={{color:T.muted}}>—</span>}</td>
+            <td>{alpha(r)}</td>
+            <td style={{color:T.text}}>{r.holdings||0}</td>
+            <td style={{color:tone(r.status.tone),textAlign:"left",whiteSpace:"normal",minWidth:"9rem"}}>{r.status.text}</td>
+            <td>{journalBtn(r)}</td>
+          </tr>)}
+          {groups.map(g=><tr key={`g-${g.group}`} className="mz-book-total" data-testid="book-group">
+            <td><span className="mz-code">{g.group}</span><span style={{color:T.textHi,fontWeight:600}}>Combined</span><span style={{color:T.muted,marginLeft:T.s2,fontSize:"var(--fs-2xs)"}}>{g.members} SLEEVES</span></td>
+            <td style={{color:T.muted}}>{usd0(g.sleeve)}</td>
+            <td style={{color:T.textHi}}>{usd0(g.equity)}</td>
+            <td>{pct(g.returnPct)}</td><td/><td/><td/><td/><td/>
+          </tr>)}
+        </tbody>
+      </table></div>
+      {/* Phones: the table's useful columns (return, vs SPUS) sat off-screen
+          behind a sideways scroll. Same data, stacked per strategy. */}
+      <ol className="mz-tbl-mobile mz-book-list" style={{fontFamily:FM}}>
+        {rows.map(r=><li key={r.id} data-testid="book-card">
+          <div className="mz-bl-1">{code(r.code)}<span className="mz-bl-name">{r.name}</span><span className="mz-bl-ret">{r.traded?pct(r.returnPct):<span style={{color:T.muted}}>not traded</span>}</span></div>
+          <div className="mz-bl-2"><span>{r.venue.toUpperCase()} · {usd0(r.sleeve)} → {equityCell(r)}</span><span>vs SPUS {alpha(r)}</span></div>
+          <div className="mz-bl-3"><span style={{color:tone(r.status.tone)}}>{r.status.text}{r.holdings?` · ${r.holdings} held`:""}</span>{journalBtn(r)}</div>
+        </li>)}
+        {groups.map(g=><li key={`g-${g.group}`} className="mz-book-total">
+          <div className="mz-bl-1">{code(g.group)}<span className="mz-bl-name">Combined · {g.members} sleeves</span><span className="mz-bl-ret">{pct(g.returnPct)}</span></div>
+          <div className="mz-bl-2"><span>{usd0(g.sleeve)} → {usd0(g.equity)}</span></div>
+        </li>)}
+      </ol>
+      {err&&<div role="alert" style={{marginTop:T.s2,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.loss}}>That journal could not be downloaded. Press retry.</div>}
+    </>}
+  </section>;
+}
+
+/** Recent orders across every strategy. AI reviews are not orders and stay in AI Committee. */
+function ActivityTape({items,strategies,state}){
+  const rows=useMemo(()=>tapeRows(items,strategies,14),[items,strategies]);
+  const statusColor=s=>s==="rejected"||s==="expired"?T.loss:s==="executed"?T.text:s==="pending"||s==="submitted"||s==="approved"?T.gold:T.muted;
+  return<section data-testid="activity-tape">
+    <SectionHead label="Activity" hint="The latest orders, newest first, from every strategy." style={{marginBottom:T.s3}}/>
+    {state!=="ready"
+      ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>{state==="loading"?"Loading…":"Activity is not available right now."}</div>
+      :!rows.length
+        ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No orders yet.</div>
+        :<ol className="mz-feed" style={{fontFamily:FM}}>
+          {rows.map(r=><li key={r.id} title={r.error||undefined}>
+            <span className="mz-feed-t">{nyStamp(r.at)}</span>
+            <span className="mz-code">{r.code}</span>
+            <span className="mz-feed-what"><b style={{color:T.textHi}}>{r.side.toUpperCase()}</b> {r.qty!=null?(Math.abs(r.qty)<1||!Number.isInteger(r.qty)?r.qty.toFixed(2):r.qty):""} <b style={{color:T.textHi}}>{r.ticker}</b></span>
+            <span className="mz-feed-s" style={{color:statusColor(r.status)}}>{r.status.toUpperCase()}</span>
+          </li>)}
+        </ol>}
+  </section>;
+}
+
 function TradeDesk({desk,onGoSignals,demoMode}){
   const{mask}=useHideValues();
   const[pending,setPending]=useState(null);
+  const[book,setBook]=useState({state:demoMode?"idle":"loading",strategies:[]});
+  const[feed,setFeed]=useState({state:demoMode?"idle":"loading",items:[]});
+
+  // The book and the tape are read once per visit. /api/bot/strategies values
+  // every sleeve server-side, so it is not polled.
+  useEffect(()=>{
+    if(demoMode)return;
+    let cancelled=false;
+    (async()=>{
+      const[sr,ar]=await Promise.all([
+        apiFetch("/api/bot/strategies").catch(()=>null),
+        apiFetch("/api/bot/activity").catch(()=>null),
+      ]);
+      if(cancelled)return;
+      try{const d=sr&&sr.ok?await sr.json():null;setBook(d?{state:"ready",strategies:asArray(d?.strategies)}:{state:"unavailable",strategies:[]});}
+      catch{setBook({state:"unavailable",strategies:[]});}
+      try{const d=ar&&ar.ok?await ar.json():null;setFeed(d?{state:"ready",items:asArray(d?.items)}:{state:"unavailable",items:[]});}
+      catch{setFeed({state:"unavailable",items:[]});}
+    })();
+    return()=>{cancelled=true;};
+  },[demoMode]);
 
   useEffect(()=>{
     if(demoMode){setPending(0);return;}
@@ -8225,9 +8389,14 @@ function TradeDesk({desk,onGoSignals,demoMode}){
         <span style={{marginLeft:"auto",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600}}>REVIEW →</span>
       </button>}
 
-      <EquityChart demoMode={demoMode} liveEquity={desk?.account?.equity}/>
+      {!demoMode&&<StrategyBlotter strategies={book.strategies} state={book.state} accountEquity={desk?.account?.equity} mask={mask}/>}
 
-      {!demoMode&&<ClosedTradesExport/>}
+      {/* Desk grid: the account's curve beside the order tape on a wide
+          screen, stacked on a narrow one (.mz-desk-grid). */}
+      <div className="mz-desk-grid">
+        <EquityChart demoMode={demoMode} liveEquity={desk?.account?.equity}/>
+        {!demoMode&&<ActivityTape items={feed.items} strategies={book.strategies} state={feed.state}/>}
+      </div>
 
       {/* Positions. */}
       <section>
@@ -8275,6 +8444,8 @@ function TradeDesk({desk,onGoSignals,demoMode}){
             </tr>)}</tbody>
           </table></div>}
       </section>
+
+      {!demoMode&&<ClosedTradesExport/>}
 
       {/* The owner asked for something that helps a person learn. This is that,
           and it is deliberately honest about what paper proves. */}
@@ -14685,6 +14856,49 @@ export default function Mizan(){
       /* Horizontal scroll rather than a squeezed table at 320px. A number
          clipped to "1,2…" is worse than one you scroll to. */
       .mz-tape-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+
+      /* ── Trade Lab desk (2026-10-08) ─────────────────────────────────────
+         A trading floor reads top-down: what each strategy is doing, then the
+         account, then the raw positions. The book is a ruled table, not cards,
+         so six-plus sleeves compare at a glance. */
+      .mz-desk-grid{display:grid; gap:var(--s-6); grid-template-columns:minmax(0,1fr);}
+      @media (min-width:1100px){ .mz-desk-grid{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr); align-items:start;} }
+      .mz-code{display:inline-block; min-width:3.4em; margin-right:var(--s-2); padding:1px 6px;
+        border:1px solid var(--mz-borderHi); border-radius:4px; text-align:center;
+        font-weight:700; letter-spacing:.06em; color:var(--mz-textHi); font-size:var(--fs-2xs);}
+      .mz-book td:first-child{white-space:normal;}
+      .mz-book-total td{border-top:1px solid var(--mz-borderHi);}
+      .mz-code-none{border-style:dashed; color:var(--mz-muted); font-weight:400;}
+      .mz-book-list{list-style:none; margin:0; padding:0;}
+      .mz-book-list > li{display:flex; flex-direction:column; gap:4px; padding:var(--s-3) 0; border-bottom:1px solid var(--mz-border);
+        font-size:var(--fs-xs); font-variant-numeric:tabular-nums;}
+      .mz-book-list > li.mz-book-total{border-top:1px solid var(--mz-borderHi); border-bottom:0;}
+      .mz-bl-1, .mz-bl-2, .mz-bl-3{display:flex; align-items:center; gap:var(--s-2); justify-content:space-between; min-width:0;}
+      .mz-bl-1 .mz-bl-name{flex:1 1 auto; min-width:0; color:var(--mz-textHi); font-weight:600; overflow-wrap:anywhere;}
+      .mz-bl-ret{flex:0 0 auto; font-weight:700;}
+      .mz-bl-2, .mz-bl-3{color:var(--mz-muted); font-size:var(--fs-2xs); flex-wrap:wrap;}
+      .mz-icon-btn{background:transparent; border:1px solid var(--mz-border); border-radius:6px;
+        color:var(--mz-textHi); font-family:inherit; font-size:var(--fs-xs); min-width:2.2em; padding:2px 8px; cursor:pointer;
+        transition:background var(--mz-dur,150ms) ease, border-color var(--mz-dur,150ms) ease;}
+      .mz-icon-btn:hover{background:var(--mz-dim); border-color:var(--mz-borderHi);}
+      .mz-icon-btn:focus-visible{outline:2px solid var(--mz-textHi); outline-offset:2px;}
+      .mz-icon-btn:disabled{opacity:.5; cursor:wait;}
+      /* Allocation bar: one track, one segment per sleeve, the rest open. */
+      .mz-alloc{display:flex; height:10px; border-radius:999px; overflow:hidden; background:var(--mz-dim);}
+      .mz-alloc > span{display:block; height:100%; border-right:2px solid var(--mz-bg);}
+      .mz-alloc > span:last-child{border-right:0;}
+      .mz-alloc .mz-alloc-free{background:transparent; opacity:1;}
+      .mz-alloc-legend{display:flex; flex-wrap:wrap; gap:var(--s-1) var(--s-4); margin-top:var(--s-2);
+        font-family:var(--ff-mono,inherit); font-size:var(--fs-2xs); color:var(--mz-text); font-variant-numeric:tabular-nums;}
+      /* Activity tape: a feed, ruled like the book. */
+      .mz-feed{list-style:none; margin:0; padding:0; font-family:var(--ff-mono,inherit); font-size:var(--fs-xs);}
+      .mz-feed li{display:grid; grid-template-columns:auto auto minmax(0,1fr) auto; gap:var(--s-2); align-items:baseline;
+        padding:var(--s-2) 0; border-bottom:1px solid var(--mz-border); font-variant-numeric:tabular-nums;}
+      .mz-feed li:last-child{border-bottom:0;}
+      .mz-feed-t{color:var(--mz-muted); white-space:nowrap;}
+      .mz-feed-what{color:var(--mz-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+      .mz-feed-s{font-size:var(--fs-2xs); letter-spacing:.1em; white-space:nowrap;}
+      @media (max-width:420px){ .mz-feed li{grid-template-columns:auto minmax(0,1fr) auto;} .mz-feed-t{grid-column:1 / -1;} }
 
       /* Weight bar — the only chart in the tape. Inline so it reads as part
          of the row rather than as a separate visualisation. */

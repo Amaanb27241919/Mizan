@@ -629,3 +629,100 @@ test("equity curve ends at the desk's live equity when history lags a session", 
     "/api/alpaca/account": { ...PAPER, equity: 1006181.11 } } });
   await expect(page.locator(".mz-cockpit")).toContainText("+$6,181.11");
 });
+
+/**
+ * The strategy book (2026-10-08). Six-plus strategies share one paper pot;
+ * the desk used to show only the account, and the Strategies cards were all
+ * titled "214 halal names". Fixtures are production-shaped rows, including
+ * the two defects found while building it: an unpriced position (read as
+ * −100%) and a multi-sleeve experiment (E) with no combined line.
+ */
+test.describe("Trade Lab strategy book", () => {
+  const prog = (o) => ({ paper: true, trades_executed: 5, started_at: "2026-10-07T13:33:38Z", holdings_count: 15, ...o });
+  const STRATS = [
+    { id: "a7728bbe-0000-4000-8000-000000000001", strategy_type: "rank_rebalance", enabled: true, mode: "semi", capital_allocated: "250000.00",
+      params: { experiment: "A: reference system + AI gate", broker: "alpaca_paper", ai_gate: true, rebalance_days: 30, last_rebalance: "2026-10-07" },
+      progress: prog({ equity: 252557.84, return_pct: 1.0231, bench_return_pct: -0.0981, alpha_pct: 1.1212 }) },
+    { id: "258e0b74-0000-4000-8000-000000000002", strategy_type: "breakout", enabled: true, mode: "semi", capital_allocated: "150000.00",
+      params: { experiment: "D: swing", broker: "alpaca_paper" },
+      progress: prog({ equity: null, return_pct: null, unpriced: ["ISRG"], held_ticker: "ISRG", holdings_count: undefined, current_value: 0 }) },
+    { id: "61b0f343-0000-4000-8000-000000000003", strategy_type: "rank_rebalance", enabled: true, mode: "semi", capital_allocated: "70000.00",
+      params: { experiment: "E · core: A + C combined, whole shares", experiment_group: "E", broker: "alpaca_paper", rebalance_days: 30, last_rebalance: "2026-10-08" },
+      progress: prog({ equity: 71400, return_pct: 2, bench_return_pct: 0.5, alpha_pct: 1.5 }) },
+    { id: "0a1474b4-0000-4000-8000-000000000004", strategy_type: "breakout", enabled: true, mode: "semi", capital_allocated: "30000.00",
+      params: { experiment: "E · swing: D + volume confirmation", experiment_group: "E", broker: "alpaca_paper" },
+      progress: prog({ equity: 29700, return_pct: -1, bench_return_pct: 0.5, alpha_pct: -1.5, holdings_count: 1 }) },
+    { id: "d8a3e542-0000-4000-8000-000000000005", strategy_type: "rank_rebalance", enabled: true, mode: "semi", capital_allocated: "0",
+      nl_description: "SHADOW research panel. Runs Anthropic + Gemini", params: { layer: "shadow", broker: "alpaca_paper" },
+      progress: { paper: true, trades_executed: 0 } },
+  ];
+  const ACTIVITY = { items: [
+    { id: "o1", strategy_id: STRATS[0].id, ticker: "MU", side: "buy", qty: 34.5464, status: "executed", created_at: "2026-10-07T13:33:38Z", executed_at: "2026-10-07T13:33:40Z" },
+    { id: "r1", strategy_id: STRATS[4].id, ticker: "COHR", side: "buy", qty: 0, status: "shadow", created_at: "2026-10-07T17:46:33Z" },
+    { id: "o2", strategy_id: STRATS[1].id, ticker: "ISRG", side: "buy", qty: 361, status: "executed", created_at: "2026-10-07T14:00:07Z" },
+  ] };
+  const open = (page) => gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: STRATS }, "/api/bot/activity": ACTIVITY,
+    "/api/alpaca/account": { ...PAPER, equity: 1000000 } } });
+
+  test("names every strategy and states its return against SPUS", async ({ page }) => {
+    await open(page);
+    const book = page.getByTestId("strategy-book");
+    await expect(book.getByTestId("book-row")).toHaveCount(5);
+    await expect(book).toContainText("Reference system + AI gate");
+    await expect(book).toContainText("+1.02%");
+    await expect(book).toContainText("+1.12 pts");
+    await expect(book).toContainText("shadow · records only");
+  });
+
+  test("an unpriced position reads PRICE N/A, never a −100% loss", async ({ page }) => {
+    await open(page);
+    const d = page.getByTestId("book-row").filter({ hasText: "Swing" }).first();
+    await expect(d).toContainText("PRICE N/A");
+    await expect(page.getByTestId("strategy-book")).not.toContainText("-100");
+  });
+
+  test("a multi-sleeve experiment gets one combined line", async ({ page }) => {
+    await open(page);
+    const g = page.getByTestId("book-group");
+    await expect(g).toContainText("Combined");
+    await expect(g).toContainText("+1.10%");
+  });
+
+  test("the allocation bar states what is unallocated", async ({ page }) => {
+    await open(page);
+    await expect(page.getByTestId("strategy-book")).toContainText(/UNALLOCATED \$500,000/);
+  });
+
+  test("the activity tape shows orders by strategy code and leaves AI reviews out", async ({ page }) => {
+    await open(page);
+    const tape = page.getByTestId("activity-tape");
+    await expect(tape).toContainText("MU");
+    await expect(tape).toContainText("ISRG");
+    await expect(tape).not.toContainText("COHR");
+  });
+
+  test("strategy cards are titled by strategy, not by universe size", async ({ page }) => {
+    await open(page);
+    await page.getByRole("button", { name: "Strategies", exact: true }).click();
+    await expect(page.getByTestId("strategy-card-title").first()).toBeVisible();
+    const titles = await page.getByTestId("strategy-card-title").allInnerTexts();
+    expect(titles.some((t) => t.includes("A · Reference system + AI gate"))).toBe(true);
+    expect(titles.every((t) => !/halal names/.test(t))).toBe(true);
+  });
+
+  test("on a phone the book stacks, so the return is on screen without scrolling sideways", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await open(page);
+    const card = page.getByTestId("book-card").filter({ hasText: "Reference system" });
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("+1.02%");
+    await expect(page.getByTestId("book-row").first()).toBeHidden();
+  });
+
+  test("the desk never overflows the page", async ({ page }) => {
+    await open(page);
+    await expect(page.getByTestId("strategy-book")).toContainText("Reference system");
+    const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(over).toBeLessThanOrEqual(0);
+  });
+});
