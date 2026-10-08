@@ -108,6 +108,7 @@ describe('/api/owner/brief wiring (handlers.mjs)', () => {
   it('only reads the owner\'s strategies (root profiles + OWNER_EMAIL)', () => {
     expect(route).toMatch(/\.eq\("is_root", true\)/)
     expect(route).toMatch(/\.in\("user_id", \[\.\.\.ownerIds\]\)/)
+    expect(route).toMatch(/BRIEF_EMAILS/)
   })
   it('is read-only — no inserts, updates or deletes', () => {
     expect(route).not.toMatch(/\.(insert|update|upsert|delete)\(/)
@@ -117,5 +118,14 @@ describe('/api/owner/brief wiring (handlers.mjs)', () => {
     const recorded = p.indexOf('last_screen: lastScreen')
     expect(recorded).toBeGreaterThan(-1)
     expect(recorded).toBeLessThan(p.indexOf('if (screen.waiting)'))
+  })
+})
+
+describe('strategy progress keeps the venue it was seeded with', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  it('fills confirm paper; they cannot turn an unfilled paper strategy "live"', () => {
+    const f = SRC.slice(SRC.indexOf('async function computeStrategyProgress('), SRC.indexOf('async function computeStrategyProgress(') + 2500)
+    expect(f).toMatch(/out\.paper = out\.paper \|\| !!pos\.paper;/)
+    expect(f).not.toMatch(/out\.paper = !!pos\.paper;/)
   })
 })
