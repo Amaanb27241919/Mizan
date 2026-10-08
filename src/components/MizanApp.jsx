@@ -16,6 +16,7 @@ import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { deskSummary } from "../lib/deskSummary.js";
 import { blotterRows, allocationSegments, tapeRows, groupTotals, strategyLabel } from "../lib/deskBlotter.js";
+import { committeeStats } from "../lib/committee.js";
 import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity } from "../lib/equityCurve.js";
 import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/benchmarkAttribution.js";
 // Aliased: MizanApp already declares a STANDARDS of its own further down.
@@ -962,7 +963,9 @@ async function fetchAINews(){
 const f$=(v,d=2)=>v!=null&&!isNaN(v)?`$${Math.abs(+v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d})}`:"-";
 const fp=v=>v!=null&&!isNaN(v)?`${+v>0?"+":""}${(+v).toFixed(2)}%`:"-";
 const fc=v=>!v||isNaN(v)?T.muted:+v>0?T.gain:+v<0?T.loss:T.muted;
-const kf=v=>v>=1e9?`$${(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(1)}M`:`$${v.toLocaleString()}`;
+// Below $1M, at most two decimals: bare toLocaleString() allows three, which
+// printed a $1,679.444 balance in the Quick Trade account picker (2026-10-08).
+const kf=v=>v>=1e9?`$${(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(1)}M`:`$${Number(v).toLocaleString("en-US",{maximumFractionDigits:2})}`;
 // Common ticker-symbol typo corrections (mirrors the server NL builder's map),
 // so a mistyped symbol is fixed before it's watched, screened, or traded.
 const TICKER_TYPOS={APPL:"AAPL",APPLE:"AAPL",NTFLX:"NFLX",NETFLIX:"NFLX",NFLIX:"NFLX",TESLA:"TSLA",AMAZON:"AMZN",AMZ:"AMZN",MICROSOFT:"MSFT",NVIDIA:"NVDA",NVDIA:"NVDA",FACEBOOK:"META",FB:"META",GOOGLE:"GOOGL",ALPHABET:"GOOGL",BRK:"BRK.B",BERKSHIRE:"BRK.B"};
@@ -6564,6 +6567,14 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
 
     {/* First-use consent gate (beta / non-root). Until accepted, the builder and
         default-layer card are hidden — the server also blocks create/execute. */}
+    {/* Strategy Progress FIRST (2026-10-08): the cards are what you open Strategies to see; the builder tools follow */}
+    {showStrat&&strategies.some(s=>s.enabled)&&<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGY PROGRESS</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(260px, 100%), 1fr))",gap:T.s3}}>
+        {strategies.filter(s=>s.enabled).map(s=><StrategyProgressCard key={s.id} strat={s}/>)}
+      </div>
+    </div>}
+
     {showStrat&&needsConsent&&<BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
       <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BEFORE YOU START · BETA</div>
       <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.7,margin:`0 0 ${T.s3}`}}>
@@ -6813,7 +6824,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
        signals.map(sig=><div key={sig.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
         <div>
           <div style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:sig.side==="buy"?T.gain:T.loss}}>{sig.side.toUpperCase()} {sig.qty} {sig.ticker}</div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>~${Number(sig.suggested_price||0).toFixed(2)} · Expires {new Date(sig.expires_at).toLocaleTimeString()}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{Number(sig.suggested_price)>0?`~$${Number(sig.suggested_price).toFixed(2)}`:"price —"} · Expires {Number.isFinite(Date.parse(sig.expires_at))?new Date(sig.expires_at).toLocaleTimeString():"—"}</div>
         </div>
         <div style={{display:"flex",gap:T.s2}}>
           <button onClick={()=>approveSignal(sig.id)} className="btn-primary" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s3}`}}>Approve</button>
@@ -6835,7 +6846,9 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         expired: {label:"EXPIRED",color:T.muted},
       };
       const labelFor=a=>(a.status==="approved"&&a.error_msg)?{label:"FAILED",color:T.loss}:(META[a.status]||{label:(a.status||"—").toUpperCase(),color:T.muted});
-      const stratLabel=id=>{const s=strategies.find(x=>x.id===id);if(!s)return null;const c=Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[];return c.length>1?`${c.length} halal names`:(c[0]||s.ticker);};
+      // Named by STRATEGY (A, E·core…), not by universe size — every row
+      // used to read "214 halal names".
+      const stratLabel=id=>{const s=strategies.find(x=>x.id===id);if(!s)return null;return strategyLabel(s);};
       return<CollapsibleTile title="BOT ACTIVITY · ALL ACTIONS" subtitle="Every signal the bot generated + its outcome" storageKey="bot_activity" defaultOpen>
         <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",marginBottom:T.s3}}>
           <button onClick={loadActivity} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingActivity?"Loading…":"Refresh"}</button>
@@ -6849,27 +6862,19 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
               <div style={{display:"flex",gap:T.s2,alignItems:"baseline",minWidth:170}}>
                 <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:a.side==="buy"?T.gain:T.loss}}>{(a.side||"").toUpperCase()}</span>
                 <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:T.textHi}}>{a.qty} {a.ticker}</span>
-                {sl&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>· {sl}</span>}
+                {sl&&(sl.code?<span className="mz-code" title={sl.name}>{sl.code}</span>:<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>· {sl.name}</span>)}
               </div>
               <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
-                <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>~${Number(a.suggested_price||0).toFixed(2)}</span>
+                <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{Number(a.suggested_price)>0?`~$${Number(a.suggested_price).toFixed(2)}`:"—"}</span>
                 <Tag label={m.label} color={m.color}/>
                 {a.paper&&<Tag label="PAPER" color={T.gold}/>}
                 <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{when?new Date(when).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"—"}</span>
               </div>
-              {m.label==="FAILED"&&a.error_msg&&<div style={{flexBasis:"100%",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss}}>{a.error_msg}</div>}
+              {(m.label==="FAILED"||a.status==="rejected")&&a.error_msg&&<div style={{flexBasis:"100%",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss}}>{a.error_msg}</div>}
             </div>);})}
          </div>}
       </CollapsibleTile>;
     })()}
-
-    {/* Strategy Progress — one card per enabled strategy, target is always a goal */}
-    {showStrat&&strategies.some(s=>s.enabled)&&<div style={{display:"flex",flexDirection:"column",gap:T.s3}}>
-      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>STRATEGY PROGRESS</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(260px, 100%), 1fr))",gap:T.s3}}>
-        {strategies.filter(s=>s.enabled).map(s=><StrategyProgressCard key={s.id} strat={s}/>)}
-      </div>
-    </div>}
 
     {/* Realized P&L ledger — closed round-trips across all strategies. The
         "did Trade actually make money" answer, which the open-position cards lose
@@ -6925,7 +6930,16 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
        strategies.map(s=>{
         const lyr=layerOf(s);
         const cands=Array.isArray(s.params?.universe_tickers)?s.params.universe_tickers:[];
-        const uniLabel=cands.length>1?`${cands[0]} +${cands.length-1} more`:(cands[0]||s.ticker);
+        // Named by strategy — the row used to be titled by its universe
+        // ("A +213 more"), which said nothing about WHICH experiment it was.
+        const sl=strategyLabel(s);
+        const uniLabel=sl.code?`${sl.code} · ${sl.name}`:sl.name;
+        // A rank strategy has no profit target by design; its stop may be the
+        // broker-side protective stop. "Target: null%" was the old rendering.
+        const pctOr=(v,none)=>v!=null&&v!==""&&Number.isFinite(Number(v))?`${Number(v)}%`:none;
+        const exits=s.strategy_type==="rank_rebalance"
+          ?`Rebalance every ${Number(s.params?.rebalance_days)||30}d · Stop: ${pctOr(s.params?.protective_stop_pct,"none")}`
+          :`Target: ${pctOr(s.profit_target_pct,"none")} · Stop: ${pctOr(s.stop_loss_pct,"none")}`;
         return<div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
         <div style={{minWidth:200}}>
           <div style={{display:"flex",gap:T.s2,alignItems:"center",marginBottom:4}}>
@@ -6934,7 +6948,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
             {s.strategy_type==="dca"&&<Tag label="DCA" color={T.gain}/>}
             {!s.enabled&&<Tag label="PAUSED" color={T.muted}/>}
           </div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}{`$${Number(s.capital_allocated).toLocaleString()}${isPaperStrategy(s)?" simulated":""} · `}{s.strategy_type==="dca"?`DCA · every ${Number(s.params?.dca_cadence_days)||7}d · holds (no auto-sell)`:`Target: ${s.profit_target_pct}% · Stop: ${s.stop_loss_pct}%`}</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{cands.length>1?`Screens ${cands.length} halal names · `:""}{`$${Number(s.capital_allocated).toLocaleString()}${isPaperStrategy(s)?" simulated":""} · `}{s.strategy_type==="dca"?`DCA · every ${Number(s.params?.dca_cadence_days)||7}d · holds (no auto-sell)`:exits}</div>
         </div>
         <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
           {/* Layer selector — switching opens the acknowledgment gate */}
@@ -7631,14 +7645,6 @@ function EquityChart({demoMode,liveEquity}){
   </section>;
 }
 
-/** Label over value over caption. The Trade Lab's one labelled-stat shape. */
-function Stat({label,value,sub}){
-  return<div>
-    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600}}>{label}</div>
-    <div style={{fontFamily:FU,fontSize:"var(--fs-2xl)",color:T.textHi,lineHeight:1.1,margin:"6px 0 2px",fontVariantNumeric:"tabular-nums"}}>{value}</div>
-    {sub&&<div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.06em"}}>{sub}</div>}
-  </div>;
-}
 
 /**
  * Risk — what the book is actually betting on.
@@ -7769,29 +7775,16 @@ function RiskPanel({desk,demoMode}){
         that component renders a signed NUMBER (v/pct/mask/dash) and silently
         shows its dash for anything else, which is how all three tiles first
         rendered as "—". Caught by screenshotting, not by any test. */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:T.s3,marginBottom:T.s5}}>
-      <BentoTile>
-        <Stat label="EFFECTIVE NAMES"
-          value={conc.effectiveNames==null?"—":String(conc.effectiveNames)}
-          sub={`${conc.count} positions held`}/>
-        <div style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,marginTop:T.s2}}>
-          How many independent bets the weights really amount to. It equals the position count only when every slice is identical.
-        </div>
-      </BentoTile>
-      <BentoTile>
-        <Stat label="TOP 5 WEIGHT" value={pct(conc.topWeight)}
-          sub={conc.top.map(r=>r.symbol).join(" · ")}/>
-      </BentoTile>
-      <BentoTile>
-        <Stat label="MAX DRAWDOWN"
-          value={dd.measurable?pct(dd.depth):"not yet"}
-          sub={dd.measurable
+    <div style={{marginBottom:T.s5}}>
+      <StatStrip testId="risk-stats" items={[
+        {label:"EFFECTIVE NAMES",value:conc.effectiveNames==null?"—":String(conc.effectiveNames),
+          sub:`${conc.count} positions held · how many independent bets the weights really amount to`},
+        {label:"TOP 5 WEIGHT",value:pct(conc.topWeight),sub:conc.top.map(r=>r.symbol).join(" · ")},
+        {label:"MAX DRAWDOWN",value:dd.measurable?pct(dd.depth):"not yet",
+          sub:dd.measurable
             ?(dd.depth>0?`${dd.peak?.date||""} → ${dd.trough?.date||""}`:"no decline on record")
-            :`${dd.points} day${dd.points===1?"":"s"} of history`}/>
-        {!dd.measurable&&<div style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,marginTop:T.s2}}>
-          Too little history to measure — which is not the same as a 0% drawdown.
-        </div>}
-      </BentoTile>
+            :`${dd.points} day${dd.points===1?"":"s"} of history — not the same as a 0% drawdown`},
+      ]}/>
     </div>
 
     <SectionHead label="Where the book is concentrated"
@@ -7864,6 +7857,7 @@ function CompliancePanel({desk,demoMode}){
   const{verdicts,phase}=useScreenVerdicts(useMemo(()=>positions.map(p=>p.symbol),[positions]),demoMode);
 
   const m=useMemo(()=>complianceMatrix(positions,verdicts,{governing:"AAOIFI"}),[positions,verdicts]);
+  const passing=m.screened-m.failingGoverning.length;
   // Rows render as soon as ANY holding has a verdict; the rest fill in.
   const anySettled=positions.some(p=>isSettledVerdict(verdicts[p.symbol]));
   const state=demoMode?"idle":!positions.length?"empty":anySettled?"ready":phase==="failed"?"unavailable":"loading";
@@ -7887,6 +7881,12 @@ function CompliancePanel({desk,demoMode}){
     </div>}
 
     {state==="ready"&&<>
+      <div style={{marginBottom:T.s4}}><StatStrip testId="compliance-stats" items={[
+        {label:"SCREENED",value:`${m.screened}/${m.total}`,tone:m.unscreened?T.gold:T.textHi,sub:m.unscreened?`${m.unscreened} missing data — not a failed screen`:"every holding screened"},
+        {label:"PASS AAOIFI",value:String(passing),tone:passing?T.gain:T.muted},
+        {label:"FAIL AAOIFI",value:String(m.failingGoverning.length),tone:m.failingGoverning.length?T.loss:T.muted,sub:m.failingGoverning.join(" · ")||"none"},
+        {label:"STANDARDS DISAGREE",value:String(m.divergent.length),tone:m.divergent.length?T.gold:T.muted,sub:m.divergent.join(" · ")||"none"},
+      ]}/></div>
       {m.divergent.length>0&&<div style={{padding:T.s4,marginBottom:T.s4,borderRadius:T.rMd,background:`${T.gold}14`,border:`1px solid ${T.gold}44`}}>
         <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.14em",color:T.gold,fontWeight:600,marginBottom:4}}>
           {m.divergent.length} HOLDING{m.divergent.length===1?"":"S"} WHERE THE STANDARDS DISAGREE
@@ -7950,9 +7950,10 @@ function CompliancePanel({desk,demoMode}){
  */
 const ACTION_TONE = { BUY: "gain", SELL: "loss", HOLD: "muted", ABSTAIN: "slate", INSUFFICIENT_DATA: "slate" };
 
-function AiCommittee({demoMode}){
+function AiCommittee({demoMode,book}){
   const{mask}=useHideValues();
   const[data,setData]=useState(null);
+  const[only,setOnly]=useState("all");
   const[state,setState]=useState(demoMode?"idle":"loading");
 
   useEffect(()=>{
@@ -7973,6 +7974,14 @@ function AiCommittee({demoMode}){
   const rows=Array.isArray(data?.rows)?data.rows:[];
   const providers=Array.isArray(data?.providers)?data.providers:[];
   const missing=providers.filter(p=>!p.available);
+  // Which strategy each round belongs to — rounds used to be anonymous, so
+  // A's gated buys and the shadow panel's research read as one record.
+  const codeOf=useMemo(()=>{const m=new Map();for(const s of asArray(book?.strategies)){const l=strategyLabel(s);m.set(s.id,l.code||l.name);}return m;},[book]);
+  const codes=useMemo(()=>[...new Set(rows.map(r=>codeOf.get(r.strategy_id)||"—"))],[rows,codeOf]);
+  const shown=only==="all"?rows:rows.filter(r=>(codeOf.get(r.strategy_id)||"—")===only);
+  const stats=useMemo(()=>committeeStats(shown,providers),[shown,providers]);
+  const ANALYST={anthropic:"CLAUDE",google:"GEMINI",openrouter:"DEEPSEEK"};
+  const nameOf=p=>ANALYST[p]||String(p).toUpperCase();
 
   return<section>
     <SectionHead label="AI committee"
@@ -8005,6 +8014,22 @@ function AiCommittee({demoMode}){
         </div>
       </div>}
 
+      {rows.length>0&&<>
+        <StatStrip testId="committee-stats" items={[
+          ...providers.map(p=>{const v=stats.perProvider[p.provider]||{answered:0,failed:0,codes:[]};const asked=v.answered+v.failed;
+            return{label:nameOf(p.provider),value:asked?`${v.answered}/${asked}`:"—",tone:!asked?T.muted:v.failed?T.gold:T.textHi,
+              sub:v.failed?`failed ${v.failed}× · ${v.codes.join(", ")}`:asked?"answered every round":"not asked yet"};}),
+          {label:"PANEL",value:`${stats.agreed} agreed`,sub:`${stats.split} split · ${stats.opposed} opposed · ${stats.noView} no view`},
+          {label:"SCREENED OUT",value:String(stats.screened),tone:T.muted,sub:"stopped by the Sharia screen, never asked"},
+        ]}/>
+        {codes.length>1&&<div className="mz-chip-row" style={{display:"flex",gap:4,flexWrap:"wrap",margin:`${T.s4} 0 ${T.s3}`}} role="group" aria-label="Filter by strategy">
+          {["all",...codes].map(c=><button key={c} onClick={()=>setOnly(c)} aria-pressed={only===c} className="mz-icon-btn" style={{
+            fontSize:"var(--fs-2xs)",letterSpacing:"0.1em",fontWeight:600,
+            background:only===c?`${T.textHi}1a`:"transparent",color:only===c?T.textHi:T.muted,
+          }}>{c==="all"?"ALL STRATEGIES":c}</button>)}
+        </div>}
+      </>}
+
       {rows.length===0
         ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd,lineHeight:1.6}}>
            No rounds recorded yet. The panel runs during market hours and writes one round per
@@ -8012,19 +8037,29 @@ function AiCommittee({demoMode}){
          </div>
         :<div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
           <thead><tr>
-            <th style={{fontSize:"var(--fs-2xs)"}}>SYMBOL</th>
-            {providers.map(p=><th key={p.provider} style={{fontSize:"var(--fs-2xs)"}}>{p.provider.toUpperCase()}</th>)}
+            <th style={{fontSize:"var(--fs-2xs)"}}>WHEN</th>
+            <th style={{fontSize:"var(--fs-2xs)",textAlign:"left"}}>STRATEGY</th>
+            <th style={{fontSize:"var(--fs-2xs)",textAlign:"left"}}>SYMBOL</th>
+            {providers.map(p=><th key={p.provider} style={{fontSize:"var(--fs-2xs)"}}>{nameOf(p.provider)}</th>)}
             <th style={{fontSize:"var(--fs-2xs)"}}>CONSENSUS</th>
             <th style={{fontSize:"var(--fs-2xs)"}}>EVIDENCE</th>
           </tr></thead>
-          <tbody>{rows.map(r=>{
+          <tbody>{shown.map(r=>{
             const e=r.ensemble||{};
             const per=Array.isArray(e.per_model)?e.per_model:[];
-            return<tr key={r.id}>
-              <td style={{color:T.textHi,fontWeight:600}}>{r.ticker}</td>
+            const fails=Array.isArray(r.failures)?r.failures:[];
+            const code=codeOf.get(r.strategy_id);
+            return<tr key={r.id} data-testid="committee-row">
+              <td style={{color:T.muted}}>{nyStamp(r.at)}</td>
+              <td style={{textAlign:"left"}}>{code?<span className="mz-code">{code}</span>:<span className="mz-code mz-code-none">—</span>}</td>
+              <td style={{color:T.textHi,fontWeight:600,textAlign:"left"}}>{r.ticker}</td>
               {providers.map(p=>{
                 const m=per.find(x=>x.provider===p.provider);
-                if(!m)return<td key={p.provider} style={{color:T.muted}}>—</td>;
+                if(r.screen_only)return<td key={p.provider} style={{color:T.muted}}>—</td>;
+                // A failed analyst says WHY, not just "—": a silent blank made
+                // a broken integration look like an abstention for a day.
+                const f=fails.find(x=>x.provider===p.provider);
+                if(!m)return<td key={p.provider} style={{color:f?T.gold:T.muted}} title={f?`${nameOf(p.provider)} failed: ${f.code}`:undefined}>{f?`failed · ${String(f.code||"").replace(/_/g," ")}`:"—"}</td>;
                 return<td key={p.provider} style={{color:tone(m.action)}}>
                   {m.action}
                   {m.confidence!=null&&<span style={{color:T.muted,fontWeight:400}}> {Math.round(m.confidence*100)}</span>}
@@ -8033,7 +8068,9 @@ function AiCommittee({demoMode}){
               <td>
                 {/* The consensus sits BESIDE the columns, never instead of
                     them — and a panel that could not agree says so. */}
-                {e.ok
+                {r.screen_only
+                  ?<span style={{color:T.muted}}>screened out · {r.sharia_verdict||"not halal"}</span>
+                  :e.ok
                   ?<span style={{color:tone(e.consensus),fontWeight:600}}>
                      {e.consensus}
                      {e.opposed&&<span style={{color:T.loss,fontWeight:400}}> · OPPOSED</span>}
@@ -8068,7 +8105,7 @@ function AiCommittee({demoMode}){
  * been measured and what that length is worth. "Up 0.6%" after one session is
  * noise wearing the costume of a result.
  */
-function PerformancePanelLab({demoMode}){
+function PerformancePanelLab({demoMode,book,liveEquity}){
   const{mask}=useHideValues();
   const[range,setRange]=useState("1M");
   const[equity,setEquity]=useState(null);
@@ -8083,7 +8120,7 @@ function PerformancePanelLab({demoMode}){
       try{
         const[e,b]=await Promise.all([
           apiFetch(`/api/alpaca/portfolio-history?range=${encodeURIComponent(range)}`),
-          apiFetch(`/api/alpaca/benchmark?range=${encodeURIComponent(range)}&symbol=SPUS`),
+          apiFetch(`/api/alpaca/benchmark?range=${encodeURIComponent(range)}&symbol=SPUS&live=1`),
         ]);
         if(!e.ok){if(!cancelled)setState("unavailable");return;}
         const ej=await e.json().catch(()=>null);
@@ -8095,17 +8132,18 @@ function PerformancePanelLab({demoMode}){
     return()=>{cancelled=true;};
   },[range,demoMode]);
 
+  // History + the desk's live equity, against SPUS history + its live price:
+  // both series end NOW. Without the pins the window stopped at yesterday and
+  // read "0.00% vs SPUS +0.56%" for a desk up 0.39% (2026-10-08).
   const att=useMemo(()=>benchmarkAttribution(
-    toPoints(equity),
+    pinLiveEquity(toPoints(equity),liveEquity),
     Array.isArray(bench?.points)?bench.points:[],
     {benchmarkName:bench?.symbol||"SPUS"},
-  ),[equity,bench]);
+  ),[equity,bench,liveEquity]);
   const conf=confidenceLabel(att.days);
+  const lb=useMemo(()=>blotterRows(book?.strategies).filter(r=>r.traded),[book]);
+  const maxAbs=useMemo(()=>Math.max(0.0001,...lb.map(r=>Math.abs(r.alphaPct??0))),[lb]);
 
-  const Row=({label,value,tone})=><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:T.s3,padding:`${T.s2} 0`,borderBottom:`1px solid ${T.border}`}}>
-    <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em"}}>{label}</span>
-    <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,fontVariantNumeric:"tabular-nums",color:tone||T.textHi}}>{value}</span>
-  </div>;
 
   return<section>
     <SectionHead label="Performance"
@@ -8132,42 +8170,52 @@ function PerformancePanelLab({demoMode}){
              dishonesty this panel exists to prevent. */}
          Not enough overlapping days to compare yet — the strategy and {att.benchmarkName} need at least two days measured over the same window. {att.days===1?"There is one so far.":"There are none so far."}
        </div>
-      :<div style={{display:"grid",gap:T.s5,gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))"}}>
-        <div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",marginBottom:T.s2}}>
-            ALPHA VS {att.benchmarkName}
-          </div>
-          <div style={{fontFamily:FU,fontSize:"var(--fs-5xl)",fontWeight:600,letterSpacing:"-0.03em",lineHeight:1,
-            fontVariantNumeric:"tabular-nums",
-            color:att.alpha>0?T.gain:att.alpha<0?T.loss:T.muted}}>
-            {att.alpha>0?"+":att.alpha<0?"−":""}{Math.abs(att.alpha).toFixed(2)}
-            <span style={{fontFamily:FM,fontSize:"var(--fs-base)",fontWeight:600,marginLeft:6,letterSpacing:"0.06em"}}>pp</span>
-          </div>
-          {/* The sentence a losing strategy would rather not print. */}
-          <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:att.alpha<0?T.loss:T.muted,marginTop:T.s2,lineHeight:1.5,maxWidth:"34ch"}}>
-            {att.alpha<0
-              ?`Behind. Holding ${att.benchmarkName} would have returned more over this window.`
-              :att.alpha>0?`Ahead of ${att.benchmarkName} over this window.`
-              :`Level with ${att.benchmarkName}.`}
-          </div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginTop:T.s3}}>
-            {att.days} DAY{att.days===1?"":"S"} MEASURED · {conf.level.toUpperCase()}
-          </div>
-          <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:4,maxWidth:"34ch",lineHeight:1.5}}>{conf.note}</div>
-        </div>
+      :<>
+        <StatStrip testId="perf-stats" items={[
+          {lead:true,label:`ACCOUNT VS ${att.benchmarkName}`,value:<>{att.alpha>0?"+":att.alpha<0?"−":""}{Math.abs(att.alpha).toFixed(2)}<span className="mz-stat-unit">pp</span></>,
+            tone:att.alpha>0?T.gain:att.alpha<0?T.loss:T.muted,
+            sub:att.alpha<0?`Behind — holding ${att.benchmarkName} would have returned more.`:att.alpha>0?`Ahead of ${att.benchmarkName} over this window.`:`Level with ${att.benchmarkName}.`},
+          {label:"ACCOUNT",value:fp(att.strategyReturn),tone:att.strategyReturn>=0?T.gain:T.loss},
+          {label:att.benchmarkName,value:fp(att.benchmarkReturn),tone:att.benchmarkReturn>=0?T.gain:T.loss},
+          {label:"DRAWDOWN",value:att.strategyDrawdown!=null?fp(att.strategyDrawdown):"—",tone:att.strategyDrawdown<0?T.loss:T.muted,
+            sub:`${att.benchmarkName} ${att.benchmarkDrawdown!=null?fp(att.benchmarkDrawdown):"—"}`},
+          {label:"MEASURED",value:`${att.days}d`,sub:`${conf.level} · ${att.window.from&&att.window.to?`${att.window.from} → ${att.window.to}`:"—"}`},
+        ]}/>
+        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s2,lineHeight:1.5,maxWidth:"72ch"}}>{conf.note}</div>
+      </>)}
 
-        <div>
-          <Row label="STRATEGY" value={fp(att.strategyReturn)} tone={att.strategyReturn>=0?T.gain:T.loss}/>
-          <Row label={att.benchmarkName} value={fp(att.benchmarkReturn)} tone={att.benchmarkReturn>=0?T.gain:T.loss}/>
-          {/* Drawdown sits beside return on purpose: beating a benchmark on
-              twice its drawdown has not beaten it in any useful sense. */}
-          <Row label="STRATEGY DRAWDOWN" value={att.strategyDrawdown!=null?fp(att.strategyDrawdown):"—"}
-            tone={att.strategyDrawdown<0?T.loss:T.muted}/>
-          <Row label={`${att.benchmarkName} DRAWDOWN`} value={att.benchmarkDrawdown!=null?fp(att.benchmarkDrawdown):"—"}
-            tone={att.benchmarkDrawdown<0?T.loss:T.muted}/>
-          <Row label="WINDOW" value={att.window.from&&att.window.to?`${att.window.from} → ${att.window.to}`:"—"}/>
-        </div>
-      </div>)}
+    {/* Per strategy — the question the account-level number cannot answer
+        when six sleeves share one pot. Each strategy's return runs from its
+        own first fill; SPUS is measured over the same window (strategyScore). */}
+    {!demoMode&&<div style={{marginTop:T.s6}} data-testid="perf-leaderboard">
+      <SectionHead label="Strategies vs SPUS"
+        hint="Each strategy from its own first fill, against SPUS over the same window. The bar is the gap in percentage points; a short record is noise, not a verdict."
+        style={{marginBottom:T.s3}}/>
+      {book?.state!=="ready"
+        ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>{book?.state==="loading"?"Loading strategies…":"The strategy list is not available."}</div>
+        :!lb.length
+          ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No strategy has traded yet.</div>
+          :<div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
+            <thead><tr>
+              <th style={{fontSize:"var(--fs-2xs)"}}>STRATEGY</th><th style={{fontSize:"var(--fs-2xs)"}}>RETURN</th>
+              <th style={{fontSize:"var(--fs-2xs)"}}>SPUS</th><th style={{fontSize:"var(--fs-2xs)",textAlign:"center"}}>VS SPUS</th>
+            </tr></thead>
+            <tbody>{lb.map(r=>{
+              const a=r.alphaPct;const w=a==null?0:Math.min(50,(Math.abs(a)/maxAbs)*50);
+              return<tr key={r.id} data-testid="perf-row">
+                <td style={{whiteSpace:"normal"}}>{r.code?<span className="mz-code">{r.code}</span>:<span className="mz-code mz-code-none">—</span>}<span style={{color:T.textHi,fontWeight:600}}>{r.name}</span></td>
+                <td style={{color:r.returnPct==null?T.muted:r.returnPct>=0?T.gain:T.loss}}>{r.returnPct==null?"—":mask(fp(r.returnPct))}</td>
+                <td style={{color:r.benchPct==null?T.muted:r.benchPct>=0?T.gain:T.loss}}>{r.benchPct==null?"—":fp(r.benchPct)}</td>
+                <td style={{minWidth:"14rem"}}>
+                  <div className="mz-div" title={a==null?"not measurable":`${a>0?"+":""}${a.toFixed(2)} pts`}>
+                    <span className="mz-div-mid"/>
+                    {a!=null&&<span className="mz-div-bar" style={{[a>=0?"left":"right"]:"50%",width:`${w}%`,background:a>=0?T.gain:T.loss}}/>}
+                  </div>
+                  <div style={{textAlign:"center",color:a==null?T.muted:a>=0?T.gain:T.loss,fontSize:"var(--fs-2xs)",marginTop:2}}>{a==null?"—":mask(`${a>0?"+":""}${a.toFixed(2)} pts`)}</div>
+                </td>
+              </tr>;})}</tbody>
+          </table></div>}
+    </div>}
   </section>;
 }
 
@@ -8180,6 +8228,45 @@ function PerformancePanelLab({demoMode}){
  * an approval window is short and a view you have to go looking for is a view
  * that expires.
  */
+/**
+ * The strategy list, read ONCE for the whole Trade tab. /api/bot/strategies
+ * values every sleeve server-side (Alpaca prices per strategy), so the desk,
+ * Performance and AI Committee share one read instead of three.
+ */
+function useStrategyBook(enabled){
+  const[book,setBook]=useState({state:enabled?"loading":"idle",strategies:[]});
+  useEffect(()=>{
+    if(!enabled){setBook({state:"idle",strategies:[]});return;}
+    let cancelled=false;
+    (async()=>{
+      try{
+        const r=await apiFetch("/api/bot/strategies");
+        const d=r.ok?await r.json():null;
+        if(!cancelled)setBook(d?{state:"ready",strategies:asArray(d?.strategies)}:{state:"unavailable",strategies:[]});
+      }catch{if(!cancelled)setBook({state:"unavailable",strategies:[]});}
+    })();
+    return()=>{cancelled=true;};
+  },[enabled]);
+  return book;
+}
+
+/**
+ * A row of ruled stat cells — the rail's language, used at the top of every
+ * Trade sub-tab so each opens on its few numbers before the detail.
+ * items: [{label, value, sub?, tone?, lead?}]
+ */
+function StatStrip({items,testId}){
+  const list=asArray(items).filter(Boolean);
+  if(!list.length)return null;
+  return<div className="mz-stats" data-testid={testId}>
+    {list.map(it=><div key={it.label} className={`mz-stat${it.lead?" mz-stat-lead":""}`}>
+      <div className="mz-stat-l" style={{fontFamily:FM}}>{it.label}</div>
+      <div className="mz-stat-v" style={{fontFamily:FM,color:it.tone||T.textHi}}>{it.value}</div>
+      {it.sub&&<div className="mz-stat-s" style={{fontFamily:FP}}>{it.sub}</div>}
+    </div>)}
+  </div>;
+}
+
 /** Save an authenticated CSV response as a file. Shared by every Trade Lab export. */
 async function downloadCsv(url,filename){
   const r=await apiFetch(url);
@@ -8319,25 +8406,19 @@ function ActivityTape({items,strategies,state}){
   </section>;
 }
 
-function TradeDesk({desk,onGoSignals,demoMode}){
+function TradeDesk({desk,onGoSignals,demoMode,book}){
   const{mask}=useHideValues();
   const[pending,setPending]=useState(null);
-  const[book,setBook]=useState({state:demoMode?"idle":"loading",strategies:[]});
   const[feed,setFeed]=useState({state:demoMode?"idle":"loading",items:[]});
 
-  // The book and the tape are read once per visit. /api/bot/strategies values
-  // every sleeve server-side, so it is not polled.
+  // The tape is read once per visit; the book comes from the Trade tab
+  // (useStrategyBook), shared with Performance and AI Committee.
   useEffect(()=>{
     if(demoMode)return;
     let cancelled=false;
     (async()=>{
-      const[sr,ar]=await Promise.all([
-        apiFetch("/api/bot/strategies").catch(()=>null),
-        apiFetch("/api/bot/activity").catch(()=>null),
-      ]);
+      const ar=await apiFetch("/api/bot/activity").catch(()=>null);
       if(cancelled)return;
-      try{const d=sr&&sr.ok?await sr.json():null;setBook(d?{state:"ready",strategies:asArray(d?.strategies)}:{state:"unavailable",strategies:[]});}
-      catch{setBook({state:"unavailable",strategies:[]});}
       try{const d=ar&&ar.ok?await ar.json():null;setFeed(d?{state:"ready",items:asArray(d?.items)}:{state:"unavailable",items:[]});}
       catch{setFeed({state:"unavailable",items:[]});}
     })();
@@ -8484,6 +8565,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   // Alpaca budget for one number.
   const{mask:maskValue}=useHideValues();
   const deskData=useAlpacaDesk(!demoMode&&isAdmin);
+  const book=useStrategyBook(!demoMode&&isAdmin);
   // Holdings (with live prices merged) — needed by Screener + Rebalance. Same
   // derivation Portfolio uses, kept self-contained here.
   // The `merged` holdings IIFE lived here. Removed 2026-10-01: its only
@@ -8699,9 +8781,9 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         mask={maskValue}
         armedVenue={sub==="order"?venue:null}/>
       <div style={{padding:T.s5}}>
-        {sub==="desk"&&<TradeDesk desk={deskData} onGoSignals={()=>setSub("signals")} demoMode={demoMode}/>}
-        {sub==="performance"&&<PerformancePanelLab demoMode={demoMode}/>}
-        {sub==="committee"&&<AiCommittee demoMode={demoMode}/>}
+        {sub==="desk"&&<TradeDesk desk={deskData} onGoSignals={()=>setSub("signals")} demoMode={demoMode} book={book}/>}
+        {sub==="performance"&&<PerformancePanelLab demoMode={demoMode} book={book} liveEquity={deskData?.account?.equity}/>}
+        {sub==="committee"&&<AiCommittee demoMode={demoMode} book={book}/>}
         {sub==="compliance"&&<CompliancePanel desk={deskData} demoMode={demoMode}/>}
         {sub==="risk"&&<RiskPanel desk={deskData} demoMode={demoMode}/>}
     {/* Persistent reference: how brokerage connections map to trade features, and the
@@ -8709,12 +8791,16 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     {/* Only where a broker connection is the thing you might need to fix.
         It was rendering on every non-desk tab, which put a "reconnect for
         trading" call-to-action under a performance report. */}
-    {(sub==="order"||sub==="strategies")&&<TradeConnectionsPanel onConnectTrade={onConnectTrade}/>}
+    {sub==="order"&&<TradeConnectionsPanel onConnectTrade={onConnectTrade}/>}
     {/* Bot panel, split into Strategies + Signals views (same component, shared state). */}
         {/* The bot panel is UNTOUCHED. Its T.* tokens resolve dark by
             inheritance, which is the whole reason the cockpit re-declares
             variables rather than hardcoding a palette. */}
         {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
+        {/* Broker setup is reference, not the reason you opened Strategies —
+            it sits under the strategies there, and above the ticket in Quick
+            Trade where a connection is what you might need to fix first. */}
+        {sub==="strategies"&&<div style={{marginTop:T.s5}}><TradeConnectionsPanel onConnectTrade={onConnectTrade}/></div>}
 
     {/* Quick Trade (ad-hoc order ticket) lives behind a Coming Soon banner for non-admin users. */}
     {/* The non-admin Order Ticket placeholder lived here. Removed 2026-10-01:
@@ -14863,7 +14949,7 @@ export default function Mizan(){
          so six-plus sleeves compare at a glance. */
       .mz-desk-grid{display:grid; gap:var(--s-6); grid-template-columns:minmax(0,1fr);}
       @media (min-width:1100px){ .mz-desk-grid{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr); align-items:start;} }
-      .mz-code{display:inline-block; min-width:3.4em; margin-right:var(--s-2); padding:1px 6px;
+      .mz-code{font-family:${FM}; display:inline-block; min-width:3.4em; margin-right:var(--s-2); padding:1px 6px;
         border:1px solid var(--mz-borderHi); border-radius:4px; text-align:center;
         font-weight:700; letter-spacing:.06em; color:var(--mz-textHi); font-size:var(--fs-2xs);}
       .mz-book td:first-child{white-space:normal;}
@@ -14877,8 +14963,8 @@ export default function Mizan(){
       .mz-bl-1 .mz-bl-name{flex:1 1 auto; min-width:0; color:var(--mz-textHi); font-weight:600; overflow-wrap:anywhere;}
       .mz-bl-ret{flex:0 0 auto; font-weight:700;}
       .mz-bl-2, .mz-bl-3{color:var(--mz-muted); font-size:var(--fs-2xs); flex-wrap:wrap;}
-      .mz-icon-btn{background:transparent; border:1px solid var(--mz-border); border-radius:6px;
-        color:var(--mz-textHi); font-family:inherit; font-size:var(--fs-xs); min-width:2.2em; padding:2px 8px; cursor:pointer;
+      .mz-icon-btn{font-family:${FM}!important; background:transparent; border:1px solid var(--mz-border); border-radius:6px;
+        color:var(--mz-textHi); font-size:var(--fs-xs); min-width:2.2em; padding:2px 8px; cursor:pointer;
         transition:background var(--mz-dur,150ms) ease, border-color var(--mz-dur,150ms) ease;}
       .mz-icon-btn:hover{background:var(--mz-dim); border-color:var(--mz-borderHi);}
       .mz-icon-btn:focus-visible{outline:2px solid var(--mz-textHi); outline-offset:2px;}
@@ -14899,6 +14985,34 @@ export default function Mizan(){
       .mz-feed-what{color:var(--mz-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
       .mz-feed-s{font-size:var(--fs-2xs); letter-spacing:.1em; white-space:nowrap;}
       @media (max-width:420px){ .mz-feed li{grid-template-columns:auto minmax(0,1fr) auto;} .mz-feed-t{grid-column:1 / -1;} }
+
+      /* Stat strip — the rail's ruled cells, at the top of each sub-tab. */
+      .mz-stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));
+        border:1px solid var(--mz-border); border-radius:8px; overflow:hidden; background:var(--mz-surface);}
+      .mz-stat{padding:var(--s-3) var(--s-4); border-right:1px solid var(--mz-border); border-bottom:1px solid var(--mz-border);
+        margin:0 -1px -1px 0; min-width:0;}
+      .mz-stat-lead{grid-column:span 2; background:linear-gradient(to bottom, var(--mz-dim), transparent);}
+      @media (max-width:480px){ .mz-stat-lead{grid-column:1 / -1;} }
+      .mz-stat-l{font-family:var(--ff-mono,inherit); font-size:var(--fs-2xs); letter-spacing:.16em; color:var(--mz-muted); font-weight:600;}
+      .mz-stat-v{font-family:var(--ff-mono,inherit); font-size:var(--fs-lg); font-weight:700; font-variant-numeric:tabular-nums;
+        margin-top:2px; line-height:1.2; overflow-wrap:anywhere;}
+      .mz-stat-lead .mz-stat-v{font-size:var(--fs-3xl); letter-spacing:-.02em;}
+      .mz-stat-unit{font-size:var(--fs-sm); margin-left:4px; letter-spacing:.06em;}
+      .mz-stat-s{font-size:var(--fs-2xs); color:var(--mz-muted); margin-top:2px; line-height:1.4;}
+
+      /* Diverging bar: the gap to SPUS either side of a centre rule. */
+      .mz-div{position:relative; height:8px; background:var(--mz-dim); border-radius:999px; overflow:hidden;}
+      .mz-div-mid{position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:var(--mz-borderHi);}
+      .mz-div-bar{position:absolute; top:0; bottom:0; border-radius:2px;}
+
+      /* ── Desk skin ───────────────────────────────────────────────────────
+         Inside the cockpit every tile is a ruled desk panel: tight radius, no
+         lift, no glow. The bento hover-lift belongs to the app's light pages;
+         on a trading desk a panel that moves under the cursor reads as noise.
+         Scoped to .mz-cockpit so the rest of the app is untouched. */
+      .mz-cockpit .bento-tile{border-radius:8px!important; box-shadow:none!important; background:var(--mz-surface)!important;}
+      .mz-cockpit .bento-tile:hover{transform:none!important; box-shadow:none!important; border-color:var(--mz-borderHi)!important;}
+      .mz-cockpit .bento-tile--click:active{transform:none!important;}
 
       /* Weight bar — the only chart in the tape. Inline so it reads as part
          of the row rather than as a separate visualisation. */

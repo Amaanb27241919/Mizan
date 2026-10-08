@@ -390,9 +390,10 @@ test.describe("Trade Lab cockpit", () => {
     } } });
     await page.getByRole("button", { name: "AI Committee", exact: true }).click();
     const t = page.locator(".mz-cockpit");
-    // Each analyst is its own column, by name.
-    await expect(t).toContainText("ANTHROPIC");
-    await expect(t).toContainText("GOOGLE");
+    // Each analyst is its own column, by the name a person knows (2026-10-08:
+    // provider names became analyst names — CLAUDE, not ANTHROPIC).
+    await expect(t).toContainText("CLAUDE");
+    await expect(t).toContainText("GEMINI");
     // Contradiction and mere difference are labelled differently.
     await expect(t).toContainText("OPPOSED");
     await expect(t).toContainText("SPLIT");
@@ -719,10 +720,89 @@ test.describe("Trade Lab strategy book", () => {
     await expect(page.getByTestId("book-row").first()).toBeHidden();
   });
 
+  test("the Strategies list names each strategy and never prints undefined% / null%", async ({ page }) => {
+    await open(page);
+    await page.getByRole("button", { name: "Strategies", exact: true }).click();
+    const cockpit = page.locator(".mz-cockpit");
+    await expect(cockpit).toContainText("A · Reference system + AI gate");
+    await expect(cockpit).toContainText("Rebalance every 30d");
+    await expect(cockpit).not.toContainText("undefined%");
+    await expect(cockpit).not.toContainText("null%");
+  });
+
+  test("Signals never prints Invalid Date or a $0.00 price for missing data", async ({ page }) => {
+    await open(page);
+    await page.getByRole("button", { name: "Signals", exact: true }).click();
+    const cockpit = page.locator(".mz-cockpit");
+    await expect(cockpit).toContainText("MU");
+    await expect(cockpit).not.toContainText("Invalid Date");
+    await expect(cockpit).not.toContainText("~$0.00");
+  });
+
   test("the desk never overflows the page", async ({ page }) => {
     await open(page);
     await expect(page.getByTestId("strategy-book")).toContainText("Reference system");
     const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(over).toBeLessThanOrEqual(0);
   });
+});
+
+// AI Committee, 2026-10-08: rounds now carry their strategy, a failed analyst
+// says why instead of a bare "—", and a scorecard opens the tab.
+test("AI committee names the strategy, the failure reason, and each analyst's record", async ({ page }) => {
+  const per = (p, a) => ({ provider: p, model: p, action: a, confidence: 0.6, risk_flags: [] });
+  const A = { id: "a7728bbe-0000-4000-8000-000000000001", strategy_type: "rank_rebalance", enabled: true, capital_allocated: "250000",
+    params: { experiment: "A: reference system + AI gate" }, progress: { paper: true, trades_executed: 1 } };
+  const SH = { id: "d8a3e542-0000-4000-8000-000000000005", strategy_type: "rank_rebalance", enabled: true, capital_allocated: "0",
+    nl_description: "SHADOW research panel", params: { layer: "shadow" }, progress: { paper: true, trades_executed: 0 } };
+  await gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: [A, SH] }, "/api/ai/research": {
+    providers: [{ provider: "anthropic", available: true }, { provider: "google", available: true }, { provider: "openrouter", available: true }],
+    configured: 3, required: 2,
+    rows: [
+      { id: "1", strategy_id: A.id, ticker: "MU", at: "2026-10-07T13:35:00Z", missing: [], packet_hash: "abc",
+        ensemble: { ok: false, code: "insufficient_votes", per_model: [per("google", "HOLD")] },
+        failures: [{ provider: "anthropic", code: "http_400" }, { provider: "openrouter", code: "schema_invalid" }] },
+      { id: "2", strategy_id: SH.id, ticker: "COHR", at: "2026-10-07T17:46:00Z", missing: [], packet_hash: "def",
+        ensemble: { ok: true, consensus: "HOLD", unanimous: true, per_model: [per("anthropic", "HOLD"), per("google", "HOLD"), per("openrouter", "HOLD")] }, failures: [] },
+      { id: "3", strategy_id: A.id, ticker: "STX", at: "2026-10-07T13:30:00Z", screen_only: true, sharia_verdict: "haram", ensemble: { ok: false }, failures: [] },
+    ] } } });
+  await page.getByRole("button", { name: "AI Committee", exact: true }).click();
+  const stats = page.getByTestId("committee-stats");
+  await expect(stats).toContainText("CLAUDE");
+  await expect(stats).toContainText("1/2");            // Claude: answered 1 of 2 asked
+  await expect(stats).toContainText("http_400");
+  await expect(stats).toContainText("1 agreed");
+  const mu = page.getByTestId("committee-row").filter({ hasText: "MU" });
+  await expect(mu).toContainText("A");
+  await expect(mu).toContainText("failed · http 400");
+  await expect(page.getByTestId("committee-row").filter({ hasText: "STX" })).toContainText("screened out · haram");
+  // Filter to one strategy.
+  await page.getByRole("button", { name: "A", exact: true }).click();
+  await expect(page.getByTestId("committee-row")).toHaveCount(2);
+});
+
+// Performance, 2026-10-08: per-strategy leaderboard, and the account comparison
+// ends NOW (live equity + live SPUS) rather than at yesterday's close.
+test("performance ranks each strategy against SPUS and measures the account to now", async ({ page }) => {
+  const prog = (o) => ({ paper: true, trades_executed: 3, started_at: "2026-10-07T13:33:38Z", ...o });
+  const S = [
+    { id: "a1", strategy_type: "rank_rebalance", enabled: true, capital_allocated: "250000", params: { experiment: "A: reference system + AI gate" }, progress: prog({ equity: 252557, return_pct: 1.02, bench_return_pct: -0.1, alpha_pct: 1.12 }) },
+    { id: "d1", strategy_type: "breakout", enabled: true, capital_allocated: "150000", params: { experiment: "D: swing" }, progress: prog({ equity: 149449, return_pct: -0.37, bench_return_pct: -0.1, alpha_pct: -0.27 }) },
+    { id: "f1", strategy_type: "rank_rebalance", enabled: true, capital_allocated: "300", params: { experiment: "F: small account" }, progress: { paper: true, trades_executed: 0 } },
+  ];
+  const day = (d) => Date.parse(`2026-10-0${d}T00:00:00Z`) / 1000;
+  await gotoLab(page, { fixtures: {
+    "/api/bot/strategies": { strategies: S },
+    "/api/alpaca/account": { ...PAPER, equity: 1004000 },
+    "/api/alpaca/portfolio-history": { timestamp: [day(5), day(6), day(7)], equity: [0, 1000000, 1000000], baseValue: 0, timeframe: "1D", range: "1M" },
+    "/api/alpaca/benchmark": { symbol: "SPUS", range: "1M", points: [
+      { t: Date.parse("2026-10-06T04:00:00Z"), v: 60 }, { t: Date.parse("2026-10-07T04:00:00Z"), v: 60.3 }, { t: Date.now(), v: 60.6 } ] },
+  } });
+  await page.getByRole("button", { name: "Performance", exact: true }).click();
+  const lb = page.getByTestId("perf-leaderboard");
+  await expect(page.getByTestId("perf-row")).toHaveCount(2);     // F has not traded: not on the board
+  await expect(lb).toContainText("Reference system + AI gate");
+  await expect(lb).toContainText("+1.12 pts");
+  await expect(lb).toContainText("-0.27 pts");
+  await expect(page.getByTestId("perf-stats")).toContainText("+0.40%");  // 1,000,000 → live 1,004,000
 });
