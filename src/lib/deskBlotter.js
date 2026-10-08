@@ -84,7 +84,9 @@ export function blotterRows(strategies, now = new Date()) {
 export function allocationSegments(rows, accountEquity) {
   const total = num(accountEquity);
   if (!(total > 0)) return [];
-  const segs = arr(rows).filter((r) => num(r?.sleeve) > 0).map((r) => ({ code: r.code || r.name || "?", amount: num(r.sleeve) }));
+  // `color` is passed through untouched (strategyColors.js) so the bar wears
+  // each strategy's identity colour; this module stays colour-agnostic.
+  const segs = arr(rows).filter((r) => num(r?.sleeve) > 0).map((r) => ({ code: r.code || r.name || "?", amount: num(r.sleeve), ...(r.color ? { color: r.color } : {}) }));
   const used = segs.reduce((t, s) => t + s.amount, 0);
   const scale = used > total ? total / used : 1;
   const out = segs.map((s) => ({ ...s, pct: Math.round((s.amount * scale / total) * 10000) / 100 }));
@@ -103,6 +105,7 @@ export function tapeRows(items, strategies, limit = 12) {
     .slice(0, limit)
     .map((i) => ({
       id: String(i.id || ""), at: i.executed_at || i.created_at || null,
+      strategyId: String(i.strategy_id || ""),
       code: codeById.get(String(i.strategy_id || "")) || "—",
       side: i.side === "sell" ? "sell" : "buy", ticker: String(i.ticker || ""),
       qty: num(i.qty), status: String(i.status || ""), error: i.error_msg || null,

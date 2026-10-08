@@ -745,6 +745,22 @@ test.describe("Trade Lab strategy book", () => {
     await expect(cockpit).not.toContainText("~$0.00");
   });
 
+  test("each strategy wears its own identity colour — on the chip edge, never on a number", async ({ page }) => {
+    await open(page);
+    const book = page.getByTestId("strategy-book");
+    const chip = (label) => book.locator(".mz-tbl-desktop .mz-code", { hasText: new RegExp(`^${label}$`) }).first();
+    await expect(chip("A")).toHaveAttribute("data-strategy-color", "#3987e5");          // blue
+    await expect(chip("D")).toHaveAttribute("data-strategy-color", "#c98500");          // yellow
+    await expect(chip("E·core")).toHaveAttribute("data-strategy-color", "#d55181");     // magenta
+    await expect(chip("E·swing")).toHaveAttribute("data-strategy-color", "#d55181");    // same experiment
+    await expect(chip("SHADOW")).toHaveAttribute("data-strategy-color", "#e66767");
+    // A return keeps gain/loss ink: A's +1.02% is not drawn in A's blue.
+    const ret = book.getByTestId("book-row").filter({ hasText: "Reference system" }).locator("td").nth(3).locator("span").first();
+    expect(await ret.evaluate((el) => getComputedStyle(el).color)).not.toBe("rgb(57, 135, 229)");
+    // The allocation legend names each colour with a swatch.
+    await expect(book.locator(".mz-swatch").first()).toBeVisible();
+  });
+
   test("the desk never overflows the page", async ({ page }) => {
     await open(page);
     await expect(page.getByTestId("strategy-book")).toContainText("Reference system");

@@ -17,6 +17,7 @@ import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { deskSummary } from "../lib/deskSummary.js";
 import { blotterRows, allocationSegments, tapeRows, groupTotals, strategyLabel } from "../lib/deskBlotter.js";
 import { committeeStats } from "../lib/committee.js";
+import { STRATEGY_PALETTE, strategyColorKey } from "../lib/strategyColors.js";
 import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity } from "../lib/equityCurve.js";
 import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/benchmarkAttribution.js";
 // Aliased: MizanApp already declares a STANDARDS of its own further down.
@@ -6024,7 +6025,10 @@ function StrategyProgressCard({strat}){
   const cadence=Number(strat.params?.dca_cadence_days)||7;
   const barLabel=isDca?"CAPITAL DEPLOYED":"PROGRESS TO TARGET";
   const barPct=isDca?(capital>0&&current!=null?Math.max(0,Math.min(100,(current/capital)*100)):0):pctToTarget;
-  return<BentoTile accent={pnl!=null?(pnl>=0?T.gain:T.loss):T.blue} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
+  // The accent bar is the strategy's IDENTITY colour (strategyColors.js); its
+  // gain/loss is carried by the numbers below, not by the card's edge.
+  const identity=stratChip(strat);
+  return<BentoTile accent={identity.color||(pnl!=null?(pnl>=0?T.gain:T.loss):T.blue)} style={{display:"flex",flexDirection:"column",gap:T.s3}}>
     <div style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi,lineHeight:1.3}} data-testid="strategy-card-title">{headline}</div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
       <div style={{display:"flex",gap:T.s2,alignItems:"center",flexWrap:"wrap",minWidth:0}}>
@@ -6848,7 +6852,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       const labelFor=a=>(a.status==="approved"&&a.error_msg)?{label:"FAILED",color:T.loss}:(META[a.status]||{label:(a.status||"—").toUpperCase(),color:T.muted});
       // Named by STRATEGY (A, E·core…), not by universe size — every row
       // used to read "214 halal names".
-      const stratLabel=id=>{const s=strategies.find(x=>x.id===id);if(!s)return null;return strategyLabel(s);};
+      const stratLabel=id=>{const s=strategies.find(x=>x.id===id);if(!s)return null;return stratChip(s);};
       return<CollapsibleTile title="BOT ACTIVITY · ALL ACTIONS" subtitle="Every signal the bot generated + its outcome" storageKey="bot_activity" defaultOpen>
         <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",marginBottom:T.s3}}>
           <button onClick={loadActivity} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingActivity?"Loading…":"Refresh"}</button>
@@ -6862,7 +6866,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
               <div style={{display:"flex",gap:T.s2,alignItems:"baseline",minWidth:170}}>
                 <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:a.side==="buy"?T.gain:T.loss}}>{(a.side||"").toUpperCase()}</span>
                 <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:T.textHi}}>{a.qty} {a.ticker}</span>
-                {sl&&(sl.code?<span className="mz-code" title={sl.name}>{sl.code}</span>:<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>· {sl.name}</span>)}
+                {sl&&(sl.label?<CodeChip label={sl.label} color={sl.color} title={sl.name}/>:<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>· {sl.name}</span>)}
               </div>
               <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
                 <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{Number(a.suggested_price)>0?`~$${Number(a.suggested_price).toFixed(2)}`:"—"}</span>
@@ -6943,6 +6947,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
         return<div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
         <div style={{minWidth:200}}>
           <div style={{display:"flex",gap:T.s2,alignItems:"center",marginBottom:4}}>
+            {(()=>{const c=stratChip(s).color;return c?<span aria-hidden="true" className="mz-swatch" style={{background:c,width:10,height:10}}/>:null;})()}
             <span style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:T.textHi}}>{uniLabel}</span>
             <Tag label={LAYER_META[lyr].label.toUpperCase()} color={LAYER_META[lyr].color}/>
             {s.strategy_type==="dca"&&<Tag label="DCA" color={T.gain}/>}
@@ -7976,7 +7981,8 @@ function AiCommittee({demoMode,book}){
   const missing=providers.filter(p=>!p.available);
   // Which strategy each round belongs to — rounds used to be anonymous, so
   // A's gated buys and the shadow panel's research read as one record.
-  const codeOf=useMemo(()=>{const m=new Map();for(const s of asArray(book?.strategies)){const l=strategyLabel(s);m.set(s.id,l.code||l.name);}return m;},[book]);
+  const chipOf=useMemo(()=>chipMap(book?.strategies),[book]);
+  const codeOf=useMemo(()=>{const m=new Map();for(const[id,c]of chipOf)m.set(id,c.label||c.name);return m;},[chipOf]);
   const codes=useMemo(()=>[...new Set(rows.map(r=>codeOf.get(r.strategy_id)||"—"))],[rows,codeOf]);
   const shown=only==="all"?rows:rows.filter(r=>(codeOf.get(r.strategy_id)||"—")===only);
   const stats=useMemo(()=>committeeStats(shown,providers),[shown,providers]);
@@ -8051,7 +8057,7 @@ function AiCommittee({demoMode,book}){
             const code=codeOf.get(r.strategy_id);
             return<tr key={r.id} data-testid="committee-row">
               <td style={{color:T.muted}}>{nyStamp(r.at)}</td>
-              <td style={{textAlign:"left"}}>{code?<span className="mz-code">{code}</span>:<span className="mz-code mz-code-none">—</span>}</td>
+              <td style={{textAlign:"left"}}>{(()=>{const c=chipOf.get(r.strategy_id);return<CodeChip label={c?.label||code||""} color={c?.color} title={c?.name}/>;})()}</td>
               <td style={{color:T.textHi,fontWeight:600,textAlign:"left"}}>{r.ticker}</td>
               {providers.map(p=>{
                 const m=per.find(x=>x.provider===p.provider);
@@ -8142,6 +8148,7 @@ function PerformancePanelLab({demoMode,book,liveEquity}){
   ),[equity,bench,liveEquity]);
   const conf=confidenceLabel(att.days);
   const lb=useMemo(()=>blotterRows(book?.strategies).filter(r=>r.traded),[book]);
+  const lbChips=useMemo(()=>chipMap(book?.strategies),[book]);
   const maxAbs=useMemo(()=>Math.max(0.0001,...lb.map(r=>Math.abs(r.alphaPct??0))),[lb]);
 
 
@@ -8203,7 +8210,7 @@ function PerformancePanelLab({demoMode,book,liveEquity}){
             <tbody>{lb.map(r=>{
               const a=r.alphaPct;const w=a==null?0:Math.min(50,(Math.abs(a)/maxAbs)*50);
               return<tr key={r.id} data-testid="perf-row">
-                <td style={{whiteSpace:"normal"}}>{r.code?<span className="mz-code">{r.code}</span>:<span className="mz-code mz-code-none">—</span>}<span style={{color:T.textHi,fontWeight:600}}>{r.name}</span></td>
+                <td style={{whiteSpace:"normal"}}><CodeChip {...(lbChips.get(r.id)||{label:r.code})}/><span style={{color:T.textHi,fontWeight:600}}>{r.name}</span></td>
                 <td style={{color:r.returnPct==null?T.muted:r.returnPct>=0?T.gain:T.loss}}>{r.returnPct==null?"—":mask(fp(r.returnPct))}</td>
                 <td style={{color:r.benchPct==null?T.muted:r.benchPct>=0?T.gain:T.loss}}>{r.benchPct==null?"—":fp(r.benchPct)}</td>
                 <td style={{minWidth:"14rem"}}>
@@ -8228,6 +8235,28 @@ function PerformancePanelLab({demoMode,book,liveEquity}){
  * an approval window is short and a view you have to go looking for is a view
  * that expires.
  */
+/**
+ * A strategy's chip: its code (A, E·core…, or LIVE / SHADOW for the two
+ * un-lettered ones) with its identity colour on the chip's EDGE. The letters
+ * stay in ink — a strategy colour is identity only and never tints a number
+ * or text, because some hues resemble gain/loss/warning (strategyColors.js).
+ */
+function stratChip(s){
+  const k=strategyColorKey(s);
+  const{code,name}=strategyLabel(s);
+  return{label:code||(k==="LV"?"LIVE":k==="SH"?"SHADOW":""),color:k?STRATEGY_PALETTE[k]:null,name};
+}
+function chipMap(strategies){
+  const m=new Map();
+  for(const s of asArray(strategies))if(s&&s.id)m.set(String(s.id),stratChip(s));
+  return m;
+}
+function CodeChip({label,color,title}){
+  if(!label)return<span className="mz-code mz-code-none" aria-hidden="true">—</span>;
+  return<span className="mz-code" title={title||undefined} data-strategy-color={color||undefined}
+    style={color?{borderColor:color,boxShadow:`inset 3px 0 0 ${color}`}:undefined}>{label}</span>;
+}
+
 /**
  * The strategy list, read ONCE for the whole Trade tab. /api/bot/strategies
  * values every sleeve server-side (Alpaca prices per strategy), so the desk,
@@ -8290,10 +8319,11 @@ function AllocationBar({segments,mask}){
     <div className="mz-alloc" role="img" aria-label={`Allocation: ${segments.map(s=>`${s.code} ${s.pct}%`).join(", ")}`}>
       {segments.map(s=>s.code==="unallocated"
         ?<span key={s.code} className="mz-alloc-free" style={{width:`${s.pct}%`}}/>
-        :<span key={s.code} style={{width:`${s.pct}%`,background:T.textHi,opacity:shade[(i++)%shade.length]}} title={`${s.code} · ${s.pct}%`}/>)}
+        :<span key={s.code} style={{width:`${s.pct}%`,background:s.color||T.textHi,opacity:s.color?1:shade[(i++)%shade.length]}} title={`${s.code} · ${s.pct}%`}/>)}
     </div>
     <div className="mz-alloc-legend" style={{fontFamily:FM}}>
       {segments.map(s=><span key={s.code}>
+        {s.color&&<span aria-hidden="true" className="mz-swatch" style={{background:s.color}}/>}
         <b style={{color:s.code==="unallocated"?T.muted:T.textHi}}>{s.code==="unallocated"?"UNALLOCATED":s.code}</b> {mask(f$(s.amount,0))} <span style={{color:T.muted}}>· {s.pct.toFixed(1)}%</span>
       </span>)}
     </div>
@@ -8306,14 +8336,15 @@ function AllocationBar({segments,mask}){
  * by side. Figures pass through from the server scoreboard (deskBlotter.js).
  */
 function StrategyBlotter({strategies,state,accountEquity,mask}){
-  const rows=useMemo(()=>blotterRows(strategies),[strategies]);
+  const chips=useMemo(()=>chipMap(strategies),[strategies]);
+  const rows=useMemo(()=>blotterRows(strategies).map(r=>{const c=chips.get(r.id);return c?{...r,code:r.code||c.label,color:c.color}:r;}),[strategies,chips]);
   const groups=useMemo(()=>groupTotals(rows),[rows]);
   const segs=useMemo(()=>allocationSegments(rows,accountEquity),[rows,accountEquity]);
   const[busy,setBusy]=useState(null);
   const[err,setErr]=useState(null);
   const pct=v=>v==null?<span style={{color:T.muted}}>—</span>:<span style={{color:v>0?T.gain:v<0?T.loss:T.muted}}>{mask(fp(v))}</span>;
   const tone=t=>t==="warn"?T.gold:t==="ok"?T.text:T.muted;
-  const code=c=>c?<span className="mz-code">{c}</span>:<span className="mz-code mz-code-none" aria-hidden="true">—</span>;
+  const code=r=><CodeChip label={r.code} color={r.color}/>;
   const usd0=v=>v!=null?mask(f$(v,0)):"—";
   const alpha=r=>r.traded&&r.alphaPct!=null?<span style={{color:r.alphaPct>0?T.gain:r.alphaPct<0?T.loss:T.muted}}>{mask(`${r.alphaPct>0?"+":""}${r.alphaPct.toFixed(2)} pts`)}</span>:<span style={{color:T.muted}}>—</span>;
   const equityCell=r=>r.unpriced?<span style={{color:T.gold}} title="A holding could not be priced, so the value is unknown — not zero.">PRICE N/A</span>:usd0(r.equity);
@@ -8346,7 +8377,7 @@ function StrategyBlotter({strategies,state,accountEquity,mask}){
         <tbody>
           {rows.map(r=><tr key={r.id} data-testid="book-row">
             <td style={{whiteSpace:"normal",minWidth:"14rem"}}>
-              {code(r.code)}
+              {code(r)}
               <span style={{color:T.textHi,fontWeight:600}}>{r.name}</span>
               <span style={{color:T.muted,marginLeft:T.s2,fontSize:"var(--fs-2xs)",letterSpacing:".08em"}}>{r.venue.toUpperCase()}</span>
             </td>
@@ -8360,7 +8391,7 @@ function StrategyBlotter({strategies,state,accountEquity,mask}){
             <td>{journalBtn(r)}</td>
           </tr>)}
           {groups.map(g=><tr key={`g-${g.group}`} className="mz-book-total" data-testid="book-group">
-            <td><span className="mz-code">{g.group}</span><span style={{color:T.textHi,fontWeight:600}}>Combined</span><span style={{color:T.muted,marginLeft:T.s2,fontSize:"var(--fs-2xs)"}}>{g.members} SLEEVES</span></td>
+            <td><CodeChip label={g.group} color={STRATEGY_PALETTE[g.group]||null}/><span style={{color:T.textHi,fontWeight:600}}>Combined</span><span style={{color:T.muted,marginLeft:T.s2,fontSize:"var(--fs-2xs)"}}>{g.members} SLEEVES</span></td>
             <td style={{color:T.muted}}>{usd0(g.sleeve)}</td>
             <td style={{color:T.textHi}}>{usd0(g.equity)}</td>
             <td>{g.traded?pct(g.returnPct):<span style={{color:T.muted}}>not traded</span>}</td><td/><td/><td/><td/><td/>
@@ -8371,12 +8402,12 @@ function StrategyBlotter({strategies,state,accountEquity,mask}){
           behind a sideways scroll. Same data, stacked per strategy. */}
       <ol className="mz-tbl-mobile mz-book-list" style={{fontFamily:FM}}>
         {rows.map(r=><li key={r.id} data-testid="book-card">
-          <div className="mz-bl-1">{code(r.code)}<span className="mz-bl-name">{r.name}</span><span className="mz-bl-ret">{r.traded?pct(r.returnPct):<span style={{color:T.muted}}>not traded</span>}</span></div>
+          <div className="mz-bl-1">{code(r)}<span className="mz-bl-name">{r.name}</span><span className="mz-bl-ret">{r.traded?pct(r.returnPct):<span style={{color:T.muted}}>not traded</span>}</span></div>
           <div className="mz-bl-2"><span>{r.venue.toUpperCase()} · {usd0(r.sleeve)} → {equityCell(r)}</span><span>vs SPUS {alpha(r)}</span></div>
           <div className="mz-bl-3"><span style={{color:tone(r.status.tone)}}>{r.status.text}{r.holdings?` · ${r.holdings} held`:""}</span>{journalBtn(r)}</div>
         </li>)}
         {groups.map(g=><li key={`g-${g.group}`} className="mz-book-total">
-          <div className="mz-bl-1">{code(g.group)}<span className="mz-bl-name">Combined · {g.members} sleeves</span><span className="mz-bl-ret">{g.traded?pct(g.returnPct):<span style={{color:T.muted}}>not traded</span>}</span></div>
+          <div className="mz-bl-1"><CodeChip label={g.group} color={STRATEGY_PALETTE[g.group]||null}/><span className="mz-bl-name">Combined · {g.members} sleeves</span><span className="mz-bl-ret">{g.traded?pct(g.returnPct):<span style={{color:T.muted}}>not traded</span>}</span></div>
           <div className="mz-bl-2"><span>{usd0(g.sleeve)} → {usd0(g.equity)}</span></div>
         </li>)}
       </ol>
@@ -8388,6 +8419,7 @@ function StrategyBlotter({strategies,state,accountEquity,mask}){
 /** Recent orders across every strategy. AI reviews are not orders and stay in AI Committee. */
 function ActivityTape({items,strategies,state}){
   const rows=useMemo(()=>tapeRows(items,strategies,14),[items,strategies]);
+  const chips=useMemo(()=>chipMap(strategies),[strategies]);
   const statusColor=s=>s==="rejected"||s==="expired"?T.loss:s==="executed"?T.text:s==="pending"||s==="submitted"||s==="approved"?T.gold:T.muted;
   return<section data-testid="activity-tape">
     <SectionHead label="Activity" hint="The latest orders, newest first, from every strategy." style={{marginBottom:T.s3}}/>
@@ -8398,7 +8430,7 @@ function ActivityTape({items,strategies,state}){
         :<ol className="mz-feed" style={{fontFamily:FM}}>
           {rows.map(r=><li key={r.id} title={r.error||undefined}>
             <span className="mz-feed-t">{nyStamp(r.at)}</span>
-            <span className="mz-code">{r.code}</span>
+            {(()=>{const c=chips.get(r.strategyId);return<CodeChip label={c?.label||(r.code!=="—"?r.code:"")} color={c?.color} title={c?.name}/>;})()}
             <span className="mz-feed-what"><b style={{color:T.textHi}}>{r.side.toUpperCase()}</b> {r.qty!=null?(Math.abs(r.qty)<1||!Number.isInteger(r.qty)?r.qty.toFixed(2):r.qty):""} <b style={{color:T.textHi}}>{r.ticker}</b></span>
             <span className="mz-feed-s" style={{color:statusColor(r.status)}}>{r.status.toUpperCase()}</span>
           </li>)}
@@ -14959,6 +14991,7 @@ export default function Mizan(){
       .mz-book td:first-child{white-space:normal;}
       .mz-book-total td{border-top:1px solid var(--mz-borderHi);}
       .mz-code-none{border-style:dashed; color:var(--mz-muted); font-weight:400;}
+      .mz-swatch{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; vertical-align:baseline;}
       .mz-book-list{list-style:none; margin:0; padding:0;}
       .mz-book-list > li{display:flex; flex-direction:column; gap:4px; padding:var(--s-3) 0; border-bottom:1px solid var(--mz-border);
         font-size:var(--fs-xs); font-variant-numeric:tabular-nums;}

@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-08
 
 ### Added
+- **trade-lab:** Quick Trade defaults to the paper desk (`a9bd2ef`)
 - **trade-lab:** Redesign every Trade sub-tab as one desk (`54aca96`)
 
 ## 2026-10-07

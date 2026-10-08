@@ -49,6 +49,7 @@ const MODULES = [
   '../../lib/trading/volume.mjs',
   '../lib/deskBlotter.js',
   '../lib/committee.js',
+  '../lib/strategyColors.js',
   '../../lib/trading/journal.mjs',
 ]
 
