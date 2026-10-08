@@ -18,9 +18,10 @@ import { deskSummary } from "../lib/deskSummary.js";
 import { blotterRows, allocationSegments, tapeRows, groupTotals, strategyLabel, MODE_LADDER } from "../lib/deskBlotter.js";
 import { deskPipeline, latestRoundAnswering, MARK_GLYPH as PIPE_GLYPH } from "../lib/deskPipeline.js";
 import { sparkPaths, pinToday } from "../lib/sparkline.js";
+import { explainStrategy } from "../lib/strategyExplainer.js";
 import { committeeStats } from "../lib/committee.js";
 import { STRATEGY_PALETTE, strategyColorKey } from "../lib/strategyColors.js";
-import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity } from "../lib/equityCurve.js";
+import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity, fundingBaseline, sinceFunding } from "../lib/equityCurve.js";
 import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/benchmarkAttribution.js";
 // Aliased: MizanApp already declares a STANDARDS of its own further down.
 import { complianceMatrix, STANDARDS as SCREEN_STANDARDS, STANDARD_LABELS } from "../lib/complianceMatrix.js";
@@ -7552,6 +7553,24 @@ function EquityChart({demoMode,liveEquity}){
   const{line,area,xy}=useMemo(()=>curvePath(points,{w:CURVE_W,h:CURVE_H}),[points]);
   const change=useMemo(()=>curveChange(points),[points]);
   const coverage=useMemo(()=>curveCoverage(raw,history),[raw,history]);
+  // ONE basis for every range (owner, 2026-10-08): the headline is always the
+  // change since the account's starting balance, read once from the longest
+  // window. The range only changes what is drawn, and its own change is the
+  // smaller line underneath. Before, 1D measured from yesterday, 1W from the
+  // week's start and 1M+ from funding — the same account, three answers.
+  const[longRaw,setLongRaw]=useState(null);
+  useEffect(()=>{
+    if(demoMode)return;
+    let cancelled=false;
+    (async()=>{
+      try{const r=await apiFetch("/api/alpaca/portfolio-history?range=1Y");
+        if(r.ok){const d=await r.json().catch(()=>null);if(!cancelled)setLongRaw(d);}}
+      catch{/* headline falls back to "—", never to the window's change */}
+    })();
+    return()=>{cancelled=true;};
+  },[demoMode]);
+  const base=useMemo(()=>fundingBaseline(toPoints(range==="1Y"?raw:longRaw)),[range,raw,longRaw]);
+  const since=useMemo(()=>sinceFunding(base,liveEquity!=null&&liveEquity!==""?liveEquity:points.at(-1)?.v),[base,liveEquity,points]);
 
   const up=change.change!=null&&change.change>=0;
   const stroke=change.change==null?T.slate:up?T.gain:T.loss;
@@ -7565,7 +7584,7 @@ function EquityChart({demoMode,liveEquity}){
 
   return<section>
     <SectionHead label="Equity curve"
-      hint="What the paper desk has been worth over time. The change is measured from the start of the window you pick — not from the account's opening balance, which would answer a different question."
+      hint="What the paper desk has been worth over time. The big number is always measured from the balance you started with, whichever range is drawn; the line under it is the change over that range alone."
       right={<div className="mz-chip-row" style={{display:"flex",gap:4,flexWrap:"wrap"}}>
         {CURVE_RANGES.map(([id,label])=><button key={id} onClick={()=>setRange(id)} style={{
           fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.1em",fontWeight:600,
@@ -7607,15 +7626,22 @@ function EquityChart({demoMode,liveEquity}){
                 AT {new Date(hovered.t).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}).toUpperCase()}
               </span>
             </>
-            :<>
-              <span style={{fontFamily:FU,fontSize:"var(--fs-3xl)",fontWeight:600,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.02em",
-                color:change.change==null?T.muted:change.change>0?T.gain:change.change<0?T.loss:T.muted}}>
-                {change.change==null?"—":`${change.change>0?"+":change.change<0?"−":""}${mask(f$(change.change))}`}
+            :<span data-testid="equity-headline" style={{display:"inline-flex",flexDirection:"column",gap:2}}>
+              <span style={{display:"inline-flex",alignItems:"baseline",gap:T.s3,flexWrap:"wrap"}}>
+                <span style={{fontFamily:FN,fontSize:"var(--fs-3xl)",fontWeight:600,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.02em",
+                  color:since.change==null?T.muted:since.change>0?T.gain:since.change<0?T.loss:T.muted}}>
+                  {since.change==null?"—":`${since.change>0?"+":since.change<0?"−":""}${mask(f$(Math.abs(since.change)))}`}
+                </span>
+                <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>
+                  {since.changePct!=null?`${fp(since.changePct)} `:""}since you started{base?<> with {mask(f$(base.v,0))} on {new Date(base.t).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</>:""}
+                </span>
               </span>
-              <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.muted,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>
-                {change.changePct!=null?fp(change.changePct):""} OVER {range}
+              <span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>
+                {range}: <span style={{color:change.change==null?T.muted:change.change>0?T.gain:change.change<0?T.loss:T.muted}}>
+                  {change.change==null?"—":`${change.change>0?"+":change.change<0?"−":""}${mask(f$(Math.abs(change.change)))}`}</span>
+                {change.changePct!=null?` (${fp(change.changePct)})`:""}
               </span>
-            </>}
+            </span>}
           <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.12em",marginLeft:"auto"}}>
             {points.length} POINTS
           </span>
@@ -8439,6 +8465,30 @@ function ActivityTape({items,strategies,state}){
   </section>;
 }
 
+/** Every strategy explained in one place — for remembering, and for when
+ *  someone asks. Same text as the Desk cards' "How it works". */
+function StrategyGuide({book}){
+  const chips=useMemo(()=>chipMap(book.strategies),[book.strategies]);
+  const rows=useMemo(()=>blotterRows(book.strategies),[book.strategies]);
+  const byId=useMemo(()=>new Map(asArray(book.strategies).filter(s=>s?.id).map(s=>[String(s.id),s])),[book.strategies]);
+  if(book.state!=="ready"||!rows.length)return null;
+  return<section className="mz-guide" data-testid="strategy-guide">
+    <LabHead title="Strategy guide" note="What each strategy does, in plain English, written from the rules it actually runs on — so it stays true if a rule changes. Open one to read it in full."/>
+    {rows.map(r=>{const c=chips.get(r.id);const a=explainStrategy(byId.get(r.id),book.strategies);
+      return<details key={r.id} className="mz-guide-item" data-testid="guide-item">
+        <summary>
+          <span className="mz-key" style={{background:c?.color||T.slate,width:16}} aria-hidden="true"/>
+          <b>{r.code||c?.label||""}</b>
+          <span className="mz-guide-name">{r.name}</span>
+          <span className="mz-guide-one">{a.oneLine}</span>
+        </summary>
+        <ul>{a.rules.map((x,i)=><li key={i}>{x}</li>)}</ul>
+        {a.tests&&<p><b>What it tests.</b> {a.tests}</p>}
+        <p className="mz-news-dim">{a.money} Mode: {r.mode}.</p>
+      </details>;})}
+  </section>;
+}
+
 /** Orders sent to the broker that have not finished. Lives in Orders. */
 function WorkingOrders({desk}){
   const{mask}=useHideValues();
@@ -8633,7 +8683,19 @@ function ModeLadder({mode}){
 /** One strategy as a small chart: its line in its own colour, SPUS in grey,
  *  on one shared scale. Before a strategy trades there is nothing to plot,
  *  so the box says what will happen instead. */
-function StrategyMultiple({row,curve,mask,today}){
+/** "What is this strategy?" — the plain-English rules, generated from the
+ *  params it runs on (strategyExplainer.js), so it cannot drift from them. */
+function StrategyAbout({about,open=false}){
+  if(!about)return null;
+  return<details className="mz-about" open={open||undefined}>
+    <summary>How it works</summary>
+    <ul>{about.rules.map((r,i)=><li key={i}>{r}</li>)}</ul>
+    {about.tests&&<p className="mz-about-tests"><b>What it tests.</b> {about.tests}</p>}
+    <p className="mz-about-money">{about.money}</p>
+  </details>;
+}
+
+function StrategyMultiple({row,curve,mask,today,about}){
   const live=row.traded&&row.returnPct!=null?{returnPct:row.returnPct,benchPct:row.benchPct}:null;
   const pts=pinToday(curve?.points,today,live);
   const g=sparkPaths(pts,{w:280,h:64,pad:4});
@@ -8645,6 +8707,7 @@ function StrategyMultiple({row,curve,mask,today}){
       <b><span className="mz-mult-key" aria-hidden="true"/>{row.code?`${row.code} · `:""}{row.name}</b>
       <span style={{color:tone(ret)}}>{row.unpriced?<span style={{color:T.gold}}>price n/a</span>:!row.traded?<span style={{color:T.muted}}>not traded</span>:ret==null?"—":mask(fp(ret))}</span>
     </header>
+    {about&&<p className="mz-mult-what">{about.oneLine}</p>}
     {g?<svg viewBox={`0 0 ${g.w} ${g.h}`} preserveAspectRatio="none" role="img"
         aria-label={`${row.code||row.name} against SPUS over ${days} trading day${days===1?"":"s"}`}>
         <line x1="0" x2={g.w} y1={g.zeroY} y2={g.zeroY} className="mz-mult-zero"/>
@@ -8659,6 +8722,7 @@ function StrategyMultiple({row,curve,mask,today}){
     </footer>
     <div className="mz-mult-status" style={{color:row.status?.tone==="warn"?T.gold:T.muted}}>{row.status?.text}</div>
     <ModeLadder mode={row.mode}/>
+    <StrategyAbout about={about}/>
   </article>;
 }
 
@@ -8744,6 +8808,7 @@ function BroadsheetDesk({desk,book,session,demoMode,onGo,screen}){
 
   const chips=useMemo(()=>chipMap(book.strategies),[book.strategies]);
   const rows=useMemo(()=>blotterRows(book.strategies).map(r=>{const c=chips.get(r.id);return c?{...r,code:r.code||c.label,color:c.color}:r;}),[book.strategies,chips]);
+  const abouts=useMemo(()=>{const m=new Map();for(const st of asArray(book.strategies))if(st?.id)m.set(String(st.id),explainStrategy(st,book.strategies));return m;},[book.strategies]);
   const symbols=useMemo(()=>asArray(desk.positions).map(p=>String(p?.symbol||"").toUpperCase()).filter(Boolean),[desk.positions]);
   const{verdicts}=screen;
   const compliance=useMemo(()=>{
@@ -8766,7 +8831,7 @@ function BroadsheetDesk({desk,book,session,demoMode,onGo,screen}){
     {book.state==="loading"&&<p className="mz-col-empty">Loading strategies…</p>}
     {book.state==="unavailable"&&<p className="mz-col-empty">The strategy list could not be loaded.</p>}
     {book.state==="ready"&&!rows.length&&<p className="mz-col-empty">No strategies yet. Build one in Strategies.</p>}
-    {rows.length>0&&<div className="mz-multis">{rows.map(r=><StrategyMultiple key={r.id} row={r} curve={curves.curves[r.id]} mask={mask} today={today}/>)}</div>}
+    {rows.length>0&&<div className="mz-multis">{rows.map(r=><StrategyMultiple key={r.id} row={r} curve={curves.curves[r.id]} mask={mask} today={today} about={abouts.get(r.id)}/>)}</div>}
 
     <div className="mz-cols">
       <LatestOrders items={feed.items} strategies={book.strategies} state={feed.state} onMore={()=>onGo("signals")}/>
@@ -9095,6 +9160,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         {sub==="committee"&&<AiCommittee demoMode={demoMode} book={book}/>}
         {sub==="compliance"&&<div className="mz-lab-stack"><CompliancePanel desk={deskData} demoMode={demoMode} screen={screen}/><RiskPanel desk={deskData} demoMode={demoMode} screen={screen}/></div>}
         {sub==="journal"&&<LabJournal book={book}/>}
+        {sub==="strategies"&&<div style={{marginBottom:T.s6}}><StrategyGuide book={book}/></div>}
         {/* The bot panel is UNTOUCHED — Strategies and the signal queue. */}
         {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
         {sub==="strategies"&&<div style={{marginTop:T.s5}}><TradeConnectionsPanel onConnectTrade={onConnectTrade}/></div>}
@@ -15239,6 +15305,26 @@ export default function Mizan(){
         background:repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--mz-dim) 55%, transparent) 6px 7px);}
       .mz-mult footer{display:flex; justify-content:space-between; gap:var(--s-2); flex-wrap:wrap; font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
       .mz-mult-status{font-family:${FP}; font-size:var(--fs-xs); margin-top:2px;}
+      .mz-mult-what{font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-text); margin:4px 0 0; line-height:1.45;}
+      .mz-about{font-family:${FP}; font-size:var(--fs-sm); margin-top:var(--s-2); color:var(--mz-text);}
+      .mz-about summary, .mz-guide-item summary{cursor:pointer; color:${T.blue}; list-style:none;}
+      :root[data-theme="dark"] .mz-about summary{color:var(--mz-textHi);}
+      .mz-about summary::-webkit-details-marker, .mz-guide-item summary::-webkit-details-marker{display:none;}
+      .mz-about summary::before{content:"▸ "; color:var(--mz-muted);}
+      .mz-about[open] summary::before{content:"▾ ";}
+      .mz-about ul, .mz-guide-item ul{margin:var(--s-2) 0; padding-left:1.1em; line-height:1.5;}
+      .mz-about li, .mz-guide-item li{margin-bottom:4px;}
+      .mz-about p, .mz-guide-item p{margin:var(--s-2) 0 0; line-height:1.5;}
+      .mz-about-money{color:var(--mz-muted);}
+      .mz-guide-item{border-bottom:1px solid var(--mz-border); padding:var(--s-3) 0; font-family:${FP}; font-size:var(--fs-sm);}
+      .mz-guide-item summary{display:flex; align-items:baseline; gap:var(--s-2); flex-wrap:wrap; color:var(--mz-text);}
+      .mz-guide-item summary b{color:var(--mz-textHi); min-width:3em;}
+      .mz-guide-name{color:var(--mz-textHi); font-weight:600;}
+      .mz-guide-one{color:var(--mz-muted); flex:1 1 16rem;}
+      .mz-guide-item summary::after{content:"▸"; margin-left:auto; color:var(--mz-muted);}
+      .mz-guide-item[open] summary::after{content:"▾";}
+      .mz-guide-item > ul, .mz-guide-item > p{max-width:72ch; margin-left:calc(16px + 3em + var(--s-4));}
+      @media (max-width:640px){ .mz-guide-item > ul, .mz-guide-item > p{margin-left:0;} }
       .mz-ladder{font-family:${FP}; font-size:var(--fs-2xs); color:var(--mz-muted); margin-top:var(--s-2); opacity:.85;}
       .mz-ladder b{font-weight:700; opacity:1;}
       /* The three short columns under the charts. */

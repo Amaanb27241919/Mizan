@@ -199,3 +199,24 @@ describe('pinLiveEquity', () => {
     expect(pinLiveEquity([], 5, 1)).toEqual([])
   })
 })
+
+describe("fundingBaseline / sinceFunding — one basis for every range", () => {
+  it("measures from the first funded point, whatever window is drawn", async () => {
+    const { toPoints, fundingBaseline, sinceFunding } = await import("../lib/equityCurve.js");
+    const yr = toPoints({ timestamp: [1, 2, 3, 4], equity: [0, 0, 1000000, 1002000] });
+    const base = fundingBaseline(yr);
+    expect(base).toEqual({ t: 3000, v: 1000000 });
+    const s = sinceFunding(base, "1004392.10");
+    expect(s.change).toBeCloseTo(4392.1, 2);
+    expect(s.changePct).toBeCloseTo(0.43921, 4);
+    expect(s.base).toBe(1000000);
+  });
+  it("is unknown — not zero — when either side is missing", async () => {
+    const { fundingBaseline, sinceFunding } = await import("../lib/equityCurve.js");
+    expect(fundingBaseline([])).toBeNull();
+    expect(fundingBaseline(null)).toBeNull();
+    expect(sinceFunding(null, 5)).toEqual({ change: null, changePct: null, base: null });
+    expect(sinceFunding({ t: 1, v: 100 }, null).change).toBeNull();
+    expect(sinceFunding({ t: 1, v: 100 }, undefined).change).toBeNull();
+  });
+});

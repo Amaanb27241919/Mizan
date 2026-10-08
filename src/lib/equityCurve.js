@@ -164,3 +164,25 @@ export function pinLiveEquity(points, liveEquity, nowMs = Date.now()) {
   if (nowMs - last.t < PIN_MERGE_MS) return [...pts.slice(0, -1), { t: last.t, v }];
   return [...pts, { t: nowMs, v }];
 }
+
+/**
+ * The account's starting balance: its first funded point. Every range on the
+ * equity chart states its headline against THIS, so 1D / 1W / 1M / 3M / 1Y
+ * all answer the same question ("since I started") instead of each measuring
+ * from its own window start (owner, 2026-10-08: "make it consistent").
+ * points: toPoints() output over the longest window available (leading
+ * unfunded zeros are already dropped there). → { t, v } or null.
+ */
+export function fundingBaseline(points) {
+  if (!Array.isArray(points)) return null;
+  const p = points.find((x) => x && Number.isFinite(x.v) && x.v > 0 && Number.isFinite(x.t));
+  return p ? { t: p.t, v: p.v } : null;
+}
+
+/** Change from the starting balance to now. Null when either side is unknown. */
+export function sinceFunding(baseline, nowValue) {
+  const b = baseline && Number.isFinite(baseline.v) && baseline.v > 0 ? baseline.v : null;
+  const n = nowValue === null || nowValue === undefined || nowValue === "" ? null : Number(nowValue);
+  if (b === null || !Number.isFinite(n)) return { change: null, changePct: null, base: b };
+  return { change: n - b, changePct: ((n - b) / b) * 100, base: b };
+}

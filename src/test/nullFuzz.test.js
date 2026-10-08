@@ -52,6 +52,7 @@ const MODULES = [
   '../lib/strategyColors.js',
   '../lib/deskPipeline.js',
   '../lib/sparkline.js',
+  '../lib/strategyExplainer.js',
   '../../lib/trading/curve.mjs',
   '../../lib/trading/journal.mjs',
 ]

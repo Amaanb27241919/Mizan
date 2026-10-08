@@ -953,3 +953,60 @@ test.describe("Trade Lab desk", () => {
     await expect(page.locator(".mz-rail-armed")).toContainText("PAPER");
   });
 });
+
+// Owner, 2026-10-08: "remind me what each strategy is — people will ask".
+test("the Strategy guide explains every strategy from its own rules", async ({ page }) => {
+  const SRC = "etf_holdings_cache:SPUS (Alpha Vantage, 219 raw -> 214 valid)";
+  const rank = (id, experiment, params) => ({ id, enabled: true, strategy_type: "rank_rebalance", capital_allocated: "250000", stop_loss_pct: "15",
+    params: { experiment, broker: "alpaca_paper", buy_top: 15, hold_zone: 25, momentum_days: 252, rebalance_days: 30, universe_source: SRC, ...params },
+    progress: { paper: true, trades_executed: 0 } });
+  await gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: [
+    rank("aaaaaaaa-0000-0000-0000-000000000001", "A: reference system + AI gate", { ai_gate: true }),
+    rank("bbbbbbbb-0000-0000-0000-000000000002", "B: reference system, no AI", {}),
+  ] } } });
+  // The Desk card carries the one-line reminder and the full rules behind it.
+  const card = page.getByTestId("strategy-multiple").filter({ hasText: "Reference system + AI gate" });
+  await expect(card).toContainText("The 15 strongest halal stocks, rebalanced monthly, with an AI check before each buy.");
+  await card.getByText("How it works").click();
+  await expect(card).toContainText("Ranks the 214 halal stocks in SPUS by their 12-month price gain");
+  await expect(card).toContainText("Tests the AI gate: B runs the same rules without it");
+  // And the guide in Strategies lists all of them.
+  await openSection(page, "Strategies");
+  const guide = page.getByTestId("strategy-guide");
+  await expect(guide.getByTestId("guide-item")).toHaveCount(2);
+  await guide.getByTestId("guide-item").filter({ hasText: "no AI" }).locator("summary").click();
+  await expect(guide).toContainText("The control for A: the same rules without the AI gate");
+});
+
+// Owner, 2026-10-08: the curve's headline changed basis with the range
+// (1D from yesterday, 1W from the week's start, 1M+ from funding).
+test("the equity headline is measured from the starting balance on every range", async ({ page }) => {
+  const day = (d) => Date.parse(`2026-10-0${d}T00:00:00Z`) / 1000;
+  // A DIFFERENT history per range, as Alpaca really returns — with one shared
+  // fixture every window's own change equalled the since-funding change and
+  // this test could not tell the two apart (a mutation survived it).
+  const H = {
+    "1D": [[day(7), day(8)], [1003000, 1003500]],
+    "1W": [[day(6), day(7), day(8)], [1001200, 1003000, 1003500]],
+  };
+  const LONG = [[day(4), day(5), day(6), day(7)], [0, 1000000, 1001200, 1003000]];
+  await gotoLab(page, { fixtures: { "/api/alpaca/account": { ...PAPER, equity: 1004392.1 } },
+    before: (pg) => pg.route("**/api/alpaca/portfolio-history**", (route) => {
+      const r = new URL(route.request().url()).searchParams.get("range");
+      const [timestamp, equity] = H[r] || LONG;
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ timestamp, equity, baseValue: 0, timeframe: "1D", range: r }) });
+    }) });
+  await openSection(page, "Portfolio");
+  const head = page.getByTestId("equity-headline");
+  const texts = [];
+  for (const r of ["1D", "1W", "1M", "3M", "1Y"]) {
+    await page.getByRole("button", { name: r, exact: true }).click();
+    await expect(head).toContainText("+$4,392.10");
+    texts.push((await head.innerText()).split("\n")[0]);
+  }
+  expect(new Set(texts).size, `headline must not change with the range: ${texts.join(" | ")}`).toBe(1);
+  await expect(head).toContainText("since you started with $1,000,000");
+  // The range's own change is still stated, underneath — and it differs.
+  await page.getByRole("button", { name: "1D", exact: true }).click();
+  await expect(head).toContainText("1D: +$1,392.10");
+});
