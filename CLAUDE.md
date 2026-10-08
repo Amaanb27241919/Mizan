@@ -208,6 +208,15 @@ lib/trading/sleeve.mjs         — Pure per-strategy money for SHARED accounts: 
                                  Unreadable balance ⇒ null ⇒ order proceeds so a broken
                                  connection still surfaces. `c1cf6d0`, after the owner stopped
                                  funding the E*TRADE account).
+lib/ownerBrief.mjs             — Pure: the Trade Lab summary for the owner's Lima morning brief
+                                 (runs 08:30 CENTRAL = 09:30 ET, the open). GET /api/owner/brief
+                                 is READ-ONLY, gated by its OWN `BRIEF_TOKEN` (never CRON_SECRET —
+                                 the token lives on the owner's Mac at ~/.lima/mizan-brief.token),
+                                 scoped to root profiles + OWNER_EMAIL + `BRIEF_EMAILS`. Per
+                                 strategy: scoreboard return vs SPUS, today's AI-panel answers,
+                                 params.last_screen (written by prepareRankPlan on change),
+                                 held names failing AAOIFI, DCA waiting-for-funds. Consumer:
+                                 ~/Developer/lima/core/brief/src/sources/mizan.ts.
 lib/trading/screenGate.mjs     — Pure: EVERY strategy screens by AAOIFI (owner decision
                                  2026-10-07). tradeEligibility → eligible | blocked |
                                  unverified; screenPlanInputs → excludeBuys / forceSells /

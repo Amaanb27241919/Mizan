@@ -13,6 +13,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade-lab:** Owner morning-brief endpoint for the 8:30 ET Lima brief (`bf431ed`)
 
 ### Fixed
+- **trade-lab:** Unfilled paper strategies read as live; brief covers all owner desks (`518de2a`)
 - **dca:** Wait for a deposit instead of ordering into an empty live account (`c1cf6d0`)
 - **trade-lab:** Equity curve ends at the desk's live equity (`59a6637`)
 - **trade-lab:** Equity curve measured the opening deposit as gain (`3bcdb92`)
