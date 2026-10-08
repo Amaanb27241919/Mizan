@@ -52,7 +52,12 @@ export function toPoints(raw) {
     if (t === null || v === null) continue;      // a hole, not a zero
     out.push({ t: t * 1000, v });                 // ms, so it feeds Date directly
   }
-  return out;
+  // Days before the account was funded read 0. They are not a balance, and
+  // measuring from them reported the $1,000,000 opening deposit as gain on
+  // the 2026-10-07 desk ("+$1,000,000.00 OVER 1M"). Only the LEADING run is
+  // dropped: a funded account that later falls to 0 keeps every point.
+  const funded = out.findIndex((p) => p.v > 0);
+  return funded <= 0 ? out : out.slice(funded);
 }
 
 /**
@@ -135,7 +140,10 @@ export function pointAtX(xy, x, w = 600) {
  */
 export function curveCoverage(raw, points) {
   const timestamp = raw && typeof raw === "object" ? raw.timestamp : null;
-  const total = Array.isArray(timestamp) ? timestamp.length : 0;
   const have = Array.isArray(points) ? points.length : 0;
+  // Count intervals from the first funded point: days before the account
+  // existed were never "missing" (toPoints drops them on purpose).
+  const startT = have ? points[0].t / 1000 : -Infinity;
+  const total = Array.isArray(timestamp) ? timestamp.filter((t) => !(Number(t) < startT)).length : 0;
   return { have, total, complete: total > 0 && have === total, empty: have === 0 };
 }

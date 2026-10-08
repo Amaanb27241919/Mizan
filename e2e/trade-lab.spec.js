@@ -601,3 +601,17 @@ test.describe("Trade Lab compliance", () => {
     await expect(page.locator(".mz-cockpit")).toContainText("3/3 SCREENED");
   });
 });
+
+// Production, 2026-10-07: a new $1M paper desk headlined "+$1,000,000.00 OVER
+// 1M" — Alpaca reports 0 equity for the days before funding, and the change
+// was measured from them.
+test("equity curve measures from funding, not from the zero days before it", async ({ page }) => {
+  const day = (d) => Date.parse(`2026-10-0${d}T00:00:00Z`) / 1000;
+  await gotoLab(page, { fixtures: { "/api/alpaca/portfolio-history": {
+    timestamp: [day(3), day(4), day(5), day(6), day(7)], equity: [0, 0, 0, 1000000, 1006000],
+    baseValue: 0, timeframe: "1D", range: "1M" } } });
+  const cockpit = page.locator(".mz-cockpit");
+  await expect(cockpit).toContainText("+$6,000.00");
+  await expect(cockpit).not.toContainText("1,000,000.00 OVER");
+  await expect(cockpit).not.toContainText("INTERVALS RECORDED");
+});

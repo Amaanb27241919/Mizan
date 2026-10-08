@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-07
 
 ### Fixed
+- **sharia:** Re-screen verdicts cached by the pre-fix engine; poll pending everywhere (`52f4f37`)
 - **sharia:** Every strategy screens by AAOIFI; Compliance/Risk stop blanking (`6040450`)
 - **ai:** Claude never answered the research panel; strict verdict schema (`f86dede`)
 

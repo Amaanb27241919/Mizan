@@ -158,3 +158,26 @@ describe('curveCoverage', () => {
     expect(curveCoverage(raw, toPoints(raw)).empty).toBe(true)
   })
 })
+
+describe('toPoints — days before the account was funded', () => {
+  it('drops the leading zero-equity run so the deposit is not counted as gain', () => {
+    const raw = { timestamp: [1, 2, 3, 4], equity: [0, 0, 1000000, 1006000] }
+    const pts = toPoints(raw)
+    expect(pts.map((p) => p.v)).toEqual([1000000, 1006000])
+    expect(curveChange(pts).change).toBe(6000)
+  })
+  it('keeps a later fall to zero', () => {
+    expect(toPoints({ timestamp: [1, 2, 3], equity: [100, 0, 50] }).map((p) => p.v)).toEqual([100, 0, 50])
+  })
+})
+
+describe('curveCoverage — unfunded days are not missing intervals', () => {
+  it('reports complete coverage once funded', () => {
+    const raw = { timestamp: [1, 2, 3, 4], equity: [0, 0, 1000000, 1006000] }
+    expect(curveCoverage(raw, toPoints(raw))).toMatchObject({ have: 2, total: 2, complete: true })
+  })
+  it('still reports genuine holes after funding', () => {
+    const raw = { timestamp: [1, 2, 3], equity: [100, null, 120] }
+    expect(curveCoverage(raw, toPoints(raw))).toMatchObject({ have: 2, total: 3, complete: false })
+  })
+})
