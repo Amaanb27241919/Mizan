@@ -333,3 +333,32 @@ describe('scopeStopsToStrategy', () => {
       .toEqual({ positions: [], openOrders: [] })
   })
 })
+
+describe("conflictingStops — what a rebalance lifts before trading a symbol (2026-10-09)", () => {
+  it("matches Mizan's own stops on that symbol, from any strategy, and nothing else", async () => {
+    const { conflictingStops } = await import("../../lib/trading/orderIdentity.js");
+    const open = [
+      { id: "1", symbol: "MU", client_order_id: "mz-stop-40229feb-MU-2026-10-09", type: "stop", side: "sell" },   // C's stop
+      { id: "2", symbol: "MU", client_order_id: "mz-stop-61b0f343-MU-2026-10-09", type: "stop", side: "sell" },   // E's own
+      { id: "3", symbol: "MU", client_order_id: "hand-order-abc", type: "limit", side: "sell" },                   // a hand order
+      { id: "4", symbol: "AMD", client_order_id: "mz-stop-40229feb-AMD-2026-10-09", type: "stop", side: "sell" },  // other symbol
+      null,
+    ];
+    expect(conflictingStops(open, "mu").map((o) => o.id)).toEqual(["1", "2"]);
+    expect(conflictingStops(open, "")).toEqual([]);
+    expect(conflictingStops(null, "MU")).toEqual([]);
+  });
+});
+
+describe("the rank rebalance lifts conflicting stops before placing each order", () => {
+  it("calls liftStops before executeStrategyOrder in the order loop", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    const SRC = readFileSync(path.resolve(__dirname, "../../lib/handlers.mjs"), "utf8");
+    const loop = SRC.slice(SRC.indexOf("const liftStops = async (sym) =>"), SRC.indexOf('action: "bot.rank.rebalanced"'));
+    expect(loop).toMatch(/if \(!venue\.paper \|\| isShadow \|\| !creds\) return;/);
+    const lift = loop.indexOf("await liftStops(o.sym);"), exec = loop.indexOf("executeStrategyOrder(");
+    expect(lift).toBeGreaterThan(-1);
+    expect(lift).toBeLessThan(exec);
+  });
+});
