@@ -14,6 +14,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade-lab:** Research (AI committee) in the broadsheet style (`153fdfc`)
 
 ### Fixed
+- **trade-lab:** Lift our own protective stops before a rebalance trades the symbol (`a173b21`)
 - **ai:** Refuse tool-carrying /api/advisor calls before they reach Anthropic (`c5ae76e`)
 - **ai:** Stop the Claude price fallback that drained the Anthropic account; circuit-break failing analysts (`8396dc3`)
 - **ai:** Research panel — feed it the evidence it was missing; name out-of-credits; fix DeepSeek's downside sign (`b626dcd`)
