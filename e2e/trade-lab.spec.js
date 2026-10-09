@@ -1098,8 +1098,16 @@ test.describe("Trade Lab orders section", () => {
     await open(page, { "/api/screen": { verdict: { tk: "AAPL", status: "review", byStandard: { AAOIFI: { pass: false } } } } });
     await page.getByRole("button", { name: "Open the ticket" }).click();
     const line = page.getByTestId("ticket-sharia");
-    await expect(line).toContainText("fails AAOIFI");
-    await expect(line).toContainText("does not stop it");
+    await expect(line).toContainText("fails AAOIFI — a buy will be refused");
+  });
+
+  test("a refused hand buy shows the server's sentence, not its code", async ({ page }) => {
+    await open(page, { "/api/screen": { verdict: { tk: "AAPL", status: "halal", byStandard: { AAOIFI: { pass: true } } } } });
+    await page.route("**/api/alpaca/order", (r) => r.fulfill({ status: 403, contentType: "application/json",
+      body: JSON.stringify({ error: "XYZ does not pass the AAOIFI Sharia screen, so it can't be bought here.", code: "sharia_failed" }) }));
+    await page.getByRole("button", { name: "Open the ticket" }).click();
+    await page.getByRole("button", { name: /Place paper buy/ }).click();
+    await expect(page.getByTestId("order-ticket").getByRole("alert")).toContainText("does not pass the AAOIFI Sharia screen");
   });
 
   test("survives a malformed signals response", async ({ page }) => {

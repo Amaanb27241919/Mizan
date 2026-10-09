@@ -8918,20 +8918,16 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
           }),
         });
         const d=await r.json();
-        if(!r.ok||d.error){setOrderErr(d.error||`HTTP ${r.status}`);return;}
+        if(!r.ok||d.error){setOrderErr(d.message||d.error||`HTTP ${r.status}`);return;}
         // No preview/confirm — Alpaca returns the placed order directly.
         setDone(true);
         setTimeout(()=>setDone(false),4000);
         onOrderPlaced?.();
         return;
       }
-      // Sharia precheck — block known non-compliant tickers before hitting the broker API
-      const HARAM_SNAP=new Set(["JPM","BAC","WFC","GS","MS","C","USB","BK","WYNN","MO","PM","MCD","BND","HYG","LCID"]);
-      if(HARAM_SNAP.has(sym.toUpperCase())){
-        setOrderErr(`${sym.toUpperCase()} is flagged as potentially non-compliant with AAOIFI standards. Consult your Sharia advisor before placing this order.`);
-        setOrderBusy(false);
-        return;
-      }
+      // No client-side Sharia list: the server holds every hand BUY to AAOIFI
+      // (handOrderGate, owner 2026-10-09) and its refusal is shown below. A
+      // second, hand-kept list here could only disagree with it.
       const orderTypeMap={market:"Market",limit:"Limit",stop:"StopLoss",stoplimit:"StopLimit"};
       const r=await apiFetch("/api/snaptrade/trade/impact",{
         method:"POST",headers:{"Content-Type":"application/json"},
@@ -8946,7 +8942,9 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         }),
       });
       const d=await r.json();
-      if(!r.ok||d.error){setOrderErr(d.error||`HTTP ${r.status}`);return;}
+      // `message` first: a Sharia refusal carries a code in `error` and the
+      // sentence a person should read in `message`.
+      if(!r.ok||d.error){setOrderErr(d.message||d.error||`HTTP ${r.status}`);return;}
       setImpactPreview(d.impact||d);
     }catch(err){setOrderErr(err.message||"Preview failed");}
     finally{setOrderBusy(false);}
@@ -9080,7 +9078,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
             :session.tradeable?<><b style={{color:T.gold}}>◐</b> {session.label} — limit orders only, expiring at the end of today's session. Books are thin and spreads wide; set the limit deliberately.</>
             :<><b style={{color:T.slate}}>○</b> closed ({String(session.reason||"").replace(/_/g," ")}). Orders are refused, not queued — a queued order fills later at a price you never saw.</>}</dd>
           <dt>Sharia screen</dt>
-          <dd data-testid="ticket-sharia">{(()=>{const l=ticketScreenLine(ticketScreen.verdict,ticketScreen.phase,false);
+          <dd data-testid="ticket-sharia">{(()=>{const l=ticketScreenLine(ticketScreen.verdict,ticketScreen.phase,true,side);
             return<><b style={{color:MARK_TONE[l.mark]}} aria-hidden="true">{PIPE_GLYPH[l.mark]}</b> {sym} {l.text}</>;})()}</dd>
           <dt>Estimated total</dt>
           <dd><span style={{fontFamily:FN,fontSize:"var(--fs-2xl)",color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{estPx>0?f$(estTotal):"—"}</span>

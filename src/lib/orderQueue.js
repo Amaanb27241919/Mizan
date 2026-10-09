@@ -81,17 +81,23 @@ export function historyRows(activity, strategies, limit = 50) {
 /**
  * The ticket's Sharia line, from the app's real screen. It replaced a static
  * "● SHARIA PRE-CHECK" that showed green for every symbol without checking.
- * `serverBlocks`: whether the order path itself refuses a failing name — today
- * it refuses only a fixed blocklist, so a failing name is said to go through.
+ * `serverBlocks`: whether the order path refuses a failing BUY. True since the
+ * owner held hand orders to AAOIFI (2026-10-09, handOrderGate); the false
+ * wording is kept for a venue that does not.
+ * `side`: a sell is never blocked, so a failing screen is not a refusal there.
  */
-export function ticketScreenLine(verdict, phase, serverBlocks = false) {
+export function ticketScreenLine(verdict, phase, serverBlocks = false, side = "buy") {
   if (phase === "idle") return { mark: "unknown", text: "type a symbol to screen it" };
   if (phase === "loading") return { mark: "unknown", text: "screening against AAOIFI…" };
   const st = verdict ? statusForStandard(verdict, "AAOIFI") : "unknown";
   if (st === "halal") return { mark: "ok", text: "passes AAOIFI" };
+  if (side === "sell" && st !== "unknown") return { mark: st === "haram" ? "block" : "warn",
+    text: `${st === "haram" ? "fails AAOIFI" : "AAOIFI result is inconclusive"} — selling it is always allowed` };
   if (st === "haram") return { mark: "block", text: serverBlocks
-    ? "fails AAOIFI — the order will be refused"
+    ? "fails AAOIFI — a buy will be refused"
     : "fails AAOIFI. The order path does not stop it (only a fixed blocklist is enforced on hand orders) — this is your call to make" };
-  if (st === "review") return { mark: "warn", text: "AAOIFI result is inconclusive — open it in the Screener before buying" };
-  return { mark: "unknown", text: "not screened — no verdict could be fetched" };
+  if (st === "review") return { mark: "warn", text: serverBlocks
+    ? "AAOIFI result is inconclusive — a buy will be refused until it passes"
+    : "AAOIFI result is inconclusive — open it in the Screener before buying" };
+  return { mark: "unknown", text: serverBlocks ? "not screened yet — a buy waits until it can be" : "not screened — no verdict could be fetched" };
 }

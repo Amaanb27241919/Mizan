@@ -36,7 +36,9 @@ describe("orderQueue", () => {
     expect(ticketScreenLine(v(true), "ready")).toEqual({ mark: "ok", text: "passes AAOIFI" });
     expect(ticketScreenLine(v(false), "ready").mark).toBe("block");
     expect(ticketScreenLine(v(false), "ready").text).toMatch(/does not stop it/);
-    expect(ticketScreenLine(v(false), "ready", true).text).toBe("fails AAOIFI — the order will be refused");
+    expect(ticketScreenLine(v(false), "ready", true).text).toBe("fails AAOIFI — a buy will be refused");
+    expect(ticketScreenLine(v(false), "ready", true, "sell").text).toBe("fails AAOIFI — selling it is always allowed");
+    expect(ticketScreenLine({ status: "review", byStandard: { AAOIFI: { pass: null } } }, "ready", true).text).toMatch(/refused until it passes/);
     expect(ticketScreenLine({ status: "review", byStandard: { AAOIFI: { pass: null } } }, "ready").mark).toBe("warn");
     expect(ticketScreenLine(null, "ready").mark).toBe("unknown");
     expect(ticketScreenLine(null, "loading").text).toMatch(/screening/);

@@ -95,3 +95,41 @@ describe('verdict cache retention', () => {
     expect(c).toMatch(/from\("polygon_cache"\)\s*\.delete\([^)]*\)\.eq\("timespan", SCREEN_CACHE_SPAN\)\.lt\("from_date"/)
   })
 })
+
+describe("handOrderGate — hand orders held to AAOIFI (owner, 2026-10-09)", () => {
+  it("buys need an AAOIFI pass; failing and unscreened buys are refused", async () => {
+    const { handOrderGate } = await import("../../lib/trading/screenGate.mjs");
+    const pass = { status: "halal", byStandard: { AAOIFI: { pass: true } } };
+    const fail = { status: "halal", byStandard: { AAOIFI: { pass: false } } };   // a vote can say halal while AAOIFI fails
+    expect(handOrderGate({ side: "buy", ticker: "aapl", verdict: pass })).toEqual({ ok: true });
+    const f = handOrderGate({ side: "buy", ticker: "xyz", verdict: fail });
+    expect(f).toMatchObject({ ok: false, code: "sharia_failed", status: 403 });
+    expect(f.error).toMatch(/^XYZ does not pass the AAOIFI Sharia screen/);
+    expect(handOrderGate({ side: "buy", ticker: "XYZ", verdict: null })).toMatchObject({ ok: false, code: "sharia_unverified", status: 503 });
+    expect(handOrderGate({ side: "buy", ticker: "XYZ", verdict: { status: "unknown" } }).code).toBe("sharia_unverified");
+  });
+  it("halal funds pass by construction, and sells are never blocked", async () => {
+    const { handOrderGate } = await import("../../lib/trading/screenGate.mjs");
+    expect(handOrderGate({ side: "buy", ticker: "SPUS", verdict: null })).toEqual({ ok: true });
+    expect(handOrderGate({ side: "sell", ticker: "XYZ", verdict: { byStandard: { AAOIFI: { pass: false } } } })).toEqual({ ok: true });
+    expect(handOrderGate(null)).toMatchObject({ ok: false, code: "sharia_unverified" });
+  });
+});
+
+describe('hand-order routes are held to AAOIFI (handlers.mjs wiring, owner 2026-10-09)', () => {
+  const SRC = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  const route = (start, end) => { const i = SRC.indexOf(start); return SRC.slice(i, SRC.indexOf(end, i)) }
+  it('the paper order route screens a buy before it reaches the broker', () => {
+    const r = route('if (pathname === "/api/alpaca/order" && method === "POST")', 'audit({\n      userId: user.id,\n      action: "alpaca.order_placed"')
+    const gate = r.indexOf('handOrderGate('), place = r.indexOf('placeAlpacaOrder(')
+    expect(gate, 'handOrderGate must be called').toBeGreaterThan(-1)
+    expect(gate, 'and before placeAlpacaOrder').toBeLessThan(place)
+    expect(r).toMatch(/side !== "sell"/)
+  })
+  it('the live preview route screens a buy before it resolves the symbol at the broker', () => {
+    const r = route('if (pathname === "/api/snaptrade/trade/impact" && method === "POST")', 'if (pathname === "/api/snaptrade/trade/place"')
+    const gate = r.indexOf('handOrderGate('), broker = r.indexOf('resolveUniversalSymbolId(')
+    expect(gate).toBeGreaterThan(-1)
+    expect(gate).toBeLessThan(broker)
+  })
+})
