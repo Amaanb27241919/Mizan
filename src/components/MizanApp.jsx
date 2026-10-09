@@ -21,6 +21,7 @@ import { explainStrategy } from "../lib/strategyExplainer.js";
 import { pendingRows, historyRows, ticketScreenLine } from "../lib/orderQueue.js";
 import { killSwitchRows } from "../lib/killSwitches.js";
 import { riskFromPoints, winRate, MIN_RISK_DAYS } from "../lib/labMetrics.js";
+import { journalLog } from "../lib/journalLog.js";
 import { HALAL_FUNDS } from "../../lib/trading/screenGate.mjs";
 import { committeeStats, failureCode } from "../lib/committee.js";
 import { STRATEGY_PALETTE, strategyColorKey } from "../lib/strategyColors.js";
@@ -7303,26 +7304,21 @@ function ClosedTradesExport(){
       setState("idle");
     }catch{setState("error");}
   };
-  const rateInput=(key,label)=><label style={{display:"flex",alignItems:"center",gap:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em"}}>
-    {label}
-    <input className="field" inputMode="decimal" value={rates[key]} aria-label={`${label} tax rate percent`}
+  const rateInput=(key,label)=><label className="mz-field" style={{flexDirection:"row",alignItems:"center",gap:T.s2}}>
+    <span>{label}</span>
+    <input className="field" inputMode="decimal" value={rates[key]} aria-label={`${label.toUpperCase()} tax rate percent`}
       onChange={e=>setRates(r=>({...r,[key]:e.target.value.replace(/[^0-9.]/g,"").slice(0,4)}))}
-      style={{width:56,padding:`4px ${T.s2}`,borderRadius:T.rSm,border:`1px solid ${T.border}`,background:"transparent",color:T.textHi,fontFamily:FM,fontVariantNumeric:"tabular-nums"}}/>%
+      style={{width:64,fontVariantNumeric:"tabular-nums"}}/>%
   </label>;
-  return<section>
-    <SectionHead label="Closed trades — tax & Zakat sheet"
-      hint="Every sold position, matched first-in-first-out to what it cost, with an estimated tax at the rates you set and 2.5% of the proceeds as a Zakat estimate. Opens in Excel. Estimates only — not tax or religious advice."
-      style={{marginBottom:T.s3}}/>
-    <div className="mz-ctrl-row" style={{display:"flex",alignItems:"center",gap:T.s4,flexWrap:"wrap"}}>
-      {rateInput("short","SHORT-TERM")}
-      {rateInput("long","LONG-TERM")}
-      <button onClick={download} disabled={state==="busy"} className="mz-tap" style={{
-        fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.08em",
-        padding:`6px ${T.s3}`,borderRadius:T.rMd,cursor:state==="busy"?"wait":"pointer",
-        background:"transparent",border:`1px solid ${T.border}`,color:T.textHi,
-      }}>{state==="busy"?"PREPARING…":"↓ DOWNLOAD SHEET (.CSV)"}</button>
-      {state==="error"&&<span role="alert" style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.loss}}>
-        The sheet could not be built. <button onClick={download} style={{background:"none",border:"none",color:T.blue,cursor:"pointer",fontFamily:FP,fontSize:"inherit",padding:0,textDecoration:"underline"}}>Try again</button>
+  return<section data-testid="closed-trades-sheet">
+    <LabHead title="Closed trades — tax & Zakat sheet"
+      note="Every sold position, matched first-in-first-out to what it cost, with an estimated tax at the rates you set and 2.5% of the proceeds as a Zakat estimate. Opens in Excel. Estimates only — not tax or religious advice."/>
+    <div className="mz-ctrl-row" style={{display:"flex",alignItems:"center",gap:T.s5,flexWrap:"wrap",fontFamily:FP,fontSize:"var(--fs-sm)"}}>
+      {rateInput("short","Short-term")}
+      {rateInput("long","Long-term")}
+      <button onClick={download} disabled={state==="busy"} className="mz-more mz-tap">{state==="busy"?"Preparing…":"↓ Download sheet (.csv)"}</button>
+      {state==="error"&&<span role="alert" style={{color:T.loss}}>
+        The sheet could not be built. <button onClick={download} className="mz-more" style={{padding:0}}>Try again</button>
       </span>}
     </div>
   </section>;
@@ -8186,27 +8182,6 @@ function StrategyBlotter({strategies,state,accountEquity,mask}){
   </section>;
 }
 
-/** Recent orders across every strategy. AI reviews are not orders and stay in AI Committee. */
-function ActivityTape({items,strategies,state}){
-  const rows=useMemo(()=>tapeRows(items,strategies,14),[items,strategies]);
-  const chips=useMemo(()=>chipMap(strategies),[strategies]);
-  const statusColor=s=>s==="rejected"||s==="expired"?T.loss:s==="executed"?T.text:s==="pending"||s==="submitted"||s==="approved"?T.gold:T.muted;
-  return<section data-testid="activity-tape">
-    <SectionHead label="Activity" hint="The latest orders, newest first, from every strategy." style={{marginBottom:T.s3}}/>
-    {state!=="ready"
-      ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>{state==="loading"?"Loading…":"Activity is not available right now."}</div>
-      :!rows.length
-        ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No orders yet.</div>
-        :<ol className="mz-feed" style={{fontFamily:FM}}>
-          {rows.map(r=><li key={r.id} title={r.error||undefined}>
-            <span className="mz-feed-t">{nyStamp(r.at)}</span>
-            {(()=>{const c=chips.get(r.strategyId);return<CodeChip label={c?.label||(r.code!=="—"?r.code:"")} color={c?.color} title={c?.name}/>;})()}
-            <span className="mz-feed-what"><b style={{color:T.textHi}}>{r.side.toUpperCase()}</b> {r.qty!=null?(Math.abs(r.qty)<1||!Number.isInteger(r.qty)?r.qty.toFixed(2):r.qty):""} <b style={{color:T.textHi}}>{r.ticker}</b></span>
-            <span className="mz-feed-s" style={{color:statusColor(r.status)}}>{r.status.toUpperCase()}</span>
-          </li>)}
-        </ol>}
-  </section>;
-}
 
 /** Every strategy explained in one place — for remembering, and for when
  *  someone asks. Same text as the Desk cards' "How it works". */
@@ -8624,10 +8599,18 @@ function LabPortfolio({desk,book}){
   </div>;
 }
 
-/** Journal: the record. Each strategy's full journal as a download, the
- *  latest activity, and what the lab is for. */
-function LabJournal({book}){
+/** Journal: the record (proposal §18). One day-by-day log of every order and
+ *  every AI review — who, what, when, why, and which model saw which evidence —
+ *  then each strategy's full journal as a download, the tax & Zakat sheet, and
+ *  what the lab is for. */
+const NY_DATELINE=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"long",month:"long",day:"numeric"});
+const NY_TIME=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"});
+function JournalLog({book}){
   const[feed,setFeed]=useState({state:"loading",items:[]});
+  const research=useResearchFeed(true);
+  const[kind,setKind]=useState("all");
+  const[only,setOnly]=useState("");
+  const[days,setDays]=useState(7);
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
@@ -8639,6 +8622,42 @@ function LabJournal({book}){
     return()=>{cancelled=true;};
   },[]);
   const chips=useMemo(()=>chipMap(book.strategies),[book.strategies]);
+  const models=useMemo(()=>Object.fromEntries(research.providers.filter(p=>p?.provider).map(p=>[p.provider,p.model])),[research.providers]);
+  const log=useMemo(()=>journalLog(feed.items,research.rows,book.strategies,{kind,strategyId:only||undefined,models}),[feed.items,research.rows,book.strategies,kind,only,models]);
+  const strategies=useMemo(()=>blotterRows(book.strategies).filter(r=>r.code),[book.strategies]);
+  const tone={ok:T.gain,warn:T.gold,block:T.loss,off:T.slate,unknown:T.muted};
+  const dateline=d=>{try{return NY_DATELINE.format(new Date(`${d}T16:00:00Z`));}catch{return d;}};
+  return<section data-testid="journal-log">
+    <LabHead title="The record" note="Every order and every AI review, day by day — what happened, why, and for a review which models answered and which evidence they saw. Nothing here is ever edited or removed."/>
+    <div className="mz-filter" role="group" aria-label="What to show">
+      {[["all","Everything"],["order","Orders"],["review","AI reviews"]].map(([k,l])=><button key={k} onClick={()=>setKind(k)} aria-pressed={kind===k} className={kind===k?"on mz-tap":"mz-tap"}>{l}</button>)}
+    </div>
+    {strategies.length>1&&<div className="mz-filter" role="group" aria-label="Which strategy" style={{marginTop:0}}>
+      <button onClick={()=>setOnly("")} aria-pressed={!only} className={!only?"on mz-tap":"mz-tap"}>All strategies</button>
+      {strategies.map(r=><button key={r.id} onClick={()=>setOnly(r.id)} aria-pressed={only===r.id} className={only===r.id?"on mz-tap":"mz-tap"}>{r.code}</button>)}
+    </div>}
+    {research.state==="forbidden"&&kind!=="order"&&<p className="mz-legend">AI reviews are visible to the operator's accounts only, so this log shows orders.</p>}
+    {feed.state==="loading"&&<p className="mz-col-empty">Loading…</p>}
+    {feed.state==="unavailable"&&<p className="mz-col-empty">The record is not available right now.</p>}
+    {feed.state==="ready"&&!log.length&&<p className="mz-col-empty">Nothing recorded yet for this view.</p>}
+    {log.slice(0,days).map(({day,events})=><div key={day} className="mz-day" data-testid="journal-day">
+      <h3 style={{fontFamily:FN}}>{dateline(day)}</h3>
+      <ol>{events.map(e=>{const c=chips.get(e.strategyId);return<li key={e.id} data-testid="journal-event" data-kind={e.kind}>
+        <span className="mz-news-dim mz-day-t">{(()=>{try{return NY_TIME.format(new Date(e.at));}catch{return"—";}})()}</span>
+        <span className="mz-day-who"><span className="mz-key" style={{background:c?.color||T.slate}} aria-hidden="true"/>{c?.label||e.code||e.name}</span>
+        <span className="mz-day-what">
+          <b style={{color:tone[e.mark]}} aria-hidden="true">{PIPE_GLYPH[e.mark]}</b> {e.what}
+          {e.why&&<span className="mz-day-why">{e.why}</span>}
+          {e.evidence&&<span className="mz-day-ev">{[e.evidence.hash?`evidence ${e.evidence.hash}`:null,e.evidence.missing?.length?`missing ${e.evidence.missing.join(", ")}`:"evidence complete",e.evidence.models?.length?e.evidence.models.join(", "):null].filter(Boolean).join(" · ")}</span>}
+        </span>
+      </li>;})}</ol>
+    </div>)}
+    {log.length>days&&<button className="mz-more mz-tap" onClick={()=>setDays(d=>d+14)}>Show older days ({log.length-days} more)</button>}
+  </section>;
+}
+
+function LabJournal({book}){
+  const chips=useMemo(()=>chipMap(book.strategies),[book.strategies]);
   const rows=useMemo(()=>blotterRows(book.strategies),[book.strategies]);
   const[busy,setBusy]=useState(null);const[err,setErr]=useState(null);
   const get=async r=>{
@@ -8648,17 +8667,17 @@ function LabJournal({book}){
     finally{setBusy(null);}
   };
   return<div className="mz-lab-stack">
+    <JournalLog book={book}/>
     <section>
       <LabHead title="Strategy journals" note="Every order, AI review and screen each strategy recorded, as a spreadsheet you can keep. Nothing here is deleted when a strategy is retired."/>
       {book.state!=="ready"?<p className="mz-col-empty">{book.state==="loading"?"Loading…":"The strategy list is not available."}</p>
         :<table className="mz-news"><tbody>{rows.map(r=>{const c=chips.get(r.id);return<tr key={r.id}>
           <td><span className="mz-key" style={{background:c?.color||T.slate}} aria-hidden="true"/><b>{r.code||c?.label||""}</b> {r.name}</td>
-          <td className="mz-news-dim">{r.status.text}</td>
+          <td className="mz-news-dim mz-hide-sm">{r.status.text}</td>
           <td style={{textAlign:"right"}}><button className="mz-more mz-tap" onClick={()=>get(r)} disabled={busy===r.id}>{busy===r.id?"Preparing…":err===r.id?"Retry download":"Download journal (.csv)"}</button></td>
         </tr>;})}</tbody></table>}
       {err&&<p role="alert" style={{color:T.loss,fontFamily:FP}}>That journal could not be downloaded. Press retry.</p>}
     </section>
-    <ActivityTape items={feed.items} strategies={book.strategies} state={feed.state}/>
     <ClosedTradesExport/>
     <section>
       <LabHead title="What this lab is for"/>
@@ -15001,6 +15020,16 @@ export default function Mizan(){
       .mz-matrix tr.is-div td{background:color-mix(in srgb, ${T.gold} 8%, transparent);}
       .mz-perf-bar{min-width:12rem;}
       @media (max-width:640px){ .mz-hide-sm{display:none;} .mz-perf-bar{min-width:7rem;} }
+      .mz-day{margin-top:var(--s-5);}
+      .mz-day h3{margin:0 0 var(--s-2); font-size:var(--fs-lg); font-weight:600; color:var(--mz-textHi); border-bottom:1px solid var(--mz-textHi); padding-bottom:var(--s-1);}
+      .mz-day ol{list-style:none; margin:0; padding:0;}
+      .mz-day li{display:grid; grid-template-columns:5.5rem 6rem minmax(0,1fr); gap:var(--s-3); padding:var(--s-2) 0; border-bottom:1px solid var(--mz-border);
+        font-family:${FP}; font-size:var(--fs-sm); font-variant-numeric:tabular-nums; align-items:baseline;}
+      .mz-day-who{white-space:nowrap; color:var(--mz-text);}
+      .mz-day-what{min-width:0; color:var(--mz-text); overflow-wrap:anywhere;}
+      .mz-day-why{display:block; color:var(--mz-muted); font-size:var(--fs-xs); margin-top:2px;}
+      .mz-day-ev{display:block; color:var(--mz-muted); font-size:var(--fs-xs); opacity:.85;}
+      @media (max-width:560px){ .mz-day li{grid-template-columns:4.5rem minmax(0,1fr);} .mz-day-what{grid-column:1 / -1;} }
       .mz-legend{font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); margin:var(--s-3) 0 0; line-height:1.5; max-width:80ch;}
       .mz-ticket{display:grid; grid-template-columns:minmax(0,22rem) minmax(0,1fr); gap:var(--s-8); align-items:start; margin-top:var(--s-4);}
       @media (max-width:820px){ .mz-ticket{grid-template-columns:minmax(0,1fr); gap:var(--s-5);} }

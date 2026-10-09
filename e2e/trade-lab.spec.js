@@ -153,7 +153,7 @@ test.describe("Trade Lab cockpit", () => {
     await page.getByLabel("SHORT-TERM tax rate percent").fill("32");
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: /DOWNLOAD SHEET/ }).click(),
+      page.getByRole("button", { name: /download sheet/i }).click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/^mizan-closed-trades-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(asked.get("short")).toBe("32");
@@ -165,7 +165,7 @@ test.describe("Trade Lab cockpit", () => {
     await page.route("**/api/alpaca/closed-trades.csv**", (route) =>
       route.fulfill({ status: 502, contentType: "application/json", body: '{"error":"x"}' }));
     await openSection(page, "Journal");
-    await page.getByRole("button", { name: /DOWNLOAD SHEET/ }).click();
+    await page.getByRole("button", { name: /download sheet/i }).click();
     await expect(page.getByRole("alert")).toContainText("could not be built");
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   });
@@ -736,12 +736,15 @@ test.describe("Trade Lab strategy book", () => {
     await expect(page.getByTestId("strategy-book")).toContainText(/UNALLOCATED \$500,000/);
   });
 
-  test("the activity tape shows orders by strategy code and leaves AI reviews out", async ({ page }) => {
+  test("the Journal's record lists orders by day, and an AI review never appears twice", async ({ page }) => {
     await open(page, "Journal");
-    const tape = page.getByTestId("activity-tape");
-    await expect(tape).toContainText("MU");
-    await expect(tape).toContainText("ISRG");
-    await expect(tape).not.toContainText("COHR");
+    const log = page.getByTestId("journal-log");
+    await expect(log).toContainText("MU");
+    await expect(log).toContainText("ISRG");
+    await log.getByRole("button", { name: "Orders", exact: true }).click();
+    await expect(log.locator('[data-kind="review"]')).toHaveCount(0);
+    await expect(log).not.toContainText("COHR");
+    await expect(page.getByTestId("journal-day").first()).toBeVisible();
   });
 
   test("strategy cards are titled by strategy, not by universe size", async ({ page }) => {
@@ -1196,4 +1199,27 @@ test("Performance states the account against SPUS and HLAL, and withholds Sharpe
   await expect(page.getByTestId("perf-hlal")).toContainText("vs HLAL");
   await expect(page.getByTestId("perf-risk")).toContainText("Not yet");
   await expect(page.getByTestId("perf-risk")).not.toContainText("Sharpe");
+});
+
+// Journal (broadsheet pass, 2026-10-09): one dated record of orders and AI
+// reviews, with §18's "which model saw which evidence".
+test("the Journal records each AI review with its models, failures in words, and its evidence", async ({ page }) => {
+  await gotoLab(page, { fixtures: {
+    "/api/bot/activity": { items: [{ id: "o1", strategy_id: null, side: "buy", ticker: "MU", qty: 2, status: "executed", paper: true, executed_at: "2026-10-09T13:33:00Z" }] },
+    "/api/ai/research": { configured: 2, required: 2,
+      providers: [{ provider: "anthropic", model: "claude-sonnet-5-5", available: true }, { provider: "google", model: "gemini-3.8-flash", available: true }],
+      rows: [{ id: "r1", ticker: "LRCX", at: "2026-10-09T12:32:00Z", packet_hash: "abcdef1234567890", missing: ["news"],
+        ensemble: { ok: false, per_model: [{ provider: "google", action: "BUY", model: "gemini-3.8-flash" }] },
+        failures: [{ provider: "anthropic", code: "http_400", detail: "Your credit balance is too low" }] }] } } });
+  await openSection(page, "Journal");
+  const log = page.getByTestId("journal-log");
+  const review = log.locator('[data-kind="review"]');
+  await expect(review).toContainText("LRCX reviewed — panel: no view");
+  await expect(review).toContainText("Claude failed (no credits)");
+  await expect(review).toContainText("evidence abcdef123456");
+  await expect(review).toContainText("missing news");
+  await expect(review).toContainText("gemini-3.8-flash");
+  await log.getByRole("button", { name: "Orders", exact: true }).click();
+  await expect(log.locator('[data-kind="review"]')).toHaveCount(0);
+  await expect(log.locator('[data-kind="order"]')).toContainText("Buy 2 MU — filled");
 });

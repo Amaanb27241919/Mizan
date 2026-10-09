@@ -56,6 +56,7 @@ const MODULES = [
   '../lib/orderQueue.js',
   '../lib/killSwitches.js',
   '../lib/labMetrics.js',
+  '../lib/journalLog.js',
   '../../lib/ai/packetInputs.mjs',
   '../../lib/trading/curve.mjs',
   '../../lib/trading/journal.mjs',
