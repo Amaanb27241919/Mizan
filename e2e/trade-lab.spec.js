@@ -251,8 +251,7 @@ test.describe("Trade Lab cockpit", () => {
     await gotoLab(page);
     await expect(page.locator(".mz-lab")).not.toContainText(/buying power/i);
     await openSection(page, "Quick Trade");
-    await expect(page.locator(".mz-rail")).not.toContainText(/buying power/i);
-    await expect(page.locator(".mz-rail")).toContainText("PAPER CASH");
+    await expect(page.getByTestId("order-ticket")).not.toContainText(/buying power/i);
   });
 
   test("keeps the original sub-tab IDS, whatever the labels say", async ({ page }) => {
@@ -342,21 +341,20 @@ test.describe("Trade Lab cockpit", () => {
     // on" was something you had to infer on a surface that can place a real
     // order. The armed marker is only shown on the order ticket.
     await gotoLab(page);
-    await expect(page.locator(".mz-rail-armed")).toHaveCount(0);   // not on the Desk
+    // Stated in words beside the send button (the gold ARMED rail cell is gone).
+    await expect(page.getByTestId("ticket-venue")).toHaveCount(0);   // not on the Desk
     await openSection(page, "Signals");
-    await expect(page.locator(".mz-rail-armed")).toHaveCount(0);   // nor in Orders until the ticket opens
-
-    await openSection(page, "Quick Trade");
-    await expect(page.locator(".mz-rail-armed")).toHaveCount(1);
-    await expect(page.locator(".mz-rail-armed")).toContainText("ARMED");
-    // Default venue is PAPER (owner, 2026-10-08), so that is what must be marked.
-    await expect(page.locator(".mz-rail-armed")).toContainText("PAPER");
+    await expect(page.getByTestId("ticket-venue")).toHaveCount(0);   // nor in Orders until the ticket opens
+    await page.getByRole("button", { name: "Open the ticket" }).click();
+    // Default venue is PAPER (owner, 2026-10-08), so that is what it must say.
+    await expect(page.getByTestId("ticket-venue")).toContainText("Alpaca paper");
+    await expect(page.getByTestId("ticket-venue")).toContainText("no real money");
   });
 
   test("an explicit LIVE choice is remembered; the default is never live", async ({ page }) => {
     await gotoLab(page, { storage: { mizan_trade_venue: "snaptrade" } });
     await openSection(page, "Quick Trade");
-    await expect(page.locator(".mz-rail-armed")).toContainText("LIVE");
+    await expect(page.getByTestId("ticket-venue")).toContainText("This is real money");
   });
 
   test("states the alpha even when it is NEGATIVE", async ({ page }) => {
@@ -949,7 +947,7 @@ test.describe("Trade Lab desk", () => {
     await page.evaluate(() => localStorage.setItem("mizan_pending_order", JSON.stringify({ sym: "SPUS", side: "buy", qty: 2 })));
     await page.reload();
     await expect(labNav(page).getByRole("button", { name: "Orders" })).toHaveAttribute("aria-current", "page");
-    await expect(page.locator(".mz-rail-armed")).toContainText("PAPER");
+    await expect(page.getByTestId("ticket-venue")).toContainText("Alpaca paper");
   });
 });
 
@@ -1056,5 +1054,57 @@ test.describe("Trade Lab strategies section", () => {
     await expect(preset).toBeHidden();
     await b.locator("summary").click();
     await expect(preset).toBeVisible();
+  });
+});
+
+// Orders (broadsheet pass, 2026-10-08).
+test.describe("Trade Lab orders section", () => {
+  const A = { id: "aaaaaaaa-0000-0000-0000-000000000001", enabled: true, strategy_type: "rank_rebalance", capital_allocated: "250000",
+    params: { experiment: "A: reference system + AI gate", broker: "alpaca_paper" }, progress: { paper: true } };
+  const open = async (page, over = {}) => {
+    await gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: [A] },
+      "/api/bot/signals": { signals: [{ id: "p1", status: "pending", strategy_id: A.id, side: "buy", qty: 12, ticker: "LRCX", suggested_price: 101.4,
+        paper: true, expires_at: new Date(Date.now() + 42 * 60000).toISOString(), created_at: new Date().toISOString() }] },
+      "/api/bot/activity": { items: [
+        { id: "h1", strategy_id: A.id, side: "buy", ticker: "MU", qty: 34.55, status: "executed", paper: true, executed_at: "2026-10-07T13:33:00Z" },
+        { id: "h2", strategy_id: null, side: "buy", ticker: "SPWO", qty: 1, status: "approved", paper: false, error_msg: "insufficient_cash", created_at: "2026-10-07T12:30:00Z" },
+        { id: "h3", strategy_id: A.id, side: "buy", ticker: "COHR", qty: 0, status: "shadow", created_at: "2026-10-07T12:00:00Z" } ] },
+      ...over } });
+    await openSection(page, "Signals");
+  };
+
+  test("a waiting signal names its strategy and the time left", async ({ page }) => {
+    await open(page);
+    const row = page.getByTestId("pending-row");
+    await expect(row).toContainText("A · Reference system + AI gate");
+    await expect(row).toContainText("Buy 12 LRCX");
+    await expect(row).toContainText(/expires in 4[12] min/);
+    await expect(row.getByRole("button", { name: "Approve" })).toBeVisible();
+  });
+
+  test("the history states why an order failed and leaves AI reviews to Research", async ({ page }) => {
+    await open(page);
+    const h = page.getByTestId("order-history");
+    await expect(h.getByTestId("history-row")).toHaveCount(2);
+    await expect(h).toContainText("insufficient cash");
+    await expect(h).toContainText("Failed");
+    await expect(h).not.toContainText("COHR");
+    // Real money is said only where the record says so.
+    await expect(h.getByTestId("history-row").filter({ hasText: "MU" })).not.toContainText("real money");
+    await expect(h.getByTestId("history-row").filter({ hasText: "SPWO" })).toContainText("real money");
+  });
+
+  test("the ticket's Sharia line is a real screen, not a static green", async ({ page }) => {
+    await open(page, { "/api/screen": { verdict: { tk: "AAPL", status: "review", byStandard: { AAOIFI: { pass: false } } } } });
+    await page.getByRole("button", { name: "Open the ticket" }).click();
+    const line = page.getByTestId("ticket-sharia");
+    await expect(line).toContainText("fails AAOIFI");
+    await expect(line).toContainText("does not stop it");
+  });
+
+  test("survives a malformed signals response", async ({ page }) => {
+    await open(page, { "/api/bot/signals": { signals: "not-an-array" }, "/api/bot/activity": { items: { nope: 1 } } });
+    await expect(page.getByTestId("approval-queue")).toContainText("Nothing is waiting for you");
+    await expect(page.locator("body")).not.toContainText(/SOMETHING WENT WRONG/i);
   });
 });

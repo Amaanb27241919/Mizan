@@ -14,11 +14,11 @@ import { isSubscriptionCandidate, isRecurringActive, detectFixedPriceSubscriptio
 import { netWorthParts, hasSnapshotableData, isBrokeragePlaid, mergeNetWorthHistory } from "../lib/netWorth.js";
 import { ATTRIBUTION_KEY } from "../lib/attribution.js";
 import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
-import { deskSummary } from "../lib/deskSummary.js";
 import { blotterRows, allocationSegments, tapeRows, groupTotals, strategyLabel, MODE_LADDER } from "../lib/deskBlotter.js";
 import { deskPipeline, latestRoundAnswering, MARK_GLYPH as PIPE_GLYPH } from "../lib/deskPipeline.js";
 import { sparkPaths, pinToday } from "../lib/sparkline.js";
 import { explainStrategy } from "../lib/strategyExplainer.js";
+import { pendingRows, historyRows, ticketScreenLine } from "../lib/orderQueue.js";
 import { committeeStats } from "../lib/committee.js";
 import { STRATEGY_PALETTE, strategyColorKey } from "../lib/strategyColors.js";
 import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity, fundingBaseline, sinceFunding } from "../lib/equityCurve.js";
@@ -6258,7 +6258,8 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     try{
       const r=await apiFetch("/api/bot/signals");
       const d=await r.json();
-      if(r.ok)setSignals(d.signals||[]);
+      // Array.isArray, not `||`: a truthy non-array (an error object with a 200) passes `||` and crashes the queue.
+      if(r.ok)setSignals(Array.isArray(d?.signals)?d.signals:[]);
     }catch{}finally{setLoadingSignals(false);}
   },[]);
 
@@ -6282,7 +6283,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     try{
       const r=await apiFetch("/api/bot/activity");
       const d=await r.json();
-      if(r.ok)setActivity(d.items||[]);
+      if(r.ok)setActivity(Array.isArray(d?.items)?d.items:[]);
     }catch{}finally{setLoadingActivity(false);}
   },[]);
 
@@ -6776,68 +6777,49 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
       </div>
     </details>}
 
-    {/* Pending Signals — the Signals view. Always rendered here (with an empty state). */}
-    {showSignals&&<BentoTile>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:T.s3}}>
-        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>PENDING SIGNALS</div>
-        <button onClick={loadSignals} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingSignals?"Loading…":"Refresh"}</button>
-      </div>
-      {loadingSignals&&!signals.length?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading signals…</div>:
-       signals.length===0?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>No pending signals.</div>:
-       signals.map(sig=><div key={sig.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:`${T.s3} 0`,borderBottom:`1px solid ${T.border}`}}>
-        <div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-md)",fontWeight:600,color:sig.side==="buy"?T.gain:T.loss}}>{sig.side.toUpperCase()} {sig.qty} {sig.ticker}</div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,fontVariantNumeric:"tabular-nums"}}>{Number(sig.suggested_price)>0?`~$${Number(sig.suggested_price).toFixed(2)}`:"price —"} · Expires {Number.isFinite(Date.parse(sig.expires_at))?new Date(sig.expires_at).toLocaleTimeString():"—"}</div>
-        </div>
-        <div style={{display:"flex",gap:T.s2}}>
-          <button onClick={()=>approveSignal(sig.id)} className="btn-primary" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s3}`}}>Approve</button>
-          {sig.paper&&<Tag label="PAPER" color={T.gold}/>}
-          <button onClick={()=>rejectSignal(sig.id)} className="btn-ghost" style={{fontSize:"var(--fs-2xs)",padding:`5px ${T.s3}`}}>Reject</button>
-        </div>
-      </div>)}
-    </BentoTile>}
+    {/* Waiting for you — the signals queue (broadsheet pass). Approve and
+        Reject keep their handlers; rows now name the strategy and the time left. */}
+    {showSignals&&<section data-testid="approval-queue">
+      <LabHead title="Waiting for your approval" note="Orders a strategy has proposed and is holding for you. Each one expires if it is not decided."
+        right={<button className="mz-more mz-tap" onClick={loadSignals}>{loadingSignals?"Loading…":"Refresh"}</button>}/>
+      {(()=>{const rows=pendingRows(signals,strategies);const chips=chipMap(strategies);
+        if(loadingSignals&&!rows.length)return<p className="mz-col-empty">Loading…</p>;
+        if(!rows.length)return<p className="mz-col-empty">Nothing is waiting for you.</p>;
+        return<ol className="mz-queue">{rows.map(r=>{const c=chips.get(r.strategyId);return<li key={r.id} data-testid="pending-row">
+          <div><span className="mz-key" style={{background:c?.color||T.slate,width:16}} aria-hidden="true"/><b>{r.code?`${r.code} · `:""}{r.name}</b></div>
+          <div className="mz-q-what"><b style={{color:r.side==="buy"?T.gain:T.loss}}>{r.side==="buy"?"Buy":"Sell"}</b> {r.qty??""} <b>{r.ticker}</b>
+            <span className="mz-news-dim"> · {r.price!=null?`about ${f$(r.price)}`:"price not quoted"} · {r.paper?"paper":"real money"}</span></div>
+          <div className="mz-news-dim" style={{color:r.expired?T.loss:undefined}}>{r.expires==null?"no expiry recorded":r.expired?"expired":`expires ${r.expires}`}</div>
+          <div className="mz-q-act">
+            <button className="btn-primary mz-tap" onClick={()=>approveSignal(r.id)} style={{fontSize:"var(--fs-xs)",padding:`6px ${T.s3}`}}>Approve</button>
+            <button className="mz-more mz-tap" onClick={()=>rejectSignal(r.id)}>Reject</button>
+          </div>
+        </li>;})}</ol>;})()}
+    </section>}
 
-    {/* Bot Activity timeline — every action the bot took, from its own ledger.
-        Shows full-auto fills the instant the cron runs, before the broker-synced
-        Portfolio → Activity tab catches up. No need to open your brokerage. */}
-    {showSignals&&(()=>{
-      const META={ // status → { label, color }
-        executed:{label:"FILLED",color:T.gain},
-        pending: {label:"PENDING",color:T.blue},
-        approved:{label:"APPROVED",color:T.blue},
-        rejected:{label:"REJECTED",color:T.muted},
-        expired: {label:"EXPIRED",color:T.muted},
-      };
-      const labelFor=a=>(a.status==="approved"&&a.error_msg)?{label:"FAILED",color:T.loss}:(META[a.status]||{label:(a.status||"—").toUpperCase(),color:T.muted});
-      // Named by STRATEGY (A, E·core…), not by universe size — every row
-      // used to read "214 halal names".
-      const stratLabel=id=>{const s=strategies.find(x=>x.id===id);if(!s)return null;return stratChip(s);};
-      return<CollapsibleTile title="BOT ACTIVITY · ALL ACTIONS" subtitle="Every signal the bot generated + its outcome" storageKey="bot_activity" defaultOpen>
-        <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",marginBottom:T.s3}}>
-          <button onClick={loadActivity} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.blue,background:"transparent",border:"none",cursor:"pointer",padding:0}}>{loadingActivity?"Loading…":"Refresh"}</button>
-        </div>
-        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,marginBottom:T.s2}}>Every signal the bot generated and what became of it — buys, sells (exits), approvals, and failures. Updates the moment the bot acts, independent of broker sync.</div>
-        {loadingActivity&&!activity?<div style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>Loading…</div>:
-         !activity||activity.length===0?<div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,textAlign:"center",padding:`${T.s4} 0`}}>No bot activity yet. Actions appear here as soon as the bot generates or fills a signal.</div>:
-         <div style={{display:"flex",flexDirection:"column"}}>
-          {activity.map((a,i)=>{const m=labelFor(a);const when=a.executed_at||a.created_at;const sl=stratLabel(a.strategy_id);return(
-            <div key={a.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s3,flexWrap:"wrap",padding:`${T.s2} 0`,borderTop:i===0?"none":`1px solid ${T.border}`,fontVariantNumeric:"tabular-nums"}}>
-              <div style={{display:"flex",gap:T.s2,alignItems:"baseline",minWidth:170}}>
-                <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:a.side==="buy"?T.gain:T.loss}}>{(a.side||"").toUpperCase()}</span>
-                <span style={{fontFamily:FM,fontSize:"var(--fs-sm)",fontWeight:600,color:T.textHi}}>{a.qty} {a.ticker}</span>
-                {sl&&(sl.label?<CodeChip label={sl.label} color={sl.color} title={sl.name}/>:<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>· {sl.name}</span>)}
-              </div>
-              <div style={{display:"flex",gap:T.s3,alignItems:"center",flexWrap:"wrap"}}>
-                <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted}}>{Number(a.suggested_price)>0?`~$${Number(a.suggested_price).toFixed(2)}`:"—"}</span>
-                <Tag label={m.label} color={m.color}/>
-                {a.paper&&<Tag label="PAPER" color={T.gold}/>}
-                <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted}}>{when?new Date(when).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"—"}</span>
-              </div>
-              {(m.label==="FAILED"||a.status==="rejected")&&a.error_msg&&<div style={{flexBasis:"100%",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.loss}}>{a.error_msg}</div>}
-            </div>);})}
-         </div>}
-      </CollapsibleTile>;
-    })()}
+    {/* Order history — every order a strategy proposed and what became of it.
+        AI reviews are research, not orders; they live in Research. */}
+    {showSignals&&<section data-testid="order-history" style={{marginTop:T.s8}}>
+      <LabHead title="Order history" note="Every order the bot proposed and what became of it, newest first — fills, refusals and failures with their reason. It updates the moment the bot acts, before your broker syncs."
+        right={<button className="mz-more mz-tap" onClick={loadActivity}>{loadingActivity?"Loading…":"Refresh"}</button>}/>
+      {(()=>{const rows=historyRows(activity,strategies);const chips=chipMap(strategies);
+        const tone={ok:T.gain,warn:T.gold,block:T.loss,off:T.slate,unknown:T.muted};
+        if(loadingActivity&&!activity)return<p className="mz-col-empty">Loading…</p>;
+        if(!rows.length)return<p className="mz-col-empty">No orders yet. They appear here as soon as a strategy proposes or fills one.</p>;
+        return<div className="mz-tape-wrap"><table className="mz-news mz-history">
+          <thead><tr><th>When</th><th>Strategy</th><th>Order</th><th style={{textAlign:"right"}}>Price</th><th style={{textAlign:"right"}}>Status</th></tr></thead>
+          <tbody>{rows.map(r=>{const c=chips.get(r.strategyId);return<React.Fragment key={r.id}>
+            <tr data-testid="history-row">
+              <td className="mz-news-dim">{nyStamp(r.at)}</td>
+              <td><span className="mz-key" style={{background:c?.color||T.slate}} aria-hidden="true"/>{c?.label||r.code||r.name}</td>
+              <td><b style={{color:r.side==="buy"?T.gain:T.loss}}>{r.side==="buy"?"Buy":"Sell"}</b> {r.qty!=null?(Number.isInteger(r.qty)?r.qty:r.qty.toFixed(2)):""} <b>{r.ticker}</b>{r.live&&<span style={{color:T.loss}}> · real money</span>}</td>
+              <td style={{textAlign:"right"}} className="mz-news-dim">{r.price!=null?f$(r.price):"—"}</td>
+              <td style={{textAlign:"right"}}><b style={{color:tone[r.mark]}} aria-hidden="true">{PIPE_GLYPH[r.mark]}</b> {r.label}</td>
+            </tr>
+            {r.reason&&<tr className="mz-history-why"><td/><td colSpan={4} style={{color:T.loss}}>{r.reason}</td></tr>}
+          </React.Fragment>;})}</tbody>
+        </table></div>;})()}
+    </section>}
 
     {/* Realized P&L ledger — closed round-trips across all strategies. The
         "did Trade actually make money" answer, which the open-position cards lose
@@ -7228,14 +7210,6 @@ function RailClock(){
   return<span style={{fontVariantNumeric:"tabular-nums"}}>{txt} ET</span>;
 }
 
-function RailCell({label,children,desk=false,grow=false,title,armed=false}){
-  return<div className={`mz-rail-cell${desk?" mz-rail-desk":""}${grow?" mz-rail-grow":""}${armed?" mz-rail-armed":""}`} title={title||undefined}>
-    <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:armed?T.textHi:T.muted,letterSpacing:"0.16em",fontWeight:600,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:T.s2}}>
-      {label}{armed&&<span style={{color:T.gold,letterSpacing:"0.1em"}}>· ARMED</span>}
-    </div>
-    <div style={{fontFamily:FM,fontSize:"var(--fs-sm)",color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{children}</div>
-  </div>;
-}
 
 /** A signed figure. Zero is deliberately neutral, not green — a flat day is
  *  not a gain, and painting it green is the kind of small lie that erodes
@@ -7249,58 +7223,6 @@ function Signed({v,pct=null,mask=(x=>x),dash="—"}){
   </span>;
 }
 
-/**
- * The status rail: two desks side by side, plus the market clock.
- *
- * PAPER's numbers come from the broker. LIVE's are derived from quotes, so
- * when coverage is partial the figure is rendered as unavailable rather than
- * as a smaller-looking truth — see src/lib/deskSummary.js for why that
- * distinction is the whole point of the module.
- */
-/**
- * `armedVenue` marks WHICH desk an order would actually hit — "alpaca" for the
- * paper account, "snaptrade" for the live brokerage, null when no ticket is
- * open. Added after looking at Quick Trade: the ticket was set to LIVE while
- * the biggest number on the rail was the PAPER balance, and nothing on screen
- * connected the two. On a surface that can place a real order, "which desk am
- * I on" must never be something you infer.
- */
-function StatusRail({session,summary,mask,armedVenue=null}){
-  const sess=session?.session||null;
-  const dot=sess==="regular"?T.gain:session?.tradeable?T.gold:T.slate;
-  const p=summary.paper,l=summary.live;
-  return<div className="mz-rail">
-    <RailCell label="SESSION" grow title={session?.reason?`Market session: ${session.reason}`:"Market session"}>
-      <span style={{display:"inline-flex",alignItems:"center",gap:T.s2}}>
-        <span style={{width:7,height:7,borderRadius:999,background:dot,boxShadow:`0 0 8px ${dot}`,flexShrink:0}}/>
-        <span>{session?.label?String(session.label).toUpperCase():"—"}</span>
-        <span style={{color:T.muted,fontWeight:400}}><RailClock/></span>
-      </span>
-    </RailCell>
-
-    <RailCell label="PAPER · ALPACA" desk armed={armedVenue==="alpaca"}
-      title={p?.accountNumber?`Paper account ${p.accountNumber}`:"Alpaca paper account"}>
-      {p?<span>{mask(f$(p.equity))} <Signed v={p.change} pct={p.changePct} mask={mask}/></span>
-        :<span style={{color:T.muted}}>not connected</span>}
-    </RailCell>
-    <RailCell label="PAPER CASH" desk title="Cash is the order ceiling here. Margin is riba, so buying power is deliberately not shown.">
-      {p?mask(f$(p.cash)):<span style={{color:T.muted}}>—</span>}
-    </RailCell>
-
-    <RailCell label="LIVE · BROKERAGE" armed={armedVenue==="snaptrade"}
-      title="Your connected brokerage accounts.">
-      {l.equity>0?mask(f$(l.equity)):<span style={{color:T.muted}}>none linked</span>}
-    </RailCell>
-    <RailCell label="LIVE DAY"
-      title={l.total>0&&!l.complete
-        ?`Live quotes cover ${l.quoted} of ${l.total} positions, so a day change for the whole book cannot be stated yet.`
-        :"Change since the prior close, from live quotes."}>
-      {l.total>0&&!l.complete
-        ?<span style={{color:T.muted}}>{l.quoted}/{l.total} quoted</span>
-        :<Signed v={l.change} pct={l.changePct} mask={mask}/>}
-    </RailCell>
-  </div>;
-}
 
 /** Positions as a tape. Weight is share of the book — a fact about the
  *  portfolio, not a view on any holding. */
@@ -8842,7 +8764,6 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   // tab-level instrument and three sub-tabs each fetching their own copy of
   // the same account would be three requests against a shared ~200/min
   // Alpaca budget for one number.
-  const{mask:maskValue}=useHideValues();
   const deskData=useAlpacaDesk(!demoMode&&isAdmin);
   const book=useStrategyBook(!demoMode&&isAdmin);
   // ONE screening read for the whole tab. The Desk, Compliance and Risk each
@@ -8948,6 +8869,22 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     return()=>{cancelled=true;clearTimeout(h);};
   },[sym]);
 
+  // The ticket's Sharia line, from the app's one screening engine (the same
+  // /api/screen the Screener reads). It replaced a static green "SHARIA
+  // PRE-CHECK" that checked nothing. Only screened while the ticket is open.
+  const[ticketScreen,setTicketScreen]=useState({phase:"idle",verdict:null});
+  useEffect(()=>{
+    const s2=(sym||"").trim().toUpperCase();
+    if(!ticketOpen||!s2||demoMode){setTicketScreen({phase:"idle",verdict:null});return;}
+    let cancelled=false;
+    setTicketScreen({phase:"loading",verdict:null});
+    const h=setTimeout(async()=>{
+      const v=await screenTicker(s2);
+      if(!cancelled)setTicketScreen({phase:"ready",verdict:v&&v.status!=="unknown"?v:null});
+    },500);
+    return()=>{cancelled=true;clearTimeout(h);};
+  },[sym,ticketOpen,demoMode]);
+
   // Step 1: preview (SnapTrade) or place (Alpaca paper) the order.
   // - SnapTrade: posts to /trade/impact, surfaces a modal, then user
   //   confirms via placeOrder() which calls /trade/place.
@@ -9036,11 +8973,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   };
   const cancelPreview=()=>{setImpactPreview(null);setOrderErr(null);};
 
-  const ORDERS=[["Market","Execute immediately at market price",true],["Limit","Execute at specified price or better",true],["Stop-Loss","Sells when price drops to stop level",true],["Stop-Limit","Stop triggers limit — price floor control",true],["Trailing Stop","Dynamic stop — locks in gains as price rises",true],["Short Sell","Selling unowned shares · Maisir — prohibited",false],["Options","Derivative contracts · Gharar — prohibited",false],["Margin","Borrowed capital with interest · Riba — prohibited",false]];
-  // Order-type names that map to a supported otype using ONLY the existing
-  // single-price form (market needs no price; limit uses LIMIT PRICE). Stop
-  // variants would need a stop-price field, so they stay display-only for now.
-  const OTYPE_BY_NAME={Market:"market",Limit:"limit"};
+
 
   // Market orders execute at the live price → base the estimate on the quote;
   // limit orders use the entered LIMIT PRICE.
@@ -9081,12 +9014,10 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
               right={<button className="mz-more mz-tap" aria-expanded={ticketOpen} onClick={()=>setTicketOpen(o=>!o)}>{ticketOpen?"Close the ticket":"Open the ticket"}</button>}/>
           </section>
         </div>}
-        {/* Which desk an order would hit, above the ticket — "which desk am I
-            on" must never be inferred on a surface that can place a real order. */}
-        {showTicket&&<div style={{marginBottom:T.s5}}><StatusRail session={session}
-          summary={deskSummary({paper:deskData.account,accounts,live,mapPosition})}
-          mask={maskValue} armedVenue={venue}/></div>}
-    {showTicket&&<TradeConnectionsPanel onConnectTrade={onConnectTrade}/>}
+        {/* "Which desk am I on" must never be inferred on a surface that can
+            place a real order. The old status rail answered it with a gold
+            ARMED cell; the ticket now states it in words, in "Before you send",
+            right beside the button. */}
 
     {/* Quick Trade (ad-hoc order ticket) lives behind a Coming Soon banner for non-admin users. */}
     {/* The non-admin Order Ticket placeholder lived here. Removed 2026-10-01:
@@ -9097,157 +9028,69 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         a tester needs to know they're on the shared blotter BEFORE they place
         an order, not after they can't find their fill. */}
     {showTicket&&isAdmin&&venue==="alpaca"&&!demoMode&&<AlpacaKeysPanel/>}
-    {showTicket&&isAdmin&&<div className="bento-row mz-side-by-side" style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:T.s4}}>
-      {/* ─── Order Ticket bento ────────────────────────── */}
-      <BentoTile style={{display:"flex",flexDirection:"column",gap:T.s4}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:T.s2,flexWrap:"wrap"}}>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600}}>AD-HOC MANUAL ORDER</div>
-          <span style={{display:"inline-flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
-            <Tag label={venue==="alpaca"?"PAPER · ALPACA":"LIVE · SNAPTRADE"} color={venue==="alpaca"?T.gold:T.blue}/>
-            {session&&<Tag label={session.label}
-              color={session.session==="regular"?T.gain:session.tradeable?T.gold:T.slate}
-              title={session.tradeable
-                ?`US market session: ${session.label}. ${session.requiresLimit?"Limit orders only.":"All order types accepted."}`
-                :`US market closed (${session.reason}).`}/>}
-          </span>
+    {/* The hand-order ticket (broadsheet pass). Same state, same submit and
+        preview handlers; the form is on the left and everything you should
+        know BEFORE sending sits beside it. */}
+    {showTicket&&isAdmin&&<section className="mz-ticket" data-testid="order-ticket">
+      <div className="mz-ticket-form">
+        <div className="mz-seg" role="group" aria-label="Where the order goes">
+          {[["alpaca","Paper · Alpaca"],["snaptrade","Live · your broker"]].map(([v,l])=><button key={v} onClick={()=>setVenue(v)} aria-pressed={venue===v}
+            className={venue===v?"on":undefined} style={venue===v?{color:v==="alpaca"?T.blue:T.loss,boxShadow:`inset 0 -2px 0 ${v==="alpaca"?T.blue:T.loss}`}:undefined}
+            title={v==="alpaca"?"Paper trade against Alpaca's free sandbox — no real money":"Place a real order through your connected broker"}>{l}</button>)}
         </div>
-        {/* Extended-hours notice. Stated as a constraint plus its reason, not a
-            warning triangle — the user is a tester who needs to know WHY the
-            type selector just locked itself to limit. */}
-        {venue==="alpaca"&&extendedSession&&(
-          <div style={{background:`${T.gold}0D`,border:`1px solid ${T.gold}33`,borderRadius:T.rMd,padding:`${T.s2} ${T.s3}`,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.6}}>
-            <span style={{color:T.gold,fontWeight:600}}>{session.label} session</span> — limit orders only, and the order expires at the end of today's session.
-            <div style={{marginTop:T.s1,opacity:0.9}}>
-              Extended-hours books are thin: fewer buyers and sellers, wider spreads, and prices that can move sharply away from the regular-session close. Set your limit deliberately.
-            </div>
-          </div>
-        )}
-        {venue==="alpaca"&&session&&!session.tradeable&&(
-          <div style={{background:`${T.slate}14`,border:`1px solid ${T.border}`,borderRadius:T.rMd,padding:`${T.s2} ${T.s3}`,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.6}}>
-            <span style={{color:T.textHi,fontWeight:600}}>Market closed</span> ({session.reason.replace(/_/g," ")}). Orders are refused rather than queued — a queued order fills later at a price you never saw.
-          </div>
-        )}
-        <p style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55,margin:0}}>One-off trade you place by hand. For automated trades, create a strategy in the <strong>Trading Bot</strong> tab — it screens a halal universe, picks the ticker, sizes it, and executes per your chosen layer.</p>
-        <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
-          {[["snaptrade","Live · SnapTrade"],["alpaca","Paper · Alpaca"]].map(([v,l])=><button key={v} onClick={()=>setVenue(v)} title={v==="alpaca"?"Paper trade against Alpaca's free sandbox — no real money":"Place a real order through your connected broker"} style={{
-            flex:1,padding:"8px 10px",fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,letterSpacing:"-0.005em",
-            border:"none",cursor:"pointer",borderRadius:T.rSm,
-            background:venue===v?(v==="alpaca"?`${T.gold}22`:`${T.blue}22`):"transparent",
-            color:venue===v?(v==="alpaca"?T.gold:T.blue):T.muted,
-            transition:"all 0.15s",
-          }}>{l}</button>)}
+        <div className="mz-seg" role="group" aria-label="Buy or sell">
+          {["buy","sell"].map(x=><button key={x} onClick={()=>setSide(x)} aria-pressed={side===x} className={side===x?"on":undefined}
+            style={side===x?{background:x==="buy"?T.gain:T.loss,color:"#fff"}:undefined}>{x==="buy"?"Buy":"Sell"}</button>)}
         </div>
-        <div style={{display:"flex",background:T.surface,borderRadius:T.rMd,overflow:"hidden",border:`1px solid ${T.border}`,padding:3}}>
-          {["buy","sell"].map(s=><button key={s} onClick={()=>setSide(s)} style={{
-            flex:1,padding:"10px",fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,letterSpacing:"-0.005em",
-            textTransform:"capitalize",border:"none",cursor:"pointer",borderRadius:T.rSm,
-            background:side===s?(s==="buy"?T.gain:T.loss):"transparent",
-            color:side===s?"#fff":T.muted,
-            transition:"all 0.15s",
-            boxShadow:side===s?`0 2px 8px ${(s==="buy"?T.gain:T.loss)}55`:"none",
-          }}>{s}</button>)}
-        </div>
-        {venue==="snaptrade"
-          ?<div>
-            <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>ACCOUNT</div>
-            <select value={acctId} onChange={e=>setAcctId(e.target.value)} className="field">
-              {accounts.length===0?<option value="">No accounts connected</option>:accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName} ({kf(a.balance||0)})</option>)}
-            </select>
-          </div>
-          :<div style={{padding:`${T.s2} ${T.s3}`,background:T.surface,border:`1px solid ${T.gold}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
-            <span style={{color:T.gold,fontWeight:600,letterSpacing:"0.06em"}}>PAPER MODE</span> — order routes to your Alpaca paper account (no real money). Halal-only: haram tickers blocked server-side.
-          </div>}
-        {/* Symbol + live quote for whatever ticker is typed */}
-        <div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>SYMBOL</div>
-          <input type="text" value={sym} onChange={e=>setSym(e.target.value.toUpperCase())}
-            className="field" style={{fontSize:"var(--fs-xl)",fontWeight:600,color:T.blue,letterSpacing:"-0.01em"}}/>
-          <div style={{marginTop:6,fontFamily:FM,fontSize:"var(--fs-xs)",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            {quoteBusy&&!quote
-              ?<span style={{color:T.muted}}>Fetching live price…</span>
-              :quote
-                ?<>
-                  <span style={{color:T.textHi,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{f$(quote.price)}</span>
-                  {quote.pct!=null&&<span style={{color:fc(quote.pct),fontVariantNumeric:"tabular-nums"}}>{fp(quote.pct)}</span>}
-                  <span style={{color:T.gain,letterSpacing:"0.12em",fontWeight:600}}>● LIVE</span>
-                  {otype!=="market"&&<button onClick={()=>setLpx(String(quote.price))} style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.06em",color:T.blue,background:`${T.blue}14`,border:`1px solid ${T.blue}30`,borderRadius:T.rSm,padding:"2px 7px",cursor:"pointer"}}>USE →</button>}
-                </>
-                :<span style={{color:T.muted}}>No live price for {sym||"—"}</span>}
+        {venue==="snaptrade"&&<label className="mz-field"><span>Account</span>
+          <select value={acctId} onChange={e=>setAcctId(e.target.value)} className="field">
+            {accounts.length===0?<option value="">No accounts connected</option>:accounts.map(a=><option key={a.accountId} value={a.accountId}>{a.brokerage} — {a.accountName} ({kf(a.balance||0)})</option>)}
+          </select></label>}
+        <label className="mz-field"><span>Symbol</span>
+          <input type="text" value={sym} onChange={e=>setSym(e.target.value.toUpperCase())} className="field" style={{fontWeight:600,color:T.textHi}}/>
+          <small>{quoteBusy&&!quote?"Fetching the live price…":quote
+            ?<><b style={{color:T.textHi}}>{f$(quote.price)}</b>{quote.pct!=null&&<span style={{color:fc(quote.pct)}}> {fp(quote.pct)}</span>} live
+              {otype!=="market"&&<button className="mz-more" onClick={()=>setLpx(String(quote.price))} style={{marginLeft:T.s2,padding:0}}>use as limit</button>}</>
+            :`No live price for ${sym||"—"}`}</small>
+        </label>
+        <div className="mz-field"><span>Order type</span>
+          <div className="mz-seg" role="group" aria-label="Order type">
+            {[["market","Market"],["limit","Limit"]].map(([v,l])=>{const off=v==="market"&&venue==="alpaca"&&extendedSession;return<button key={v} disabled={off} aria-pressed={otype===v}
+              className={otype===v?"on":undefined} onClick={()=>setOtype(v)} title={off?"Outside regular hours only limit orders are accepted":undefined}>{l}</button>;})}
           </div>
         </div>
-        <div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>QUANTITY</div>
-          <input type="number" value={qty} onChange={e=>setQty(e.target.value)}
-            className="field" style={{fontSize:"var(--fs-lg)",fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}/>
-        </div>
-        {/* Limit price only applies to limit orders — hidden for market. */}
-        {otype!=="market"&&<div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>LIMIT PRICE</div>
-          <input type="number" value={lpx} onChange={e=>setLpx(e.target.value)}
-            className="field" style={{fontSize:"var(--fs-lg)",fontWeight:500,color:T.text,fontVariantNumeric:"tabular-nums"}}/>
-        </div>}
-        <div style={{background:T.surface,borderRadius:T.rMd,padding:`${T.s3} ${T.s4}`,border:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
-          <span style={{fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,letterSpacing:"0.04em"}}>
-            Estimated Total <span style={{opacity:0.7}}>· {otype==="market"?(quote?"@ live price":"@ market"):"@ limit"}</span>
-          </span>
-          <span style={{fontFamily:FU,fontSize:"var(--fs-xl)",fontWeight:700,color:T.textHi,letterSpacing:"-0.015em",fontVariantNumeric:"tabular-nums"}}>{estPx>0?f$(estTotal):"—"}</span>
-        </div>
-        <div style={{background:`linear-gradient(135deg, ${T.gain}12, transparent 70%), ${T.surface}`,border:`1px solid ${T.gain}28`,borderRadius:T.rMd,padding:`${T.s2} ${T.s3}`}}>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gain,letterSpacing:"0.16em",fontWeight:600,marginBottom:2}}>● SHARIA PRE-CHECK</div>
-          <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.text,letterSpacing:"-0.005em"}}>{sym} — screening against AAOIFI criteria</div>
-        </div>
-        <button onClick={submit} disabled={orderBusy||(venue==="snaptrade"&&!acctId)} style={{
-          padding:`12px ${T.s4}`,borderRadius:T.rMd,
-          fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,letterSpacing:"-0.005em",
-          border:"none",cursor:orderBusy||(venue==="snaptrade"&&!acctId)?"not-allowed":"pointer",
-          background:done?`${T.gain}22`:orderBusy?T.dim:`linear-gradient(135deg, ${side==="buy"?T.gain:T.loss}, ${side==="buy"?"#0A8A65":"#D85555"})`,
-          color:done?T.gain:orderBusy?T.muted:"#fff",
-          transition:"all 0.2s",
-          boxShadow:done||orderBusy?"none":`0 4px 14px ${(side==="buy"?T.gain:T.loss)}55`,
-        }}>
-          {done?<span style={{display:"inline-flex",alignItems:"center",gap:6}}>Order Placed<Icon name="check" size={13}/></span>:orderBusy?"Loading…":venue==="alpaca"?`Place Paper ${side==="buy"?"Buy":"Sell"} ${sym}`:`Preview ${side==="buy"?"Buy":"Sell"} ${sym}`}
+        <label className="mz-field"><span>Quantity</span>
+          <input type="number" value={qty} onChange={e=>setQty(e.target.value)} className="field" style={{fontVariantNumeric:"tabular-nums"}}/></label>
+        {otype!=="market"&&<label className="mz-field"><span>Limit price</span>
+          <input type="number" value={lpx} onChange={e=>setLpx(e.target.value)} className="field" style={{fontVariantNumeric:"tabular-nums"}}/></label>}
+        <button onClick={submit} disabled={orderBusy||(venue==="snaptrade"&&!acctId)} className="mz-send" style={{
+          background:done?`${T.gain}22`:orderBusy?T.dim:side==="buy"?T.gain:T.loss,color:done?T.gain:orderBusy?T.muted:"#fff",
+          cursor:orderBusy||(venue==="snaptrade"&&!acctId)?"not-allowed":"pointer"}}>
+          {done?<span style={{display:"inline-flex",alignItems:"center",gap:6}}>Order placed<Icon name="check" size={13}/></span>:orderBusy?"Sending…":venue==="alpaca"?`Place paper ${side==="buy"?"buy":"sell"} · ${sym}`:`Preview real ${side==="buy"?"buy":"sell"} · ${sym}`}
         </button>
-        {orderErr&&<div style={{padding:`${T.s2} ${T.s3}`,background:T.lossBg,border:`1px solid ${T.loss}30`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.loss,whiteSpace:"pre-wrap",lineHeight:1.4}}>{ICON_NO}{orderErr}</div>}
-      </BentoTile>
-
-      {/* ─── Order Types card grid ─────────────────────── */}
-      <BentoTile>
-        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s4}}>ORDER TYPES <span style={{color:T.blue}}>· click to select</span></div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:T.s2}}>
-          {ORDERS.map(([nm,desc,ok])=>{
-            const selectable=ok&&!!OTYPE_BY_NAME[nm];
-            const active=selectable&&otype===OTYPE_BY_NAME[nm];
-            return <div key={nm} onClick={selectable?()=>setOtype(OTYPE_BY_NAME[nm]):undefined} style={{
-              background:active?`${T.gain}12`:T.surface,
-              border:`1px solid ${active?T.gain+"66":T.border}`,
-              borderLeft:`3px solid ${ok?T.gain:T.loss}`,
-              borderRadius:T.rMd,
-              padding:`${T.s3} ${T.s4}`,
-              display:"flex",gap:T.s3,alignItems:"flex-start",
-              opacity:ok?1:0.7,
-              cursor:selectable?"pointer":"default",
-              transition:"background 0.15s, border-color 0.15s",
-            }}>
-              <div style={{
-                width:18,height:18,borderRadius:T.rSm,flexShrink:0,marginTop:2,
-                background:ok?`${T.gain}22`:`${T.loss}22`,
-                border:`1px solid ${ok?T.gain:T.loss}40`,
-                display:"flex",alignItems:"center",justifyContent:"center",
-                fontFamily:FM,fontSize:"var(--fs-2xs)",color:ok?T.gain:T.loss,fontWeight:700,
-              }}>{ok?<Icon name="check" size={12}/>:<Icon name="close" size={12}/>}</div>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:T.s2}}>
-                  <span style={{fontFamily:FP,fontSize:"var(--fs-md)",fontWeight:600,color:ok?T.textHi:T.muted,letterSpacing:"-0.005em"}}>{nm}</span>
-                  {active&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:700,letterSpacing:"0.14em",color:T.gain,background:`${T.gain}1e`,border:`1px solid ${T.gain}40`,borderRadius:T.rSm,padding:"1px 5px"}}>SELECTED</span>}
-                  {selectable&&!active&&<span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:600,letterSpacing:"0.1em",color:T.blue}}>SELECT</span>}
-                </div>
-                <div style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,lineHeight:1.55,letterSpacing:"-0.005em",marginTop:T.s1}}>{desc}</div>
-              </div>
-            </div>;
-          })}
-        </div>
-      </BentoTile>
-    </div>}
+        {orderErr&&<div role="alert" className="mz-ticket-err" style={{color:T.loss}}>{ICON_NO}{orderErr}</div>}
+      </div>
+      <aside className="mz-ticket-side" data-testid="ticket-checks">
+        <h3 style={{fontFamily:FN}}>Before you send</h3>
+        <dl>
+          <dt>Where it goes</dt>
+          <dd data-testid="ticket-venue">{venue==="alpaca"?<>Your <b>Alpaca paper</b> account — simulated, no real money.</>:<b style={{color:T.loss}}>Your real brokerage account. This is real money.</b>}</dd>
+          <dt>Market</dt>
+          <dd>{!session?"session unknown":session.session==="regular"?<><b style={{color:T.gain}}>●</b> open — all order types accepted</>
+            :session.tradeable?<><b style={{color:T.gold}}>◐</b> {session.label} — limit orders only, expiring at the end of today's session. Books are thin and spreads wide; set the limit deliberately.</>
+            :<><b style={{color:T.slate}}>○</b> closed ({String(session.reason||"").replace(/_/g," ")}). Orders are refused, not queued — a queued order fills later at a price you never saw.</>}</dd>
+          <dt>Sharia screen</dt>
+          <dd data-testid="ticket-sharia">{(()=>{const l=ticketScreenLine(ticketScreen.verdict,ticketScreen.phase,false);
+            return<><b style={{color:MARK_TONE[l.mark]}} aria-hidden="true">{PIPE_GLYPH[l.mark]}</b> {sym} {l.text}</>;})()}</dd>
+          <dt>Estimated total</dt>
+          <dd><span style={{fontFamily:FN,fontSize:"var(--fs-2xl)",color:T.textHi,fontVariantNumeric:"tabular-nums"}}>{estPx>0?f$(estTotal):"—"}</span>
+            <span className="mz-news-dim"> {otype==="market"?(quote?"at the live price":"at market"):"at your limit"}</span></dd>
+          <dt>Never offered here</dt>
+          <dd className="mz-news-dim">Short selling (maisir), options (gharar) and margin (riba). Stop orders are set by strategies, not by this ticket.</dd>
+        </dl>
+      </aside>
+    </section>}
+    {showTicket&&<div style={{marginTop:T.s6}}><TradeConnectionsPanel onConnectTrade={onConnectTrade}/></div>}
       </div>
     </div>
 
@@ -15215,6 +15058,35 @@ export default function Mizan(){
         background:repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--mz-dim) 55%, transparent) 6px 7px);}
       .mz-mult footer{display:flex; justify-content:space-between; gap:var(--s-2); flex-wrap:wrap; font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
       .mz-mult-status{font-family:${FP}; font-size:var(--fs-xs); margin-top:2px;}
+      .mz-ticket{display:grid; grid-template-columns:minmax(0,22rem) minmax(0,1fr); gap:var(--s-8); align-items:start; margin-top:var(--s-4);}
+      @media (max-width:820px){ .mz-ticket{grid-template-columns:minmax(0,1fr); gap:var(--s-5);} }
+      .mz-ticket-form{display:flex; flex-direction:column; gap:var(--s-4); font-family:${FP};}
+      .mz-seg{display:flex; border:1px solid var(--mz-borderHi);}
+      .mz-seg > button{flex:1; background:none; border:0; border-right:1px solid var(--mz-border); padding:9px 10px; cursor:pointer;
+        font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-muted); font-weight:500;}
+      .mz-seg > button:last-child{border-right:0;}
+      .mz-seg > button.on{color:var(--mz-textHi); font-weight:600; box-shadow:inset 0 -2px 0 var(--mz-textHi);}
+      .mz-seg > button:disabled{opacity:.45; cursor:not-allowed;}
+      @media (pointer:coarse){ .mz-seg > button{min-height:44px;} }
+      .mz-field{display:flex; flex-direction:column; gap:4px; font-size:var(--fs-sm);}
+      .mz-field > span{color:var(--mz-muted);}
+      .mz-field small{font-size:var(--fs-xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      .mz-send{border:0; padding:12px var(--s-4); font-family:${FP}; font-size:var(--fs-md); font-weight:600;}
+      .mz-ticket-err{font-size:var(--fs-sm); white-space:pre-wrap; line-height:1.45;}
+      .mz-ticket-side{border-top:1px solid var(--mz-textHi); padding-top:var(--s-3); font-family:${FP}; font-size:var(--fs-sm);}
+      .mz-ticket-side h3{margin:0 0 var(--s-3); font-size:var(--fs-xl); font-weight:600; color:var(--mz-textHi);}
+      .mz-ticket-side dl{margin:0; display:grid; grid-template-columns:minmax(0,9rem) minmax(0,1fr); gap:var(--s-3) var(--s-4);}
+      @media (max-width:520px){ .mz-ticket-side dl{grid-template-columns:minmax(0,1fr); gap:2px;} .mz-ticket-side dd{margin-bottom:var(--s-3);} }
+      .mz-ticket-side dt{color:var(--mz-muted);}
+      .mz-ticket-side dd{margin:0; color:var(--mz-text); line-height:1.5;}
+      .mz-queue{list-style:none; margin:0; padding:0; border-top:1px solid var(--mz-textHi);}
+      .mz-queue > li{display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1.6fr) auto auto; gap:var(--s-2) var(--s-5); align-items:center;
+        padding:var(--s-3) 0; border-bottom:1px solid var(--mz-border); font-family:${FP}; font-size:var(--fs-sm); font-variant-numeric:tabular-nums;}
+      .mz-queue b{color:var(--mz-textHi);}
+      .mz-q-act{display:inline-flex; gap:var(--s-3); align-items:center;}
+      @media (max-width:760px){ .mz-queue > li{grid-template-columns:minmax(0,1fr);} }
+      .mz-history-why td{padding-top:0; border-bottom:1px solid var(--mz-border); font-size:var(--fs-xs);}
+      .mz-history tr:has(+ .mz-history-why) td{border-bottom:0;}
       .mz-autoline{align-items:center; font-family:${FP};}
       .mz-st-mode-ro{font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); padding:5px 0;}
       .mz-stable{list-style:none; margin:0; padding:0; border-top:1px solid var(--mz-textHi);}
@@ -15291,47 +15163,6 @@ export default function Mizan(){
       .mz-notes{display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:var(--s-6);}
       .mz-notes h3{margin:0 0 var(--s-2); font-size:var(--fs-lg); font-weight:600; color:var(--mz-textHi);}
       .mz-notes p{margin:0; font-size:var(--fs-sm); color:var(--mz-muted); line-height:1.55;}
-
-      /* The status rail. Sticky, because a trading surface should never make
-         you scroll to find out whether the market is open. */
-      .mz-rail{
-        position:sticky; top:0; z-index:4;
-        display:flex; align-items:stretch; flex-wrap:wrap;
-        background:var(--mz-surface);
-        border-bottom:1px solid var(--mz-borderHi);
-      }
-      .mz-rail-cell{
-        display:flex; flex-direction:column; justify-content:center; gap:2px;
-        padding:var(--s-2) var(--s-4);
-        border-right:1px solid var(--mz-border);
-        min-width:0; flex:0 0 auto;
-      }
-      .mz-rail-cell:last-child{border-right:0;}
-      /* The desk groups (PAPER / LIVE) get a heavier separator than the cells
-         inside them, so the eye reads two desks rather than six numbers. */
-      .mz-rail-desk{border-right:2px solid var(--mz-borderHi);}
-      .mz-rail-grow{flex:1 1 auto;}
-      /* The desk an order would actually hit. Gold, because this is the same
-         "pay attention" register the app uses for warnings — not green, which
-         would read as approval of the choice. */
-      .mz-rail-armed{
-        background:linear-gradient(to bottom, rgba(184,132,42,0.16), transparent);
-        box-shadow:inset 0 2px 0 0 var(--mz-armed, #b8842a);
-      }
-      @media (max-width:720px){
-        .mz-rail-cell{flex:1 1 50%; border-right:1px solid var(--mz-border);}
-        .mz-rail-desk{flex:1 1 100%; border-right:0; border-bottom:2px solid var(--mz-borderHi);}
-      }
-      /* Below ~420px a two-up rail put "LIVE · BROKERAGE" and "LIVE DAY" in
-         50% cells while both labels were nowrap, so each label ran out of its
-         own cell and over its neighbour. Flex reports honest, non-overlapping
-         rects while the TEXT inside paints on top of the next cell, so this is
-         invisible to an overflow check and had to be seen. One per row below
-         that width. */
-      @media (max-width:420px){
-        .mz-rail-cell{flex:1 1 100%; border-right:0; border-bottom:1px solid var(--mz-border);}
-        .mz-rail-cell:last-child{border-bottom:0;}
-      }
 
       /* Data tape: rules, not cards. A card per row would triple the vertical
          cost of a table whose whole purpose is letting you compare rows. */
@@ -15422,8 +15253,12 @@ export default function Mizan(){
          lift, no glow. The bento hover-lift belongs to the app's light pages;
          on a trading desk a panel that moves under the cursor reads as noise.
          Scoped to .mz-lab so the rest of the app is untouched. */
-      .mz-lab .bento-tile{border-radius:8px!important; box-shadow:none!important; background:var(--mz-surface)!important;}
-      .mz-lab .bento-tile:hover{transform:none!important; box-shadow:none!important; border-color:var(--mz-borderHi)!important;}
+      /* Broadsheet: no tiles. Any card still inside the lab reads as a ruled
+         section — a hairline above, no fill, no radius, no lift. */
+      .mz-lab .bento-tile{border:0!important; border-top:1px solid var(--mz-borderHi)!important; border-radius:0!important;
+        box-shadow:none!important; background:transparent!important; padding-left:0!important; padding-right:0!important;}
+      .mz-lab .bento-tile::before{display:none!important;}
+      .mz-lab .bento-tile:hover{transform:none!important; box-shadow:none!important;}
       .mz-lab .bento-tile--click:active{transform:none!important;}
 
       /* Weight bar — the only chart in the tape. Inline so it reads as part

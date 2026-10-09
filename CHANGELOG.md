@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-08
 
 ### Added
+- **trade-lab:** Strategies section in the broadsheet style (`a9b1907`)
 - **trade-lab:** Plain-English strategy guide + one basis for the equity curve (`e636543`)
 - **trade-lab:** Broadsheet redesign — Desk + eight sections (`70074c2`)
 - **trade-lab:** Colour-code every strategy (`eb818bc`)

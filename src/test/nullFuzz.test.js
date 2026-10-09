@@ -53,6 +53,7 @@ const MODULES = [
   '../lib/deskPipeline.js',
   '../lib/sparkline.js',
   '../lib/strategyExplainer.js',
+  '../lib/orderQueue.js',
   '../../lib/trading/curve.mjs',
   '../../lib/trading/journal.mjs',
 ]
