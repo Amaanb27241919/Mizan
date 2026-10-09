@@ -33,6 +33,13 @@ const PORT = Number(process.env.MIZAN_E2E_PORT) || 4173;
 
 export default defineConfig({
   testDir: "./e2e",
+  // Refuses to run against a dist/ built WITHOUT Supabase settings. Such a
+  // build boots in single-user pass-through mode (no login, a fake user), and
+  // eight unrelated-looking tests then fail — "login controls under 44px",
+  // "another user's state survived" — for one reason nobody would guess. That
+  // cost a whole investigation on 2026-10-09 in a worktree with no .env.local.
+  // `npm run build:e2e` supplies the public project URL and a placeholder key.
+  globalSetup: "./e2e/support/global-setup.js",
   // Visual diffs are the point; a flaky-retry that hides a real regression is
   // worse than a red build. Retries only in CI, for genuine infra flake.
   retries: process.env.CI ? 1 : 0,

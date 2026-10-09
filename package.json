@@ -9,6 +9,7 @@
     "vite": "vite",
     "lint": "eslint --config config/eslint.mjs .",
     "build": "npm run gen:backlog && npm run lint && vite build",
+    "build:e2e": "VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-https://kcghivcvczxaguezurii.supabase.co} VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:-e2e-placeholder-anon-key} npm run build",
     "start": "NODE_ENV=production node server.js",
     "preview": "vite preview",
     "gen:icons": "node scripts/gen-pwa-icons.mjs",
