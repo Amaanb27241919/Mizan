@@ -20,6 +20,7 @@ import { sparkPaths, pinToday } from "../lib/sparkline.js";
 import { explainStrategy } from "../lib/strategyExplainer.js";
 import { pendingRows, historyRows, ticketScreenLine } from "../lib/orderQueue.js";
 import { killSwitchRows } from "../lib/killSwitches.js";
+import { riskFromPoints, winRate, MIN_RISK_DAYS } from "../lib/labMetrics.js";
 import { HALAL_FUNDS } from "../../lib/trading/screenGate.mjs";
 import { committeeStats, failureCode } from "../lib/committee.js";
 import { STRATEGY_PALETTE, strategyColorKey } from "../lib/strategyColors.js";
@@ -7884,6 +7885,9 @@ function PerformancePanelLab({demoMode,book,liveEquity}){
   const[range,setRange]=useState("1M");
   const[equity,setEquity]=useState(null);
   const[bench,setBench]=useState(null);
+  // HLAL beside SPUS (proposal §16: SPUS primary, HLAL secondary). A second
+  // halal benchmark keeps "beat SPUS" from being a fact about one fund.
+  const[bench2,setBench2]=useState(null);
   const[state,setState]=useState(demoMode?"idle":"loading");
 
   useEffect(()=>{
@@ -7892,15 +7896,17 @@ function PerformancePanelLab({demoMode,book,liveEquity}){
     setState(s=>s==="ready"?s:"loading");
     (async()=>{
       try{
-        const[e,b]=await Promise.all([
+        const[e,b,h]=await Promise.all([
           apiFetch(`/api/alpaca/portfolio-history?range=${encodeURIComponent(range)}`),
           apiFetch(`/api/alpaca/benchmark?range=${encodeURIComponent(range)}&symbol=SPUS&live=1`),
+          apiFetch(`/api/alpaca/benchmark?range=${encodeURIComponent(range)}&symbol=HLAL&live=1`),
         ]);
         if(!e.ok){if(!cancelled)setState("unavailable");return;}
         const ej=await e.json().catch(()=>null);
         const bj=b.ok?await b.json().catch(()=>null):null;
+        const hj=h&&h.ok?await h.json().catch(()=>null):null;
         if(cancelled)return;
-        setEquity(ej); setBench(bj); setState("ready");
+        setEquity(ej); setBench(bj); setBench2(hj); setState("ready");
       }catch{if(!cancelled)setState("unavailable");}
     })();
     return()=>{cancelled=true;};
@@ -7915,82 +7921,94 @@ function PerformancePanelLab({demoMode,book,liveEquity}){
     {benchmarkName:bench?.symbol||"SPUS"},
   ),[equity,bench,liveEquity]);
   const conf=confidenceLabel(att.days);
+  const acct=useMemo(()=>pinLiveEquity(toPoints(equity),liveEquity),[equity,liveEquity]);
+  const att2=useMemo(()=>benchmarkAttribution(acct,Array.isArray(bench2?.points)?bench2.points:[],{benchmarkName:"HLAL"}),[acct,bench2]);
+  const risk=useMemo(()=>riskFromPoints(acct),[acct]);
+  const byId=useMemo(()=>new Map(asArray(book?.strategies).filter(x=>x?.id).map(x=>[String(x.id),x])),[book]);
   const lb=useMemo(()=>blotterRows(book?.strategies).filter(r=>r.traded),[book]);
   const lbChips=useMemo(()=>chipMap(book?.strategies),[book]);
   const maxAbs=useMemo(()=>Math.max(0.0001,...lb.map(r=>Math.abs(r.alphaPct??0))),[lb]);
 
 
-  return<section>
-    <SectionHead label="Performance"
-      hint="Your strategy against the index you would otherwise have held. Alpha is the difference in percentage points — if it is negative, doing nothing would have beaten this."
-      right={<div className="mz-chip-row" style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-        {CURVE_RANGES.map(([id,label])=><button key={id} onClick={()=>setRange(id)} style={{
-          fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.1em",fontWeight:600,
-          padding:`4px ${T.s2}`,borderRadius:T.rSm,cursor:"pointer",
-          background:range===id?`${T.textHi}1a`:"transparent",
-          border:`1px solid ${range===id?T.borderHi:T.border}`,
-          color:range===id?T.textHi:T.muted,
-        }}>{label}</button>)}
-      </div>}
-      style={{marginBottom:T.s3}}/>
+  const sgn=v=>`${v>0?"+":v<0?"−":""}${Math.abs(v).toFixed(2)}`;
+  const tone=v=>v==null?T.muted:v>0?T.gain:v<0?T.loss:T.muted;
+  const ratio=v=>v==null||!Number.isFinite(v)?"—":v.toFixed(2);
+  return<section data-testid="performance">
+    <LabHead title="Performance"
+      note="The paper account against the halal funds you could have held instead. The gap is in percentage points — if it is negative, doing nothing would have beaten this."
+      right={<nav className="mz-filter" style={{margin:0}} aria-label="Range">{CURVE_RANGES.map(([id,label])=>
+        <button key={id} onClick={()=>setRange(id)} aria-pressed={range===id} className={range===id?"on mz-tap":"mz-tap"}>{label}</button>)}</nav>}/>
 
-    {state==="loading"&&<div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>LOADING…</div>}
-    {state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>Performance history is not available for this desk.</div>}
-    {state==="idle"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No performance history loaded.</div>}
+    {state==="loading"&&<p className="mz-col-empty">Loading…</p>}
+    {state==="unavailable"&&<p className="mz-col-empty">Performance history is not available for this desk.</p>}
+    {state==="idle"&&<p className="mz-col-empty">No performance history loaded.</p>}
 
     {state==="ready"&&(!att.comparable
-      ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
-         {/* Deliberately not a number. One aligned day is a point, not a
-             comparison, and inventing a figure here would be the exact
-             dishonesty this panel exists to prevent. */}
-         Not enough overlapping days to compare yet — the strategy and {att.benchmarkName} need at least two days measured over the same window. {att.days===1?"There is one so far.":"There are none so far."}
-       </div>
+      // Deliberately not a number: one aligned day is a point, not a comparison.
+      ?<p className="mz-col-empty">Not enough overlapping days to compare yet — the account and {att.benchmarkName} need at least two days measured over the same window. {att.days===1?"There is one so far.":"There are none so far."}</p>
       :<>
-        <StatStrip testId="perf-stats" items={[
-          {lead:true,label:`ACCOUNT VS ${att.benchmarkName}`,value:<>{att.alpha>0?"+":att.alpha<0?"−":""}{Math.abs(att.alpha).toFixed(2)}<span className="mz-stat-unit">pp</span></>,
-            tone:att.alpha>0?T.gain:att.alpha<0?T.loss:T.muted,
-            sub:att.alpha<0?`Behind — holding ${att.benchmarkName} would have returned more.`:att.alpha>0?`Ahead of ${att.benchmarkName} over this window.`:`Level with ${att.benchmarkName}.`},
-          {label:"ACCOUNT",value:fp(att.strategyReturn),tone:att.strategyReturn>=0?T.gain:T.loss},
-          {label:att.benchmarkName,value:fp(att.benchmarkReturn),tone:att.benchmarkReturn>=0?T.gain:T.loss},
-          {label:"DRAWDOWN",value:att.strategyDrawdown!=null?fp(att.strategyDrawdown):"—",tone:att.strategyDrawdown<0?T.loss:T.muted,
-            sub:`${att.benchmarkName} ${att.benchmarkDrawdown!=null?fp(att.benchmarkDrawdown):"—"}`},
-          {label:"MEASURED",value:`${att.days}d`,sub:`${conf.level} · ${att.window.from&&att.window.to?`${att.window.from} → ${att.window.to}`:"—"}`},
-        ]}/>
-        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,marginTop:T.s2,lineHeight:1.5,maxWidth:"72ch"}}>{conf.note}</div>
+        <div className="mz-figs mz-score" data-testid="perf-stats">
+          <div><div className="mz-fig-l">Account vs {att.benchmarkName}</div>
+            <div className="mz-fig-v" style={{fontFamily:FN,color:tone(att.alpha)}}>{mask(sgn(att.alpha))}<span style={{fontSize:"var(--fs-md)"}}> pts</span></div>
+            <div className="mz-fig-s">{att.alpha<0?`Behind — holding ${att.benchmarkName} would have returned more.`:att.alpha>0?`Ahead of ${att.benchmarkName} over this window.`:`Level with ${att.benchmarkName}.`}</div></div>
+          <div><div className="mz-fig-l">Account</div><div className="mz-fig-v" style={{fontFamily:FN,color:tone(att.strategyReturn)}}>{mask(fp(att.strategyReturn))}</div></div>
+          <div><div className="mz-fig-l">{att.benchmarkName}</div><div className="mz-fig-v" style={{fontFamily:FN,color:tone(att.benchmarkReturn)}}>{fp(att.benchmarkReturn)}</div>
+            <div className="mz-fig-s">the primary benchmark</div></div>
+          <div data-testid="perf-hlal"><div className="mz-fig-l">HLAL</div><div className="mz-fig-v" style={{fontFamily:FN,color:tone(att2.comparable?att2.benchmarkReturn:null)}}>{att2.comparable?fp(att2.benchmarkReturn):"—"}</div>
+            <div className="mz-fig-s">{att2.comparable?<>account <span style={{color:tone(att2.alpha)}}>{mask(sgn(att2.alpha))} pts</span> vs HLAL</>:"no HLAL history for this window"}</div></div>
+          <div><div className="mz-fig-l">Max drawdown</div><div className="mz-fig-v" style={{fontFamily:FN,color:att.strategyDrawdown<0?T.loss:undefined}}>{att.strategyDrawdown!=null?fp(att.strategyDrawdown):"—"}</div>
+            <div className="mz-fig-s">{att.benchmarkName} {att.benchmarkDrawdown!=null?fp(att.benchmarkDrawdown):"—"}</div></div>
+          <div><div className="mz-fig-l">Measured</div><div className="mz-fig-v" style={{fontFamily:FN}}>{att.days} days</div>
+            <div className="mz-fig-s">{att.window.from&&att.window.to?`${att.window.from} → ${att.window.to}`:"—"}</div></div>
+        </div>
+        <p className="mz-legend" data-testid="perf-confidence"><b style={{color:conf.level==="meaningful"?T.gain:T.gold}} aria-hidden="true">{conf.level==="meaningful"?"●":"◐"}</b> {conf.note}</p>
       </>)}
 
-    {/* Per strategy — the question the account-level number cannot answer
-        when six sleeves share one pot. Each strategy's return runs from its
-        own first fill; SPUS is measured over the same window (strategyScore). */}
-    {!demoMode&&<div style={{marginTop:T.s6}} data-testid="perf-leaderboard">
-      <SectionHead label="Strategies vs SPUS"
-        hint="Each strategy from its own first fill, against SPUS over the same window. The bar is the gap in percentage points; a short record is noise, not a verdict."
-        style={{marginBottom:T.s3}}/>
+    {state==="ready"&&<>
+      <LabHead title="Risk-adjusted" note={`Return per unit of risk, from the account's daily equity. A 0% risk-free rate — there is no interest-bearing benchmark to subtract. Needs ${MIN_RISK_DAYS} trading days to mean anything.`}/>
+      {!risk.ready
+        ?<p className="mz-col-empty" data-testid="perf-risk">Not yet — {risk.days} of {risk.needed} trading days recorded. A ratio from a handful of days is noise, so none is shown.</p>
+        :<div className="mz-figs mz-score" data-testid="perf-risk">
+          <div><div className="mz-fig-l">Sharpe</div><div className="mz-fig-v" style={{fontFamily:FN}}>{ratio(risk.sharpe)}</div><div className="mz-fig-s">return per unit of volatility</div></div>
+          <div><div className="mz-fig-l">Sortino</div><div className="mz-fig-v" style={{fontFamily:FN}}>{ratio(risk.sortino)}</div><div className="mz-fig-s">counts only the down days</div></div>
+          <div><div className="mz-fig-l">Volatility</div><div className="mz-fig-v" style={{fontFamily:FN}}>{(risk.volatility*100).toFixed(1)}%</div><div className="mz-fig-s">annualised</div></div>
+          {/* No drawdown here: the figures above state it, against SPUS's. A
+              second drawdown over a slightly different window read as a
+              contradiction (−0.38% above, 1.1% here) in the first render. */}
+        </div>}
+    </>}
+
+    {/* Per strategy — the question the account number cannot answer when
+        several sleeves share one pot. Each from its own first fill, against
+        SPUS over the same window (strategyScore). */}
+    {!demoMode&&<section data-testid="perf-leaderboard">
+      <LabHead title="Strategies against SPUS" note="Each strategy from its own first fill, against SPUS over the same window. The bar is the gap in percentage points; a short record is noise, not a verdict."/>
       {book?.state!=="ready"
-        ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>{book?.state==="loading"?"Loading strategies…":"The strategy list is not available."}</div>
+        ?<p className="mz-col-empty">{book?.state==="loading"?"Loading strategies…":"The strategy list is not available."}</p>
         :!lb.length
-          ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>No strategy has traded yet.</div>
-          :<div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
-            <thead><tr>
-              <th style={{fontSize:"var(--fs-2xs)"}}>STRATEGY</th><th style={{fontSize:"var(--fs-2xs)"}}>RETURN</th>
-              <th style={{fontSize:"var(--fs-2xs)"}}>SPUS</th><th style={{fontSize:"var(--fs-2xs)",textAlign:"center"}}>VS SPUS</th>
-            </tr></thead>
+          ?<p className="mz-col-empty">No strategy has traded yet.</p>
+          :<div className="mz-tape-wrap"><table className="mz-news">
+            <thead><tr><th>Strategy</th><th className="mz-hide-sm">Since</th><th style={{textAlign:"right"}}>Return</th><th style={{textAlign:"right"}}>SPUS</th><th className="mz-perf-bar" style={{textAlign:"center"}}>vs SPUS</th><th style={{textAlign:"right"}}>Closed trades</th></tr></thead>
             <tbody>{lb.map(r=>{
               const a=r.alphaPct;const w=a==null?0:Math.min(50,(Math.abs(a)/maxAbs)*50);
+              const c=lbChips.get(r.id);const st=byId.get(r.id);const wr=winRate(st?.progress);
+              const since=st?.progress?.started_at?String(st.progress.started_at).slice(0,10):"—";
               return<tr key={r.id} data-testid="perf-row">
-                <td style={{whiteSpace:"normal"}}><CodeChip {...(lbChips.get(r.id)||{label:r.code})}/><span style={{color:T.textHi,fontWeight:600}}>{r.name}</span></td>
-                <td style={{color:r.returnPct==null?T.muted:r.returnPct>=0?T.gain:T.loss}}>{r.returnPct==null?"—":mask(fp(r.returnPct))}</td>
-                <td style={{color:r.benchPct==null?T.muted:r.benchPct>=0?T.gain:T.loss}}>{r.benchPct==null?"—":fp(r.benchPct)}</td>
-                <td style={{minWidth:"14rem"}}>
+                <td><span className="mz-key" style={{background:c?.color||T.slate,width:16}} aria-hidden="true"/><b>{r.code||c?.label||""}</b> {r.name}</td>
+                <td className="mz-news-dim mz-hide-sm">{since}</td>
+                <td style={{textAlign:"right",color:tone(r.returnPct)}}>{r.returnPct==null?"—":mask(fp(r.returnPct))}</td>
+                <td style={{textAlign:"right",color:tone(r.benchPct)}}>{r.benchPct==null?"—":fp(r.benchPct)}</td>
+                <td>
                   <div className="mz-div" title={a==null?"not measurable":`${a>0?"+":""}${a.toFixed(2)} pts`}>
                     <span className="mz-div-mid"/>
                     {a!=null&&<span className="mz-div-bar" style={{[a>=0?"left":"right"]:"50%",width:`${w}%`,background:a>=0?T.gain:T.loss}}/>}
                   </div>
-                  <div style={{textAlign:"center",color:a==null?T.muted:a>=0?T.gain:T.loss,fontSize:"var(--fs-2xs)",marginTop:2}}>{a==null?"—":mask(`${a>0?"+":""}${a.toFixed(2)} pts`)}</div>
+                  <div style={{textAlign:"center",color:tone(a),fontSize:"var(--fs-xs)",marginTop:2}}>{a==null?"—":mask(`${a>0?"+":""}${a.toFixed(2)} pts`)}</div>
                 </td>
+                <td style={{textAlign:"right"}} className={wr?undefined:"mz-news-dim"}>{wr?<>{wr.closed} · {wr.rate}% won</>:"none yet"}</td>
               </tr>;})}</tbody>
           </table></div>}
-    </div>}
+    </section>}
   </section>;
 }
 
@@ -8047,22 +8065,6 @@ function useStrategyBook(enabled){
   return book;
 }
 
-/**
- * A row of ruled stat cells — the rail's language, used at the top of every
- * Trade sub-tab so each opens on its few numbers before the detail.
- * items: [{label, value, sub?, tone?, lead?}]
- */
-function StatStrip({items,testId}){
-  const list=asArray(items).filter(Boolean);
-  if(!list.length)return null;
-  return<div className="mz-stats" data-testid={testId}>
-    {list.map(it=><div key={it.label} className={`mz-stat${it.lead?" mz-stat-lead":""}`}>
-      <div className="mz-stat-l" style={{fontFamily:FM}}>{it.label}</div>
-      <div className="mz-stat-v" style={{fontFamily:FM,color:it.tone||T.textHi}}>{it.value}</div>
-      {it.sub&&<div className="mz-stat-s" style={{fontFamily:FP}}>{it.sub}</div>}
-    </div>)}
-  </div>;
-}
 
 /** Save an authenticated CSV response as a file. Shared by every Trade Lab export. */
 async function downloadCsv(url,filename){
@@ -14997,6 +14999,8 @@ export default function Mizan(){
       .mz-matrix th.is-gov, .mz-matrix td.is-gov{background:color-mix(in srgb, var(--mz-textHi) 6%, transparent); font-weight:700;}
       .mz-matrix th.is-gov{color:var(--mz-textHi);}
       .mz-matrix tr.is-div td{background:color-mix(in srgb, ${T.gold} 8%, transparent);}
+      .mz-perf-bar{min-width:12rem;}
+      @media (max-width:640px){ .mz-hide-sm{display:none;} .mz-perf-bar{min-width:7rem;} }
       .mz-legend{font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); margin:var(--s-3) 0 0; line-height:1.5; max-width:80ch;}
       .mz-ticket{display:grid; grid-template-columns:minmax(0,22rem) minmax(0,1fr); gap:var(--s-8); align-items:start; margin-top:var(--s-4);}
       @media (max-width:820px){ .mz-ticket{grid-template-columns:minmax(0,1fr); gap:var(--s-5);} }
@@ -15168,20 +15172,6 @@ export default function Mizan(){
       .mz-feed-what{color:var(--mz-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
       .mz-feed-s{font-size:var(--fs-2xs); letter-spacing:.1em; white-space:nowrap;}
       @media (max-width:420px){ .mz-feed li{grid-template-columns:auto minmax(0,1fr) auto;} .mz-feed-t{grid-column:1 / -1;} }
-
-      /* Stat strip — the rail's ruled cells, at the top of each sub-tab. */
-      .mz-stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));
-        border:1px solid var(--mz-border); border-radius:8px; overflow:hidden; background:var(--mz-surface);}
-      .mz-stat{padding:var(--s-3) var(--s-4); border-right:1px solid var(--mz-border); border-bottom:1px solid var(--mz-border);
-        margin:0 -1px -1px 0; min-width:0;}
-      .mz-stat-lead{grid-column:span 2; background:linear-gradient(to bottom, var(--mz-dim), transparent);}
-      @media (max-width:480px){ .mz-stat-lead{grid-column:1 / -1;} }
-      .mz-stat-l{font-family:var(--ff-mono,inherit); font-size:var(--fs-2xs); letter-spacing:.16em; color:var(--mz-muted); font-weight:600;}
-      .mz-stat-v{font-family:var(--ff-mono,inherit); font-size:var(--fs-lg); font-weight:700; font-variant-numeric:tabular-nums;
-        margin-top:2px; line-height:1.2; overflow-wrap:anywhere;}
-      .mz-stat-lead .mz-stat-v{font-size:var(--fs-3xl); letter-spacing:-.02em;}
-      .mz-stat-unit{font-size:var(--fs-sm); margin-left:4px; letter-spacing:.06em;}
-      .mz-stat-s{font-size:var(--fs-2xs); color:var(--mz-muted); margin-top:2px; line-height:1.4;}
 
       /* Diverging bar: the gap to SPUS either side of a centre rule. */
       .mz-div{position:relative; height:8px; background:var(--mz-dim); border-radius:999px; overflow:hidden;}

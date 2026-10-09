@@ -20,6 +20,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **ai:** Research panel — feed it the evidence it was missing; name out-of-credits; fix DeepSeek's downside sign (`b626dcd`)
 - **trade:** Hold hand orders to AAOIFI, like every strategy (`34f8b72`)
 
+### Maintenance
+- **ai:** Record the full Anthropic bill on every Assistant call (`47e4b39`)
+
 ## 2026-10-08
 
 ### Added

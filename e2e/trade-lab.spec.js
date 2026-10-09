@@ -1175,3 +1175,25 @@ test("Research says an analyst is out of credits, in words, with what to do", as
   await expect(page.getByTestId("committee-no-credits")).toContainText("Claude is out of credits");
   await expect(page.getByTestId("committee-row")).toContainText("failed · out of credits");
 });
+
+// Performance (broadsheet pass, 2026-10-09): SPUS primary, HLAL secondary (§16),
+// and no risk ratio from a handful of days.
+test("Performance states the account against SPUS and HLAL, and withholds Sharpe until there are enough days", async ({ page }) => {
+  const day = (i) => Date.parse("2026-10-01T04:00:00Z") + i * 86400000;
+  await gotoLab(page, { fixtures: {
+    "/api/alpaca/portfolio-history": { timestamp: [0, 1, 2, 3].map((i) => (day(i) + 72000000) / 1000), equity: [1000000, 1002000, 1001000, 1004000], baseValue: 1000000, timeframe: "1D", range: "1M" },
+    "/api/alpaca/account": { ...PAPER, equity: 1004000 } },
+    before: (pg) => pg.route("**/api/alpaca/benchmark**", (route) => {
+      const sym = new URL(route.request().url()).searchParams.get("symbol");
+      const base = sym === "HLAL" ? 50 : 60, end = sym === "HLAL" ? 51 : 60.3;
+      route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ symbol: sym, range: "1M", points: [0, 1, 2, 3].map((i) => ({ t: day(i), v: base + ((end - base) * i) / 3 })) }) });
+    }) });
+  await openSection(page, "Performance");
+  const stats = page.getByTestId("perf-stats");
+  await expect(stats).toContainText("Account vs SPUS");
+  await expect(page.getByTestId("perf-hlal")).toContainText("+2.00%");
+  await expect(page.getByTestId("perf-hlal")).toContainText("vs HLAL");
+  await expect(page.getByTestId("perf-risk")).toContainText("Not yet");
+  await expect(page.getByTestId("perf-risk")).not.toContainText("Sharpe");
+});
