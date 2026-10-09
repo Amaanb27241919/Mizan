@@ -330,3 +330,26 @@ describe("provider failures say what is actually wrong (2026-10-09)", () => {
     expect(RESPONSE_SCHEMA.properties.downside_pct.description).toMatch(/never -8/);
   });
 });
+
+describe("withBreaker — a failing analyst cannot slow the whole pass (2026-10-09)", () => {
+  it("stops asking an out-of-credits provider, and records the skip", async () => {
+    const { withBreaker } = await import("../../lib/ai/providers.mjs");
+    let calls = 0;
+    const dead = { provider: "anthropic", model: "m", available: true, analyze: async () => { calls++; return { ok: false, provider: "anthropic", model: "m", code: "no_credits", transient: false }; } };
+    const [p] = withBreaker([dead]);
+    await p.analyze("a"); const r2 = await p.analyze("b"); await p.analyze("c");
+    expect(calls).toBe(1);
+    expect(r2).toMatchObject({ ok: false, code: "skipped_no_credits" });
+  });
+  it("trips after two timeouts, never on a single blip, and leaves a healthy provider alone", async () => {
+    const { withBreaker } = await import("../../lib/ai/providers.mjs");
+    let n = 0;
+    const slow = { provider: "openrouter", model: "d", analyze: async () => { n++; return { ok: false, code: "network", transient: true }; } };
+    const good = { provider: "google", model: "g", analyze: async () => ({ ok: true, signal: {} }) };
+    const [s, g] = withBreaker([slow, good]);
+    await s.analyze("1"); expect((await s.analyze("2")).code).toBe("network"); expect((await s.analyze("3")).code).toBe("skipped_repeated_timeouts");
+    expect(n).toBe(2);
+    for (let i = 0; i < 5; i++) expect((await g.analyze("x")).ok).toBe(true);
+    expect(withBreaker(null)).toEqual([]);
+  });
+});

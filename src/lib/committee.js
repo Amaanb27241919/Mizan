@@ -14,7 +14,8 @@ const arr = (v) => (Array.isArray(v) ? v : []);
 export function failureCode(f) {
   const c = f && typeof f === "object" ? String(f.code || "") : "";
   const d = f && typeof f === "object" ? String(f.detail || "") : "";
-  if (c === "http_402" || /credit balance is too low|purchase credits|insufficient (credits|balance|funds)/i.test(d)) return "no_credits";
+  if (c === "http_402" || c === "skipped_no_credits" || /credit balance is too low|purchase credits|insufficient (credits|balance|funds)/i.test(d)) return "no_credits";
+  if (c === "skipped_repeated_timeouts") return "timed out";
   return c;
 }
 

@@ -894,28 +894,6 @@ const C1M=C1Y.slice(-22);const C1W=C1Y.slice(-7);const CYTD=C1Y.slice(-90);
 let _gk={};
 function setGlobalKeys(k){_gk={...k};}
 
-// All Anthropic traffic now flows through /api/advisor so the browser
-// never holds an ANTHROPIC_KEY. The server attaches the key from env
-// vars, applies rate limits, and logs usage.
-const ai=async(prompt,max=6000)=>{
-  const r=await apiFetch("/api/advisor",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      model:"claude-sonnet-4-6",
-      max_tokens:max,
-      // web_search lets the price/news fallbacks pull live data via the
-      // server. The /api/advisor proxy only forwards documented tool types.
-      tools:[{type:"web_search_20250305",name:"web_search"}],
-      messages:[{role:"user",content:prompt}],
-    }),
-  });
-  const d=await r.json();
-  if(!r.ok||d.error)throw new Error(d.error||`advisor ${r.status}`);
-  const blocks=Array.isArray(d.content)?d.content:[];
-  return blocks.filter(b=>b.type==="text").map(b=>b.text).join("");
-};
-const tryJ=t=>{try{const m=t.match(/\[[\s\S]*\]/);return m?JSON.parse(m[0]):null;}catch{return null;}};
 
 // Server-proxied. The browser never holds a vendor key; the proxy uses the
 // server's FINNHUB_KEY env var and is per-user JWT-scoped + rate limited.
@@ -949,16 +927,6 @@ async function fetchNewsF(){
       t:new Date((n.datetime||Date.now()/1000)*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),
     }));
   }catch{return[];}
-}
-
-async function fetchAIPrices(tickers){
-  const txt=await ai(`Search Yahoo Finance NOW for current prices of: ${tickers.join(",")}. Return ONLY JSON array no markdown: [{"tk":"AAPL","price":195,"chg":1.2,"pct":0.62,"hi":197,"lo":194,"prePrice":196,"prePct":0.5,"postPrice":195.5,"postPct":-0.25,"vol":"58M"}]`);
-  return tryJ(txt)||[];
-}
-
-async function fetchAINews(){
-  const txt=await ai(`Search Yahoo Finance, Bloomberg, Reuters TODAY for top 8 market stories. Return ONLY JSON array no markdown: [{"h":"headline","src":"Bloomberg","t":"2h ago","s":"positive"}]\ns: positive|negative|neutral`,3000);
-  return tryJ(txt)||[];
 }
 
 /* ─── MICRO COMPONENTS ───────────────────────────────── */
@@ -14525,10 +14493,13 @@ export default function Mizan(){
             allTickers=[...new Set([...tickers,...tks.filter(t=>typeof t==="string"&&t)])];
           }catch{}
           // Server proxy uses env-var FINNHUB_KEY regardless of any
-          // user-supplied key, so we can always try it. fetchAIPrices is
-          // the Anthropic-driven fallback (also routed through /api/advisor).
-          let prices=await fetchFinnhub(allTickers).catch(()=>[]);
-          if(!prices.length)prices=await fetchAIPrices(allTickers).catch(()=>[]);
+          // user-supplied key, so we can always try it. When it returns
+          // nothing the last real prices stay on screen. There used to be a
+          // fallback here that asked Claude to web-search prices — an LLM's
+          // guess fed in as a quote, called on every background refresh of
+          // every open tab; it drained the Anthropic account overnight on
+          // 2026-10-08. Removed: a stale real price beats a fresh invented one.
+          const prices=await fetchFinnhub(allTickers).catch(()=>[]);
           if(prices.length){setLive(prices);try{localStorage.setItem("mizan_live_cache",JSON.stringify(prices));}catch{}broadcast("live",prices);}
         })(),
         fetchSnapHoldings(),

@@ -14,6 +14,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade-lab:** Research (AI committee) in the broadsheet style (`153fdfc`)
 
 ### Fixed
+- **ai:** Research panel — feed it the evidence it was missing; name out-of-credits; fix DeepSeek's downside sign (`b626dcd`)
 - **trade:** Hold hand orders to AAOIFI, like every strategy (`34f8b72`)
 
 ## 2026-10-08
