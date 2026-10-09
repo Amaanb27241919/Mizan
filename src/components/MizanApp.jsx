@@ -21,7 +21,7 @@ import { explainStrategy } from "../lib/strategyExplainer.js";
 import { pendingRows, historyRows, ticketScreenLine } from "../lib/orderQueue.js";
 import { killSwitchRows } from "../lib/killSwitches.js";
 import { HALAL_FUNDS } from "../../lib/trading/screenGate.mjs";
-import { committeeStats } from "../lib/committee.js";
+import { committeeStats, failureCode } from "../lib/committee.js";
 import { STRATEGY_PALETTE, strategyColorKey } from "../lib/strategyColors.js";
 import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity, fundingBaseline, sinceFunding } from "../lib/equityCurve.js";
 import { attribution as benchmarkAttribution, confidenceLabel } from "../lib/benchmarkAttribution.js";
@@ -7805,7 +7805,9 @@ function AiCommittee({demoMode,book}){
   const nameOf=p=>ANALYST[p]||String(p).toUpperCase();
 
   const verb=a=>{const x=String(a||"").toUpperCase();return x==="INSUFFICIENT_DATA"?"Not enough data":x.charAt(0)+x.slice(1).toLowerCase();};
-  const code=c=>String(c||"").replace(/_/g," ");
+  // no_credits is an empty provider account, not a request error — said in words.
+  const code=c=>c==="no_credits"?"out of credits":String(c||"").replace(/_/g," ");
+  const broke=providers.filter(p=>(stats.perProvider[p.provider]?.codes||[]).includes("no_credits")).map(p=>nameOf(p.provider));
 
   return<section data-testid="research">
     <LabHead title="AI committee"
@@ -7824,6 +7826,9 @@ function AiCommittee({demoMode,book}){
         <b style={{color:T.gold}} aria-hidden="true">◐</b> <b>{data.configured} analyst{data.configured===1?"":"s"} configured; a panel needs {data.required}.</b> Not configured: {missing.map(p=>nameOf(p.provider)).join(", ")}. A panel needs at least two — one model is not a committee, and recording it as one would make the whole record misleading.
       </p>}
 
+      {broke.length>0&&<p className="mz-research-warn" data-testid="committee-no-credits">
+        <b style={{color:T.loss}} aria-hidden="true">■</b> <b>{broke.join(" and ")} {broke.length===1?"is":"are"} out of credits.</b> Every review {broke.length===1?"it":"they"} {broke.length===1?"is":"are"} asked fails until the provider account is topped up — for Claude that is Plans &amp; Billing in the Anthropic console. The same key powers Mizan's Assistant, which is down for the same reason.
+      </p>}
       {rows.length>0&&<>
         {/* The scorecard: how each analyst has actually behaved. A failing
             analyst names its error, so a broken integration never looks like
@@ -7866,7 +7871,7 @@ function AiCommittee({demoMode,book}){
                 const m=per.find(x=>x.provider===p.provider);
                 if(r.screen_only)return<td key={p.provider} className="mz-news-dim">—</td>;
                 const f=fails.find(x=>x.provider===p.provider);
-                if(!m)return<td key={p.provider} style={{color:f?T.gold:T.muted}}>{f?<>◐ failed · {code(f.code)}</>:"—"}</td>;
+                if(!m)return<td key={p.provider} style={{color:f?T.gold:T.muted}} title={f?.detail||undefined}>{f?<>◐ failed · {code(failureCode(f))}</>:"—"}</td>;
                 return<td key={p.provider}><b style={{color:tone(m.action)}}>{verb(m.action)}</b>
                   {m.confidence!=null&&<span className="mz-news-dim"> {Math.round(m.confidence*100)}</span>}</td>;
               })}

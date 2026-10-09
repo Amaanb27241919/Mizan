@@ -6,6 +6,18 @@
  */
 const arr = (v) => (Array.isArray(v) ? v : []);
 
+/**
+ * A failure's code, corrected for rows recorded before 2026-10-09: an empty
+ * provider account was stored as "http_400" with the provider's message in
+ * `detail`. Read from the message so old rows say "out of credits" too.
+ */
+export function failureCode(f) {
+  const c = f && typeof f === "object" ? String(f.code || "") : "";
+  const d = f && typeof f === "object" ? String(f.detail || "") : "";
+  if (c === "http_402" || /credit balance is too low|purchase credits|insufficient (credits|balance|funds)/i.test(d)) return "no_credits";
+  return c;
+}
+
 export function committeeStats(rows, providers) {
   const perProvider = {};
   for (const p of arr(providers)) if (p?.provider) perProvider[p.provider] = { answered: 0, failed: 0, codes: [] };
@@ -21,7 +33,8 @@ export function committeeStats(rows, providers) {
       if (!f?.provider) continue;
       const s = slot(f.provider);
       s.failed++;
-      if (f.code && !s.codes.includes(f.code)) s.codes.push(f.code);
+      const fc = failureCode(f);
+      if (fc && !s.codes.includes(fc)) s.codes.push(fc);
     }
     if (!e.ok) noView++;
     else if (e.opposed) opposed++;

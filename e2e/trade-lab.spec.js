@@ -1164,3 +1164,14 @@ test("Stops and switches states all five levels and names what is not built", as
   await expect(rows.filter({ hasText: "Strategy" })).toContainText("1 paused");
   await expect(rows.filter({ hasText: "Broker" })).toContainText("not built");
 });
+
+test("Research says an analyst is out of credits, in words, with what to do", async ({ page }) => {
+  await gotoLab(page, { fixtures: { "/api/ai/research": {
+    providers: [{ provider: "anthropic", available: true }, { provider: "google", available: true }], configured: 2, required: 2,
+    rows: [{ id: "1", ticker: "MU", at: "2026-10-08T12:10:00Z",
+      ensemble: { ok: false, code: "insufficient_votes", per_model: [{ provider: "google", action: "HOLD", confidence: 0.6 }] },
+      failures: [{ provider: "anthropic", code: "no_credits", detail: "Your credit balance is too low" }] }] } } });
+  await openSection(page, "AI Committee");
+  await expect(page.getByTestId("committee-no-credits")).toContainText("Claude is out of credits");
+  await expect(page.getByTestId("committee-row")).toContainText("failed · out of credits");
+});

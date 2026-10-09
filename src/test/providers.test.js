@@ -282,7 +282,7 @@ describe('openrouterProvider', () => {
   it('reports not_configured without a key, and a spent credit limit as data, not an exception', async () => {
     expect(await openrouterProvider({ apiKey: null }).analyze('x')).toMatchObject({ ok: false, code: 'not_configured' })
     const r = await openrouterProvider({ apiKey: 'k', fetchImpl: mockFetch(() => bad(402, '{"error":{"message":"Key limit exceeded"}}')) }).analyze('P')
-    expect(r).toMatchObject({ ok: false, code: 'http_402' })
+    expect(r).toMatchObject({ ok: false, code: 'no_credits' })
   })
 })
 
@@ -312,3 +312,21 @@ describe('strict verdict schema for JSON-Schema providers', () => {
     expect(g.generationConfig.responseSchema).toEqual(RESPONSE_SCHEMA)
   })
 })
+
+describe("provider failures say what is actually wrong (2026-10-09)", () => {
+  it("an empty Anthropic account is no_credits, not a generic http_400, and is not retried", async () => {
+    const { anthropicProvider, isOutOfCredits } = await import("../../lib/ai/providers.mjs");
+    const fetchImpl = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ type: "error", error: { type: "invalid_request_error",
+      message: "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits." } }) });
+    const r = await anthropicProvider({ apiKey: "k", fetchImpl }).analyze("packet");
+    expect(r).toMatchObject({ ok: false, code: "no_credits", transient: false });
+    expect(r.detail).toMatch(/credit balance is too low/);
+    expect(isOutOfCredits(402, "")).toBe(true);
+    expect(isOutOfCredits(400, "messages: field required")).toBe(false);
+  });
+  it("every analyst is told downside_pct is a positive magnitude", async () => {
+    const { SYSTEM_INSTRUCTION, RESPONSE_SCHEMA } = await import("../../lib/ai/providers.mjs");
+    expect(SYSTEM_INSTRUCTION).toMatch(/downside_pct is a POSITIVE magnitude: a plausible 8% loss is written 8, never -8/);
+    expect(RESPONSE_SCHEMA.properties.downside_pct.description).toMatch(/never -8/);
+  });
+});

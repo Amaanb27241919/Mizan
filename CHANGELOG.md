@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-09
 
 ### Added
+- **trade-lab:** Compliance & Risk in the broadsheet style; halal funds read as covered (`76f81bb`)
 - **trade-lab:** Research (AI committee) in the broadsheet style (`153fdfc`)
 
 ### Fixed

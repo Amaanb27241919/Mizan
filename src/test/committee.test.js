@@ -31,3 +31,15 @@ describe('committeeStats — how each analyst and the panel actually performed',
     expect(committeeStats(null, null)).toMatchObject({ reviewed: 0, screened: 0, perProvider: {} })
   })
 })
+
+describe("failureCode — old rows say out of credits too", () => {
+  it("reads an empty account from the stored message", async () => {
+    const { failureCode, committeeStats } = await import("../lib/committee.js");
+    expect(failureCode({ code: "http_400", detail: "Your credit balance is too low to access the Anthropic API." })).toBe("no_credits");
+    expect(failureCode({ code: "http_402" })).toBe("no_credits");
+    expect(failureCode({ code: "schema_invalid", detail: "downside_pct must be stated as a positive magnitude" })).toBe("schema_invalid");
+    expect(failureCode(null)).toBe("");
+    const st = committeeStats([{ ensemble: { ok: false }, failures: [{ provider: "anthropic", code: "http_400", detail: "credit balance is too low" }] }], [{ provider: "anthropic" }]);
+    expect(st.perProvider.anthropic.codes).toEqual(["no_credits"]);
+  });
+});
