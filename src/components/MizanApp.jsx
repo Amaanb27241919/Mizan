@@ -19,6 +19,8 @@ import { deskPipeline, latestRoundAnswering, MARK_GLYPH as PIPE_GLYPH } from "..
 import { sparkPaths, pinToday } from "../lib/sparkline.js";
 import { explainStrategy } from "../lib/strategyExplainer.js";
 import { pendingRows, historyRows, ticketScreenLine } from "../lib/orderQueue.js";
+import { killSwitchRows } from "../lib/killSwitches.js";
+import { HALAL_FUNDS } from "../../lib/trading/screenGate.mjs";
 import { committeeStats } from "../lib/committee.js";
 import { STRATEGY_PALETTE, strategyColorKey } from "../lib/strategyColors.js";
 import { toPoints, curvePath, curveChange, curveCoverage, pointAtX, pinLiveEquity, fundingBaseline, sinceFunding } from "../lib/equityCurve.js";
@@ -7623,68 +7625,41 @@ function RiskPanel({desk,demoMode,screen}){
 
   const pct=n=>n==null?"—":`${(n*100).toFixed(1)}%`;
 
-  if(state==="loading")return<section><SectionHead label="Risk" style={{marginBottom:T.s3}}/>
-    <div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>MEASURING…</div></section>;
-  if(state!=="ready")return<section><SectionHead label="Risk" style={{marginBottom:T.s3}}/>
-    <div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
-      {state==="empty"?"No positions to measure.":"Demo mode shows no risk record."}</div></section>;
+  const head=<LabHead title="Risk" note="What the book is betting on, stated as properties of the positions you hold. Measurements, not judgments — no score and no suggestion."/>;
+  if(state==="loading")return<section>{head}<p className="mz-col-empty">Measuring…</p></section>;
+  if(state!=="ready")return<section>{head}<p className="mz-col-empty">{state==="empty"?"No positions to measure.":"Demo mode shows no risk record."}</p></section>;
 
-  return<section>
-    <SectionHead label="Risk"
-      hint="What the book is betting on, stated as properties of the positions you hold. No score and no suggestion — these are measurements, not judgments."
-      style={{marginBottom:T.s3}}/>
-
-    {/* A labelled stat is spelled out here rather than reusing <Signed/>:
-        that component renders a signed NUMBER (v/pct/mask/dash) and silently
-        shows its dash for anything else, which is how all three tiles first
-        rendered as "—". Caught by screenshotting, not by any test. */}
-    <div style={{marginBottom:T.s5}}>
-      <StatStrip testId="risk-stats" items={[
-        {label:"EFFECTIVE NAMES",value:conc.effectiveNames==null?"—":String(conc.effectiveNames),
-          sub:`${conc.count} positions held · how many independent bets the weights really amount to`},
-        {label:"TOP 5 WEIGHT",value:pct(conc.topWeight),sub:conc.top.map(r=>r.symbol).join(" · ")},
-        {label:"MAX DRAWDOWN",value:dd.measurable?pct(dd.depth):"not yet",
-          sub:dd.measurable
-            ?(dd.depth>0?`${dd.peak?.date||""} → ${dd.trough?.date||""}`:"no decline on record")
-            :`${dd.points} day${dd.points===1?"":"s"} of history — not the same as a 0% drawdown`},
-      ]}/>
+  return<section data-testid="risk">
+    {head}
+    <div className="mz-figs mz-score" data-testid="risk-stats">
+      <div><div className="mz-fig-l">Effective names</div><div className="mz-fig-v" style={{fontFamily:FN}}>{conc.effectiveNames==null?"—":String(conc.effectiveNames)}</div>
+        <div className="mz-fig-s">{conc.count} positions held · how many independent bets the weights really amount to</div></div>
+      <div><div className="mz-fig-l">Top 5 weight</div><div className="mz-fig-v" style={{fontFamily:FN}}>{pct(conc.topWeight)}</div>
+        <div className="mz-fig-s">{conc.top.map(r=>r.symbol).join(" · ")}</div></div>
+      <div><div className="mz-fig-l">Max drawdown</div><div className="mz-fig-v" style={{fontFamily:FN,color:dd.measurable&&dd.depth>0?T.loss:undefined}}>{dd.measurable?pct(dd.depth):"not yet"}</div>
+        <div className="mz-fig-s">{dd.measurable?(dd.depth>0?`${dd.peak?.date||""} → ${dd.trough?.date||""}`:"no decline on record"):`${dd.points} day${dd.points===1?"":"s"} of history — not the same as a 0% drawdown`}</div></div>
     </div>
 
-    <SectionHead label="Where the book is concentrated"
-      right={byIndustry.coverage<1&&<Tag label={`${Math.round(byIndustry.coverage*100)}% CLASSIFIED`} color={T.gold}/>}
-      style={{marginBottom:T.s3}}/>
-
+    <LabHead title="Where the book is concentrated" right={byIndustry.coverage<1&&<span style={{fontFamily:FP,fontSize:"var(--fs-sm)",color:T.gold}}>{Math.round(byIndustry.coverage*100)}% classified</span>}/>
     {byIndustry.groups.length===0
-      ? <div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
-          No industry data on the cached screens, so the book cannot be grouped. Nothing is inferred from that.
-        </div>
-      : <>
-          <div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
-            <thead><tr>
-              <th style={{fontSize:"var(--fs-2xs)"}}>INDUSTRY</th>
-              <th style={{fontSize:"var(--fs-2xs)"}}>NAMES</th>
-              <th style={{fontSize:"var(--fs-2xs)"}}>SHARE</th>
-              <th style={{fontSize:"var(--fs-2xs)",width:"34%"}}></th>
-            </tr></thead>
-            <tbody>{byIndustry.groups.map(g=><tr key={g.label}>
-              <td style={{color:T.textHi,fontWeight:600}}>{g.label}</td>
-              <td style={{color:T.muted}}>{g.symbols.length}</td>
-              <td style={{color:T.textHi}}>{pct(g.share)}</td>
-              <td>
-                {/* Slate, not a semantic colour: a big bucket is a fact about
-                    the book, not a warning. Red here would be a judgment. */}
-                <div style={{height:6,borderRadius:3,background:`${T.slate}22`,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${Math.max(2,g.share*100)}%`,background:T.slate,borderRadius:3}}/>
-                </div>
-              </td>
-            </tr>)}</tbody>
-          </table></div>
-          <div style={{fontFamily:FP,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.55,marginTop:T.s3,maxWidth:"74ch"}}>
-            Shares are of the {byIndustry.labelled} position{byIndustry.labelled===1?"":"s"} that carry an industry on their
-            screen{byIndustry.unknown>0&&<span style={{color:T.gold}}> — {byIndustry.unknown} could not be classified and {byIndustry.unknown===1?"is":"are"} excluded from these percentages</span>}.
-            Even position weights can still be one bet: inverse-volatility sizing evens the slices, not the exposure.
-          </div>
-        </>}
+      ?<p className="mz-col-empty">No industry data on the cached screens, so the book cannot be grouped. Nothing is inferred from that.</p>
+      :<>
+        <div className="mz-tape-wrap"><table className="mz-news">
+          <thead><tr><th>Industry</th><th style={{textAlign:"right"}}>Names</th><th style={{textAlign:"right"}}>Share</th><th style={{width:"34%"}}/></tr></thead>
+          <tbody>{byIndustry.groups.map(g=><tr key={g.label}>
+            <td><b>{g.label}</b></td>
+            <td style={{textAlign:"right"}} className="mz-news-dim">{g.symbols.length}</td>
+            <td style={{textAlign:"right"}}>{pct(g.share)}</td>
+            {/* Ink, not a semantic colour: a big bucket is a fact about the
+                book, not a warning. Red here would be a judgment. */}
+            <td><div className="mz-fig-bar" style={{marginTop:0}}><span style={{width:`${Math.max(2,g.share*100)}%`}}/></div></td>
+          </tr>)}</tbody>
+        </table></div>
+        <p className="mz-legend">
+          Shares are of the {byIndustry.labelled} position{byIndustry.labelled===1?"":"s"} that carry an industry on their screen{byIndustry.unknown>0&&<span style={{color:T.gold}}> — {byIndustry.unknown} could not be classified and {byIndustry.unknown===1?"is":"are"} excluded from these percentages</span>}.
+          Even position weights can still be one bet: inverse-volatility sizing evens the slices, not the exposure.
+        </p>
+      </>}
   </section>;
 }
 
@@ -7720,78 +7695,59 @@ function CompliancePanel({desk,demoMode,screen}){
   const ownScreen=useScreenVerdicts(useMemo(()=>screen?[]:positions.map(p=>p.symbol),[positions,screen]),demoMode);
   const{verdicts,phase}=screen||ownScreen;
 
-  const m=useMemo(()=>complianceMatrix(positions,verdicts,{governing:"AAOIFI"}),[positions,verdicts]);
-  const passing=m.screened-m.failingGoverning.length;
+  const m=useMemo(()=>complianceMatrix(positions,verdicts,{governing:"AAOIFI",funds:HALAL_FUNDS}),[positions,verdicts]);
+  const passing=m.screened-(m.funds||0)-m.failingGoverning.length;   // stocks only — funds are not ratio-screened
   // Rows render as soon as ANY holding has a verdict; the rest fill in.
   const anySettled=positions.some(p=>isSettledVerdict(verdicts[p.symbol]));
   const state=demoMode?"idle":!positions.length?"empty":anySettled?"ready":phase==="failed"?"unavailable":"loading";
   const total=positions.reduce((t,p)=>t+p.value,0);
   const color=mk=>mk==="pass"?T.gain:mk==="fail"?T.loss:mk==="review"?T.gold:T.slate;
 
-  return<section>
-    <SectionHead label="Compliance"
-      hint="Every holding against all seven screening standards. AAOIFI governs — it is the methodology Mīzan states — and the rest are shown beside it so a disagreement between them is visible rather than something you have to go looking for."
-      right={state==="ready"&&<span style={{display:"inline-flex",gap:T.s2}}>
-        <Tag label={`${m.screened}/${m.total} SCREENED`} color={m.unscreened?T.gold:T.slate}/>
-        {phase==="screening"&&m.unscreened>0&&<Tag label="SCREENING…" color={T.slate}/>}
-        {m.divergent.length>0&&<Tag label={`${m.divergent.length} DIVERGENT`} color={T.gold}/>}
-      </span>}
-      style={{marginBottom:T.s3}}/>
+  const GLYPH_WORD={pass:"pass",fail:"fail",review:"inconclusive",no_data:"not screened"};
+  return<section data-testid="compliance">
+    <LabHead title="Sharia compliance"
+      note="Every holding against all seven screening standards. AAOIFI governs — it is the methodology Mīzan states, and the one every buy is held to — and the other six sit beside it so a disagreement is visible rather than something you have to go looking for."
+      right={state==="ready"&&<span className="mz-news-dim" style={{fontFamily:FP,fontSize:"var(--fs-sm)"}}>{phase==="screening"&&m.unscreened>0?"screening…":`${m.screened} of ${m.total} screened`}</span>}/>
 
-    {state==="loading"&&<div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>SCREENING…</div>}
-    {state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>Screening is unavailable right now. Nothing is inferred from that — a holding with no verdict is shown as not screened, never as failing.</div>}
-    {(state==="idle"||state==="empty")&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
-      {state==="empty"?"No positions to screen yet.":"Demo mode shows no compliance record."}
-    </div>}
+    {state==="loading"&&<p className="mz-col-empty">Screening…</p>}
+    {state==="unavailable"&&<p className="mz-col-empty">Screening is unavailable right now. Nothing is inferred from that — a holding with no verdict is shown as not screened, never as failing.</p>}
+    {(state==="idle"||state==="empty")&&<p className="mz-col-empty">{state==="empty"?"No positions to screen yet.":"Demo mode shows no compliance record."}</p>}
 
     {state==="ready"&&<>
-      <div style={{marginBottom:T.s4}}><StatStrip testId="compliance-stats" items={[
-        {label:"SCREENED",value:`${m.screened}/${m.total}`,tone:m.unscreened?T.gold:T.textHi,sub:m.unscreened?`${m.unscreened} missing data — not a failed screen`:"every holding screened"},
-        {label:"PASS AAOIFI",value:String(passing),tone:passing?T.gain:T.muted},
-        {label:"FAIL AAOIFI",value:String(m.failingGoverning.length),tone:m.failingGoverning.length?T.loss:T.muted,sub:m.failingGoverning.join(" · ")||"none"},
-        {label:"STANDARDS DISAGREE",value:String(m.divergent.length),tone:m.divergent.length?T.gold:T.muted,sub:m.divergent.join(" · ")||"none"},
-      ]}/></div>
-      {m.divergent.length>0&&<div style={{padding:T.s4,marginBottom:T.s4,borderRadius:T.rMd,background:`${T.gold}14`,border:`1px solid ${T.gold}44`}}>
-        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.14em",color:T.gold,fontWeight:600,marginBottom:4}}>
-          {m.divergent.length} HOLDING{m.divergent.length===1?"":"S"} WHERE THE STANDARDS DISAGREE
-        </div>
-        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.55,maxWidth:"70ch"}}>
-          {m.divergent.join(", ")} — AAOIFI and the majority of the other standards point different
-          ways. Usually this is the Cash/Assets test: the market-cap-denominated standards and the
-          asset-denominated ones measure different things, so a name can genuinely pass one and fail
-          the other. AAOIFI governs here, so these are held.
-        </div>
-      </div>}
+      <div className="mz-figs mz-score" data-testid="compliance-stats">
+        <div><div className="mz-fig-l">Screened</div><div className="mz-fig-v" style={{fontFamily:FN,color:m.unscreened?T.gold:undefined}}>{m.screened}/{m.total}</div>
+          <div className="mz-fig-s">{m.unscreened?`${m.unscreened} missing data — not a failed screen`:"every holding covered"}{m.funds?` · ${m.funds} halal fund${m.funds===1?"":"s"}`:""}</div></div>
+        <div><div className="mz-fig-l">Pass AAOIFI</div><div className="mz-fig-v" style={{fontFamily:FN,color:passing?T.gain:T.muted}}>{passing}</div>
+          {m.funds>0&&<div className="mz-fig-s">stocks only; funds are screened by their issuer</div>}</div>
+        <div><div className="mz-fig-l">Fail AAOIFI</div><div className="mz-fig-v" style={{fontFamily:FN,color:m.failingGoverning.length?T.loss:T.muted}}>{m.failingGoverning.length}</div>
+          <div className="mz-fig-s">{m.failingGoverning.length?<>{m.failingGoverning.join(" · ")} — a ranking strategy sells these at its next rebalance; check any held by hand or by a swing</>:"none"}</div></div>
+        <div><div className="mz-fig-l">Standards disagree</div><div className="mz-fig-v" style={{fontFamily:FN,color:m.divergent.length?T.gold:T.muted}}>{m.divergent.length}</div>
+          <div className="mz-fig-s">{m.divergent.join(" · ")||"none"}</div></div>
+      </div>
+      {m.divergent.length>0&&<p className="mz-research-warn" data-testid="compliance-divergent">
+        <b style={{color:T.gold}} aria-hidden="true">◐</b> <b>{m.divergent.join(", ")}</b> — AAOIFI and most of the other standards point different ways.
+        Usually this is the cash-to-assets test: the standards that divide by market value and the ones that divide by total assets measure
+        different things, so a name can genuinely pass one and fail the other. AAOIFI governs here, so these are held.
+      </p>}
 
-      <div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
+      <div className="mz-tape-wrap"><table className="mz-news mz-matrix">
         <thead><tr>
-          <th style={{fontSize:"var(--fs-2xs)"}}>SYMBOL</th>
-          <th style={{fontSize:"var(--fs-2xs)"}}>WEIGHT</th>
-          {SCREEN_STANDARDS.map(std=><th key={std} style={{fontSize:"var(--fs-2xs)",
-            color:std===m.governing?T.textHi:T.muted}}>{STANDARD_LABELS[std]}</th>)}
+          <th>Symbol</th><th style={{textAlign:"right"}}>Weight</th>
+          {SCREEN_STANDARDS.map(std=><th key={std} className={std===m.governing?"is-gov":undefined} style={{textAlign:"center"}}>{STANDARD_LABELS[std]}</th>)}
         </tr></thead>
         <tbody>{m.rows.map(r=>{
           const w=total>0?(r.value/total)*100:0;
-          return<tr key={r.symbol} style={r.divergent?{background:`${T.gold}0f`}:undefined}>
-            <td style={{color:T.textHi,fontWeight:600}}>
-              {r.symbol}
-              {/* Never styled like a fail — it is an absence, not a verdict. */}
-              {r.unscreened&&<span style={{color:T.slate,fontWeight:400}}> · not screened</span>}
-            </td>
-            <td style={{color:T.muted}}>{w.toFixed(1)}%</td>
-            {SCREEN_STANDARDS.map(std=><td key={std} style={{
-              color:color(r.marks[std]),
-              fontWeight:std===m.governing?700:400,
-              fontSize:std===m.governing?"var(--fs-sm)":undefined,
-            }}>{MARK_GLYPH[r.marks[std]]}</td>)}
+          return<tr key={r.symbol} className={r.divergent?"is-div":undefined}>
+            <td><b>{r.symbol}</b>{r.fund?<span className="mz-news-dim"> · halal fund, screened by its issuer</span>:r.unscreened&&<span className="mz-news-dim"> · not screened</span>}</td>
+            <td style={{textAlign:"right"}} className="mz-news-dim">{w.toFixed(1)}%</td>
+            {SCREEN_STANDARDS.map(std=>r.fund
+              ?<td key={std} className={std===m.governing?"is-gov":undefined} style={{textAlign:"center",color:T.muted}} title="Issuer-screened fund — the ratio screen does not apply">—</td>
+              :<td key={std} className={std===m.governing?"is-gov":undefined}
+              style={{textAlign:"center",color:color(r.marks[std])}} title={`${STANDARD_LABELS[std]}: ${GLYPH_WORD[r.marks[std]]||r.marks[std]}`}>{MARK_GLYPH[r.marks[std]]}</td>)}
           </tr>;
         })}</tbody>
       </table></div>
-
-      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.1em",marginTop:T.s3}}>
-        ✓ PASS · ✗ FAIL · ~ INCONCLUSIVE · · NOT SCREENED
-        {m.unscreened>0&&phase!=="screening"&&<span style={{color:T.gold}}> — {m.unscreened} holding{m.unscreened===1?"":"s"} could not be screened; that is missing data, not a failed screen.</span>}
-      </div>
+      <p className="mz-legend">✓ pass · ✗ fail · ~ inconclusive · · not screened{m.unscreened>0&&phase!=="screening"&&<span style={{color:T.gold}}> — {m.unscreened} holding{m.unscreened===1?"":"s"} could not be screened; that is missing data, not a failed screen.</span>}</p>
     </>}
   </section>;
 }
@@ -8301,6 +8257,24 @@ function StrategyGuide({book}){
   </section>;
 }
 
+/** The proposal's five kill-switch levels against what actually exists
+ *  (killSwitches.js) — the real safety net, with its gaps named. */
+function KillSwitchTable({book}){
+  const rows=useMemo(()=>killSwitchRows(book.strategies),[book.strategies]);
+  if(book.state!=="ready")return null;
+  return<section data-testid="kill-switches">
+    <LabHead title="Stops and switches" note="The five levels at which automation can be halted, as the Trade Lab plan lists them, and where each one stands today."/>
+    <div className="mz-tape-wrap"><table className="mz-news">
+      <thead><tr><th>Level</th><th>State</th><th>Where</th></tr></thead>
+      <tbody>{rows.map(r=><tr key={r.level} data-testid="kill-row">
+        <td><b>{r.level}</b>{r.built===false&&<span style={{color:T.gold}}> · not built</span>}{r.built==="partial"&&<span className="mz-news-dim"> · automatic only</span>}</td>
+        <td><b style={{color:MARK_TONE[r.mark]}} aria-hidden="true">{PIPE_GLYPH[r.mark]}</b> {r.state}</td>
+        <td className="mz-news-dim">{r.where}</td>
+      </tr>)}</tbody>
+    </table></div>
+  </section>;
+}
+
 /** Orders sent to the broker that have not finished. Lives in Orders. */
 function WorkingOrders({desk}){
   const{mask}=useHideValues();
@@ -8625,7 +8599,7 @@ function BroadsheetDesk({desk,book,session,demoMode,onGo,screen}){
   const{verdicts}=screen;
   const compliance=useMemo(()=>{
     if(desk.state!=="ready")return null;
-    const m=complianceMatrix(symbols.map(s=>({symbol:s,value:0})),verdicts,{governing:"AAOIFI"});
+    const m=complianceMatrix(symbols.map(s=>({symbol:s,value:0})),verdicts,{governing:"AAOIFI",funds:HALAL_FUNDS});
     return{total:m.total,screened:m.screened,failing:m.failingGoverning};
   },[desk.state,symbols,verdicts]);
   const committee=useMemo(()=>research.state==="ready"?latestRoundAnswering(research.rows,research.providers,research.configured):null,[research]);
@@ -8979,7 +8953,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         {sub==="positions"&&<><div style={{marginBottom:T.s6}}><EquityChart demoMode={demoMode} liveEquity={deskData?.account?.equity}/></div><LabPortfolio desk={deskData} book={book}/></>}
         {sub==="performance"&&<PerformancePanelLab demoMode={demoMode} book={book} liveEquity={deskData?.account?.equity}/>}
         {sub==="committee"&&<AiCommittee demoMode={demoMode} book={book}/>}
-        {sub==="compliance"&&<div className="mz-lab-stack"><CompliancePanel desk={deskData} demoMode={demoMode} screen={screen}/><RiskPanel desk={deskData} demoMode={demoMode} screen={screen}/></div>}
+        {sub==="compliance"&&<div className="mz-lab-stack"><CompliancePanel desk={deskData} demoMode={demoMode} screen={screen}/><RiskPanel desk={deskData} demoMode={demoMode} screen={screen}/><KillSwitchTable book={book}/></div>}
         {sub==="journal"&&<LabJournal book={book}/>}
         {sub==="strategies"&&<div style={{marginBottom:T.s6}}><StrategyGuide book={book}/></div>}
         {/* The bot panel is UNTOUCHED — Strategies and the signal queue. */}
@@ -15044,6 +15018,10 @@ export default function Mizan(){
       .mz-filter{display:flex; gap:var(--s-4); flex-wrap:wrap; margin:var(--s-4) 0 var(--s-2); font-family:${FP}; font-size:var(--fs-sm);}
       .mz-filter > button{background:none; border:0; padding:var(--s-1) 0; cursor:pointer; color:var(--mz-muted); border-bottom:2px solid transparent;}
       .mz-filter > button.on{color:var(--mz-textHi); font-weight:600; border-bottom-color:var(--mz-textHi);}
+      .mz-matrix th.is-gov, .mz-matrix td.is-gov{background:color-mix(in srgb, var(--mz-textHi) 6%, transparent); font-weight:700;}
+      .mz-matrix th.is-gov{color:var(--mz-textHi);}
+      .mz-matrix tr.is-div td{background:color-mix(in srgb, ${T.gold} 8%, transparent);}
+      .mz-legend{font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); margin:var(--s-3) 0 0; line-height:1.5; max-width:80ch;}
       .mz-ticket{display:grid; grid-template-columns:minmax(0,22rem) minmax(0,1fr); gap:var(--s-8); align-items:start; margin-top:var(--s-4);}
       @media (max-width:820px){ .mz-ticket{grid-template-columns:minmax(0,1fr); gap:var(--s-5);} }
       .mz-ticket-form{display:flex; flex-direction:column; gap:var(--s-4); font-family:${FP};}

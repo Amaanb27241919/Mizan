@@ -492,13 +492,14 @@ test.describe("Trade Lab risk", () => {
   const openRisk = async (page, extra = {}) => {
     await gotoLab(page, { fixtures: { ...riskFixtures, ...extra } });
     await openSection(page, "Risk");
+    await expect(page.getByTestId("risk")).toBeVisible();
     await page.waitForTimeout(1500);
-    return page.locator(".mz-lab").innerText();
+    return page.getByTestId("risk").innerText();
   };
 
   test("every headline tile shows a figure, never a dash", async ({ page }) => {
     const txt = await openRisk(page);
-    for (const label of ["EFFECTIVE NAMES", "TOP 5 WEIGHT", "MAX DRAWDOWN"]) {
+    for (const label of ["Effective names", "Top 5 weight", "Max drawdown"]) {
       const v = new RegExp(`${label}\\s*\\n\\s*([^\\n]+)`).exec(txt)?.[1]?.trim();
       expect(v, `${label} rendered as "${v}"`).toBeTruthy();
       expect(v, `${label} fell back to a dash`).not.toBe("—");
@@ -510,7 +511,7 @@ test.describe("Trade Lab risk", () => {
     const txt = await openRisk(page);
     // 9 of 10 carry an industry; the panel must say so rather than quietly
     // computing shares over 90% of the book and presenting them as the whole.
-    expect(txt).toContain("90% CLASSIFIED");
+    expect(txt).toContain("90% classified");
     expect(txt).toMatch(/1 could not be classified/);
     expect(txt).not.toMatch(/\bOther\b/);     // no catch-all bucket
   });
@@ -527,7 +528,7 @@ test.describe("Trade Lab risk", () => {
     const txt = await openRisk(page, {
       "/api/alpaca/portfolio-history": { timestamp: [Date.parse("2026-10-01T00:00:00Z") / 1000], equity: [100000], baseValue: 100000, timeframe: "1D", range: "1M" },
     });
-    const v = /MAX DRAWDOWN\s*\n\s*([^\n]+)/.exec(txt)?.[1]?.trim();
+    const v = /Max drawdown\s*\n\s*([^\n]+)/.exec(txt)?.[1]?.trim();
     expect(v).toBe("not yet");
     expect(txt).toMatch(/not the same as a 0% drawdown/);
   });
@@ -602,10 +603,10 @@ test.describe("Trade Lab compliance", () => {
     }) });
     await openSection(page, "Compliance");
     const cockpit = page.locator(".mz-lab");
-    await expect(cockpit).toContainText("1/3 SCREENED");          // renders what it has at once
+    await expect(page.getByTestId("compliance-stats")).toContainText("1/3");          // renders what it has at once
     await expect(cockpit).not.toContainText("could not be screened"); // not while still asking
     release();
-    await expect(cockpit).toContainText("3/3 SCREENED", { timeout: 10000 });
+    await expect(page.getByTestId("compliance-stats")).toContainText("3/3", { timeout: 10000 });
     // One screening read for the whole tab: the Desk and this page share it,
     // so the pending names are asked for exactly once more — not once per panel.
     expect(calls).toBe(2);
@@ -622,7 +623,7 @@ test.describe("Trade Lab compliance", () => {
           body: JSON.stringify({ provider: "finnhub", results: { MU: { tk: "MU", status: "unknown", reason: "finnhub_unavailable:429" } } }) });
       }) });
     await openSection(page, "Compliance");
-    await expect(page.locator(".mz-lab")).toContainText("2/3 SCREENED");
+    await expect(page.getByTestId("compliance-stats")).toContainText("2/3");
     expect(asked.every((tk) => tk === "MU")).toBe(true);
   });
 
@@ -638,7 +639,7 @@ test.describe("Trade Lab compliance", () => {
           body: JSON.stringify({ provider: "finnhub", results: Object.fromEntries(asked.map((tk) => [tk, verdict(tk)])) }) });
       }) });
     await openSection(page, "Compliance");
-    await expect(page.locator(".mz-lab")).toContainText("3/3 SCREENED");
+    await expect(page.getByTestId("compliance-stats")).toContainText("3/3");
   });
 });
 
@@ -1133,4 +1134,33 @@ test("Research lists reviews newest first and claims no evidence for a screened-
   const stx = rows.filter({ hasText: "STX" });
   await expect(stx).toContainText("screened out · haram");
   await expect(stx).not.toContainText("complete");
+});
+
+// Compliance & Risk (broadsheet pass, 2026-10-09).
+test("a halal fund reads as covered by its issuer, not as missing data", async ({ page }) => {
+  const pass = { tk: "MU", status: "halal", engine: 2, asOf: new Date().toISOString().slice(0, 10),
+    byStandard: { AAOIFI: { pass: true }, DOWJONES: { pass: true }, SP_SHARIAH: { pass: true }, FTSE_SHARIAH: { pass: true }, MSCI_ISLAMIC: { pass: true }, SC_MALAYSIA: { pass: true }, IFSB: { pass: true } } };
+  await gotoLab(page, { fixtures: {
+    "/api/alpaca/positions": ["MU", "SPUS"].map((symbol) => ({ symbol, qty: "1", avg_entry_price: "1", current_price: "1", market_value: "1000", unrealized_pl: "0", unrealized_plpc: "0" })),
+    "/api/screen": { provider: "finnhub", results: { MU: pass } } } });
+  await openSection(page, "Compliance");
+  const stats = page.getByTestId("compliance-stats");
+  await expect(stats).toContainText("2/2");
+  await expect(stats).toContainText("1 halal fund");
+  await expect(page.getByTestId("compliance")).toContainText("SPUS · halal fund, screened by its issuer");
+  await expect(page.getByTestId("compliance")).not.toContainText("missing data");
+  // And the Desk's Sharia light agrees.
+  await openSection(page, "Command Center");
+  await expect(page.getByTestId("order-pipeline")).toContainText("2/2 pass AAOIFI");
+});
+
+test("Stops and switches states all five levels and names what is not built", async ({ page }) => {
+  await gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: [
+    { id: "a", enabled: false, strategy_type: "rank_rebalance", capital_allocated: "1", params: { broker: "alpaca_paper" }, progress: { paper: true } },
+    { id: "b", enabled: true, strategy_type: "rank_rebalance", capital_allocated: "1", params: { broker: "alpaca_paper" }, progress: { paper: true } } ] } } });
+  await openSection(page, "Risk");
+  const rows = page.getByTestId("kill-row");
+  await expect(rows).toHaveCount(5);
+  await expect(rows.filter({ hasText: "Strategy" })).toContainText("1 paused");
+  await expect(rows.filter({ hasText: "Broker" })).toContainText("not built");
 });

@@ -119,7 +119,16 @@ export function complianceRow(symbol, verdict, { governing = "AAOIFI" } = {}) {
  * the biggest positions first, because a divergence in a 7% position matters
  * more than one in a 0.3% position.
  */
-export function complianceMatrix(holdings, verdicts, { governing = "AAOIFI" } = {}) {
+export function complianceMatrix(holdings, verdicts, opts) {
+  // Not a destructuring default: `= {}` never fires for null.
+  const o = opts && typeof opts === "object" ? opts : {};
+  const governing = o.governing || "AAOIFI";
+  // Sharia-screened FUNDS (SPUS, SPSK…) hold a basket, not a balance sheet, so
+  // the ratio screen never produces a verdict for them. They are covered by
+  // their issuer's screen — the same "eligible by construction" rule the
+  // strategies use (lib/trading/screenGate.mjs HALAL_FUNDS) — and counting
+  // them as missing data made a fully covered book read "26/27 screened".
+  const funds = o.funds instanceof Set ? o.funds : new Set();
   const list = Array.isArray(holdings) ? holdings : [];
   const map = verdicts && typeof verdicts === "object" ? verdicts : {};
 
@@ -128,21 +137,24 @@ export function complianceMatrix(holdings, verdicts, { governing = "AAOIFI" } = 
       const sym = String(h?.symbol ?? h?.sym ?? h ?? "").toUpperCase();
       if (!sym) return null;
       const row = complianceRow(sym, map[sym], { governing });
-      return { ...row, value: Number(h?.value) || 0 };
+      const fund = funds.has(sym);
+      return { ...row, value: Number(h?.value) || 0, ...(fund ? { fund: true, unscreened: false, divergent: false } : {}) };
     })
     .filter(Boolean)
     .sort((a, b) => b.value - a.value);
 
-  const screened = rows.filter((r) => !r.unscreened);
+  const screened = rows.filter((r) => !r.unscreened && !r.fund);
 
   return {
     rows,
     governing,
     total: rows.length,
-    screened: screened.length,
+    funds: rows.filter((r) => r.fund).length,
+    // Covered = screened stocks + issuer-screened funds.
+    screened: screened.length + rows.filter((r) => r.fund).length,
     // Stated plainly so a surface can say "4 of 25 not screened" instead of
     // rendering a confident-looking matrix over missing data.
-    unscreened: rows.length - screened.length,
+    unscreened: rows.filter((r) => r.unscreened).length,
     divergent: rows.filter((r) => r.divergent).map((r) => r.symbol),
     failingGoverning: screened.filter((r) => r.governingMark === MARK.FAIL).map((r) => r.symbol),
   };

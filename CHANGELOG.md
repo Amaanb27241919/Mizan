@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-10-09
 
+### Added
+- **trade-lab:** Research (AI committee) in the broadsheet style (`153fdfc`)
+
 ### Fixed
 - **trade:** Hold hand orders to AAOIFI, like every strategy (`34f8b72`)
 

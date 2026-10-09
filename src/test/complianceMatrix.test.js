@@ -141,3 +141,16 @@ describe('complianceMatrix — the book', () => {
     expect(complianceMatrix(null, null).total).toBe(0)
   })
 })
+
+describe("complianceMatrix — issuer-screened funds", () => {
+  it("counts a halal fund as covered, never as missing data", () => {
+    const pass = { status: "halal", byStandard: { AAOIFI: { pass: true } } };
+    const m = complianceMatrix([{ symbol: "MU", value: 2 }, { symbol: "SPUS", value: 3 }], { MU: pass }, { funds: new Set(["SPUS"]) });
+    expect(m).toMatchObject({ total: 2, screened: 2, unscreened: 0, funds: 1, failingGoverning: [], divergent: [] });
+    expect(m.rows.find((r) => r.symbol === "SPUS")).toMatchObject({ fund: true, unscreened: false });
+  });
+  it("without the option, a fund with no verdict still reads as unscreened (no silent change)", () => {
+    const m = complianceMatrix([{ symbol: "SPUS", value: 1 }], {}, null);
+    expect(m).toMatchObject({ screened: 0, unscreened: 1, funds: 0 });
+  });
+});

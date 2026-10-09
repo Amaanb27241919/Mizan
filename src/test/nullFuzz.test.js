@@ -54,6 +54,7 @@ const MODULES = [
   '../lib/sparkline.js',
   '../lib/strategyExplainer.js',
   '../lib/orderQueue.js',
+  '../lib/killSwitches.js',
   '../../lib/trading/curve.mjs',
   '../../lib/trading/journal.mjs',
 ]
