@@ -13,6 +13,10 @@ describe("the Assistant endpoint decides what a call may cost", () => {
   const route = SRC.slice(SRC.indexOf('if (pathname === "/api/advisor" && method === "POST")'), SRC.indexOf('if (pathname === "/api/advisor/count"'));
   it("never forwards tools (no web search through the proxy)", () => {
     expect(route).toMatch(/const tools = null;/);
+    // A request carrying tools is refused before any Anthropic call is made.
+    const refuse = route.indexOf('error: "tools_not_supported"'), call = route.indexOf('api.anthropic.com');
+    expect(refuse).toBeGreaterThan(-1);
+    expect(refuse).toBeLessThan(call);
     expect(route).not.toMatch(/SAFE_TOOLS/);
   });
   it("caps the reply and pins the model server-side", () => {
