@@ -7845,110 +7845,90 @@ function AiCommittee({demoMode,book}){
   const codes=useMemo(()=>[...new Set(rows.map(r=>codeOf.get(r.strategy_id)||"—"))],[rows,codeOf]);
   const shown=only==="all"?rows:rows.filter(r=>(codeOf.get(r.strategy_id)||"—")===only);
   const stats=useMemo(()=>committeeStats(shown,providers),[shown,providers]);
-  const ANALYST={anthropic:"CLAUDE",google:"GEMINI",openrouter:"DEEPSEEK"};
+  const ANALYST={anthropic:"Claude",google:"Gemini",openrouter:"DeepSeek"};
   const nameOf=p=>ANALYST[p]||String(p).toUpperCase();
 
-  return<section>
-    <SectionHead label="AI committee"
-      hint="Each analyst's own verdict, side by side. They see identical evidence and never see each other's answers — the disagreement is the measurement, so it is never averaged away."
-      right={state==="ready"&&<Tag label={`${data.configured}/${data.required} ANALYSTS`}
-        color={data.configured>=data.required?T.gain:T.gold}/>}
-      style={{marginBottom:T.s3}}/>
+  const verb=a=>{const x=String(a||"").toUpperCase();return x==="INSUFFICIENT_DATA"?"Not enough data":x.charAt(0)+x.slice(1).toLowerCase();};
+  const code=c=>String(c||"").replace(/_/g," ");
 
-    {state==="loading"&&<div style={{padding:T.s6,textAlign:"center",fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em"}}>LOADING…</div>}
-    {state==="forbidden"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
-      This surface is owner-only.
-    </div>}
-    {state==="unavailable"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
-      The research record is not available.
-    </div>}
-    {state==="idle"&&<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd}}>
-      Demo mode shows no research record.
-    </div>}
+  return<section data-testid="research">
+    <LabHead title="AI committee"
+      note="Each analyst's own verdict, side by side. They see identical evidence and never see each other's answers — the disagreement is the measurement, so it is never averaged away. Nothing here can place an order."
+      right={state==="ready"&&<span className="mz-news-dim" style={{fontFamily:FP,fontSize:"var(--fs-sm)"}}>
+        <b style={{color:data.configured>=data.required?T.gain:T.gold}} aria-hidden="true">{data.configured>=data.required?"●":"◐"}</b> {data.configured} analyst{data.configured===1?"":"s"} configured · {data.required} needed</span>}/>
+
+    {state==="loading"&&<p className="mz-col-empty">Loading…</p>}
+    {state==="forbidden"&&<p className="mz-col-empty">The research record is visible to the operator's accounts only.</p>}
+    {state==="unavailable"&&<p className="mz-col-empty">The research record is not available right now.</p>}
+    {state==="idle"&&<p className="mz-col-empty">Demo mode shows no research record.</p>}
 
     {state==="ready"&&<>
       {/* Honest before there is data: which analysts are missing, by name. */}
-      {missing.length>0&&<div style={{padding:T.s4,marginBottom:T.s4,borderRadius:T.rMd,
-        background:`${T.gold}14`,border:`1px solid ${T.gold}44`}}>
-        <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",letterSpacing:"0.14em",color:T.gold,fontWeight:600,marginBottom:4}}>
-          {data.configured} OF {data.required} ANALYSTS CONFIGURED
-        </div>
-        <div style={{fontFamily:FP,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
-          Not configured: {missing.map(p=>p.provider).join(", ")}. A panel needs at least two —
-          one model is not a committee, and recording it as one would make the whole record misleading.
-        </div>
-      </div>}
+      {missing.length>0&&<p className="mz-research-warn" data-testid="committee-missing">
+        <b style={{color:T.gold}} aria-hidden="true">◐</b> <b>{data.configured} analyst{data.configured===1?"":"s"} configured; a panel needs {data.required}.</b> Not configured: {missing.map(p=>nameOf(p.provider)).join(", ")}. A panel needs at least two — one model is not a committee, and recording it as one would make the whole record misleading.
+      </p>}
 
       {rows.length>0&&<>
-        <StatStrip testId="committee-stats" items={[
-          ...providers.map(p=>{const v=stats.perProvider[p.provider]||{answered:0,failed:0,codes:[]};const asked=v.answered+v.failed;
-            return{label:nameOf(p.provider),value:asked?`${v.answered}/${asked}`:"—",tone:!asked?T.muted:v.failed?T.gold:T.textHi,
-              sub:v.failed?`failed ${v.failed}× · ${v.codes.join(", ")}`:asked?"answered every round":"not asked yet"};}),
-          {label:"PANEL",value:`${stats.agreed} agreed`,sub:`${stats.split} split · ${stats.opposed} opposed · ${stats.noView} no view`},
-          {label:"SCREENED OUT",value:String(stats.screened),tone:T.muted,sub:"stopped by the Sharia screen, never asked"},
-        ]}/>
-        {codes.length>1&&<div className="mz-chip-row" style={{display:"flex",gap:4,flexWrap:"wrap",margin:`${T.s4} 0 ${T.s3}`}} role="group" aria-label="Filter by strategy">
-          {["all",...codes].map(c=><button key={c} onClick={()=>setOnly(c)} aria-pressed={only===c} className="mz-icon-btn" style={{
-            fontSize:"var(--fs-2xs)",letterSpacing:"0.1em",fontWeight:600,
-            background:only===c?`${T.textHi}1a`:"transparent",color:only===c?T.textHi:T.muted,
-          }}>{c==="all"?"ALL STRATEGIES":c}</button>)}
-        </div>}
+        {/* The scorecard: how each analyst has actually behaved. A failing
+            analyst names its error, so a broken integration never looks like
+            an abstention. */}
+        <div className="mz-figs mz-score" data-testid="committee-stats">
+          {providers.map(p=>{const v=stats.perProvider[p.provider]||{answered:0,failed:0,codes:[]};const asked=v.answered+v.failed;
+            return<div key={p.provider}><div className="mz-fig-l">{nameOf(p.provider)}</div>
+              <div className="mz-fig-v" style={{fontFamily:FN,color:!asked?T.muted:v.failed?T.gold:undefined}}>{asked?`${v.answered}/${asked}`:"—"}</div>
+              <div className="mz-fig-s">{!asked?"not asked yet":v.failed?<span style={{color:T.gold}}>failed {v.failed}× · {v.codes.map(code).join(", ")}</span>:"answered every review"}</div></div>;})}
+          <div><div className="mz-fig-l">The panel</div>
+            <div className="mz-fig-v" style={{fontFamily:FN}}>{stats.agreed} agreed</div>
+            <div className="mz-fig-s">{stats.split} split · {stats.opposed} opposed · {stats.noView} no view</div></div>
+          <div><div className="mz-fig-l">Screened out</div>
+            <div className="mz-fig-v" style={{fontFamily:FN,color:T.muted}}>{stats.screened}</div>
+            <div className="mz-fig-s">stopped by the Sharia screen, never asked</div></div>
+        </div>
+        {codes.length>1&&<nav className="mz-filter" aria-label="Filter by strategy">
+          {["all",...codes].map(c=><button key={c} onClick={()=>setOnly(c)} aria-pressed={only===c} className={only===c?"on mz-tap":"mz-tap"}>{c==="all"?"All strategies":c}</button>)}
+        </nav>}
       </>}
 
       {rows.length===0
-        ?<div style={{padding:T.s5,fontFamily:FP,fontSize:"var(--fs-sm)",color:T.muted,border:`1px dashed ${T.border}`,borderRadius:T.rMd,lineHeight:1.6}}>
-           No rounds recorded yet. The panel runs during market hours and writes one round per
-           holding per day. Nothing it produces can place an order.
-         </div>
-        :<div className="mz-tape-wrap"><table className="mz-tape" style={{fontFamily:FM,fontSize:"var(--fs-xs)"}}>
+        ?<p className="mz-col-empty">No reviews recorded yet. The panel runs during market hours and writes one review per name per day.</p>
+        :<div className="mz-tape-wrap"><table className="mz-news mz-committee">
           <thead><tr>
-            <th style={{fontSize:"var(--fs-2xs)"}}>WHEN</th>
-            <th style={{fontSize:"var(--fs-2xs)",textAlign:"left"}}>STRATEGY</th>
-            <th style={{fontSize:"var(--fs-2xs)",textAlign:"left"}}>SYMBOL</th>
-            {providers.map(p=><th key={p.provider} style={{fontSize:"var(--fs-2xs)"}}>{nameOf(p.provider)}</th>)}
-            <th style={{fontSize:"var(--fs-2xs)"}}>CONSENSUS</th>
-            <th style={{fontSize:"var(--fs-2xs)"}}>EVIDENCE</th>
+            <th>When</th><th>Strategy</th><th>Symbol</th>
+            {providers.map(p=><th key={p.provider}>{nameOf(p.provider)}</th>)}
+            <th>Panel</th><th style={{textAlign:"right"}}>Evidence</th>
           </tr></thead>
-          <tbody>{shown.map(r=>{
+          <tbody>{[...shown].sort((x,y)=>String(y.at||"").localeCompare(String(x.at||""))).map(r=>{
             const e=r.ensemble||{};
             const per=Array.isArray(e.per_model)?e.per_model:[];
             const fails=Array.isArray(r.failures)?r.failures:[];
-            const code=codeOf.get(r.strategy_id);
+            const c=chipOf.get(r.strategy_id);
             return<tr key={r.id} data-testid="committee-row">
-              <td style={{color:T.muted}}>{nyStamp(r.at)}</td>
-              <td style={{textAlign:"left"}}>{(()=>{const c=chipOf.get(r.strategy_id);return<CodeChip label={c?.label||code||""} color={c?.color} title={c?.name}/>;})()}</td>
-              <td style={{color:T.textHi,fontWeight:600,textAlign:"left"}}>{r.ticker}</td>
+              <td className="mz-news-dim">{nyStamp(r.at)}</td>
+              <td><span className="mz-key" style={{background:c?.color||T.slate}} aria-hidden="true"/>{c?.label||codeOf.get(r.strategy_id)||"—"}</td>
+              <td><b>{r.ticker}</b></td>
               {providers.map(p=>{
                 const m=per.find(x=>x.provider===p.provider);
-                if(r.screen_only)return<td key={p.provider} style={{color:T.muted}}>—</td>;
-                // A failed analyst says WHY, not just "—": a silent blank made
-                // a broken integration look like an abstention for a day.
+                if(r.screen_only)return<td key={p.provider} className="mz-news-dim">—</td>;
                 const f=fails.find(x=>x.provider===p.provider);
-                if(!m)return<td key={p.provider} style={{color:f?T.gold:T.muted}} title={f?`${nameOf(p.provider)} failed: ${f.code}`:undefined}>{f?`failed · ${String(f.code||"").replace(/_/g," ")}`:"—"}</td>;
-                return<td key={p.provider} style={{color:tone(m.action)}}>
-                  {m.action}
-                  {m.confidence!=null&&<span style={{color:T.muted,fontWeight:400}}> {Math.round(m.confidence*100)}</span>}
-                </td>;
+                if(!m)return<td key={p.provider} style={{color:f?T.gold:T.muted}}>{f?<>◐ failed · {code(f.code)}</>:"—"}</td>;
+                return<td key={p.provider}><b style={{color:tone(m.action)}}>{verb(m.action)}</b>
+                  {m.confidence!=null&&<span className="mz-news-dim"> {Math.round(m.confidence*100)}</span>}</td>;
               })}
               <td>
-                {/* The consensus sits BESIDE the columns, never instead of
-                    them — and a panel that could not agree says so. */}
+                {/* Beside the columns, never instead of them — and a panel
+                    that could not agree says so. */}
                 {r.screen_only
-                  ?<span style={{color:T.muted}}>screened out · {r.sharia_verdict||"not halal"}</span>
+                  ?<span className="mz-news-dim">screened out · {r.sharia_verdict||"not halal"}</span>
                   :e.ok
-                  ?<span style={{color:tone(e.consensus),fontWeight:600}}>
-                     {e.consensus}
-                     {e.opposed&&<span style={{color:T.loss,fontWeight:400}}> · OPPOSED</span>}
-                     {!e.unanimous&&!e.opposed&&<span style={{color:T.gold,fontWeight:400}}> · SPLIT</span>}
-                   </span>
-                  :<span style={{color:T.muted}}>no view · {String(e.code||"").replace(/_/g," ")}</span>}
+                  ?<><b style={{color:tone(e.consensus)}}>{verb(e.consensus)}</b>
+                     {e.opposed&&<span style={{color:T.loss}}> · opposed</span>}
+                     {!e.unanimous&&!e.opposed&&<span style={{color:T.gold}}> · split</span>}</>
+                  :<span className="mz-news-dim">no view{e.code?` · ${code(e.code)}`:""}</span>}
               </td>
-              <td style={{color:T.muted}}>
-                {/* What the packet could NOT see. A verdict formed without
-                    fundamentals is a different verdict, and hiding that would
-                    make the record look stronger than it is. */}
-                {r.missing?.length?`−${r.missing.length}`:"full"}
-                <span style={{opacity:.6}}> · {String(r.packet_hash||"").slice(0,6)}</span>
+              <td style={{textAlign:"right"}} className="mz-news-dim" title={r.packet_hash?`evidence packet ${r.packet_hash}`:undefined}>
+                {/* What the packet could NOT see — a verdict formed without
+                    fundamentals is a different verdict. */}
+                {r.screen_only?"—":r.missing?.length?<span style={{color:T.gold}} title={r.missing.join(", ")}>missing {r.missing.length}</span>:"complete"}
               </td>
             </tr>;
           })}</tbody>
@@ -15056,6 +15036,14 @@ export default function Mizan(){
         background:repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--mz-dim) 55%, transparent) 6px 7px);}
       .mz-mult footer{display:flex; justify-content:space-between; gap:var(--s-2); flex-wrap:wrap; font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
       .mz-mult-status{font-family:${FP}; font-size:var(--fs-xs); margin-top:2px;}
+      .mz-research-warn{font-family:${FP}; font-size:var(--fs-sm); line-height:1.55; color:var(--mz-text); border-left:3px solid ${T.gold}; padding:var(--s-2) var(--s-3); margin:0 0 var(--s-4);}
+      .mz-research-warn b{color:var(--mz-textHi);}
+      .mz-score{grid-template-columns:repeat(auto-fit,minmax(10rem,1fr)); row-gap:var(--s-5);}
+      .mz-score .mz-fig-v{font-size:var(--fs-3xl);}
+      @media (max-width:900px){ .mz-score > div{padding-left:0; border-left:0;} }
+      .mz-filter{display:flex; gap:var(--s-4); flex-wrap:wrap; margin:var(--s-4) 0 var(--s-2); font-family:${FP}; font-size:var(--fs-sm);}
+      .mz-filter > button{background:none; border:0; padding:var(--s-1) 0; cursor:pointer; color:var(--mz-muted); border-bottom:2px solid transparent;}
+      .mz-filter > button.on{color:var(--mz-textHi); font-weight:600; border-bottom-color:var(--mz-textHi);}
       .mz-ticket{display:grid; grid-template-columns:minmax(0,22rem) minmax(0,1fr); gap:var(--s-8); align-items:start; margin-top:var(--s-4);}
       @media (max-width:820px){ .mz-ticket{grid-template-columns:minmax(0,1fr); gap:var(--s-5);} }
       .mz-ticket-form{display:flex; flex-direction:column; gap:var(--s-4); font-family:${FP};}

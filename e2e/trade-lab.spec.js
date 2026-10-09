@@ -424,11 +424,11 @@ test.describe("Trade Lab cockpit", () => {
     const t = page.locator(".mz-lab");
     // Each analyst is its own column, by the name a person knows (2026-10-08:
     // provider names became analyst names — CLAUDE, not ANTHROPIC).
-    await expect(t).toContainText("CLAUDE");
-    await expect(t).toContainText("GEMINI");
+    await expect(t).toContainText("Claude");
+    await expect(t).toContainText("Gemini");
     // Contradiction and mere difference are labelled differently.
-    await expect(t).toContainText("OPPOSED");
-    await expect(t).toContainText("SPLIT");
+    await expect(t).toContainText("· opposed");
+    await expect(t).toContainText("· split");
   });
 
   test("says how many analysts are missing, rather than showing fewer quietly", async ({ page }) => {
@@ -440,9 +440,9 @@ test.describe("Trade Lab cockpit", () => {
     } } });
     await openSection(page, "AI Committee");
     const t = page.locator(".mz-lab");
-    await expect(t).toContainText("1 OF 2 ANALYSTS CONFIGURED");
+    await expect(t).toContainText("1 analyst configured; a panel needs 2.");
     await expect(t).toContainText(/one model is not a committee/i);
-    await expect(t).toContainText(/not configured: google/i);
+    await expect(t).toContainText(/not configured: gemini/i);
   });
 
   test("no overflow at 320px", async ({ page }) => {
@@ -828,9 +828,9 @@ test("AI committee names the strategy, the failure reason, and each analyst's re
     ] } } });
   await openSection(page, "AI Committee");
   const stats = page.getByTestId("committee-stats");
-  await expect(stats).toContainText("CLAUDE");
+  await expect(stats).toContainText("Claude");
   await expect(stats).toContainText("1/2");            // Claude: answered 1 of 2 asked
-  await expect(stats).toContainText("http_400");
+  await expect(stats).toContainText("http 400");
   await expect(stats).toContainText("1 agreed");
   const mu = page.getByTestId("committee-row").filter({ hasText: "MU" });
   await expect(mu).toContainText("A");
@@ -1115,4 +1115,22 @@ test.describe("Trade Lab orders section", () => {
     await expect(page.getByTestId("approval-queue")).toContainText("Nothing is waiting for you");
     await expect(page.locator("body")).not.toContainText(/SOMETHING WENT WRONG/i);
   });
+});
+
+test("Research lists reviews newest first and claims no evidence for a screened-out name", async ({ page }) => {
+  const per = (p, a) => ({ provider: p, action: a, confidence: 0.6 });
+  await gotoLab(page, { fixtures: { "/api/ai/research": {
+    providers: [{ provider: "anthropic", available: true }, { provider: "google", available: true }], configured: 2, required: 2,
+    rows: [
+      { id: "old", ticker: "MU", at: "2026-10-08T12:10:00Z", ensemble: { ok: true, consensus: "HOLD", unanimous: true, per_model: [per("anthropic", "HOLD"), per("google", "HOLD")] } },
+      { id: "scr", ticker: "STX", at: "2026-10-08T12:20:00Z", screen_only: true, sharia_verdict: "haram" },
+      { id: "new", ticker: "LRCX", at: "2026-10-08T12:30:00Z", ensemble: { ok: true, consensus: "BUY", unanimous: true, per_model: [per("anthropic", "BUY"), per("google", "BUY")] } },
+    ] } } });
+  await openSection(page, "AI Committee");
+  const rows = page.getByTestId("committee-row");
+  await expect(rows.first()).toContainText("LRCX");
+  await expect(rows.last()).toContainText("MU");
+  const stx = rows.filter({ hasText: "STX" });
+  await expect(stx).toContainText("screened out · haram");
+  await expect(stx).not.toContainText("complete");
 });

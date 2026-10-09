@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-09
+
+### Fixed
+- **trade:** Hold hand orders to AAOIFI, like every strategy (`34f8b72`)
+
 ## 2026-10-08
 
 ### Added
