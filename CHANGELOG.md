@@ -22,6 +22,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **ai:** Research panel — feed it the evidence it was missing; name out-of-credits; fix DeepSeek's downside sign (`b626dcd`)
 - **trade:** Hold hand orders to AAOIFI, like every strategy (`34f8b72`)
 
+### Docs
+- Trade Lab broadsheet, AAOIFI hand orders, AI committee fixes, backlog (`843fcba`)
+
 ### Maintenance
 - **e2e:** Build:e2e and a pre-flight so the suite never runs a pass-through build (`8d401bf`)
 - **ai:** Record the full Anthropic bill on every Assistant call (`47e4b39`)

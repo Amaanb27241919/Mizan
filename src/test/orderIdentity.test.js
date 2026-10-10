@@ -264,7 +264,7 @@ describe('stop-arming wiring', () => {
     // that the rank branch CALLS it after arming.
     const BR = SRC.slice(SRC.indexOf('if (strat.strategy_type === "rank_rebalance")'))
     const arm = BR.indexOf('await armProtectiveStops(strat, armCreds)')
-    const cadence = BR.indexOf('if (!rankDue(strat)) continue;')
+    const cadence = BR.indexOf('if (!rankDue(strat)) {')
     expect(arm).toBeGreaterThan(-1)
     expect(cadence).toBeGreaterThan(-1)
     expect(arm, 'arming must not sit behind the weekly cadence gate').toBeLessThan(cadence)
@@ -355,8 +355,13 @@ describe("the rank rebalance lifts conflicting stops before placing each order",
     const { readFileSync } = await import("node:fs");
     const path = await import("node:path");
     const SRC = readFileSync(path.resolve(__dirname, "../../lib/handlers.mjs"), "utf8");
-    const loop = SRC.slice(SRC.indexOf("const liftStops = async (sym) =>"), SRC.indexOf('action: "bot.rank.rebalanced"'));
-    expect(loop).toMatch(/if \(!venue\.paper \|\| isShadow \|\| !creds\) return;/);
+    const lifter = SRC.slice(SRC.indexOf("function makeStopLifter("), SRC.indexOf("async function retryRefusedOrders("));
+    expect(lifter).toMatch(/if \(!venue\?\.paper \|\| isShadow \|\| !creds\) return;/);
+    const loop = SRC.slice(SRC.indexOf("const liftStops = makeStopLifter(strat, { venue, isShadow, creds });"), SRC.indexOf('action: "bot.rank.rebalanced"'));
+    // The F18 retry pass lifts too, or the same wash-trade refusal just repeats.
+    const retry = SRC.slice(SRC.indexOf("async function retryRefusedOrders("), SRC.indexOf("async function bookFromSignals("));
+    expect(retry.indexOf("await liftStops(o.sym);")).toBeGreaterThan(-1);
+    expect(retry.indexOf("await liftStops(o.sym);")).toBeLessThan(retry.indexOf("executeStrategyOrder("));
     const lift = loop.indexOf("await liftStops(o.sym);"), exec = loop.indexOf("executeStrategyOrder(");
     expect(lift).toBeGreaterThan(-1);
     expect(lift).toBeLessThan(exec);

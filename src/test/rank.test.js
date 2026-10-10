@@ -226,7 +226,7 @@ describe('rank_rebalance is shadow-only', () => {
   })
 
   it('only consumes the rebalance cadence when something was placed', () => {
-    expect(branch).toMatch(/placed > 0 \? \{ \.\.\.\(strat\.params/)
+    expect(branch).toMatch(/placed > 0\s*\? \{ \.\.\.\(strat\.params \|\| \{\}\), last_rebalance: todayDate/)
   })
 
   it('applies the earnings filter when configured, and fails closed without the calendar', () => {

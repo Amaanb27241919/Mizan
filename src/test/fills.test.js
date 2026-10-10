@@ -173,11 +173,11 @@ describe('Phase 0 wiring', () => {
     // Alpaca answers 2xx on ACCEPT. Counting, not presence: an earlier version
     // of this test checked that `submitted` APPEARED, which passed happily
     // while one of the five sites had been flipped back to `executed`.
-    // Mutation testing caught it. There are five execution sites; all five
+    // Mutation testing caught it. There are six execution sites (the F18 retry pass is the sixth); all six
     // must branch the same way.
     const submitted = SRC.match(/\? \{ status: "submitted" \}/g) || []
-    expect(submitted, 'all five execution sites must write submitted for paper')
-      .toHaveLength(5)
+    expect(submitted, 'all six execution sites must write submitted for paper')
+      .toHaveLength(6)
     const ternaryExecuted = SRC.match(/\? \{ status: "executed"/g) || []
     expect(ternaryExecuted, 'no site may claim executed on the paper branch')
       .toHaveLength(0)

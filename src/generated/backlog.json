@@ -67,8 +67,8 @@
         },
         {
           "id": "F18",
-          "title": "A partial rank rebalance consumes its whole cadence",
-          "done": false
+          "title": "A partial rank rebalance consumes its whole cadence — SHIPPED 2026-10-09 (refused orders kept in params.rebalance_retry and retried alone on later ticks; lib/trading/rebalanceRetry.mjs)",
+          "done": true
         },
         {
           "id": "F9",
@@ -97,7 +97,7 @@
         }
       ],
       "archive": false,
-      "open": 10,
+      "open": 9,
       "total": 18
     },
     {

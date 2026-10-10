@@ -195,7 +195,7 @@ The "something is wrong" bucket. Aligned with maintenance mode.
 - **Status:** done · **Effort:** S · **User value:** low-medium · **Autonomous:** yes (display only)
 - SPSK (and any halal ETF) has no company balance sheet, so the ratio engine returns `review` with no AAOIFI pass and the Trade Lab Compliance matrix counts it as NOT SCREENED (26/27 on 2026-10-07). The strategies already treat these as eligible by construction (`HALAL_FUNDS` in `lib/trading/screenGate.mjs`). A distinct "fund — screened by issuer" state would be more accurate than "missing data". Must not become a blanket halal stamp for any ETF — only the named Sharia-screened funds.
 
-### F18 — A partial rank rebalance consumes its whole cadence
+### F18 — A partial rank rebalance consumes its whole cadence — ✅ SHIPPED 2026-10-09 (refused orders kept in params.rebalance_retry and retried alone on later ticks; lib/trading/rebalanceRetry.mjs)
 
 - **Status:** open · **Effort:** S–M · **User value:** medium (experiment data) · **Autonomous:** no — changes when strategies trade (owner call)
 - Found 2026-10-09. The rank branch writes `last_rebalance = today` whenever `placed > 0`. When E·core's first rebalance placed 1 of 10 buys (9 refused as wash trades), it would not have retried the other 9 for **30 days**; the cadence was reset by hand.
