@@ -63,6 +63,11 @@
         {
           "id": "F17",
           "title": "Compliance shows halal FUNDS as \"not screened\"",
+          "done": true
+        },
+        {
+          "id": "F18",
+          "title": "A partial rank rebalance consumes its whole cadence",
           "done": false
         },
         {
@@ -93,7 +98,7 @@
       ],
       "archive": false,
       "open": 10,
-      "total": 17
+      "total": 18
     },
     {
       "key": "G",
@@ -272,11 +277,26 @@
           "id": "N26",
           "title": "Compliance-tier gate for every new grounded-AI feature (owner-directed 2026-07-15)",
           "done": true
+        },
+        {
+          "id": "N27",
+          "title": "Broker-level kill switch (Trade Lab §14)",
+          "done": false
+        },
+        {
+          "id": "N28",
+          "title": "Manual symbol block list (Trade Lab §14)",
+          "done": false
+        },
+        {
+          "id": "N29",
+          "title": "\"Quant\" column in the AI committee (Trade Lab §23)",
+          "done": false
         }
       ],
       "archive": false,
-      "open": 23,
-      "total": 26
+      "open": 26,
+      "total": 29
     },
     {
       "key": "M",

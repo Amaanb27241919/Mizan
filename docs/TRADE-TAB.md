@@ -1,7 +1,7 @@
 # MĪZAN — Trade Tab: How It Works
 
-> Instructions + technical explanation for the **Trade** tab (the MĪZAN Trading Bot
-> and Quick Trade ticket). Last reviewed against code: 2026-06-25.
+> Instructions + technical explanation for the **Trade** tab (the MĪZAN Trade Lab: trading bot,
+> research panel and hand-order ticket). Last reviewed against code: 2026-10-09 (broadsheet redesign).
 > Source of truth: `src/components/MizanApp.jsx` (frontend) and `lib/handlers.mjs` (backend).
 
 ---
@@ -24,22 +24,26 @@ It is **gated** — Trade access needs root OR the `trading_bot_enabled` beta al
 
 ## 2. Where it lives in the UI
 
-- Top-level nav item **"Trade"** — only rendered when the current user is admin
-  (`NAV` array, `MizanApp.jsx:9935`). Hidden entirely for everyone else.
-- Also reachable from the Command Palette (⌘K → "Go to Trade") and the keyboard
-  shortcut **`g t`** — both registered **only when `isAdmin`**.
-- The tab renders the `TradeBot` component (`MizanApp.jsx:5356`), an admin trading
-  **hub** with **six sub-tabs** (`TabBar`, `MizanApp.jsx:5490`). It opens on
-  **Strategies**. `TradeBot` itself returns `null` for non-admins (`:5487`).
+- Top-level nav item **"Trade"**, rendered only for trading-enabled accounts (`isAdmin`
+  is set from `profiles.trading_bot_enabled`, not root). Also ⌘K → "Go to Trade" and `g t`.
+- The tab renders `TradeBot` — **"The Trade Lab"**, redesigned 2026-10-08/09 as a
+  financial-newspaper **broadsheet** on Mizan's paper (Newsreader masthead, hairline
+  rules, no tile walls; follows the app's light/dark theme). Section nav is `LabNav`
+  (`LAB_SECTIONS`), built on the `.mz-tabbar` contract and counted as `trade/<id>`.
 
-  | Sub-tab | Renders | Role |
-  |---------|---------|------|
-  | **Strategies** (default) | `TradingBotPanel view="strategies"` (`:4918`) | NL builder, strategy list, layer toggle, kill switch, per-account full-auto |
-  | **Signals** | `TradingBotPanel view="signals"` | Pending signals → Approve / Reject, **plus the Bot Activity timeline** (every action the bot took) |
-  | **Screener** | `AAOIFIScreener` (`:2103`) | AAOIFI Sharia screen (shared with Portfolio) |
-  | **Rebalance** | `Rebalancer` (`:3638`) | Drift vs target allocation (shared with Portfolio) |
-  | **Backtest** | `HistoricalBacktest` (`:4821`) | Polygon-history SMA backtest |
-  | **Quick Trade** | inline order form + `OrderPreviewModal` (`:4567`) | Ad-hoc manual override only (see §4) |
+  | Section (id) | What you read there |
+  |---|---|
+  | **Desk** (`desk`) | Order pipeline status line (market → AI committee → strategies → Sharia gate → cash → brokers, plus pauses); value / cash / invested / waiting-on-you; **one small chart per strategy vs SPUS** (`/api/bot/curves`) with its plain-English one-liner, "How it works" and execution-mode ladder; latest orders; latest AI rounds; "Does the AI help?" (A vs B). |
+  | **Strategies** (`strategies`) | Strategy guide (every strategy in plain English, from its params); automation status + **Pause all**; "Your strategies" table (money, rules, trades, return vs SPUS, mode switch, Edit/Pause/Delete — the shadow panel gets no mode switch); "Build a new strategy" (default mode, Halal Bogleheads preset, plain-English builder) folded by default; full-auto accounts; brokerage support. |
+  | **Positions** (`positions`) | The paper equity curve — headline always **since the starting balance**, the range's own change underneath; the strategy book + allocation bar; every paper position. |
+  | **Orders** (`signals`) | Waiting for your approval (strategy, order, time left, Approve/Reject); order history (outcome + reason; AI reviews excluded); working orders; **Place an order by hand** (the ticket, folded — see §6A). |
+  | **Research** (`committee`) | The AI committee: analysts configured, each analyst's record (failures named, e.g. "out of credits"), panel agreed/split/opposed/no view, every review with one column per model, evidence completeness. |
+  | **Compliance & Risk** (`compliance`) | Seven-standard matrix (AAOIFI governs; halal funds read "screened by its issuer"); concentration, effective names, drawdown; **Stops and switches** — the five kill-switch levels against what exists. |
+  | **Performance** (`performance`) | Account vs SPUS (points) and vs **HLAL**; drawdown; days measured + confidence; Sharpe/Sortino/volatility (withheld until 20 days); strategies vs SPUS with closed-trade win rate. |
+  | **Journal** (`journal`) | The record — every order and AI review by day, with model ids and evidence hashes (§18); per-strategy journal CSVs; the closed-trades tax & Zakat sheet; what the lab is for. |
+
+  Folded ids still resolve (`LAB_REDIRECT`): `order` → Orders with the ticket open
+  (the Rebalancer's "Copy to Order" lands there), `risk` → Compliance & Risk.
 
 ---
 
@@ -225,14 +229,19 @@ and "fires" signals every cron run that simply never fill until the account is f
 
 ## 6. How to use it (instructions)
 
-### A) Ad-hoc manual order (Quick Trade — override only)
+### A) Hand order (Orders → Place an order by hand)
 This is for a one-off trade you type by hand. Automated trades come from strategies (B).
-1. Trade → **Quick Trade**.
-2. Pick a venue: **Live · SnapTrade** (real broker) or **Paper · Alpaca** (sandbox, no real money).
-3. Choose **Buy/Sell**, select the account, enter **Symbol**, **Quantity**, and (for limit) **Limit Price**.
-4. A **Sharia pre-check** runs on the symbol. Known non-compliant tickers are blocked before the broker is ever called.
-5. **SnapTrade:** click **Preview** → review the impact modal (fees, fill price, buying power) → **Confirm** to place.
-   **Alpaca:** the paper order is placed directly (no preview).
+1. Trade → **Orders** → **Open the ticket**.
+2. Venue: **Paper · Alpaca** (the default) or **Live · your broker** (real money — the
+   "Before you send" column says so in red).
+3. Buy/Sell, (live) account, Symbol (live quote shown), **Market/Limit**, Quantity, Limit price.
+4. **Before you send** states where it goes, the market session, the **real AAOIFI screen**
+   for the symbol, the estimated total, and what is never offered (short selling, options,
+   margin; stops are set by strategies).
+5. **Hand BUYS are held to AAOIFI server-side** (`handOrderGate`, 2026-10-09): a failing
+   name is refused ("does not pass the AAOIFI Sharia screen"), an unscreenable one is
+   refused with "try again", halal funds pass, and **sells are never blocked**.
+6. **Paper:** placed directly. **Live:** Preview → review the impact modal → Confirm.
 
 ### B) Create a bot strategy (Natural-Language Builder)
 1. Trade → **Strategies** (admin view).
@@ -312,17 +321,24 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
 
 ## 7. How it works under the hood
 
-### Frontend components (`src/components/MizanApp.jsx`)
-| Component | Line | Role |
-|-----------|------|------|
-| `TradeBot` | 5356 | 6-sub-tab hub shell; order state, SnapTrade/Alpaca submit; `null` for non-admins |
-| `TradingBotPanel` | 4918 | `view="strategies"`/`"signals"` — NL builder, signals, strategies, kill switch, per-account full-auto, brokerage `<select>`, **in-place Edit modal** (`openEdit`/`saveEdit`) |
-| `LAYER_META` | 4904 | Manual/Semi/Full metadata (icon + blurb) for the layer selector & ack gate |
-| `StrategyReality` | 4703 | Review screen — client-side backtest + mismatch warning |
-| `StrategyProgressCard` | 4799 | Per-strategy progress toward target |
-| `computeSmaBacktest` | 4666 | Shared backtest math (reused by HistoricalBacktest + StrategyReality) |
-| `OrderPreviewModal` | 4567 | SnapTrade impact preview → confirm/cancel |
-| `isAdmin` / `fullAutoEnabled` / `featuresLoaded` state | 8887 | Fetched from `/api/user/features` at mount; gate the nav, palette, shortcut, and bounce |
+### Frontend components (`src/components/MizanApp.jsx`; line numbers drift — search the name)
+| Component | Role |
+|-----------|------|
+| `TradeBot` | The Trade Lab shell: masthead, `LabNav`, section routing, hand-order ticket state + submit; one shared screening read (`useScreenVerdicts`) for Desk/Compliance/Risk; `null` without trading permission |
+| `BroadsheetDesk` | The Desk (pipeline, figures, `StrategyMultiple` small charts, latest orders, `CommitteeLatest`, `AiQuestion`) |
+| `StrategyGuide` / `StrategyAbout` | Plain-English strategies (`src/lib/strategyExplainer.js`) |
+| `TradingBotPanel` | `view="strategies"`/`"signals"`: automation status line + Pause all, `StrategyTable`, builder disclosure, approval queue, order history, full-auto accounts, edit + layer-ack modals |
+| `LabPortfolio`, `EquityChart`, `StrategyBlotter`, `PositionTape` | Positions |
+| `WorkingOrders`, `OrderPreviewModal`, `AlpacaKeysPanel`, `TradeConnectionsPanel` | Orders |
+| `AiCommittee` | Research |
+| `CompliancePanel`, `RiskPanel`, `KillSwitchTable` | Compliance & Risk |
+| `PerformancePanelLab` | Performance |
+| `LabJournal` / `JournalLog`, `ClosedTradesExport` | Journal |
+
+Pure, tested helpers behind them: `deskBlotter`, `deskPipeline`, `sparkline`,
+`strategyExplainer`, `orderQueue`, `killSwitches`, `labMetrics`, `journalLog`,
+`equityCurve`, `complianceMatrix`, `committee` (all in `src/lib/`), plus
+`lib/trading/curve.mjs` and `lib/ai/packetInputs.mjs` on the server.
 
 ### Backend endpoints (`lib/handlers.mjs`) — all gated by `canUseTradingBot()`
 | Endpoint | Method | Purpose |
@@ -398,14 +414,14 @@ Once active, each strategy shows a **Strategy Progress** card: capital, current 
   push. A full-mode strategy on a non-opted-in account still signals but never fires.
 
 ### Sharia gate
-- Server list: `HARAM_TICKERS = {JPM, WYNN, MO, LCID, BND}` (`handlers.mjs:31`).
-- Default screening set: `HALAL_UNIVERSE_DEFAULT` (Sharia-screened ETFs SPUS/HLAL/UMMA/…
-  plus commonly-compliant large caps) — every candidate is still re-checked against
-  `HARAM_TICKERS` before any signal (`strategyUniverse()`).
-- Client precheck on the ad-hoc Quick Trade ticket uses a broader `HARAM_SNAP` set.
-- Enforced server-side in **every execution path**: manual `/trade/impact`, signal
-  approval, cron generation, and inside `executeSnapTradeOrder()` itself — re-checked at
-  execution, not just on display. A blocked ticker is rejected and audited.
+- **AAOIFI governs everything that buys** (`lib/trading/screenGate.mjs`): every strategy
+  (`tradeEligibility` / `screenPlanInputs`, owner decision 2026-10-07) and every hand
+  order (`handOrderGate`, 2026-10-09). Halal funds (SPUS/HLAL/UMMA/SPSK/SPWO/SPTE/SPRE)
+  are eligible by construction; an unscreened name never buys; a held name is sold only
+  when screened and FAILING. The fixed `HARAM_TICKERS` list remains as a second layer
+  inside the order functions. The old client-side `HARAM_SNAP` list was removed.
+- Verdicts come from the one screening engine (`lib/sharia.mjs` via `/api/screen`), with
+  the shared daily cache in `polygon_cache` (`sharia_verdict_v1`).
 
 ### Database tables (migrations `020_trading_bot.sql`, `021_full_auto_per_account.sql`, `023_bot_strategy_type_dca.sql`)
 - `bot_strategies` — one row per strategy: ticker (the **primary**/first candidate),
@@ -446,6 +462,13 @@ Every meaningful action writes to `audit_log`: `bot.signal.generated`, `.approve
 ---
 
 ## 9. Current implementation status
+
+> **2026-10-09.** Live today: the experiments run on Alpaca **paper** (one shared $1M
+> account with per-strategy sleeves) and the root account's control + shadow panel; the
+> E*TRADE DCA is the only real-money strategy and is waiting for a deposit. The rank
+> rebalance lifts Mizan's own protective stops on a symbol before trading it (shared
+> account wash-trade rule). The text below describes the SnapTrade execution layers,
+> which are unchanged.
 
 This is an **owner-only** feature (`is_root`). It does not exist for any other user —
 it is not advertised, sold, or available to them. Because it only ever trades the

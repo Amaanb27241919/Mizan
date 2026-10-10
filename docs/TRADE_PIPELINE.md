@@ -11,6 +11,34 @@ returned 503. Quotes priced against an unverified inventory are wrong quotes.
 
 ---
 
+## Changes since this was written (2026-10-09)
+
+Each item below is in `lib/handlers.mjs` unless named; search the symbol. Line
+numbers have drifted.
+
+- **Hand orders are screened by AAOIFI** before any broker call: `handOrderGate`, on
+  POST /api/alpaca/order and POST /api/snaptrade/trade/impact. A buy must pass; an
+  unscreenable buy is refused with "try again"; sells are never blocked. A wiring
+  test pins gate-before-broker.
+- **The rank rebalance lifts Mizan's own protective stops on a symbol before trading
+  it** (`liftStops` → `conflictingStops` → `cancelBracketLegs`). On the shared paper
+  account a resting stop from any strategy made Alpaca refuse the order as a
+  "potential wash trade". The next tick's arming pass re-places the stops.
+- **Research panel.** Every model now sees the same complete evidence packet:
+  - The packet now carries returns, technicals, the SPUS benchmark, identity and
+    earnings (`lib/ai/packetInputs.mjs`).
+  - An empty provider account is `no_credits` (`isOutOfCredits`).
+  - A per-pass breaker (`withBreaker`) skips an out-of-credits or twice-timed-out
+    analyst.
+  - Panel failure never blocks a buy: no view passes the gate; unreviewed names wait
+    only until the cutoff.
+- **GET /api/bot/curves**: read-only per-strategy daily return vs SPUS, rebuilt from
+  the ledger and SIP closes (`lib/trading/curve.mjs`). Paged past PostgREST's
+  1,000-row cap.
+- **/api/advisor** pins its model, caps replies at 1,500 tokens, refuses requests
+  carrying tools, and logs cache and web-search usage. The browser price fallback
+  that drained the Anthropic account is deleted.
+
 ## The finding that changes Phase 5
 
 > **SUPERSEDED 2026-10-01 — the engine CAN reach Alpaca now.** The section below

@@ -191,8 +191,16 @@ The "something is wrong" bucket. Aligned with maintenance mode.
 
 ### F17 — Compliance shows halal FUNDS as "not screened"
 
-- **Status:** open, small · **Effort:** S · **User value:** low-medium · **Autonomous:** yes (display only)
+- **✅ SHIPPED 2026-10-09 (`76f81bb`):** `complianceMatrix(…, { funds: HALAL_FUNDS })` — a named Sharia-screened fund reads "halal fund, screened by its issuer", counts as covered, and is excluded from "Pass AAOIFI" (stocks only). The Desk's Sharia light uses the same option. Only the named funds; no blanket ETF stamp.
+- **Status:** done · **Effort:** S · **User value:** low-medium · **Autonomous:** yes (display only)
 - SPSK (and any halal ETF) has no company balance sheet, so the ratio engine returns `review` with no AAOIFI pass and the Trade Lab Compliance matrix counts it as NOT SCREENED (26/27 on 2026-10-07). The strategies already treat these as eligible by construction (`HALAL_FUNDS` in `lib/trading/screenGate.mjs`). A distinct "fund — screened by issuer" state would be more accurate than "missing data". Must not become a blanket halal stamp for any ETF — only the named Sharia-screened funds.
+
+### F18 — A partial rank rebalance consumes its whole cadence
+
+- **Status:** open · **Effort:** S–M · **User value:** medium (experiment data) · **Autonomous:** no — changes when strategies trade (owner call)
+- Found 2026-10-09. The rank branch writes `last_rebalance = today` whenever `placed > 0`. When E·core's first rebalance placed 1 of 10 buys (9 refused as wash trades), it would not have retried the other 9 for **30 days**; the cadence was reset by hand.
+- **The obvious fix is unsafe as-is:** retrying the same day would re-buy orders still `submitted` (not yet reconciled to `executed`), because `bookFromSignals` counts executed rows only. A safe fix must count submitted buys as held for planning, or mark the rebalance "partial" and retry only the unplaced names.
+- Related: the wash-trade cause itself is fixed (`a173b21`, lift own stops before trading a symbol).
 
 ### F9 — OpenBB fundamentals adapter for Sharia screening (PROTOTYPE built, promotion blocked on diff evidence)
 
@@ -522,6 +530,21 @@ Building these is the treadmill the owner is stepping off. Build only on an expl
 - **Evidence:** In-code compliance boundary shipped + deployed 2026-07-15: `lib/compliance/policy.mjs` (three data tiers IMPERSONAL / ACCOUNT_SERVICING / PROHIBITED), `lib/compliance/advisor-prompt.mjs` (hardened advisor prompt), `lib/compliance/advisor-filter.mjs` (post-generation filter). Read-only line drawn at personalization of advice. Refs: `docs/COMPLIANCE.md`, memory `compliance-boundary-and-price-chart`.
 
 ---
+
+### N27 — Broker-level kill switch (Trade Lab §14)
+
+- **Status:** parked · **Effort:** S–M · **Autonomous:** no (adds a way to halt trading — owner call)
+- The Compliance & Risk "Stops and switches" table (`src/lib/killSwitches.js`) shows global, strategy and account levels built; symbol is automatic only (the AAOIFI gate); **broker is not built** — pausing a broker today means pausing its strategies one by one.
+
+### N28 — Manual symbol block list (Trade Lab §14)
+
+- **Status:** parked · **Effort:** S · **Autonomous:** no
+- A per-owner list of tickers no strategy or hand order may buy, beyond the AAOIFI gate (e.g. the ethical overlay, or a name under review). Would sit beside `handOrderGate` / `screenPlanInputs`.
+
+### N29 — "Quant" column in the AI committee (Trade Lab §23)
+
+- **Status:** parked · **Effort:** M · **Autonomous:** no
+- §23 asks for the deterministic ranking's own view beside the models' votes, so model value can be measured against the quant baseline. Research shows only Claude/Gemini/DeepSeek today.
 
 ## M — Needs a DB migration (PARKED, owner approval)
 
@@ -868,6 +891,7 @@ Verification agent hit a session limit; status unconfirmed.
 - [ ] **O20** mmfarooki full-auto onboarding — blocked on the beta tester's own setup
 - [ ] **O21** Build the equal-weight fractional $50/week halal basket DCA engine (Robinhood, khanstyle02)
 - [ ] **O22** Monetization strategy decision
+- [ ] **O28** **Anthropic account (2026-10-09):** top up credits (the research panel's Claude analyst AND the app's Assistant are down for every user until then); check the console Usage page by API key + day for where ~$17 of the $20 went (Mizan's own log shows ~$3 — the removed price fallback); give Mizan its own key with a monthly spend limit; search the public repo for `sk-ant-` and rotate if a real key ever appeared. Close stale Mizan tabs before topping up (they are refused server-side either way).
 - [ ] **O25** **Canada — two fiqh questions for your scholar** (both block engineering, neither is an engineering call): (a) is **nisab evaluated in USD or the user's home currency**? `/api/metals/spot` returns `nisab_gold_usd` / `nisab_silver_usd` only, so today a Canadian is compared against a USD threshold. (b) how are **RRSP / TFSA** treated for Zakat? An RRSP carries withdrawal tax and penalties that some scholars allow deducting; a TFSA generally does not. Blocks [F12](#f12--canadian-registered-accounts-rrsp--tfsa--resp--rrif--lira-are-unrecognised) and the currency half of [F10](#f10--multi-currency-mizan-sums-every-balance-as-usd-opened-up-by-the-2026-07-31-geo-change).
 - [ ] **O26** **Canada — legal review before promoting to Canadian users.** `src/components/Terms.jsx:127-129` sets governing law to the **State of New York** with a **US $100** liability cap (:106); `src/components/Privacy.jsx:133` cites GDPR but **not PIPEDA** (Canada's federal privacy law). Serving Canadians deliberately warrants counsel on both.
 - [ ] **O27** **Canada — regulatory posture on the trading bot.** Flagging, not advising: the "compliant, not an RIA" position is reasoned around **US** rules. Canadian securities regulation is **provincial** (CSA + provincial commissions). Read-only screening/Zakat is very likely fine; **extending semi-auto bot execution to a Canadian brokerage account is a different regulatory surface and must not happen by default.** Full-auto is already owner-allowlist-only (`canUseFullAuto`), which is the correct side of the line — keep it there. See CLAUDE.md §1 and O23.

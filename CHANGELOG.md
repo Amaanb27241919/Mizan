@@ -23,6 +23,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade:** Hold hand orders to AAOIFI, like every strategy (`34f8b72`)
 
 ### Maintenance
+- **e2e:** Build:e2e and a pre-flight so the suite never runs a pass-through build (`8d401bf`)
 - **ai:** Record the full Anthropic bill on every Assistant call (`47e4b39`)
 
 ## 2026-10-08

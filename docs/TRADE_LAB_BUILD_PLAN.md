@@ -86,6 +86,23 @@ its honest warning, activity log, system health, backtest report.
       warning (descriptive, not advice — stays Tier 1/2)
 - [ ] Benchmark line vs SPUS on every strategy
 
+### ✅ PHASE 1 (UI) DONE — 2026-10-09
+
+The Trade tab is "The Trade Lab", a broadsheet on Mizan's paper. The §23 destinations
+were folded into eight sections with no data dropped: Desk · Strategies · Positions ·
+Orders · Research · Compliance & Risk · Performance · Journal.
+
+The Desk carries every §23 Command Center field: value, cash, exposure, mode, compliance,
+risk, pending signals, AI consensus, strategy health, broker health, kill-switch state.
+
+The plan's other UI requirements are also in:
+- §16 metrics: SPUS + HLAL, Sharpe/Sortino withheld until 20 days, win rate.
+- §18 audit: the Journal record, with model ids and evidence hashes.
+- §14: the five kill-switch levels shown against what exists.
+
+Still open (BACKLOG N27–N29): broker kill switch, manual symbol block list, Quant
+column. See `docs/TRADE-TAB.md` §2.
+
 ## Phase 2 — turn on rank-rebalance  *(the uncle's config)*
 
 - [ ] Universe = SPUS ∪ SPSK constituents (SPUS already cached, 219 names)
