@@ -106,9 +106,10 @@ const openSection = async (page, name) => {
 };
 
 test.describe("Trade Lab cockpit", () => {
-  test("opens on the Desk: masthead, order pipeline, figures", async ({ page }) => {
+  test("opens on the Desk: console bar, order pipeline, figures", async ({ page }) => {
     await gotoLab(page);
-    await expect(page.getByRole("heading", { name: "The Trade Lab" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Trade Lab");
+    await expect(page.getByTestId("console-bar")).toContainText("Desk");
     const pipe = page.getByTestId("order-pipeline");
     for (const gate of ["Market", "AI committee", "Strategies", "Sharia gate", "Cash", "Brokers"]) await expect(pipe).toContainText(gate);
     await expect(pipe).toContainText("no margin");
@@ -125,7 +126,7 @@ test.describe("Trade Lab cockpit", () => {
       return m ? m.slice(0, 3).map(Number).reduce((a, x) => a + x, 0) : null;
     };
     const ink = async () => {
-      const c = await page.locator(".mz-mast h1").evaluate(el => getComputedStyle(el).color);
+      const c = await page.locator(".mz-cbar-crumb b").evaluate(el => getComputedStyle(el).color);
       return c.match(/\d+/g).slice(0, 3).map(Number).reduce((a, x) => a + x, 0);
     };
     await gotoLab(page, { theme: "light" });
@@ -135,10 +136,14 @@ test.describe("Trade Lab cockpit", () => {
     expect(await ink(), "light ink on the dark theme").toBeGreaterThan(500);
   });
 
-  test("the masthead uses the newspaper face, and only the lab does", async ({ page }) => {
+  test("the console speaks in the monospace face, and no longer loads Newsreader", async ({ page }) => {
     await gotoLab(page);
-    const ff = await page.locator(".mz-mast h1").evaluate(el => getComputedStyle(el).fontFamily);
-    expect(ff).toMatch(/Newsreader/);
+    const ff = await page.locator(".mz-cbar-crumb").evaluate(el => getComputedStyle(el).fontFamily);
+    expect(ff).toMatch(/IBM Plex Mono/);
+    // The broadsheet's serif was dropped with the console (2026-10-11); a
+    // leftover import would make every visitor download a face nothing uses.
+    const css = await page.locator("style").evaluateAll(els => els.map(e => e.textContent).join(""));
+    expect(css).not.toMatch(/Newsreader/);
   });
 
   test("downloads the closed-trades tax & Zakat sheet at the rates the user set", async ({ page }) => {
@@ -1222,4 +1227,71 @@ test("the Journal records each AI review with its models, failures in words, and
   await log.getByRole("button", { name: "Orders", exact: true }).click();
   await expect(log.locator('[data-kind="review"]')).toHaveCount(0);
   await expect(log.locator('[data-kind="order"]')).toContainText("Buy 2 MU — filled");
+});
+
+// The console (owner, 2026-10-11): top bar, rail with layers, one stage, a dock.
+test.describe("Trade Lab console", () => {
+  const s = (id, experiment, cap, pr) => ({ id, enabled: true, strategy_type: "rank_rebalance", capital_allocated: String(cap),
+    params: { experiment, broker: "alpaca_paper" }, progress: { paper: true, ...pr } });
+  const traded = (ret, bench) => ({ trades_executed: 12, return_pct: ret, bench_return_pct: bench, alpha_pct: ret - bench, equity: 1, holdings_count: 4, current_value: 900, cash: 100 });
+  const STRATS = [
+    s("aaaaaaaa-0000-0000-0000-000000000001", "A: reference system + AI gate", 250000, traded(1.02, -0.1)),
+    s("bbbbbbbb-0000-0000-0000-000000000002", "B: reference system, no AI", 250000, traded(0.61, -0.1)),
+  ];
+  const curve = (pts) => ({ startedOn: "2026-10-06", points: pts.map(([day, r, b]) => ({ day, returnPct: r, benchPct: b })) });
+  const CURVES = { curves: {
+    [STRATS[0].id]: curve([["2026-10-06", 0, 0], ["2026-10-07", 0.4, -0.2], ["2026-10-08", 1.02, -0.1]]),
+    [STRATS[1].id]: curve([["2026-10-06", 0, 0], ["2026-10-07", 0.2, -0.2], ["2026-10-08", 0.61, -0.1]]),
+  } };
+  const at = new Date(Date.now() - 5 * 60000).toISOString();
+  const ACTIVITY = { items: [
+    { id: "o1", ticker: "MU", side: "buy", status: "rejected", paper: true, error_msg: "potential wash trade detected", strategy_id: STRATS[1].id, created_at: at },
+    { id: "o2", ticker: "AMAT", side: "buy", status: "executed", paper: true, strategy_id: STRATS[0].id, created_at: at, executed_at: at },
+  ] };
+  const open = (page, over = {}) => gotoLab(page, { fixtures: { "/api/bot/strategies": { strategies: STRATS }, "/api/bot/curves": CURVES,
+    "/api/bot/activity": ACTIVITY, "/api/bot/signals": { signals: [] }, ...over } });
+
+  test("the alert button counts what needs attention and takes you to the feed", async ({ page }) => {
+    await open(page);
+    // One rejected paper order is a warning; a filled order is a log line, not an alert.
+    const btn = page.getByRole("button", { name: /^Alerts: / });
+    await expect(btn).toHaveAccessibleName(/Alerts: [1-9]\d* active/);
+    const feed = page.getByTestId("console-alerts");
+    await expect(feed.locator("li[data-level=warn]").filter({ hasText: "Rejected · BUY MU" })).toContainText("potential wash trade detected");
+    await expect(feed.locator("li[data-level=info]").filter({ hasText: "Filled · BUY AMAT" })).toHaveCount(1);
+    await btn.click();
+    await expect(feed).toBeFocused();
+  });
+
+  test("a layer switched off leaves the stage, and stays off after a reload", async ({ page }) => {
+    await open(page);
+    const stage = page.getByTestId("console-stage");
+    await expect(stage.locator(".mz-stage-tag")).toHaveCount(2);
+    await page.getByTestId("console-layers").getByLabel("B", { exact: true }).uncheck();
+    await expect(stage.locator(".mz-stage-tag")).toHaveText(["A"]);
+    await page.reload();
+    await expect(page.getByTestId("console-stage").locator(".mz-stage-tag")).toHaveText(["A"]);
+  });
+
+  test("selecting a strategy drives the inspector, the crosshair and the breadcrumb", async ({ page }) => {
+    await open(page);
+    const insp = page.getByTestId("console-inspector");
+    await expect(insp).toContainText("Reference system + AI gate");   // first traded strategy by default
+    await page.getByTestId("console-stage").locator(".mz-stage-tag", { hasText: "B" }).click();
+    await expect(insp).toContainText("Reference system, no AI");
+    await expect(insp).toContainText("+0.71 pts");
+    await expect(page.getByTestId("console-bar")).toContainText("Desk · B");
+    await expect(page.getByTestId("console-stage").locator(".mz-reticle")).toHaveCount(1);
+  });
+
+  test("find selects a strategy by its code, and says so when nothing matches", async ({ page }) => {
+    await open(page);
+    const box = page.getByRole("searchbox", { name: "Find a strategy" }).or(page.getByLabel("Find a strategy"));
+    await box.fill("b");
+    await box.press("Enter");
+    await expect(page.getByTestId("console-inspector")).toContainText("Reference system, no AI");
+    await box.fill("zzz");
+    await box.press("Enter");
+    await expect(page.getByRole("status")).toContainText("No strategy matches");
+  });
 });

@@ -17,6 +17,7 @@ import { useHideValues, HIDE_VALUES_KEY } from "../lib/useHideValues.js";
 import { blotterRows, allocationSegments, tapeRows, groupTotals, strategyLabel, MODE_LADDER } from "../lib/deskBlotter.js";
 import { deskPipeline, latestRoundAnswering, MARK_GLYPH as PIPE_GLYPH } from "../lib/deskPipeline.js";
 import { sparkPaths, pinToday } from "../lib/sparkline.js";
+import { consoleAlerts, alertCounts, orderQueue, stageGeometry, lastActivity } from "../lib/labConsole.js";
 import { explainStrategy } from "../lib/strategyExplainer.js";
 import { pendingRows, historyRows, ticketScreenLine } from "../lib/orderQueue.js";
 import { killSwitchRows } from "../lib/killSwitches.js";
@@ -95,7 +96,7 @@ const T = {
   rSm:"var(--r-sm)", rMd:"var(--r-md)", rLg:"var(--r-lg)",
 };
 const THEME_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
 
   :root, :root[data-theme="light"] {
     /* Paper-canvas light theme — primary brand face */
@@ -8255,10 +8256,9 @@ function WorkingOrders({desk}){
    Mizan's own paper and ink, hairline rules instead of a wall of tiles,
    charts before numbers, status as a coloured mark inside a sentence.
 
-   Newsreader (a typeface designed for news) is the Trade Lab's display face —
-   an explicit owner exception to the fixed font stack (CLAUDE.md §8), scoped
-   to Trade so the lab stands apart from the rest of Mizan. Tables and labels
-   stay IBM Plex.
+   On 2026-10-11 the owner moved the lab to a CONSOLE (a monitoring screen:
+   top bar, rail with layers, one large stage, a dock of panels). The
+   newspaper serif went with it; the lab now speaks in IBM Plex Mono.
 
    Twelve proposal sections (§23) became eight: Desk · Strategies · Portfolio
    · Orders · Research · Compliance & Risk · Performance · Journal. The ids are
@@ -8266,7 +8266,10 @@ function WorkingOrders({desk}){
    compliance → Compliance & Risk) so nav_usage counters and stored state
    carry over. Nothing was removed; see the Index board of the design canvas.
    ═══════════════════════════════════════════════════════════════════════════ */
-const FN="'Newsreader','Georgia','Times New Roman',serif";
+// The lab's display face. Newsreader (the broadsheet, 2026-10-08) gave way to
+// the console (2026-10-11): one monospace face for labels, figures and heads,
+// as on an instrument panel. FN stays a name so the lab can change face in one place.
+const FN=FM;
 
 /** Section identity colours — owner-approved with the hybrid mockup. They
  *  mark WHERE you are (a square in the nav, a rule under the heading) and
@@ -8299,7 +8302,7 @@ function LabNav({active,onChange}){
   </nav></div>;
 }
 
-/** Section heading: Newsreader, with the section's colour as a short rule. */
+/** Section heading: the lab's display face (FN), a ruled caption in the console. */
 function LabHead({title,note,right,id}){
   return<div className="mz-lab-head">
     <div style={{minWidth:0}}>
@@ -8310,23 +8313,206 @@ function LabHead({title,note,right,id}){
   </div>;
 }
 
-const nyDate=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"long",month:"long",day:"numeric",year:"numeric"});
 const nyToday=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 
-function LabMasthead({session}){
+/* ── The console (owner, 2026-10-11) ─────────────────────────────────────────
+   Drawn after a monitoring screen: a top bar (where you are, the clock, the
+   last thing that happened, alerts), a left rail (sections, then LAYERS — one
+   switch per strategy line), one large stage with every strategy against SPUS,
+   and a dock (inspector · queue · alert feed). The accent is amber (T.gold):
+   it marks only what wants attention, as the warning colour does app-wide. */
+const LAYERS_KEY="mizan_lab_hidden";
+/** Which strategy lines are switched OFF. Hidden, not shown, is stored, so a
+ *  new strategy appears on the stage without anyone ticking it. */
+function useLabLayers(){
+  const[hidden,setHidden]=useState(()=>{try{const v=JSON.parse(localStorage.getItem(LAYERS_KEY)||"[]");return new Set(Array.isArray(v)?v.map(String):[]);}catch{return new Set();}});
+  const toggle=id=>setHidden(h=>{const n=new Set(h);if(n.has(id))n.delete(id);else n.add(id);try{localStorage.setItem(LAYERS_KEY,JSON.stringify([...n]));}catch{}return n;});
+  return[hidden,toggle];
+}
+const NY_HM=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hour12:false});
+const agoText=(ms,now)=>{if(!ms)return"—";const m=Math.max(0,Math.round((now-ms)/60000));return m<60?`${m}m ago`:m<1440?`${Math.round(m/60)}h ago`:`${Math.round(m/1440)}d ago`;};
+
+function ConsoleBar({section,selected,session,last,counts,onAlerts,onFind,findMiss}){
+  const[now,setNow]=useState(()=>Date.now());
+  // Minutes are enough for "last activity"; the clock ticks in its own component.
+  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(t);},[]);
+  const[q,setQ]=useState("");
   const sess=session?.session||null;
-  const tone=sess==="regular"?T.gain:session?.tradeable?T.gold:T.slate;
-  const state=!session?"session unknown":sess==="regular"?"Market open":session.tradeable?String(session.label||"Extended hours"):"Market closed";
-  return<header className="mz-mast">
-    <div style={{minWidth:0}}>
-      <div className="mz-mast-kicker" style={{fontFamily:FP}}>MĪZAN</div>
-      <h1 style={{fontFamily:FN}}>The Trade Lab</h1>
+  const state=!session?"Session —":sess==="regular"?"Market open":session.tradeable?String(session.label||"Extended hours"):"Market closed";
+  return<header className="mz-cbar" data-testid="console-bar">
+    <h1 className="mz-cbar-crumb"><span>Trade Lab</span><i aria-hidden="true">/</i><span className="mz-hide-sm">Paper desk</span><i aria-hidden="true" className="mz-hide-sm">/</i><b>{section}{selected?<span className="mz-hide-sm"> · {selected}</span>:null}</b></h1>
+    <div className="mz-cbar-meta">
+      <span><b style={{color:sess==="regular"?T.gain:session?.tradeable?T.gold:T.muted}} aria-hidden="true">●</b> {state}</span>
+      <RailClock/>
+      <span className="mz-hide-sm" title="The newest order or AI review the lab recorded">Last activity {agoText(last,now)}</span>
     </div>
-    <div className="mz-mast-date" style={{fontFamily:FP}}>
-      <div>{nyDate.format(new Date())} · <RailClock/></div>
-      <div><b style={{color:tone}} aria-hidden="true">●</b> {state} · <span style={{color:T.blue,fontWeight:600}}>Paper desk</span></div>
-    </div>
+    <form className="mz-cbar-find" role="search" onSubmit={e=>{e.preventDefault();if(q.trim())onFind(q.trim());}}>
+      <input aria-label="Find a strategy" placeholder="Find strategy…" value={q} onChange={e=>setQ(e.target.value)}/>
+      {findMiss&&<span className="mz-cbar-miss" role="status">No strategy matches “{findMiss}”</span>}
+    </form>
+    <button className={`mz-cbar-alerts mz-tap${counts.crit?" crit":counts.active?" warn":""}`} onClick={onAlerts}
+      aria-label={`Alerts: ${counts.active} active, ${counts.crit} critical`}>Alerts <b>{counts.active}</b></button>
   </header>;
+}
+
+/** The left rail: sections, then one switch per strategy line on the stage. */
+function ConsoleRail({active,onChange,rows,hidden,onToggle,selected,onSelect,mask,curves,today,about}){
+  const sel=rows.find(r=>r.id===selected)||null;
+  return<aside className="mz-rail" aria-label="Trade Lab">
+    <div className="mz-rail-h"><span>[Trade Lab]</span><span className="mz-rail-flag" aria-hidden="true"/></div>
+    <LabNav active={active} onChange={onChange}/>
+    {rows.length>0&&<fieldset className="mz-layers" data-testid="console-layers">
+      <legend>Layers</legend>
+      {rows.map(r=><div key={r.id} className={`mz-layer${selected===r.id?" sel":""}`}>
+        <label className="mz-tap"><input type="checkbox" checked={!hidden.has(r.id)} onChange={()=>onToggle(r.id)}/>
+          <span className="mz-swatch" style={{background:r.color||T.slate}} aria-hidden="true"/>{r.code||r.name}</label>
+        <button className="mz-layer-ret mz-tap" onClick={()=>onSelect(r.id)} aria-pressed={selected===r.id} title={`Inspect ${r.code||r.name}`}
+          style={{color:!r.traded||r.returnPct==null?T.muted:r.returnPct>0?T.gain:r.returnPct<0?T.loss:T.muted}}>
+          {r.unpriced?"n/a":!r.traded?"—":r.returnPct==null?"—":mask(fp(r.returnPct))}</button>
+      </div>)}
+    </fieldset>}
+    {sel&&<RailReadout row={sel} curve={curves[sel.id]} mask={mask} today={today} about={about}/>}
+  </aside>;
+}
+
+/** Bottom of the rail: the selected strategy, its code large, its line against SPUS. */
+function RailReadout({row,curve,mask,today,about}){
+  const live=row.traded&&row.returnPct!=null?{returnPct:row.returnPct,benchPct:row.benchPct}:null;
+  const g=sparkPaths(pinToday(curve?.points,today,live),{w:200,h:96,pad:6});
+  return<div className="mz-readout" data-testid="rail-readout">
+    <div className="mz-readout-top">
+      <span className="mz-readout-code" style={{borderColor:row.color||T.slate}}>{row.code||"—"}</span>
+      <div style={{minWidth:0}}>
+        <div className="mz-readout-name">{row.name}</div>
+        <div className="mz-readout-sub">{about?.oneLine||row.status?.text||""}</div>
+      </div>
+    </div>
+    {g?<svg viewBox={`0 0 ${g.w} ${g.h}`} preserveAspectRatio="none" role="img" aria-label={`${row.code||row.name} against SPUS`}>
+        <line x1="0" x2={g.w} y1={g.zeroY} y2={g.zeroY} className="mz-mult-zero"/>
+        {g.bench&&<polyline points={g.bench} className="mz-readout-bench"/>}
+        {g.strategy&&<polyline points={g.strategy} className="mz-readout-line"/>}
+      </svg>:<div className="mz-mult-empty" style={{height:96}}>{row.traded?"needs a second close":"no fills yet"}</div>}
+    <div className="mz-readout-foot"><span>{row.code||"Strategy"} vs SPUS</span><span>{row.alphaPct==null?"—":mask(`${row.alphaPct>0?"+":""}${row.alphaPct.toFixed(2)} pts`)}</span></div>
+  </div>;
+}
+
+const ptsOf=xy=>xy.map(([x,y])=>`${x},${y}`).join(" ");
+/** The stage: every switched-on strategy against SPUS on one scale and one
+ *  calendar, with a crosshair on the selected strategy's latest close. */
+function ConsoleStage({geo,selected,onSelect,mask,head}){
+  const sel=geo?geo.lines.find(l=>l.id===selected)||null:null;
+  const left=v=>`${(v/geo.w)*100}%`,top=v=>`${(v/geo.h)*100}%`;
+  // Line-end tags, pushed apart so two lines ending close together stay legible.
+  const tagY=useMemo(()=>{
+    const m=new Map();if(!geo)return m;
+    const gap=geo.h*0.065;let prev=-Infinity;
+    for(const l of [...geo.lines].filter(l=>l.last).sort((a,b)=>a.last[1]-b.last[1])){const y=Math.max(l.last[1],prev+gap);m.set(l.id,y);prev=y;}
+    return m;
+  },[geo]);
+  return<section className="mz-stage" data-testid="console-stage" aria-label="Every strategy against SPUS">
+    {head}
+    {!geo?<div className="mz-stage-empty">The stage draws a strategy from its second close. Switch on a layer that has traded.</div>
+    :<div className="mz-stage-plot">
+      <svg viewBox={`0 0 ${geo.w} ${geo.h}`} preserveAspectRatio="none" role="img"
+        aria-label={`${geo.lines.length} strateg${geo.lines.length===1?"y":"ies"} against SPUS over ${geo.days.length} trading days`}>
+        <line x1="0" x2={geo.w} y1={geo.zeroY} y2={geo.zeroY} className="mz-stage-zero"/>
+        {geo.bench&&<polyline points={ptsOf(geo.bench)} className="mz-stage-bench"/>}
+        {geo.lines.map(l=><g key={l.id} className={l.id===selected?"sel":undefined} style={{"--strat":l.color||"var(--mz-textHi)"}} onClick={()=>onSelect(l.id)}>
+          <polyline points={ptsOf(l.xy)} className="mz-stage-hit"/>
+          <polyline points={ptsOf(l.xy)} className="mz-stage-line"/>
+        </g>)}
+      </svg>
+      <div className="mz-stage-scale" aria-hidden="true">{geo.ticks.map(t=><span key={t.v} style={{top:top(t.y)}}>{t.v>0?"+":t.v<0?"−":""}{Math.abs(t.v)}%</span>)}</div>
+      {geo.lines.map(l=>l.last&&<button key={l.id} className={`mz-stage-tag${l.id===selected?" sel":""}`} style={{left:left(l.last[0]),top:top(tagY.get(l.id)??l.last[1])}}
+        onClick={()=>onSelect(l.id)} title={`Inspect ${l.code}`}>{l.code}</button>)}
+      {sel?.last&&<>
+        <div className="mz-cross mz-cross-h" style={{top:top(sel.last[1])}} aria-hidden="true"/>
+        <div className="mz-cross mz-cross-v" style={{left:left(sel.last[0])}} aria-hidden="true"/>
+        <div className="mz-reticle" style={{left:left(sel.last[0]),top:top(sel.last[1])}} aria-hidden="true"/>
+      </>}
+      <div className="mz-stage-ruler" aria-hidden="true">
+        <span>{geo.days[0]}</span>
+        {sel&&<b>{sel.code} {sel.lastPct==null?"—":mask(`${sel.lastPct>0?"+":""}${sel.lastPct.toFixed(2)}%`)}</b>}
+        <span>{geo.days[geo.days.length-1]}</span>
+      </div>
+    </div>}
+    <p className="mz-stage-key"><span className="mz-key mz-key-bench" aria-hidden="true"/> SPUS over the same days · dotted lines are strategies · select a line or a layer to inspect it</p>
+  </section>;
+}
+
+/** Dock, left: the selected strategy's particulars. */
+function ConsoleInspector({row,strat,about,mask}){
+  if(!row)return<section className="mz-panel"><h3 className="mz-panel-h">Strategy inspector</h3><p className="mz-col-empty">Select a strategy on the stage or in Layers.</p></section>;
+  const pr=strat?.progress||{},p=strat?.params||{};
+  const inv=Number(pr.current_value)||0,cash=Number(pr.cash)||0,total=inv+cash;
+  const cells=Math.min(Math.max(0,Number(row.holdings)||0),30);
+  const tone=v=>v==null?T.muted:v>0?T.gain:v<0?T.loss:T.muted;
+  const spec=[
+    ["Strategy",`${row.code?`${row.code} · `:""}${row.name}`],
+    ["Type",String(row.type||"—").replace(/_/g," ")],
+    ["Venue",row.venue==="paper"?"Paper":"Live money"],
+    ["Mode",row.mode||"—"],
+    ["Sleeve",row.sleeve>0?mask(f$(row.sleeve,0)):"—"],
+    ["Equity",row.equity==null?"—":mask(f$(row.equity,0))],
+    ["Return",row.unpriced?<span style={{color:T.gold}}>price n/a</span>:!row.traded?"not traded":row.returnPct==null?"—":<span style={{color:tone(row.returnPct)}}>{mask(fp(row.returnPct))}</span>],
+    ["vs SPUS",row.alphaPct==null?"—":<span style={{color:tone(row.alphaPct)}}>{mask(`${row.alphaPct>0?"+":""}${row.alphaPct.toFixed(2)} pts`)}</span>],
+    ["Holdings",String(row.holdings||0)],
+    ["Standard",String(p.screen_standard||"AAOIFI")],
+    ["Started",pr.started_at?String(pr.started_at).slice(0,10):"—"],
+    ["Status",<span style={{color:row.status?.tone==="warn"?T.gold:undefined}}>{row.status?.text||"—"}</span>],
+  ];
+  return<section className="mz-panel" data-testid="console-inspector">
+    <h3 className="mz-panel-h">Strategy inspector</h3>
+    {total>0?<div className="mz-hull" role="img" aria-label={`${Math.round(inv/total*100)}% invested across ${row.holdings||0} holdings, ${Math.round(cash/total*100)}% cash`}>
+      <span className="mz-hull-in" style={{width:`${inv/total*100}%`,"--strat":row.color||"var(--mz-textHi)"}}>
+        {Array.from({length:cells},(_,i)=><i key={i}/>)}
+      </span>
+      <span className="mz-hull-cash" style={{width:`${cash/total*100}%`}}/>
+    </div>:<div className="mz-hull mz-hull-none">no money placed yet</div>}
+    <div className="mz-hull-key"><span>Invested{cells?` · ${row.holdings} holdings`:""}</span><span>Cash</span></div>
+    <dl className="mz-spec">{spec.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+    {about?.oneLine&&<p className="mz-panel-note">{about.oneLine}</p>}
+  </section>;
+}
+
+/** Dock, middle: the order queue — today's counts, today's tape, recent days. */
+function ConsoleQueue({queue,onMore}){
+  const max=Math.max(1,...queue.days.map(d=>d.n));
+  const figs=[["Waiting",queue.waiting,"approval"],["Working",queue.working,"broker"],["Filled",queue.filled,"today"],["Refused",queue.refused,"today"]];
+  return<section className="mz-panel" data-testid="console-queue">
+    <h3 className="mz-panel-h">Order queue</h3>
+    <div className="mz-qfigs">{figs.map(([l,v,u])=><div key={l}><b className={l==="Refused"&&v>0?"hot":undefined}>{v}</b><span>{l}</span><small>{u}</small></div>)}</div>
+    <div className="mz-qtape" role="img" aria-label={`${queue.tape.length} orders today`}>
+      {queue.tape.length?queue.tape.slice(-28).map(t=><i key={t.id} data-status={t.status} title={`${t.side==="sell"?"Sell":"Buy"} ${t.ticker} · ${t.status}`}/>)
+        :<span className="mz-qtape-none">No orders today</span>}
+    </div>
+    {queue.days.length>1&&<div className="mz-qbars" role="img" aria-label={`Orders per day over the last ${queue.days.length} days with orders`}>
+      {queue.days.map(d=><span key={d.day} style={{height:`${Math.max(6,d.n/max*100)}%`}} title={`${d.day}: ${d.n}`}/>)}
+    </div>}
+    {queue.days.length>1&&<div className="mz-qbars-x"><span>{queue.days[0].day.slice(5)}</span><span>{queue.days[queue.days.length-1].day.slice(5)}</span></div>}
+    <button className="mz-more mz-tap" onClick={onMore}>All orders →</button>
+  </section>;
+}
+
+/** Dock, right: the alert feed. Critical first; a filled order is a log line. */
+function ConsoleAlerts({alerts,counts,trace}){
+  const[all,setAll]=useState(false);
+  const list=all?alerts:alerts.slice(0,6);
+  const tag={crit:"Crit",warn:"Warn",info:"Info"};
+  return<section className="mz-panel" id="lab-alerts" data-testid="console-alerts" tabIndex={-1}>
+    <h3 className="mz-panel-h">Alert feed <span>{counts.active} active · {counts.crit} crit</span></h3>
+    {trace&&<svg className="mz-trace" viewBox={`0 0 ${trace.w} ${trace.h}`} preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" x2={trace.w} y1={trace.zeroY} y2={trace.zeroY} className="mz-mult-zero"/>
+      {trace.strategy&&<polyline points={trace.strategy} className="mz-trace-line"/>}
+    </svg>}
+    {!alerts.length?<p className="mz-col-empty">Nothing needs attention.</p>
+      :<ol className="mz-alerts">{list.map(a=><li key={a.id} data-level={a.level}>
+        <span className="mz-alert-t">{a.id.startsWith("o:")?NY_HM.format(new Date(a.at)):"now"}</span>
+        <span className="mz-alert-what"><b>{a.title}</b><small>{a.who}{a.detail?` · ${a.detail}`:""}</small></span>
+        <span className="mz-alert-tag">{tag[a.level]}</span>
+      </li>)}</ol>}
+    {alerts.length>6&&<button className="mz-more mz-tap" onClick={()=>setAll(v=>!v)}>{all?"Show fewer":`Show all ${alerts.length}`}</button>}
+  </section>;
 }
 
 /** One line: every gate an order passes, each with its mark. */
@@ -8522,48 +8708,31 @@ function AiQuestion({rows,curves,mask}){
 
 /** The Desk: masthead, pipeline, figures, strategies as small charts, then
  *  three short columns. Everything else lives one section away. */
-function BroadsheetDesk({desk,book,session,demoMode,onGo,screen}){
+function BroadsheetDesk({desk,book,demoMode,onGo,lab,selected,onSelect}){
   const{mask}=useHideValues();
-  const curves=useStrategyCurves(!demoMode);
-  const research=useResearchFeed(!demoMode);
-  const[pending,setPending]=useState(demoMode?0:null);
-  const[feed,setFeed]=useState({state:demoMode?"idle":"loading",items:[]});
-  useEffect(()=>{
-    if(demoMode)return;
-    let cancelled=false;
-    (async()=>{
-      const[ar,sr]=await Promise.all([apiFetch("/api/bot/activity").catch(()=>null),apiFetch("/api/bot/signals").catch(()=>null)]);
-      if(cancelled)return;
-      try{const d=ar&&ar.ok?await ar.json():null;setFeed(d?{state:"ready",items:asArray(d?.items)}:{state:"unavailable",items:[]});}
-      catch{setFeed({state:"unavailable",items:[]});}
-      try{const d=sr&&sr.ok?await sr.json():null;if(!cancelled&&d)setPending(asArray(d?.signals).filter(x=>x?.status==="pending").length);}
-      catch{/* the figure stays a dash — unknown, not zero */}
-    })();
-    return()=>{cancelled=true;};
-  },[demoMode]);
-
-  const chips=useMemo(()=>chipMap(book.strategies),[book.strategies]);
-  const rows=useMemo(()=>blotterRows(book.strategies).map(r=>{const c=chips.get(r.id);return c?{...r,code:r.code||c.label,color:c.color}:r;}),[book.strategies,chips]);
-  const abouts=useMemo(()=>{const m=new Map();for(const st of asArray(book.strategies))if(st?.id)m.set(String(st.id),explainStrategy(st,book.strategies));return m;},[book.strategies]);
-  const symbols=useMemo(()=>asArray(desk.positions).map(p=>String(p?.symbol||"").toUpperCase()).filter(Boolean),[desk.positions]);
-  const{verdicts}=screen;
-  const compliance=useMemo(()=>{
-    if(desk.state!=="ready")return null;
-    const m=complianceMatrix(symbols.map(s=>({symbol:s,value:0})),verdicts,{governing:"AAOIFI",funds:HALAL_FUNDS});
-    return{total:m.total,screened:m.screened,failing:m.failingGoverning};
-  },[desk.state,symbols,verdicts]);
-  const committee=useMemo(()=>research.state==="ready"?latestRoundAnswering(research.rows,research.providers,research.configured):null,[research]);
-  const pipeline=useMemo(()=>deskPipeline({session,committee,rows,bookState:book.state,compliance,account:desk.account,deskState:desk.state}),[session,committee,rows,book.state,compliance,desk.account,desk.state]);
+  const{curves,research,feed,pending,rows,abouts,pipeline,alerts,counts,queue,geo}=lab;
   const today=nyToday();
-
+  const selRow=rows.find(r=>r.id===selected)||null;
+  const selStrat=asArray(book.strategies).find(x=>String(x?.id)===selected)||null;
+  // The alert trace: the selected strategy's lead over SPUS, day by day.
+  const trace=useMemo(()=>{
+    const pts=asArray(curves.curves[selected]?.points).filter(p=>p&&p.returnPct!=null&&p.benchPct!=null).map(p=>({day:p.day,returnPct:p.returnPct-p.benchPct}));
+    return sparkPaths(pts,{w:300,h:40,pad:3});
+  },[curves.curves,selected]);
   return<div className="mz-desk" data-testid="broadsheet-desk">
     <PipelineStrip pipeline={pipeline}/>
     {pending>0&&<button className="mz-approve mz-tap" onClick={()=>onGo("signals")}>
       <b style={{color:T.gold}} aria-hidden="true">◐</b> {pending} signal{pending===1?"":"s"} awaiting your approval <span>Review →</span>
     </button>}
-    <DeskFigures account={desk.account} pending={pending} mask={mask} state={desk.state}/>
+    <ConsoleStage geo={geo} selected={selected} onSelect={onSelect} mask={mask}
+      head={<DeskFigures account={desk.account} pending={pending} mask={mask} state={desk.state}/>}/>
+    <div className="mz-dock">
+      <ConsoleInspector row={selRow} strat={selStrat} about={abouts.get(selected)} mask={mask}/>
+      <ConsoleQueue queue={queue} onMore={()=>onGo("signals")}/>
+      <ConsoleAlerts alerts={alerts} counts={counts} trace={trace}/>
+    </div>
 
-    <LabHead title="Strategies against SPUS" note={<>Each line from the strategy's first fill. <span className="mz-key mz-key-bench" aria-hidden="true"/> grey is SPUS over the same days. The ladder shows how much control the bot has.</>}/>
+    <LabHead title="Strategy tracks" note={<>Each line from the strategy's first fill. <span className="mz-key mz-key-bench" aria-hidden="true"/> grey is SPUS over the same days. The ladder shows how much control the bot has.</>}/>
     {book.state==="loading"&&<p className="mz-col-empty">Loading strategies…</p>}
     {book.state==="unavailable"&&<p className="mz-col-empty">The strategy list could not be loaded.</p>}
     {book.state==="ready"&&!rows.length&&<p className="mz-col-empty">No strategies yet. Build one in Strategies.</p>}
@@ -8919,6 +9088,57 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   };
   const cancelPreview=()=>{setImpactPreview(null);setOrderErr(null);};
 
+  // ── The console's shared reads (2026-10-11). The top bar's alert count, the
+  // rail's layers and the Desk's stage all read the SAME copies, so they are
+  // fetched once here rather than per surface.
+  const labOn=!demoMode&&isAdmin;
+  const{mask:labMask}=useHideValues();
+  const curves=useStrategyCurves(labOn);
+  const research=useResearchFeed(labOn);
+  const[pending,setPending]=useState(demoMode?0:null);
+  const[feed,setFeed]=useState({state:labOn?"loading":"idle",items:[]});
+  useEffect(()=>{
+    if(!labOn)return;
+    let cancelled=false;
+    (async()=>{
+      const[ar,sr]=await Promise.all([apiFetch("/api/bot/activity").catch(()=>null),apiFetch("/api/bot/signals").catch(()=>null)]);
+      if(cancelled)return;
+      try{const d=ar&&ar.ok?await ar.json():null;setFeed(d?{state:"ready",items:asArray(d?.items)}:{state:"unavailable",items:[]});}
+      catch{setFeed({state:"unavailable",items:[]});}
+      try{const d=sr&&sr.ok?await sr.json():null;if(!cancelled&&d)setPending(asArray(d?.signals).filter(x=>x?.status==="pending").length);}
+      catch{/* the figure stays a dash — unknown, not zero */}
+    })();
+    return()=>{cancelled=true;};
+  },[labOn]);
+  const[hidden,toggleLayer]=useLabLayers();
+  const[selected,setSelected]=useState(null);
+  const[findMiss,setFindMiss]=useState(null);
+  const lab=useMemo(()=>{
+    const chips=chipMap(book.strategies);
+    const rows=blotterRows(book.strategies).map(r=>{const c=chips.get(r.id);return c?{...r,code:r.code||c.label,color:c.color}:r;});
+    const abouts=new Map();for(const st of asArray(book.strategies))if(st?.id)abouts.set(String(st.id),explainStrategy(st,book.strategies));
+    const symbols=asArray(deskData.positions).map(p=>String(p?.symbol||"").toUpperCase()).filter(Boolean);
+    let compliance=null;
+    if(deskData.state==="ready"){const m=complianceMatrix(symbols.map(x=>({symbol:x,value:0})),screen.verdicts,{governing:"AAOIFI",funds:HALAL_FUNDS});compliance={total:m.total,screened:m.screened,failing:m.failingGoverning};}
+    const committee=research.state==="ready"?latestRoundAnswering(research.rows,research.providers,research.configured):null;
+    const pipeline=deskPipeline({session,committee,rows,bookState:book.state,compliance,account:deskData.account,deskState:deskData.state});
+    const codes=new Map(rows.map(r=>[r.id,r.code||r.name]));
+    const alerts=consoleAlerts({items:feed.items,codes,pending,compliance,pipeline});
+    return{curves,research,feed,pending,rows,abouts,pipeline,alerts,counts:alertCounts(alerts),queue:orderQueue(feed.items),
+      last:lastActivity(feed.items,research.rows),
+      geo:stageGeometry(curves.curves,rows,new Set(rows.map(r=>r.id).filter(id=>!hidden.has(id))),{w:1000,h:360,pad:16,padRight:72})};
+  },[book.strategies,book.state,deskData.positions,deskData.state,deskData.account,screen.verdicts,research,session,feed.items,pending,curves,hidden]);
+  // The inspector follows the selection; with none, the first strategy that has traded.
+  const selectedId=selected&&lab.rows.some(r=>r.id===selected)?selected:(lab.rows.find(r=>r.traded)||lab.rows[0])?.id||null;
+  const selectedRow=lab.rows.find(r=>r.id===selectedId)||null;
+  const findStrategy=q=>{
+    const t=q.toLowerCase();
+    const hit=lab.rows.find(r=>String(r.code||"").toLowerCase()===t)||lab.rows.find(r=>`${r.code} ${r.name}`.toLowerCase().includes(t));
+    if(!hit){setFindMiss(q);return;}
+    setFindMiss(null);setSelected(hit.id);goSection("desk");
+  };
+  const showAlerts=()=>{setSub("desk");setTimeout(()=>{const el=document.getElementById("lab-alerts");if(el){el.scrollIntoView({behavior:"smooth",block:"center"});el.focus({preventScroll:true});}},60);};
+
 
 
   // Market orders execute at the live price → base the estimate on the quote;
@@ -8939,11 +9159,15 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         Command Center; Performance is added now because the strategy is live
         and the alpha question is unanswered. The three original ids
         (signals/strategies/order) are UNCHANGED for nav_usage continuity. */}
-    <div className="mz-lab">
-      <LabMasthead session={session}/>
-      <LabNav active={sub} onChange={goSection}/>
+    <div className="mz-lab mz-console">
+      <ConsoleBar section={(LAB_SECTIONS.find(([id])=>id===sub)||[null,"Desk"])[1]} selected={selectedRow?.code||null} session={session}
+        last={lab.last} counts={lab.counts} onAlerts={showAlerts} onFind={findStrategy} findMiss={findMiss}/>
+      <div className="mz-console-grid">
+      <ConsoleRail active={sub} onChange={goSection} rows={lab.rows} hidden={hidden} onToggle={toggleLayer}
+        selected={selectedId} onSelect={id=>{setSelected(id);if(sub!=="desk")goSection("desk");}} mask={labMask}
+        curves={lab.curves.curves} today={nyToday()} about={lab.abouts.get(selectedId)}/>
       <div className="mz-lab-body">
-        {sub==="desk"&&<BroadsheetDesk desk={deskData} book={book} session={session} demoMode={demoMode} onGo={goSection} screen={screen}/>}
+        {sub==="desk"&&<BroadsheetDesk desk={deskData} book={book} demoMode={demoMode} onGo={goSection} lab={lab} selected={selectedId} onSelect={setSelected}/>}
         {sub==="positions"&&<><div style={{marginBottom:T.s6}}><EquityChart demoMode={demoMode} liveEquity={deskData?.account?.equity}/></div><LabPortfolio desk={deskData} book={book}/></>}
         {sub==="performance"&&<PerformancePanelLab demoMode={demoMode} book={book} liveEquity={deskData?.account?.equity}/>}
         {sub==="committee"&&<AiCommittee demoMode={demoMode} book={book}/>}
@@ -9037,6 +9261,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
       </aside>
     </section>}
     {showTicket&&<div style={{marginTop:T.s6}}><TradeConnectionsPanel onConnectTrade={onConnectTrade}/></div>}
+      </div>
       </div>
     </div>
 
@@ -14942,8 +15167,8 @@ export default function Mizan(){
          the work a dark palette alone cannot. */
       /* ── Trade Lab broadsheet (2026-10-08) ──────────────────────────────
          A financial newspaper's markets page on Mizan's own paper: hairline
-         rules, no tile walls, charts before numbers. Newsreader is the lab's
-         display face (owner exception, Trade only). */
+         rules, no tile walls, charts before numbers. The console block
+         further down restyles it (2026-10-11). */
       .mz-lab{color:var(--mz-text);}
       .mz-mast{display:flex; align-items:flex-end; justify-content:space-between; gap:var(--s-4); flex-wrap:wrap;
         padding-bottom:var(--s-2); border-bottom:3px double var(--mz-textHi);}
@@ -15219,6 +15444,189 @@ export default function Mizan(){
       .mz-lab .bento-tile::before{display:none!important;}
       .mz-lab .bento-tile:hover{transform:none!important; box-shadow:none!important;}
       .mz-lab .bento-tile--click:active{transform:none!important;}
+      /* ── Trade Lab console (owner, 2026-10-11) ─────────────────────────────
+         Drawn after a monitoring screen: panels on the paper, hairlines, one
+         monospace face, corner marks, and ONE accent (--mz-signal = T.gold, the
+         app's warning colour) for whatever wants attention. Strategy colours
+         stay identity only. */
+      .mz-console{--mz-signal:${T.gold}; font-family:${FM};}
+      .mz-cbar{display:flex; align-items:center; gap:var(--s-3) var(--s-5); flex-wrap:wrap; padding:var(--s-2) var(--s-4);
+        background:var(--mz-surface); border:1px solid var(--mz-border); font-size:var(--fs-xs); color:var(--mz-text);}
+      .mz-cbar-crumb{margin:0; display:flex; gap:7px; align-items:baseline; min-width:0; font-family:${FM}; font-size:var(--fs-sm);
+        font-weight:400; color:var(--mz-muted); letter-spacing:.02em;}
+      .mz-cbar-crumb i{font-style:normal; color:var(--mz-borderHi);}
+      .mz-cbar-crumb b{color:var(--mz-textHi); font-weight:600;}
+      .mz-cbar-meta{display:flex; gap:var(--s-2) var(--s-5); margin-left:auto; flex-wrap:wrap; text-transform:uppercase; letter-spacing:.06em;
+        color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      .mz-cbar-find{position:relative;}
+      .mz-cbar-find input{font-family:${FM}; height:34px; width:13rem; max-width:100%; padding:0 10px; border:1px solid var(--mz-border);
+        background:var(--mz-bg); color:var(--mz-textHi); border-radius:0;}
+      .mz-cbar-find input::placeholder{color:var(--mz-muted); text-transform:uppercase; letter-spacing:.06em;}
+      .mz-cbar-find input:focus-visible{outline:2px solid var(--mz-signal); outline-offset:-1px;}
+      .mz-cbar-miss{position:absolute; top:calc(100% + 3px); left:0; white-space:nowrap; font-size:var(--fs-2xs); color:var(--mz-signal);}
+      .mz-cbar-alerts{font-family:${FM}; font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.08em; padding:8px 14px; cursor:pointer;
+        border:1px solid var(--mz-border); background:transparent; color:var(--mz-text); border-radius:0;}
+      .mz-cbar-alerts b{margin-left:8px; font-weight:600;}
+      .mz-cbar-alerts.warn{background:var(--mz-signal); border-color:var(--mz-signal); color:#fff;}
+      .mz-cbar-alerts.crit{background:${T.loss}; border-color:${T.loss}; color:#fff;}
+      .mz-cbar-alerts:focus-visible{outline:2px solid var(--mz-textHi); outline-offset:2px;}
+      @media (max-width:640px){ .mz-cbar-meta{margin-left:0;} .mz-cbar-find{flex:1 1 10rem;} .mz-cbar-find input{width:100%;} }
+
+      .mz-console-grid{display:grid; grid-template-columns:15rem minmax(0,1fr); gap:var(--s-4); margin-top:var(--s-4); align-items:start;}
+      .mz-console .mz-lab-body{padding-top:0; min-width:0;}
+      .mz-rail{position:sticky; top:var(--s-4); background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4);
+        display:flex; flex-direction:column; gap:var(--s-4); min-width:0;}
+      .mz-rail-h{display:flex; justify-content:space-between; align-items:center; font-size:var(--fs-md); color:var(--mz-textHi); letter-spacing:.04em;}
+      .mz-rail-flag{width:16px; height:10px; background:var(--mz-signal); clip-path:polygon(0 0,100% 0,72% 50%,100% 100%,0 100%);}
+      .mz-console .mz-rail .mz-tabbar-wrap{margin:0;}
+      .mz-console .mz-rail .mz-labnav{flex-direction:column; gap:0; border-bottom:0; overflow:visible;}
+      .mz-console .mz-rail .mz-labnav > button{font-family:${FM}; font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.07em; justify-content:flex-start;
+        padding:7px 0 7px 12px; border-bottom:0; border-left:2px solid transparent; color:var(--mz-muted); text-align:left;}
+      .mz-console .mz-rail .mz-labnav > button:hover{color:var(--mz-textHi);}
+      .mz-console .mz-rail .mz-labnav > button.on{color:var(--mz-textHi); font-weight:600; border-left-color:var(--mz-signal);}
+      .mz-console .mz-labnav-sq{display:none;}
+      .mz-layers{border:0; margin:0; padding:var(--s-4) 0 0; min-width:0; display:flex; flex-direction:column; gap:1px;
+        background:repeating-linear-gradient(135deg, var(--mz-border) 0 1px, transparent 1px 5px) top/100% 9px no-repeat;}
+      .mz-layers legend{float:left; width:100%; padding:var(--s-4) 0 var(--s-2); font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.1em; color:var(--mz-muted);}
+      .mz-layer{display:flex; align-items:center; justify-content:space-between; gap:6px; min-width:0;}
+      .mz-layer label{display:flex; align-items:center; gap:8px; min-width:0; cursor:pointer; font-size:var(--fs-xs); color:var(--mz-text); padding:4px 0;}
+      .mz-layer input{accent-color:var(--mz-signal); width:14px; height:14px; margin:0; flex:0 0 auto;}
+      .mz-layer .mz-swatch{margin:0; border-radius:0; flex:0 0 auto;}
+      .mz-layer.sel label{color:var(--mz-textHi); font-weight:600;}
+      .mz-layer-ret{font-family:${FM}; font-size:var(--fs-xs); background:none; border:1px solid transparent; padding:2px 5px; cursor:pointer;
+        font-variant-numeric:tabular-nums; border-radius:0;}
+      .mz-layer-ret[aria-pressed="true"]{border-color:var(--mz-signal);}
+      .mz-readout{padding-top:var(--s-4); background:repeating-linear-gradient(135deg, var(--mz-border) 0 1px, transparent 1px 5px) top/100% 9px no-repeat;}
+      .mz-readout-top{display:flex; gap:var(--s-3); align-items:center; margin:var(--s-3) 0 var(--s-2);}
+      .mz-readout-code{font-size:var(--fs-lg); color:var(--mz-textHi); border:1px solid; padding:2px 8px; min-width:2.6rem; text-align:center; flex:0 0 auto;}
+      .mz-readout-name{font-size:var(--fs-xs); color:var(--mz-textHi); overflow-wrap:anywhere;}
+      .mz-readout-sub{font-family:${FP}; font-size:var(--fs-2xs); color:var(--mz-muted); line-height:1.4; margin-top:2px;}
+      .mz-readout svg{display:block; width:100%; height:96px; overflow:visible;
+        background:linear-gradient(90deg, var(--mz-border) 1px, transparent 1px) 0 0/25% 100%;}
+      .mz-readout-line{fill:none; stroke:var(--mz-textHi); stroke-width:2; vector-effect:non-scaling-stroke; stroke-linejoin:round;}
+      .mz-readout-bench{fill:none; stroke:var(--mz-muted); stroke-width:1.5; stroke-dasharray:4 3; vector-effect:non-scaling-stroke;}
+      .mz-readout-foot{display:flex; justify-content:space-between; gap:var(--s-2); margin-top:4px; font-size:var(--fs-2xs); text-transform:uppercase;
+        letter-spacing:.06em; color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      @media (max-width:1023px){
+        .mz-console-grid{grid-template-columns:minmax(0,1fr);}
+        .mz-rail{position:static; padding:var(--s-3) var(--s-4); gap:var(--s-2);}
+        .mz-rail-h{display:none;}
+        .mz-console .mz-rail .mz-labnav{flex-direction:row; overflow-x:auto; gap:var(--s-4);}
+        .mz-console .mz-rail .mz-labnav > button{padding:8px 0; border-left:0; border-bottom:2px solid transparent;}
+        .mz-console .mz-rail .mz-labnav > button.on{border-bottom-color:var(--mz-signal);}
+        .mz-layers{flex-direction:row; flex-wrap:wrap; gap:2px var(--s-4); padding-top:var(--s-3);}
+        .mz-layers legend{padding-top:var(--s-3);}
+        .mz-readout{display:none;}
+      }
+
+      .mz-stage{background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4); position:relative; min-width:0;}
+      .mz-console .mz-stage .mz-figs{padding:0 0 var(--s-4);}
+      .mz-console .mz-stage .mz-fig-l{font-family:${FM}; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em;}
+      .mz-console .mz-fig-v{font-family:${FM}; font-weight:300; letter-spacing:-.02em;}
+      .mz-stage-plot{position:relative; height:clamp(15rem, 38vw, 26rem); margin:var(--s-5) 0 var(--s-8) 3.2rem;
+        background:radial-gradient(circle, color-mix(in srgb, var(--mz-muted) 38%, transparent) 0.9px, transparent 1.3px) 0 0/9px 9px;}
+      .mz-stage-plot svg{position:absolute; inset:0; width:100%; height:100%; overflow:visible;}
+      .mz-stage-zero{stroke:var(--mz-borderHi); stroke-width:1; vector-effect:non-scaling-stroke;}
+      .mz-stage-bench{fill:none; stroke:var(--mz-muted); stroke-width:1.5; stroke-dasharray:7 5; vector-effect:non-scaling-stroke;}
+      .mz-stage-line{fill:none; stroke:var(--mz-text); stroke-opacity:.6; stroke-width:3.2; stroke-linecap:round; stroke-linejoin:round;
+        stroke-dasharray:0 6; vector-effect:non-scaling-stroke; pointer-events:none;}
+      .mz-stage-plot g.sel .mz-stage-line{stroke:var(--strat); stroke-opacity:1; stroke-width:2.5; stroke-dasharray:none;}
+      .mz-stage-hit{fill:none; stroke:transparent; stroke-width:18; vector-effect:non-scaling-stroke; cursor:pointer; pointer-events:stroke;}
+      .mz-stage-scale{position:absolute; top:0; bottom:0; left:-3.2rem; width:2.8rem; pointer-events:none;}
+      .mz-stage-scale span{position:absolute; right:0; transform:translateY(-50%); font-size:var(--fs-2xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      .mz-stage-scale span::after{content:""; position:absolute; left:calc(100% + 4px); top:50%; width:10px; height:1px; background:var(--mz-borderHi);}
+      .mz-stage-tag{position:absolute; transform:translate(10px,-50%); font-family:${FM}; font-size:var(--fs-2xs); white-space:nowrap; cursor:pointer;
+        background:var(--mz-surface); border:1px solid var(--mz-border); color:var(--mz-text); padding:1px 6px; border-radius:0;}
+      .mz-stage-tag.sel{border-color:var(--mz-signal); color:var(--mz-textHi); z-index:2;}
+      .mz-cross{position:absolute; pointer-events:none; background:color-mix(in srgb, var(--mz-textHi) 30%, transparent);}
+      .mz-cross-h{left:0; right:0; height:1px;}
+      .mz-cross-v{top:0; bottom:0; width:1px;}
+      .mz-reticle{position:absolute; width:58px; height:58px; transform:translate(-50%,-50%); pointer-events:none;
+        background:
+          linear-gradient(var(--mz-textHi),var(--mz-textHi)) left top/14px 1.5px no-repeat,
+          linear-gradient(var(--mz-textHi),var(--mz-textHi)) left top/1.5px 14px no-repeat,
+          linear-gradient(var(--mz-textHi),var(--mz-textHi)) right top/14px 1.5px no-repeat,
+          linear-gradient(var(--mz-textHi),var(--mz-textHi)) right top/1.5px 14px no-repeat,
+          linear-gradient(var(--mz-textHi),var(--mz-textHi)) left bottom/14px 1.5px no-repeat,
+          linear-gradient(var(--mz-textHi),var(--mz-textHi)) left bottom/1.5px 14px no-repeat,
+          linear-gradient(var(--mz-textHi),var(--mz-textHi)) right bottom/14px 1.5px no-repeat,
+          linear-gradient(var(--mz-textHi),var(--mz-textHi)) right bottom/1.5px 14px no-repeat;}
+      .mz-reticle::after{content:""; position:absolute; inset:14px; border:1px dashed var(--mz-muted); border-radius:50%;}
+      .mz-stage-ruler{position:absolute; left:0; right:0; bottom:calc(-1 * var(--s-6)); display:flex; justify-content:space-between; gap:var(--s-2);
+        font-size:var(--fs-2xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      .mz-stage-ruler b{color:var(--mz-textHi); font-weight:600;}
+      .mz-stage-key{font-family:${FP}; font-size:var(--fs-2xs); color:var(--mz-muted); margin:0; line-height:1.5;}
+      .mz-stage-empty{height:12rem; margin:var(--s-4) 0; display:flex; align-items:center; justify-content:center; padding:var(--s-4); text-align:center;
+        font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-muted);
+        background:radial-gradient(circle, color-mix(in srgb, var(--mz-muted) 30%, transparent) 0.9px, transparent 1.3px) 0 0/9px 9px;}
+      @media (max-width:640px){ .mz-stage{padding:var(--s-3);} .mz-stage-plot{margin-left:2.6rem;} .mz-stage-scale{left:-2.6rem; width:2.3rem;} .mz-reticle{width:40px; height:40px;} .mz-reticle::after{inset:10px;} }
+
+      .mz-dock{display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr); gap:var(--s-4); margin-top:var(--s-4);}
+      @media (max-width:1180px){ .mz-dock{grid-template-columns:minmax(0,1fr) minmax(0,1fr);} .mz-dock > :first-child{grid-column:1 / -1;} }
+      @media (max-width:720px){ .mz-dock{grid-template-columns:minmax(0,1fr);} }
+      .mz-panel{position:relative; min-width:0; background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4);}
+      .mz-panel::before,.mz-panel::after{content:"+"; position:absolute; top:-0.72em; font-size:var(--fs-sm); line-height:1; color:var(--mz-borderHi); pointer-events:none;}
+      .mz-panel::before{left:-0.32em;} .mz-panel::after{right:-0.32em;}
+      .mz-panel-h{margin:0 0 var(--s-3); display:flex; justify-content:space-between; gap:var(--s-2); flex-wrap:wrap; font-family:${FM};
+        font-size:var(--fs-xs); font-weight:500; text-transform:uppercase; letter-spacing:.08em; color:var(--mz-textHi);}
+      .mz-panel-h span{color:var(--mz-muted); font-weight:400;}
+      .mz-panel-note{font-family:${FP}; font-size:var(--fs-xs); color:var(--mz-muted); line-height:1.45; margin:var(--s-3) 0 0;}
+      .mz-hull{display:flex; height:22px; border:1px solid var(--mz-borderHi); clip-path:polygon(0 0,95% 0,100% 50%,95% 100%,0 100%); overflow:hidden;}
+      .mz-hull-in{display:flex; height:100%; background:color-mix(in srgb, var(--strat) 22%, transparent);}
+      .mz-hull-in i{flex:1 1 0; border-right:1px solid color-mix(in srgb, var(--strat) 55%, transparent);}
+      .mz-hull-cash{height:100%; background:repeating-linear-gradient(135deg, transparent 0 3px, var(--mz-border) 3px 4px);}
+      .mz-hull-none{align-items:center; padding:0 var(--s-2); font-size:var(--fs-2xs); color:var(--mz-muted);}
+      .mz-hull-key{display:flex; justify-content:space-between; margin:4px 0 var(--s-3); font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.06em; color:var(--mz-muted);}
+      .mz-spec{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px var(--s-4); margin:0;}
+      .mz-spec > div{display:grid; grid-template-columns:6em minmax(0,1fr); gap:6px; font-size:var(--fs-xs); min-width:0;}
+      .mz-spec dt{color:var(--mz-muted); text-transform:uppercase; letter-spacing:.05em;}
+      .mz-spec dd{margin:0; color:var(--mz-textHi); font-variant-numeric:tabular-nums; overflow-wrap:anywhere;}
+      @media (max-width:460px){ .mz-spec{grid-template-columns:minmax(0,1fr);} }
+      .mz-spec > div:first-child{grid-column:1 / -1;}
+      .mz-qfigs{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--s-2);}
+      .mz-qfigs > div{display:flex; flex-direction:column; min-width:0;}
+      .mz-qfigs b{font-size:var(--fs-3xl); font-weight:300; line-height:1.1; color:var(--mz-textHi); font-variant-numeric:tabular-nums;}
+      .mz-qfigs b.hot{color:var(--mz-signal);}
+      .mz-qfigs span{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.04em; color:var(--mz-text); white-space:nowrap;}
+      .mz-qfigs small{white-space:nowrap;}
+      .mz-qfigs small{font-size:var(--fs-2xs); color:var(--mz-muted);}
+      .mz-qtape{display:flex; flex-wrap:wrap; gap:4px; margin:var(--s-4) 0 var(--s-3); min-height:12px;}
+      .mz-qtape i{width:18px; height:10px; border:1px solid var(--mz-textHi); border-radius:6px 2px 2px 6px;}
+      .mz-qtape i[data-status="submitted"]{border-style:dashed;}
+      .mz-qtape i[data-status="pending"]{border-color:var(--mz-signal); border-style:dashed;}
+      .mz-qtape i[data-status="rejected"],.mz-qtape i[data-status="expired"]{background:var(--mz-signal); border-color:var(--mz-signal);}
+      .mz-qtape-none{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.06em; color:var(--mz-muted);}
+      .mz-qbars{display:flex; align-items:flex-end; gap:3px; height:48px; border-bottom:1px solid var(--mz-borderHi);}
+      .mz-qbars span{flex:1 1 0; min-height:2px; background:color-mix(in srgb, var(--mz-text) 40%, transparent);}
+      .mz-qbars span:last-child{background:var(--mz-signal);}
+      .mz-qbars-x{display:flex; justify-content:space-between; margin-top:3px; font-size:var(--fs-2xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      .mz-trace{display:block; width:100%; height:40px; margin-bottom:var(--s-3); border-bottom:1px solid var(--mz-border); overflow:visible;}
+      .mz-trace-line{fill:none; stroke:var(--mz-textHi); stroke-width:1.25; vector-effect:non-scaling-stroke;}
+      .mz-alerts{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;}
+      .mz-alerts li{display:grid; grid-template-columns:3.2em minmax(0,1fr) auto; gap:var(--s-2); align-items:start; padding:6px 8px;
+        border:1px solid var(--mz-border); font-size:var(--fs-xs);}
+      .mz-alerts li[data-level="crit"]{background:color-mix(in srgb, ${T.loss} 10%, transparent); border-color:color-mix(in srgb, ${T.loss} 45%, transparent);}
+      .mz-alerts li[data-level="warn"]{background:color-mix(in srgb, var(--mz-signal) 12%, transparent); border-color:color-mix(in srgb, var(--mz-signal) 45%, transparent);}
+      .mz-alert-t{color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      .mz-alert-what{min-width:0;}
+      .mz-alert-what b{display:block; color:var(--mz-textHi); font-weight:500; text-transform:uppercase; letter-spacing:.03em; overflow-wrap:anywhere;}
+      .mz-alert-what small{display:block; color:var(--mz-muted); font-size:var(--fs-2xs); overflow-wrap:anywhere;}
+      .mz-alert-tag{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.06em; border:1px solid currentColor; padding:1px 5px; color:var(--mz-muted);}
+      .mz-alerts li[data-level="crit"] .mz-alert-tag{color:${T.loss};}
+      .mz-alerts li[data-level="warn"] .mz-alert-tag{color:var(--mz-signal);}
+      #lab-alerts:focus{outline:none;} #lab-alerts:focus-visible{outline:2px solid var(--mz-signal);}
+
+      /* Every other section in the console look: mono heads, panels, hairlines. */
+      .mz-console .mz-lab-head{border-bottom:1px solid var(--mz-border);}
+      .mz-console .mz-lab-head h2{font-size:var(--fs-sm); font-weight:500; text-transform:uppercase; letter-spacing:.08em;}
+      .mz-console .mz-lab-head p{font-family:${FP};}
+      .mz-console .mz-pipe{font-family:${FM}; font-size:var(--fs-xs); background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-2) var(--s-3); margin-bottom:var(--s-4);}
+      .mz-console .mz-multis{gap:var(--s-3); border-top:0;}
+      .mz-console .mz-mult{background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-3) var(--s-4);}
+      .mz-console .mz-mult header{font-family:${FM}; font-size:var(--fs-sm);}
+      .mz-console .mz-cols > *{background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4);}
+      .mz-console .mz-col h3,.mz-console .mz-day h3,.mz-console .mz-notes h3,.mz-console .mz-ticket-side h3{font-size:var(--fs-xs); font-weight:500; text-transform:uppercase; letter-spacing:.08em;}
+      .mz-console .mz-news{font-family:${FM}; font-size:var(--fs-xs);}
 
       /* Weight bar — the only chart in the tape. Inline so it reads as part
          of the row rather than as a separate visualisation. */

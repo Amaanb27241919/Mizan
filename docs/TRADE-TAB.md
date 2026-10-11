@@ -24,6 +24,15 @@ It is **gated** — Trade access needs root OR the `trading_bot_enabled` beta al
 
 ## 2. Where it lives in the UI
 
+> **Console layout (2026-10-11, owner).** The Lab is now drawn after a monitoring screen:
+> - **Top bar:** where you are, ET clock, last recorded activity, find-a-strategy, and an ALERTS button that jumps to the feed.
+> - **Left rail:** the 8 sections, then LAYERS (one checkbox per strategy line; switched-off ids persist in `mizan_lab_hidden`), then the selected strategy's readout.
+> - **Desk stage:** every strategy against SPUS on one scale and one calendar, with a crosshair on the selected strategy's latest close.
+> - **Dock:** strategy inspector · order queue · alert feed (critical first; a filled order is a log line).
+> - The strategy tracks, latest orders, committee and A-vs-B panels remain below.
+> - One monospace face (FN now = FM; Newsreader dropped). One accent, `--mz-signal` = T.gold.
+> - Logic is pure and tested in `src/lib/labConsole.js`.
+
 - Top-level nav item **"Trade"**, rendered only for trading-enabled accounts (`isAdmin`
   is set from `profiles.trading_bot_enabled`, not root). Also ⌘K → "Go to Trade" and `g t`.
 - The tab renders `TradeBot` — **"The Trade Lab"**, redesigned 2026-10-08/09 as a

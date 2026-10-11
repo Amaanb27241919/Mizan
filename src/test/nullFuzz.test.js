@@ -59,6 +59,7 @@ const MODULES = [
   '../lib/journalLog.js',
   '../../lib/ai/packetInputs.mjs',
   '../../lib/trading/rebalanceRetry.mjs',
+  '../lib/labConsole.js',
   '../../lib/trading/curve.mjs',
   '../../lib/trading/journal.mjs',
 ]
