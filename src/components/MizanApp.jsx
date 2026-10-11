@@ -8279,19 +8279,21 @@ const FN="'Newsreader','Georgia','Times New Roman',serif";
 /** Section identity colours — owner-approved with the hybrid mockup. They
  *  mark WHERE you are (a square in the nav, a rule under the heading) and
  *  never tint a number. Distinct from the strategy palette on purpose. */
+// Eight became five (owner, 2026-10-11): each section now reads like the Desk —
+// figures, one main view, panels — instead of headings over paragraphs.
+// Strategies = one strategy's console (+ settings for all); Account =
+// Positions + Performance + Compliance & Risk; Journal = Journal + Research.
+// Ids are the OLD ones where one existed, so nav_usage counters carry over.
 const LAB_SECTIONS=[
   ["desk","Desk",T.blue],
   ["strategies","Strategies","#8a5a3c"],
-  // "Positions", not "Portfolio": the app's main nav already has a Portfolio.
-  ["positions","Positions","#1a8a8a"],
+  // "Account", not "Portfolio": the app's main nav already has a Portfolio.
+  ["positions","Account","#1a8a8a"],
   ["signals","Orders",T.gold],
-  ["committee","Research",T.violet],
-  ["compliance","Compliance & Risk",T.gain],
-  ["performance","Performance","#2d5fb3"],
   ["journal","Journal",T.slate],
 ];
 /** Old ids that were folded into a section, and where they now live. */
-const LAB_REDIRECT={order:"signals",risk:"compliance"};
+const LAB_REDIRECT={order:"signals",risk:"positions",compliance:"positions",performance:"positions",committee:"journal"};
 const MARK_TONE={ok:T.gain,warn:T.gold,block:T.loss,off:T.slate,unknown:T.muted};
 
 /** The section nav. Built on the .mz-tabbar contract (buttons as direct
@@ -8309,10 +8311,13 @@ function LabNav({active,onChange}){
 
 /** Section heading: the lab's display face (FN), a ruled caption in the console. */
 function LabHead({title,note,right,id}){
+  // The explanation is one tap away, not a paragraph over every panel: the
+  // console reads like the Desk (owner, 2026-10-11). Still in the DOM, so a
+  // screen reader and a search find it.
   return<div className="mz-lab-head">
     <div style={{minWidth:0}}>
       <h2 id={id} style={{fontFamily:FN}}>{title}</h2>
-      {note&&<p style={{fontFamily:FP}}>{note}</p>}
+      {note&&<details className="mz-head-about"><summary>About</summary><p style={{fontFamily:FP}}>{note}</p></details>}
     </div>
     {right&&<div className="mz-lab-head-r">{right}</div>}
   </div>;
@@ -8398,6 +8403,85 @@ function RailReadout({row,curve,mask,today,about}){
         {g.strategy&&<polyline points={g.strategy} className="mz-readout-line"/>}
       </svg>:<div className="mz-mult-empty" style={{height:96}}>{row.traded?"needs a second close":"no fills yet"}</div>}
     <div className="mz-readout-foot"><span>{row.code||"Strategy"} vs SPUS</span><span>{row.alphaPct==null?"—":mask(`${row.alphaPct>0?"+":""}${row.alphaPct.toFixed(2)} pts`)}</span></div>
+  </div>;
+}
+
+/** A row of big figures, as on the Desk. items: [{label, value, sub, color}] */
+function ConsoleFigs({items,testid}){
+  return<div className="mz-figs mz-cfigs" data-testid={testid}>{items.map(it=><div key={it.label}>
+    <div className="mz-fig-l">{it.label}</div>
+    <div className="mz-fig-v" style={{fontFamily:FN,color:it.color}}>{it.value}</div>
+    {it.sub!=null&&<div className="mz-fig-s">{it.sub}</div>}
+  </div>)}</div>;
+}
+
+const REVIEW_ANALYST={anthropic:"Claude",google:"Gemini",openrouter:"DeepSeek"};
+/** Strategies, top: ONE strategy's console — the one selected in the rail. */
+function StrategyConsole({lab,book,selected,onGo,mask}){
+  const row=lab.rows.find(r=>r.id===selected)||null;
+  const strat=asArray(book.strategies).find(x=>String(x?.id)===selected)||null;
+  const about=lab.abouts.get(selected);
+  const geo=useMemo(()=>row?stageGeometry(lab.curves.curves,lab.rows,new Set([row.id]),{w:1000,h:300,pad:16,padRight:72}):null,[lab.curves.curves,lab.rows,row]);
+  const orders=useMemo(()=>tapeRows(lab.feed.items,book.strategies,500).filter(o=>o.strategyId===selected).slice(0,8),[lab.feed.items,book.strategies,selected]);
+  const reviews=useMemo(()=>asArray(lab.research.rows).filter(r=>r&&String(r.strategy_id)===selected&&!r.screen_only).slice(0,6),[lab.research.rows,selected]);
+  if(!row)return<section className="mz-panel" data-testid="strategy-console"><h3 className="mz-panel-h">Strategy</h3>
+    <p className="mz-col-empty">{book.state==="loading"?"Loading strategies…":"No strategy yet. Build one below."}</p></section>;
+  const tone=v=>v==null?undefined:v>0?T.gain:v<0?T.loss:undefined;
+  const mark=s=>s==="executed"?["●",T.gain,"Filled"]:s==="rejected"||s==="expired"?["■",T.loss,s==="rejected"?"Rejected":"Expired"]:["◐",T.gold,s.charAt(0).toUpperCase()+s.slice(1)];
+  const verdict=(r,p)=>{
+    const m=asArray(r?.ensemble?.per_model).find(x=>x?.provider===p);
+    if(m)return<b style={{color:m.action==="BUY"?T.gain:m.action==="SELL"?T.loss:T.slate}}>{String(m.action||"").charAt(0)+String(m.action||"").slice(1).toLowerCase().replace(/_/g," ")}</b>;
+    const f=asArray(r?.failures).find(x=>x?.provider===p);
+    return f?<span style={{color:T.gold}}>{f.code==="no_credits"?"out of credits":"no answer"}</span>:<span className="mz-news-dim">—</span>;
+  };
+  const providers=asArray(lab.research.providers).filter(p=>p?.available).map(p=>p.provider);
+  return<div className="mz-desk" data-testid="strategy-console">
+    <ConsoleStage geo={geo} selected={row.id} onSelect={()=>{}} mask={mask}
+      head={<>
+        <div className="mz-strat-head">
+          <span className="mz-readout-code" style={{borderColor:row.color||T.slate}}>{row.code||"—"}</span>
+          <div style={{minWidth:0}}>
+            <h2 style={{fontFamily:FN}}>{row.name}</h2>
+            {about?.oneLine&&<p>{about.oneLine}</p>}
+          </div>
+          <ModeLadder mode={row.mode}/>
+        </div>
+        <ConsoleFigs testid="strategy-figures" items={[
+          {label:"Sleeve",value:row.sleeve>0?mask(f$(row.sleeve,0)):"—",sub:row.venue==="paper"?"paper money":"live money"},
+          {label:"Equity",value:row.equity==null?"—":mask(f$(row.equity,0)),sub:`${row.holdings||0} holding${row.holdings===1?"":"s"}`},
+          {label:"Return",value:row.unpriced?"n/a":!row.traded?"—":row.returnPct==null?"—":mask(fp(row.returnPct)),color:tone(row.returnPct),sub:row.traded?"since its first fill":"not traded yet"},
+          {label:"vs SPUS",value:row.alphaPct==null?"—":mask(`${row.alphaPct>0?"+":""}${row.alphaPct.toFixed(2)}`),color:tone(row.alphaPct),sub:"points, same days"},
+        ]}/>
+      </>}/>
+    <div className="mz-dock">
+      <ConsoleInspector row={row} strat={strat} about={about} mask={mask}/>
+      <section className="mz-panel" data-testid="strategy-orders">
+        <h3 className="mz-panel-h">Its orders <span>{orders.length?`latest ${orders.length}`:""}</span></h3>
+        {!orders.length?<p className="mz-col-empty">{lab.feed.state==="ready"?"No orders yet.":"Orders are not available right now."}</p>
+          :<ol className="mz-alerts mz-alerts-wt">{orders.map(o=>{const[g,c,t]=mark(o.status);return<li key={o.id} title={o.error||undefined}>
+            <span className="mz-alert-t">{nyStamp(o.at)}</span>
+            <span className="mz-alert-what"><b>{o.side==="sell"?"Sell":"Buy"} {o.qty!=null?(Number.isInteger(o.qty)?o.qty:o.qty.toFixed(2)):""} {o.ticker}</b>{o.error&&<small>{o.error}</small>}</span>
+            <span className="mz-alert-tag" style={{color:c}}><span aria-hidden="true">{g}</span> {t}</span>
+          </li>;})}</ol>}
+        <button className="mz-more mz-tap" onClick={()=>onGo("signals")}>All orders →</button>
+      </section>
+      <section className="mz-panel" data-testid="strategy-reviews">
+        <h3 className="mz-panel-h">AI reviews <span>{reviews.length?`latest ${reviews.length}`:""}</span></h3>
+        {!reviews.length?<p className="mz-col-empty">{lab.research.state==="forbidden"?"Visible to the operator's accounts only.":"No AI reviews for this strategy."}</p>
+          :<ol className="mz-alerts mz-alerts-wt">{reviews.map(r=><li key={r.id}>
+            <span className="mz-alert-t">{nyStamp(r.at||r.created_at)}</span>
+            <span className="mz-alert-what"><b>{r.ticker}</b><small>{providers.map((p,i)=><React.Fragment key={p}>{i>0&&" · "}{REVIEW_ANALYST[p]||p} {verdict(r,p)}</React.Fragment>)}</small></span>
+            <span/>
+          </li>)}</ol>}
+        <button className="mz-more mz-tap" onClick={()=>onGo("journal")}>The whole record →</button>
+      </section>
+    </div>
+    {about&&<section className="mz-panel mz-wide" data-testid="strategy-how">
+      <h3 className="mz-panel-h">How it works</h3>
+      <ul className="mz-how">{about.rules.map((r,i)=><li key={i}>{r}</li>)}</ul>
+      {about.tests&&<p className="mz-panel-note"><b>What it tests.</b> {about.tests}</p>}
+      <p className="mz-panel-note">{about.money}</p>
+    </section>}
   </div>;
 }
 
@@ -9129,7 +9213,7 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
     const pipeline=deskPipeline({session,committee,rows,bookState:book.state,compliance,account:deskData.account,deskState:deskData.state});
     const codes=new Map(rows.map(r=>[r.id,r.code||r.name]));
     const alerts=consoleAlerts({items:feed.items,codes,pending,compliance,pipeline});
-    return{curves,research,feed,pending,rows,abouts,pipeline,alerts,counts:alertCounts(alerts),queue:orderQueue(feed.items),
+    return{curves,research,feed,pending,rows,abouts,pipeline,alerts,compliance,counts:alertCounts(alerts),queue:orderQueue(feed.items),
       last:lastActivity(feed.items,research.rows),
       geo:stageGeometry(curves.curves,rows,new Set(rows.map(r=>r.id).filter(id=>!hidden.has(id))),{w:1000,h:360,pad:16,padRight:72})};
   },[book.strategies,book.state,deskData.positions,deskData.state,deskData.account,screen.verdicts,research,session,feed.items,pending,curves,hidden]);
@@ -9169,20 +9253,56 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         last={lab.last} counts={lab.counts} onAlerts={showAlerts} onFind={findStrategy} findMiss={findMiss}/>
       <div className="mz-console-grid">
       <ConsoleRail active={sub} onChange={goSection} rows={lab.rows} hidden={hidden} onToggle={toggleLayer}
-        selected={selectedId} onSelect={id=>{setSelected(id);if(sub!=="desk")goSection("desk");}} mask={labMask}
+        selected={selectedId} onSelect={id=>{setSelected(id);if(sub!=="desk"&&sub!=="strategies")goSection("strategies");}} mask={labMask}
         curves={lab.curves.curves} today={nyToday()} about={lab.abouts.get(selectedId)}/>
       <div className="mz-lab-body">
         {sub==="desk"&&<BroadsheetDesk desk={deskData} book={book} demoMode={demoMode} onGo={goSection} lab={lab} selected={selectedId} onSelect={setSelected}/>}
-        {sub==="positions"&&<><div style={{marginBottom:T.s6}}><EquityChart demoMode={demoMode} liveEquity={deskData?.account?.equity}/></div><LabPortfolio desk={deskData} book={book}/></>}
-        {sub==="performance"&&<PerformancePanelLab demoMode={demoMode} book={book} liveEquity={deskData?.account?.equity}/>}
-        {sub==="committee"&&<AiCommittee demoMode={demoMode} book={book}/>}
-        {sub==="compliance"&&<div className="mz-lab-stack"><CompliancePanel desk={deskData} demoMode={demoMode} screen={screen}/><RiskPanel desk={deskData} demoMode={demoMode} screen={screen}/><KillSwitchTable book={book}/></div>}
-        {sub==="journal"&&<LabJournal book={book}/>}
-        {sub==="strategies"&&<div style={{marginBottom:T.s6}}><StrategyGuide book={book}/></div>}
+        {/* ACCOUNT = Positions + Performance + Compliance & Risk, the way the
+            Desk reads: figures and the equity curve first, then panels. */}
+        {sub==="positions"&&<div className="mz-lab-stack mz-console-stack" data-testid="account-console">
+          <section className="mz-stage">
+            <ConsoleFigs testid="account-figures" items={[
+              {label:"Paper account",value:Number(deskData?.account?.equity)>0?labMask(f$(Number(deskData.account.equity),0)):"—",sub:"every strategy together"},
+              {label:"Cash",value:deskData?.account?.cash!=null&&Number.isFinite(Number(deskData.account.cash))?labMask(f$(Number(deskData.account.cash),0)):"—",sub:"the buying limit — no margin"},
+              {label:"Positions",value:deskData.state==="ready"?String(asArray(deskData.positions).length):"—",sub:"held across strategies"},
+              {label:"AAOIFI",value:lab.compliance?`${lab.compliance.screened-lab.compliance.failing}/${lab.compliance.total}`:"—",
+                color:lab.compliance?.failing>0?T.loss:undefined,sub:lab.compliance?(lab.compliance.failing>0?`${lab.compliance.failing} failing`:"pass or covered by issuer"):"screening…"},
+            ]}/>
+            <EquityChart demoMode={demoMode} liveEquity={deskData?.account?.equity}/>
+          </section>
+          <LabPortfolio desk={deskData} book={book}/>
+          <PerformancePanelLab demoMode={demoMode} book={book} liveEquity={deskData?.account?.equity}/>
+          <div className="mz-dock2"><CompliancePanel desk={deskData} demoMode={demoMode} screen={screen}/><RiskPanel desk={deskData} demoMode={demoMode} screen={screen}/></div>
+          <KillSwitchTable book={book}/>
+        </div>}
+        {/* JOURNAL = the record + the AI committee (was Research). */}
+        {sub==="journal"&&<div className="mz-lab-stack mz-console-stack" data-testid="journal-console">
+          <section className="mz-stage">
+            <ConsoleFigs testid="journal-figures" items={[
+              {label:"Orders recorded",value:lab.feed.state==="ready"?String(asArray(lab.feed.items).filter(i=>i?.status!=="shadow").length):"—",sub:"every strategy, newest first"},
+              {label:"AI reviews",value:lab.research.state==="ready"?String(asArray(lab.research.rows).filter(r=>!r?.screen_only).length):"—",sub:"latest 60"},
+              {label:"Analysts",value:lab.research.state==="ready"?`${asArray(lab.research.providers).filter(p=>p?.available).length}/${asArray(lab.research.providers).length}`:"—",sub:"configured and answering"},
+              {label:"Strategies",value:String(lab.rows.length),sub:"each with its own journal"},
+            ]}/>
+          </section>
+          <LabJournal book={book}/>
+          <AiCommittee demoMode={demoMode} book={book}/>
+        </div>}
+        {/* STRATEGIES = the selected strategy's console, then settings for all. */}
+        {sub==="strategies"&&<StrategyConsole lab={lab} book={book} selected={selectedId} onGo={goSection} mask={labMask}/>}
+        {sub==="strategies"&&<div className="mz-lab-stack mz-console-stack" style={{marginTop:T.s4}}><StrategyGuide book={book}/></div>}
+        {sub==="signals"&&<section className="mz-stage" style={{marginBottom:T.s4}}>
+          <ConsoleFigs testid="orders-figures" items={[
+            {label:"Waiting",value:String(lab.queue.waiting),color:lab.queue.waiting>0?"var(--mz-signal)":undefined,sub:"need your approval"},
+            {label:"Working",value:String(lab.queue.working),sub:"at the broker"},
+            {label:"Filled",value:String(lab.queue.filled),sub:"today"},
+            {label:"Refused",value:String(lab.queue.refused),color:lab.queue.refused>0?"var(--mz-signal)":undefined,sub:"today"},
+          ]}/>
+        </section>}
         {/* The bot panel is UNTOUCHED — Strategies and the signal queue. */}
-        {(sub==="strategies"||sub==="signals")&&<TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/>}
-        {sub==="strategies"&&<div style={{marginTop:T.s5}}><TradeConnectionsPanel onConnectTrade={onConnectTrade}/></div>}
-        {sub==="signals"&&<div className="mz-lab-stack" style={{marginTop:T.s6}}>
+        {(sub==="strategies"||sub==="signals")&&<div className={sub==="strategies"?"mz-console-panel":undefined} style={sub==="strategies"?{marginTop:T.s4}:undefined}><TradingBotPanel view={sub} isAdmin={isAdmin} fullAutoEnabled={fullAutoEnabled} isRoot={isRoot} consented={consented} snapAccounts={accounts} demoMode={demoMode} onNav={onNav}/></div>}
+        {sub==="strategies"&&<div className="mz-console-panel" style={{marginTop:T.s4}}><TradeConnectionsPanel onConnectTrade={onConnectTrade}/></div>}
+        {sub==="signals"&&<div className="mz-lab-stack mz-console-stack" style={{marginTop:T.s4}}>
           <WorkingOrders desk={deskData}/>
           <section>
             <LabHead title="Place an order by hand" note="A one-off order outside any strategy. Paper by default; a live order needs the venue switched deliberately."
@@ -15614,6 +15734,8 @@ export default function Mizan(){
       .mz-alerts li[data-level="crit"]{background:color-mix(in srgb, ${T.loss} 10%, transparent); border-color:color-mix(in srgb, ${T.loss} 45%, transparent);}
       .mz-alerts li[data-level="warn"]{background:color-mix(in srgb, var(--mz-signal) 12%, transparent); border-color:color-mix(in srgb, var(--mz-signal) 45%, transparent);}
       .mz-alert-t{color:var(--mz-muted); font-variant-numeric:tabular-nums;}
+      .mz-alerts-wt li{grid-template-columns:7.2em minmax(0,1fr) auto;}
+      .mz-alerts-wt .mz-alert-t{white-space:nowrap;}
       .mz-alert-what{min-width:0;}
       .mz-alert-what b{display:block; color:var(--mz-textHi); font-weight:500; text-transform:uppercase; letter-spacing:.03em; overflow-wrap:anywhere;}
       .mz-alert-what small{display:block; color:var(--mz-muted); font-size:var(--fs-2xs); overflow-wrap:anywhere;}
@@ -15632,6 +15754,33 @@ export default function Mizan(){
       .mz-console .mz-mult header{font-family:${FM}; font-size:var(--fs-sm);}
       .mz-console .mz-cols > *{background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4);}
       .mz-console .mz-news{font-family:${FM}; font-size:var(--fs-xs);}
+      /* Every section as a console (owner, 2026-10-11): figures, then panels. */
+      .mz-console .mz-lab-stack{gap:var(--s-4);}
+      .mz-console-stack > section:not(.mz-stage), .mz-console-stack > div.mz-lab-stack > section, .mz-dock2 > section, .mz-console-panel{
+        position:relative; min-width:0; background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4);}
+      .mz-console-stack > div.mz-lab-stack{gap:var(--s-4);}
+      .mz-console .mz-console-stack .mz-lab-head, .mz-console .mz-console-panel .mz-lab-head{margin-top:0;}
+      .mz-console .mz-lab-head h2{font-size:var(--fs-xl);}
+      .mz-dock2{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--s-4);}
+      @media (max-width:1180px){ .mz-dock2{grid-template-columns:minmax(0,1fr);} }
+      .mz-head-about{margin-top:2px;}
+      .mz-head-about summary{cursor:pointer; list-style:none; display:inline-flex; align-items:center; gap:5px; font-family:${FM}; font-size:var(--fs-2xs);
+        text-transform:uppercase; letter-spacing:.08em; color:var(--mz-muted); min-height:24px;}
+      .mz-head-about summary::-webkit-details-marker{display:none;}
+      .mz-head-about summary::before{content:"+"; color:var(--mz-signal); font-weight:600;}
+      .mz-head-about[open] summary::before{content:"−";}
+      .mz-head-about summary:hover{color:var(--mz-textHi);}
+      .mz-head-about p{margin:4px 0 0; font-size:var(--fs-sm); color:var(--mz-muted); max-width:72ch; line-height:1.5;}
+      @media (pointer:coarse){ .mz-head-about summary{min-height:44px;} }
+      .mz-cfigs .mz-fig-l{font-family:${FM}; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em;}
+      .mz-console .mz-stage > .mz-cfigs:last-child{padding-bottom:0; border-bottom:0;}
+      .mz-strat-head{display:flex; align-items:center; gap:var(--s-3); flex-wrap:wrap; padding-bottom:var(--s-4); margin-bottom:var(--s-4); border-bottom:1px solid var(--mz-border);}
+      .mz-strat-head > div{flex:1 1 14rem;}
+      .mz-strat-head h2{margin:0; font-size:var(--fs-2xl); font-weight:600; color:var(--mz-textHi); line-height:1.15;}
+      .mz-strat-head p{margin:2px 0 0; font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-muted);}
+      .mz-wide{margin-top:var(--s-4);}
+      .mz-how{margin:0; padding-left:1.1em; font-family:${FP}; font-size:var(--fs-sm); color:var(--mz-text); line-height:1.55;}
+      .mz-how li + li{margin-top:4px;}
 
       /* Weight bar — the only chart in the tape. Inline so it reads as part
          of the row rather than as a separate visualisation. */

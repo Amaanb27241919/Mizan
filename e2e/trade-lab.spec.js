@@ -98,8 +98,10 @@ const gotoLab = async (page, opts = {}) => {
 // Twelve sections became eight (2026-10-08). Specs written against the old
 // names go through here, so a rename is one table rather than forty edits.
 const labNav = (page) => page.getByRole("navigation", { name: "Trade Lab sections" });
-const SECTION = { "Command Center": "Desk", Signals: "Orders", "Quick Trade": "Orders", "AI Committee": "Research",
-  Risk: "Compliance & Risk", Compliance: "Compliance & Risk", Portfolio: "Positions" };
+// …and eight became five (2026-10-11): Positions, Performance and Compliance &
+// Risk are the Account section; Research is in the Journal.
+const SECTION = { "Command Center": "Desk", Signals: "Orders", "Quick Trade": "Orders", "AI Committee": "Journal", Research: "Journal",
+  Risk: "Account", Compliance: "Account", "Compliance & Risk": "Account", Portfolio: "Account", Positions: "Account", Performance: "Account" };
 const openSection = async (page, name) => {
   await labNav(page).getByRole("button", { name: SECTION[name] || name, exact: true }).click();
   if (name === "Quick Trade") await page.getByRole("button", { name: "Open the ticket" }).click();
@@ -251,8 +253,13 @@ test.describe("Trade Lab cockpit", () => {
       "/api/alpaca/account": { ...PAPER, equity: 104202.02 },
     } });
     await openSection(page, "Portfolio");
-    const chart = page.locator("section", { has: page.locator("svg[aria-label*='equity' i]") });
+    // The innermost section holding the curve: the chart itself, not the
+    // Account panel around it, whose figures DO state the balance — once.
+    const chart = page.locator("section", { has: page.locator("svg[aria-label*='equity' i]") }).last();
     await expect(chart).toBeVisible();
+    await expect(page.getByTestId("account-figures")).toContainText("$104,202");
+    const all = await page.getByTestId("account-console").innerText();
+    expect(all.match(/\$104,202/g) || [], "the balance is stated in exactly one place").toHaveLength(1);
     // The curve's own last value must NOT be presented as a balance.
     await expect(chart).not.toContainText("$104,202.02");
     // It states the change instead.
@@ -279,13 +286,15 @@ test.describe("Trade Lab cockpit", () => {
     const src = readFileSync(HERE + "../src/components/MizanApp.jsx", "utf8")
     const table = src.slice(src.indexOf("const LAB_SECTIONS=["), src.indexOf("const LAB_SECTIONS=[") + 600)
     const ids = [...table.matchAll(/\["([a-z]+)","[^"]+"/g)].map(m => m[1])
-    for (const id of ["desk", "signals", "strategies", "committee", "compliance", "performance"]) {
+    for (const id of ["desk", "signals", "strategies", "positions", "journal"]) {
       expect(ids, `section id "${id}" must survive a rename`).toContain(id)
     }
     // Folded sections still resolve, so stored state and deep links land somewhere.
-    expect(src).toMatch(/LAB_REDIRECT=\{order:"signals",risk:"compliance"\}/)
+    for (const [from, to] of [["order", "signals"], ["risk", "positions"], ["compliance", "positions"], ["performance", "positions"], ["committee", "journal"]]) {
+      expect(src, `${from} must redirect to ${to}`).toMatch(new RegExp(`LAB_REDIRECT=\\{[^}]*\\b${from}:"${to}"`))
+    }
     await gotoLab(page);
-    for (const label of ["Desk", "Orders", "Strategies", "Research", "Compliance & Risk", "Journal"]) {
+    for (const label of ["Desk", "Strategies", "Account", "Orders", "Journal"]) {
       await expect(labNav(page).getByRole("button", { name: label, exact: true })).toBeVisible();
     }
   });
@@ -1014,16 +1023,18 @@ test("the equity headline is measured from the starting balance on every range",
     }) });
   await openSection(page, "Portfolio");
   const head = page.getByTestId("equity-headline");
+  // Account also holds Performance, with its own range buttons: use the chart's.
+  const chart = page.locator("section", { has: head }).last();
   const texts = [];
   for (const r of ["1D", "1W", "1M", "3M", "1Y"]) {
-    await page.getByRole("button", { name: r, exact: true }).click();
+    await chart.getByRole("button", { name: r, exact: true }).click();
     await expect(head).toContainText("+$4,392.10");
     texts.push((await head.innerText()).split("\n")[0]);
   }
   expect(new Set(texts).size, `headline must not change with the range: ${texts.join(" | ")}`).toBe(1);
   await expect(head).toContainText("since you started with $1,000,000");
   // The range's own change is still stated, underneath — and it differs.
-  await page.getByRole("button", { name: "1D", exact: true }).click();
+  await chart.getByRole("button", { name: "1D", exact: true }).click();
   await expect(head).toContainText("1D: +$1,392.10");
 });
 
@@ -1292,6 +1303,47 @@ test.describe("Trade Lab console", () => {
     await expect(insp).toContainText("+0.71 pts");
     await expect(page.getByTestId("console-bar")).toContainText("Desk · B");
     await expect(page.getByTestId("console-stage").locator(".mz-reticle")).toHaveCount(1);
+  });
+
+  test("Strategies is one strategy's console: its figures, only ITS orders, and how it works", async ({ page }) => {
+    await open(page);
+    await labNav(page).getByRole("button", { name: "Strategies", exact: true }).click();
+    const c = page.getByTestId("strategy-console");
+    await expect(c.getByRole("heading", { name: "Reference system + AI gate" })).toBeVisible();
+    await expect(page.getByTestId("strategy-figures")).toContainText("+1.12");
+    // A's orders only: B's rejected MU must not appear under A.
+    const orders = page.getByTestId("strategy-orders");
+    await expect(orders).toContainText("Buy  AMAT".replace("  ", " "));
+    await expect(orders).not.toContainText("MU");
+    await expect(page.getByTestId("strategy-how")).toContainText("AAOIFI Sharia screen");
+    // The rail switches the console to another strategy.
+    await page.getByTestId("console-layers").getByTitle("Inspect B").click();
+    await expect(c.getByRole("heading", { name: "Reference system, no AI" })).toBeVisible();
+    await expect(orders).toContainText("MU");
+    await expect(orders).toContainText("potential wash trade detected");
+  });
+
+  test("Account holds positions, performance, compliance, risk and the stops; Journal holds the AI committee", async ({ page }) => {
+    await open(page);
+    await labNav(page).getByRole("button", { name: "Account", exact: true }).click();
+    const acct = page.getByTestId("account-console");
+    for (const id of ["account-figures", "strategy-book", "performance", "compliance", "risk", "kill-switches"]) {
+      await expect(acct.getByTestId(id), `${id} lives in Account`).toHaveCount(1);
+    }
+    await labNav(page).getByRole("button", { name: "Journal", exact: true }).click();
+    const j = page.getByTestId("journal-console");
+    for (const id of ["journal-figures", "journal-log", "research"]) await expect(j.getByTestId(id), `${id} lives in Journal`).toHaveCount(1);
+  });
+
+  test("explanations fold behind About instead of sitting over every panel", async ({ page }) => {
+    await open(page);
+    await labNav(page).getByRole("button", { name: "Account", exact: true }).click();
+    const about = page.getByTestId("kill-switches").locator("details.mz-head-about");
+    await expect(about).toHaveCount(1);
+    const note = about.locator("p");
+    await expect(note).toBeHidden();
+    await about.locator("summary").click();
+    await expect(note).toBeVisible();
   });
 
   test("find selects a strategy by its code, and says so when nothing matches", async ({ page }) => {

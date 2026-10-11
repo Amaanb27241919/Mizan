@@ -32,6 +32,15 @@ It is **gated** — Trade access needs root OR the `trading_bot_enabled` beta al
 > - The strategy tracks, latest orders, committee and A-vs-B panels remain below.
 > - Newsreader (`FN`) for the heading, section heads and big figures; IBM Plex Mono for labels. One accent, `--mz-signal`, defined per theme: burnt orange `#c2410c` on light (4.9:1), `#f2884a` on dark (7.2:1).
 > - Logic is pure and tested in `src/lib/labConsole.js`.
+>
+> **Eight sections became five (2026-10-11, owner: "make every tab like the Desk").**
+> - **Desk:** all strategies at a glance.
+> - **Strategies** (`strategies`): ONE strategy's console, the one selected in the rail. It has figures, its own curve vs SPUS, inspector · its orders · its AI reviews, how it works, then the Strategy guide and settings for all strategies (modes, edit, pause, builder, broker connections).
+> - **Account** (`positions`): Positions + Performance + Compliance & Risk. Figures and the equity curve, then strategy book, positions, performance, compliance beside risk, and stops & switches.
+> - **Orders** (`signals`): queue figures, then approvals, history, working orders and the hand-order ticket.
+> - **Journal** (`journal`): Journal + Research. Figures, the record, journals, the tax & Zakat sheet, and the AI committee.
+> - Folded ids redirect through `LAB_REDIRECT`: performance/compliance/risk → positions, committee → journal, order → signals.
+> - Every section explanation is folded behind an **About** toggle (`LabHead`), not printed over each panel.
 
 - Top-level nav item **"Trade"**, rendered only for trading-enabled accounts (`isAdmin`
   is set from `profiles.trading_bot_enabled`, not root). Also ⌘K → "Go to Trade" and `g t`.
