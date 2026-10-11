@@ -2,6 +2,18 @@
 
 > **SESSION PROTOCOL**: Read this file at the start of every session. Read `MIZAN-STATE-AUDIT.md` when you need architecture, schema, or feature status depth. Update `MIZAN-STATE-AUDIT.md` (last-audited date + any new findings) when you discover drift from what's documented. This file is the source of truth for how to work on Mizan correctly.
 
+> **Q4 navigation:** For the founder's one-bet checklist, current source hierarchy, and *updated* Week 1 Claude prompt, use [`docs/Q4_2026_START_HERE.md`](docs/Q4_2026_START_HERE.md). It replaces the older prompt in the Manus revenue plan; it does not authorize work outside the explicit task.
+
+## CURRENT HANDOFF — Q4 2026 revenue focus (owner request, 4 October)
+
+**Goal:** test whether one *human-delivered*, fixed-scope U.S. owner-managed-business Zakat assessment can earn a first paid case by 31 December. This is a founder **discovery experiment**, not a shipped Case Lab product, accepted religious opinion, or standing authorization to build. $250 is an unvalidated pilot price hypothesis; one collected case is monthly revenue, **not** recurring MRR. The consumer app stays free. The Trade Lab's paper/shadow record stays R&D, not a paid return claim. Historical bounded-push and feature-backlog text below is context, not a queue that overrides this focus.
+
+**When the founder pastes the Week 1 Claude prompt:** first read this file, the current audit, `docs/COMPLIANCE.md`, `src/components/Terms.jsx`, `src/lib/legal.js`, and the exact trading route guards. Do the requested **read-only** work: a blank case-workpaper template (source/as-of/method/assumptions/preparer/reviewer/limitations/reuse rights), a minimal *conditional* lead-page proposal, and a factual Terms-vs-Trade note. Preserve existing uncommitted changes in `MIZAN-STATE-AUDIT.md`. One implementation owner, one small ticket at a time. **Do not** implement checkout, ingest sensitive documents, modify auth/trading/cron/schema, push or deploy merely because the revenue plan exists. Request a new, explicit owner instruction before implementing a separate offer page or modifying money-touching behavior.
+
+**Commercial gates:** a named qualified reviewer with agreed fee, scope, turnaround and permitted claims; qualified buyer conversations; written case method and independent sign-off; secure minimum-necessary document transfer, deletion and default-**no-reuse** rights; separate service terms and appropriate review before taking client records/payment. Never claim a scholar, certification, published purification ratios, a price, or paying-user traction before verified. Avoid feeding private client statements to AI without an approved handling policy. If the reviewer is unavailable, do not silently replace the review with a model. See `docs/COMPLIANCE.md` for engineering boundaries; it is not legal clearance.
+
+**Trading truth (verified in this checkout, not a production compliance opinion):** the consumer dashboard is predominantly information/aggregation, **not globally read-only**. `canUseTradingBot` grants root or `profiles.trading_bot_enabled`; `POST /api/snaptrade/trade/place` and approved strategy signals can submit **real broker orders**. `POST /api/alpaca/order` and rank-rebalance are paper-only. `canUseFullAuto` uses a **separate `profiles.full_auto_enabled` allowlist** plus an account switch; it can include a specifically authorized non-root family beta even though the current UI displays Full only for root. Do not broaden the allowlist or conflate a consent click with legal review. The Terms source and its PDF were updated locally to state the actual route capabilities; **they are not published by this handoff**. Obtain an appropriate legal review before deploying changed service terms. No order, gate, automation policy, or marketing site was activated here.
+
 > **⚙️ OPERATING MODE — BOUNDED PUSH (owner decision, 2026-08-12).** Maintenance mode is **temporarily lifted for one defined push**, then resumes. Scope of the push, and nothing wider:
 > 1. **Verification infrastructure** — Playwright E2E + visual snapshots. `@playwright/test` was installed and never configured, `@testing-library/react` has zero render tests, and there is no test account. Consequence: five user-facing surfaces shipped to production in one week without a human or a machine ever seeing them render, and a 320px clipping bug was caught by reading CSS rather than looking. **This is the first task and it gates the rest** — fixing UI without it repeats the same blind shipping, faster.
 > 2. **UI/UX + accessibility** — audit against §5/§9 and fix what's real. The owner's goal is "user-friendly + UI".
@@ -24,7 +36,7 @@
 2. Zakat calculation with live nisab (gold/silver via Stooq)
 3. Dividend purification tracking (impurity ratios per ETF, per-dividend log)
 4. Unified brokerage + bank view (SnapTrade + Plaid)
-5. AI with Islamic finance guardrails (Claude Sonnet via `/api/advisor` — **auth-gated**, per-user 60/hr): the chat advisor + **grounded-AI features** (fed only real data, explain-don't-judge, never invent a number). Shipped: plain-English Sharia-screening explanations. Roadmap: see memory `ai-roadmap` (Zakat guidance, portfolio insights, AI digest, per-token crypto). Reuse `/api/advisor` — don't build new AI plumbing. **Compliance boundary (2026-07-15):** the advisor is now governed by an in-code boundary drawing the read-only line at *personalization of advice* — it explains impersonal facts + the user's own data but must never generate a buy/sell/hold recommendation or suitability judgment. Enforced by `lib/compliance/advisor-prompt.mjs` (hardened prompt) + `advisor-filter.mjs` (output backstop). Any new AI feature MUST stay inside the three tiers — see `docs/COMPLIANCE.md` + memory `compliance-boundary-and-price-chart`. **Required gate — no exceptions:** before shipping ANY new grounded-AI feature (pending set: Zakat/purification guidance, portfolio insight card, AI weekly digest, per-token crypto screening, security-event explainer), it MUST pass a compliance-tier review — classify its output into the three tiers, route it through the hardened advisor prompt + `advisor-filter.mjs`, and confirm it emits no personalized buy/sell/hold recommendation or suitability judgment. **Owner posture (2026-07-15): stay COMPLIANT, NOT an RIA.** The trading-bot NL strategy generator + the Rebalancer are **self-directed** (`890d147`): the NL generator only structures user-named tickers (open-ended asks → impersonal model presets, never invented picks), the Rebalancer shows neutral your-target math (not "SELL — trim"), both carry a self-directed disclaimer. **Never let any surface emit a personalized pick.** Beta users trade LIVE semi-auto (they approve every real order = self-directed = compliant); **full-auto (discretionary) stays owner-allowlist-only via `canUseFullAuto` — never extend it to beta users (that is the RIA line).** See BACKLOG O23.
+5. AI with Islamic finance guardrails (Claude Sonnet via `/api/advisor` — **auth-gated**, per-user 60/hr): the chat advisor + **grounded-AI features** (fed only real data, explain-don't-judge, never invent a number). Shipped: plain-English Sharia-screening explanations. Roadmap: see memory `ai-roadmap` (Zakat guidance, portfolio insights, AI digest, per-token crypto). Reuse `/api/advisor` — don't build new AI plumbing. **Compliance boundary (2026-07-15):** the advisor is now governed by an in-code boundary drawing the read-only line at *personalization of advice* — it explains impersonal facts + the user's own data but must never generate a buy/sell/hold recommendation or suitability judgment. Enforced by `lib/compliance/advisor-prompt.mjs` (hardened prompt) + `advisor-filter.mjs` (output backstop). Any new AI feature MUST stay inside the three tiers — see `docs/COMPLIANCE.md` + memory `compliance-boundary-and-price-chart`. **Required gate — no exceptions:** before shipping ANY new grounded-AI feature (pending set: Zakat/purification guidance, portfolio insight card, AI weekly digest, per-token crypto screening, security-event explainer), it MUST pass a compliance-tier review — classify its output into the three tiers, route it through the hardened advisor prompt + `advisor-filter.mjs`, and confirm it emits no personalized buy/sell/hold recommendation or suitability judgment. **Owner posture (2026-07-15): stay COMPLIANT, NOT an RIA.** The trading-bot NL strategy generator + the Rebalancer are **self-directed** (`890d147`): the NL generator only structures user-named tickers (open-ended asks → impersonal model presets, never invented picks), the Rebalancer shows neutral your-target math (not "SELL — trim"), both carry a self-directed disclaimer. **Never let any surface emit a personalized pick.** Trade-enabled beta users may submit LIVE manual/semi-auto orders after the required consent; this is an engineering design, NOT a legal compliance determination. **`canUseFullAuto` checks a separate `full_auto_enabled` profile allowlist plus the per-account switch; it is NOT root-only, though the current UI shows its Full layer only to root. A specifically authorized non-root family beta can qualify server-side. Never widen or monetize this without separate legal review.** See BACKLOG O23.
 6. Goal templates rooted in Muslim financial life (Hajj, Mahr, Waqf, Emergency)
 
 **Tone**: Professional, trustworthy, elegant. This is a tool for financially literate Muslims who care about both returns and deen. The design reflects that — light-first paper canvas with navy accents (green/red reserved for compliant/loss semantics), editorial typography, no noise.
@@ -33,7 +45,7 @@
 ```
 Frontend:  React 18 (JSX, not TypeScript) · Vite 5 · Recharts · Single-file SPA
 Backend:   Node.js ESM · Vercel serverless (api/[...path].mjs) · lib/handlers.mjs
-Database:  Supabase (PostgreSQL + Auth + RLS) · 34 migration files through 033, all applied in prod
+Database:  Supabase (PostgreSQL + Auth + RLS) · 34 migration files through 033, all applied in prod (033 verified 2026-10-06)
 Hosting:   Vercel (team: mizan-s-projects2) · prod URL: app.mizan.exchange (mizan-puce.vercel.app)
 External:  SnapTrade · Plaid · Anthropic · Finnhub · Polygon · Stooq · Alpaca (paper)
 ```
@@ -235,6 +247,47 @@ lib/trading/stuck.mjs          — Pure: findStuckStrategies (3+ consecutive rej
                                  revoked broker login read as "could not resolve symbol").
 lib/trading/closedLots.mjs     — Pure FIFO realized-trade sheet → CSV (tax at user rates,
                                  Zakat = 2.5% of PROCEEDS, not of the gain).
+TRADE LAB (the Trade tab, owner/beta only) — the CONSOLE (2026-10-11, owner, drawn after a monitoring
+                                 screen: top bar · left rail with sections + LAYERS · one stage of every strategy vs SPUS ·
+                                 dock of inspector / order queue / alert feed; logic in src/lib/labConsole.js; Newsreader for
+                                 heads + big figures, IBM Plex Mono for labels; accent --mz-signal, a burnt orange defined per
+                                 theme: #c2410c light, #f2884a dark). 8 sections → 5 the same day (ca78408): Desk · Strategies
+                                 (one strategy's console) · Account (Positions+Performance+Compliance&Risk) · Orders · Journal
+                                 (+Research); LAB_REDIRECT maps the folded ids; section notes fold behind "About".
+                                 It replaced the BROADSHEET redesign of 2026-10-08/09:
+                                 A financial newspaper's markets page on Mizan's own paper: hairline
+                                 rules, no tile walls, charts before numbers, status as a coloured mark
+                                 in a sentence. 8 sections (LAB_SECTIONS in MizanApp): Desk · Strategies
+                                 · Positions · Orders · Research · Compliance & Risk · Performance ·
+                                 Journal. Ids kept where one existed (signals=Orders, committee=Research,
+                                 compliance=Compliance & Risk); LAB_REDIRECT maps the folded ids
+                                 (order→Orders with the ticket open, risk→Compliance & Risk). Shared
+                                 pieces: LabHead, .mz-figs (ruled figures), .mz-news (tables),
+                                 PIPE_GLYPH (● ◐ ■ ○ — ok/warn/block/off), .mz-filter (text tabs).
+                                 Any BentoTile left inside .mz-lab renders flat by CSS. The forced-dark
+                                 cockpit (.mz-cockpit), StatusRail, TradeDesk, ActivityTape, StatStrip
+                                 and src/lib/deskSummary.js are DELETED — don't reintroduce them.
+src/lib/deskPipeline.js        — Pure: the Desk's order pipeline (market → AI committee → strategies →
+                                 Sharia gate → cash → brokers) + pauses, each a status mark from data
+                                 the desk already holds; latestRoundAnswering counts PER REVIEW.
+src/lib/sparkline.js           — Pure: small-multiple geometry (one shared scale that contains 0) +
+                                 pinToday (the line ends on the printed number).
+lib/trading/curve.mjs          — Pure: a strategy's DAILY return vs SPUS rebuilt from its own ledger +
+                                 SIP closes (same accounting as strategyScore). GET /api/bot/curves.
+src/lib/strategyExplainer.js   — Pure: a strategy in plain English FROM ITS PARAMS (so it cannot drift);
+                                 "what it tests" = the ONE rule it differs from a sibling by (never the
+                                 shadow panel). Desk cards + the Strategy guide.
+src/lib/orderQueue.js          — Pure: approval queue rows, order history (AI reviews excluded, reasons
+                                 named, "real money" only on paper:false), the ticket's REAL Sharia line.
+src/lib/killSwitches.js        — Pure: the five §14 levels against what exists (global/strategy/account
+                                 built; symbol automatic via AAOIFI; broker NOT built).
+src/lib/labMetrics.js          — Pure: Sharpe/Sortino/volatility (0% risk-free) withheld until 20 days;
+                                 per-strategy closed-trade win rate.
+src/lib/journalLog.js          — Pure: the Journal's dated record of orders + AI reviews (§18: model ids,
+                                 evidence hash, what was missing).
+lib/ai/packetInputs.mjs        — Pure: returns/technicals/benchmark/identity/events for the research
+                                 packet from data the panel already holds. Until 2026-10-09 every round
+                                 went out "NOT AVAILABLE: benchmark, events, identity, returns".
 src/lib/push.js                — Web push subscription (the client half, written 2026-09-29).
                                  The server half existed for months — endpoints, the
                                  push_subscriptions table, a `push` listener in sw.js, three
@@ -315,8 +368,11 @@ server.js                      — Dev server (Vite middleware + API on :3000)
 
 ### Verification (what actually proves the app works)
 ```
-npm test              — Vitest, 1,229 unit tests passed on 2026-10-07. Pure functions + static contracts. Fast (~15s).
+npm test              — Vitest. 1,373 unit tests passed on 2026-10-09 (clean main; the uncommitted Q4 legal tests add more). Re-run after edits.
+npm run build:e2e     — the build the e2e suite needs: `npm run build` with the PUBLIC Supabase project URL and a
+                        placeholder anon key when none are set. Run it before test:e2e.
 npm run test:e2e      — Playwright. Renders the real production build. NOT in `npm run build`.
+                        416 passed / 0 failed on 2026-10-09.
 npm run test:all      — both
 npm run lint          — crash-focused ESLint (config/eslint.mjs). Wired INTO `npm run build`.
 
@@ -326,10 +382,18 @@ playwright.config.js  — 3 projects: desktop 1440x900, mobile-320 (320x720), ph
                         dead in the test browser and the suite passes by never evaluating them.
                         `serviceWorkers: "block"` is LOAD-BEARING — see §5 PWA notes.
                         Runs against `vite preview` over dist/, so what's tested is what ships.
+e2e/support/global-setup.js — REFUSES to run against a dist/ built without Supabase settings. Such a
+                        build boots in single-user pass-through mode (no login, a fake user) and
+                        the login, demo-wipe, onboarding and Settings-depth specs fail with messages
+                        that never name the cause. That was the "8 pre-existing failures" of
+                        2026-10-09: a worktree with no .env.local, never an app bug.
 e2e/support/app.js    — Boots the app SIGNED IN with zero credentials: seeds a fake Supabase
                         session into localStorage and answers every /api/** call from fixtures.
                         No test account, no rate-limit burn, no chance of writing to prod.
 e2e/smoke.spec.js             — the app boots and renders
+e2e/trade-lab.spec.js         — the Trade Lab broadsheet: all 8 sections, the hand-order AAOIFI
+                                refusal, the strategy explainer, one basis for the equity curve,
+                                halal funds as covered, the Journal record. ~70 tests × 3 viewports.
 e2e/responsive.spec.js        — overflow/clipping across login + every tab + every SUB-tab at real
                                 phone sizes, dock fit, header leaf-overlap, landscape sub-tab
                                 height, --mz-vh resolution. See §5 Responsive.
@@ -382,8 +446,8 @@ scripts/generate-ios-splash.mjs      — iOS launch images + their <link> tags; 
 013_rls_hardening.sql          — RLS gap patch
 014_rls_hardening2.sql         — RLS gap patch 2
 015_rls_audit_and_select_policies.sql — Pre-launch RLS audit confirming full coverage
-016_encrypt_secrets.sql        — Added ciphertext/iv/auth_tag columns to user_snaptrade + user_keys (columns exist, but NEVER POPULATED — see crypto.mjs note above; ENCRYPTION_KEY unset so encryption never ran)
-017_drop_plaintext_secrets.sql — INTENDED to drop plaintext secret cols, but the plaintext `snaptrade_user_secret` still exists AND is the only populated one. Effectively NOT in force. Do not trust "AES-256-GCM only now".
+016_encrypt_secrets.sql        — Added ciphertext/iv/auth_tag columns; prior verified audit (2026-07-27) recorded SnapTrade ciphertext populated and 0 plaintext SnapTrade secrets in production; re-verify before relying on this
+017_drop_plaintext_secrets.sql — INTENDED to remove plaintext columns; `snaptrade_user_secret` still exists but prior verified audit reported 0 non-NULL values. The fallback code still names it; do not assume the column is gone.
 018_security_events.sql        — security_events table (DB-backed IP blocks)
 019_purification.sql           — purification_ratios table (AAOIFI impurity %)
 020_trading_bot.sql            — bot_strategies + pending_signals (owner/beta trading bot)
@@ -415,6 +479,11 @@ scripts/generate-ios-splash.mjs      — iOS launch images + their <link> tags; 
                                  **plaintext** `mizan_keys` blob in user_state that the server never
                                  read for Alpaca. Credentials are managed in Trade → Order Ticket.
                                  Guarded by src/test/alpacaKeys.test.js.
+030_signal_broker.sql           — signal broker/paper/order id; audit records 030 applied in prod
+031_strategy_rank_rebalance.sql — rank-rebalance strategy type; audit records 031 applied
+032_signal_status_submitted.sql — submitted-not-filled status; audit records 032 applied
+033_signal_rationale_and_shadow.sql — additive rationale + shadow status; APPLIED in prod
+                                 (verified 2026-10-06: CHECK allows 'shadow', column exists)
 ```
 
 ---
@@ -466,6 +535,9 @@ Understanding these concepts is required to work on Mizan correctly. Financial e
 - **Single screening source of truth**: `h.sh_` is governed by the server screening service (`lib/sharia.mjs` via `/api/screen` — provider-dispatched: Finnhub now, Zoya when `ZOYA_API_KEY` is set). A root effect screens real holdings into `shariaScreen` state; `mapPosition` reads the live verdict (hardcoded `SHARIA_MAP` is only the instant fallback while it loads). Screener tab, Overview compliance, Rebalancer halal-mode, and Purification all read this one verdict — no more divergence.
 - **Screening under the Finnhub free tier (2026-10-07, `6040450` + `52f4f37`).** A 429 used to read as "no data": the verdict degraded to `review` (or a blank standard), was cached for the day, and the Trade Lab Compliance tab showed 7 of 27 holdings unscreened while STX/TER flipped between runs. Now: `fhGet` paces at 50/min across the instance, retries 429/5xx with backoff, and THROWS on a persistent failure → an honest `unknown` that is **never cached**. Verdicts are shared across instances in `polygon_cache` under `timespan='sharia_verdict_v1'` (no migration; evicted after 7 days by the daily cleanup). `/api/screen` POST answers within 15s and marks the rest `{status:'unknown', reason:'pending'}`. Every verdict carries **`SCREEN_ENGINE_VERSION`** (`src/lib/shariaVerdict.js`) — **bump it whenever older verdicts become untrustworthy**; clients and the shared cache re-screen any other stamp. Client merges MUST go through `mergeVerdicts` / `symbolsToScreen` / `screenUntilSettled` (never `{...cache, ...incoming}`, which let a throttled answer erase a good verdict). `statusForStandard` lives in the pure `shariaVerdict.js` so the SERVER uses the exact rule the app shows (`shariaStatus.js` re-exports it).
 - **Strategies screen by AAOIFI, not the vote** — see `lib/trading/screenGate.mjs` in §2. The server's top-level `status` is a cross-standard VOTE (halal at ≥5 of 7, haram at ≥4 fails); strategy A's AI gate read it and dropped STX/CRWD/FTNT (pass AAOIFI + S&P, fail FTSE/MSCI/SC/IFSB) while B/C/live held them, confounding the AI-vs-no-AI comparison. Never gate a trade on `verdict.status`.
+- **Hand orders are held to AAOIFI too** (owner decision 2026-10-09, `handOrderGate` in `lib/trading/screenGate.mjs`). POST /api/alpaca/order and POST /api/snaptrade/trade/impact screen a BUY before any broker call: it must pass AAOIFI (halal funds pass by construction); an unscreenable buy is refused with "try again", never placed on an assumption; a SELL is never blocked. Before this only the fixed HARAM_TICKERS blocklist applied, so a failing name not on the list went through. The client's own hard-coded haram list was removed — one definition. Guarded by a wiring test (gate before broker).
+- **Halal funds are covered by their issuer, not "unscreened."** `complianceMatrix(…, { funds: HALAL_FUNDS })` counts SPUS/SPSK/… as covered; the ratio screen never produces a verdict for a basket, and counting them as missing data made a fully covered book read "26/27 screened".
+- **Shared paper account: lift our own stops before a rebalance trades a symbol.** Each tick arms every strategy's protective stops BEFORE a due rebalance, and Alpaca refuses an order with an opposite-side order resting ("potential wash trade detected" — E·core lost 9 of 10 buys, 2026-10-09). The rebalance now cancels Mizan's own `mz-stop-` orders on that symbol first (`conflictingStops`, `cancelBracketLegs`); the next tick re-arms them. Hand orders are never touched.
 - **Crypto is never auto-classified.** `screenSymbol` returns `review` (not `halal`) for known tokens with NO standard marked pass, because the AAOIFI ratio engine has nothing to evaluate on an asset with no balance sheet. It used to return `halal` with all seven standards green; the client masked that for HELD crypto only, so any path without connector data (the ad-hoc lookup) saw the raw verdict. Fixed at the source 2026-08-10 — don't reintroduce a client-side-only override. Per-token verdicts are BACKLOG N6.
 - **The Screener screens ANY ticker, not just holdings** (2026-08-10, from user feedback). `/api/screen?symbol=` has always taken an arbitrary symbol; the Screener tab now has a lookup box for symbols the user doesn't own. It is IMPERSONAL (Tier 1) and must stay that way: **one symbol in, one verdict out.** Never add ranking, sorting by desirability, or a curated "picks" list — that converts an impersonal fact into a personalized recommendation and crosses the RIA line. Lookup results are deliberately kept OUT of the holdings `results` cache (it feeds the freshness label and the compliance-change notification baseline).
 
@@ -528,6 +600,9 @@ FU = "Fraunces"       — Display: hero numbers, big stat values, section headin
 FP = "IBM Plex Sans"  — Body: descriptions, paragraphs, form labels
 FM = "IBM Plex Mono"  — Labels: ALL tickers, chips, pills, eyebrows, numbers in tables,
                          percentages, dates, badges, button text, nav labels
+FN = "Newsreader"     — TRADE LAB ONLY (owner exception, 2026-10-08, kept in the console 2026-10-11):
+                         the lab's heading, section heads and big figures. Labels there are IBM Plex Mono.
+                         Nowhere else in the app.
 ```
 
 **Font usage rules** (these are absolute):
@@ -602,6 +677,7 @@ They are in **rem, not px, and that is load-bearing**: a px clamp adapts to the 
 - **Portfolio is one flat strip of 9.** It used to end in "Tools", which revealed a second strip — the app's only depth-3 branch, behind a label describing none of its five unrelated contents. Do not reintroduce nesting; the strip scrolls with snap.
 - **Finances is a strip of 5** (Accounts · Budget · Spending · Recurring · Transactions), split 2026-08-25 from a single scroll of SEVEN stacked sections, each with its own state and several with their own modals. Grouped the way Copilot and Monarch group the same surface. **A section that becomes a destination owes the reader an empty state** — on one scroll an empty section simply did not appear; behind a tab it is a blank screen you clicked into. Recurring, Spending and Transactions each gained a `<ComingSoon pending>` fallback for exactly this, and `e2e/budget.spec.js` fails if any pane renders under ~80 characters.
 - `nav_usage` (migration 028) counts destinations per user — **counters, not an event log**, so there is no timeline and nothing financial. Use it to answer whether Backtest / ETF Overlap earn their slots rather than deciding by taste.
+- **Trade is a strip of 8** (`LabNav`, built on the `.mz-tabbar` contract so these guards walk it and it records `trade/<id>`). Twelve proposal sections were folded into eight without dropping any data (2026-10-08).
 - **Every `<TabBar>` needs a `track` prefix** (`track="portfolio"` → records `portfolio/backtest`). Without it that strip is silently uncounted. This is not hypothetical: for its first day `recordNavView` was wired only into the top-level `setNav`, so sub-tabs recorded nothing and the feature could not answer its own question. `e2e/responsive.spec.js` guards it.
 
 ### PWA install surface (added 2026-08-15)
@@ -712,7 +788,7 @@ Do these WITHOUT being asked:
 These are architectural commitments. Undoing them would break the app or violate the design contract:
 
 - **Split MizanApp.jsx** — it is intentionally monolithic. If extraction is needed for a specific component, user will ask explicitly.
-- **Change the font stack** — Fraunces + IBM Plex Sans + IBM Plex Mono is intentional and final.
+- **Change the font stack** — Fraunces + IBM Plex Sans + IBM Plex Mono is intentional and final. One owner-approved exception: Newsreader (`FN`) inside the Trade Lab only. The Lab's `--mz-signal` orange is likewise an owner-approved, Lab-only accent.
 - **Add new color tokens** — use existing `T.*` palette. The paper-canvas + ink + navy (accent) + green/red (semantics) palette is the brand, with amber/gold reserved for Zakat & warnings only.
 - **Use Tailwind or CSS Modules** — all styling is inline with `T.*` tokens + the THEME_CSS string injected at mount.
 - **Add external npm packages** — ask first. Bundle is already 360KB gzipped. Every dependency must justify itself. (Approved additions to date: `lightweight-charts` v5, 2026-07-15, for the holdings price chart — dynamic-imported so it stays out of the initial bundle; `@vercel/speed-insights` v2, 2026-07-20, mounted in `src/main.jsx` via the `/react` entry — same-origin beacon, no CSP change, ~0.8KB gz.)
@@ -746,7 +822,7 @@ npm run build   # Must exit 0 with no errors
 - [ ] No NaN, undefined, or "[object Object]" visible to user
 
 ### Responsive / touch checklist (added 2026-08-15)
-Run `npm run test:e2e` — it covers all of this automatically. Check by hand only when adding a surface the specs don't reach yet.
+Run `npm run build:e2e && npm run test:e2e` — it covers all of this automatically. Check by hand only when adding a surface the specs don't reach yet.
 - [ ] Nothing overflows at **320px** — `html{overflow-x:clip}` means over-wide content is silently CLIPPED, never scrollable, so this is invisible by eye
 - [ ] Control groups `flex-wrap` rather than relying on `flexShrink:0`; grid cells that hold inputs get `minWidth:0` (a grid item won't shrink below its content's min-content width, and Chrome gives `<input type=date>` a big one)
 - [ ] Viewport heights use `var(--mz-vh)`, never a bare `100vh`; never pair a viewport-relative min-height with a viewport-relative max-height
@@ -806,7 +882,7 @@ These are documented constraints, not undiscovered issues:
 |-------------|-------------|--------------|-------|
 | SnapTrade | Brokerage aggregation | `VITE_SNAPTRADE_CLIENT_ID`, `VITE_SNAPTRADE_CONSUMER_KEY` | ✅ userSecret is ENCRYPTED AT REST as of 2026-07-27 (AES-256-GCM; `ENCRYPTION_KEY` set, 10/10 rows ciphertext, plaintext column nulled — see crypto.mjs note). **Trading varies by broker** (gate on the `/brokerages` object's `allows_trading` flag, NOT `authorization_types` which is unreliable): Fidelity = read-only (no orders); **Robinhood = READ-ONLY via SnapTrade — `allows_trading:false`, a `connectionType:"trade"` login returns 400 code 1012 "does not support trade authorizations" (corrected 2026-07-08; it does NOT trade)**; E\*Trade = trade-enabled but whole-shares only. See memory `snaptrade-broker-capabilities`. Trading needs `connectionType:"trade"`; the connect modal now badges non-trading brokers "Read-only" and blocks trade selection. |
 | Plaid | Bank accounts + transactions | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | access_token server-only, never reaches browser |
-| Anthropic | AI Advisor chat | `ANTHROPIC_KEY` | claude-sonnet-4-6, 60/hr rate limit, streaming |
+| Anthropic | AI Advisor chat + screening explainer + research panel (Claude analyst) | `ANTHROPIC_KEY`, `ADVISOR_MODEL` (opt) | **/api/advisor decides cost server-side (2026-10-09): pinned model (ADVISOR_MODEL or claude-sonnet-4-6), replies capped at 1,500 tokens, and any request carrying `tools` is REFUSED (400) before Anthropic is called.** Why: the browser's `fetchAIPrices` fallback asked Claude + web search for prices on every background refresh of an open tab (~25/hr, around the clock) and drained the $20 balance on 2026-10-08 — it is DELETED; never put a paid AI call in a polling path, and never feed an LLM's price in as a quote. The audit now records cache tokens + web_search_requests. An empty account surfaces as `no_credits` (not http_400); the daily `anthropic.credits` check alerts. 60/hr rate limit. |
 | Stooq | Gold/silver spot prices | None (free) | CSV proxy — no API key needed |
 | Finnhub | News, earnings, profile, dividends, quote (incl. `/api/market/quote` chart live-line), **Sharia screening fundamentals** | `FINNHUB_KEY` / `VITE_FINNHUB_KEY` | 60 req/min free tier — screening costs 3 calls/symbol, paced at 50/min in `lib/sharia.mjs` (a cold 27-holding screen ≈ 100s; the shared verdict cache makes it once a day). **No `/stock/candle`** on free tier → the price chart uses Polygon for OHLC |
 | Zoya | Sharia screening (optional provider — overrides Finnhub when keyed) | `ZOYA_API_KEY`, `ZOYA_API_BASE` (opt) | NOT yet provisioned. When set, `lib/sharia.mjs` routes screening to Zoya (adds non-permissible-income test + direct verdict); falls back to Finnhub on any error. Adapter response-mapping must be verified against the live API. |
@@ -912,7 +988,7 @@ Current gaps in order of user value (from MIZAN-STATE-AUDIT.md Section 6):
 | Hijri Calendar / Hawl tracking | M | Reuses ZakatSadaqah component + push notifications |
 | Shareable snapshot links | M | Read-only token-based view |
 | Risk metrics (Sharpe, max drawdown, volatility) | M | Reuses Polygon OHLC + existing backtester pipeline |
-| Order Ticket activation | S | Remove two gates — backend already deployed |
+| Order Ticket access | — | Already available to trading-enabled accounts; do not remove gates (see §9) |
 | Anonymous peer comparison | L | Requires opt-in + aggregate queries |
 | Browser extension (Sharia checker) | L | No extension manifest yet |
 

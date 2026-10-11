@@ -14,6 +14,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade-lab:** Restore Newsreader; add an orange console accent for both themes (`01f2e7a`)
 - **trade-lab:** Console layout, drawn after a monitoring screen (`fb43152`)
 
+### Fixed
+- **legal:** Terms and trading disclosures state what the trading routes actually do (`1ab5cf8`)
+
 ## 2026-10-09
 
 ### Added

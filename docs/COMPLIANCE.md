@@ -12,10 +12,38 @@
 registration remain **pending** — the guardrail is shipped, its legal sufficiency is not
 established.
 
-The read-only line is drawn at the **personalization of advice**, *not* at trade
-execution and *not* at any single feature. MIZAN may **display** the user's own
-data and may **state impersonal facts**, but it must **never generate a tailored
-recommendation or suitability judgment**.
+The **advice-output boundary** is drawn at the **personalization of advice**,
+not at trade execution and not at any single feature. MĪZAN may **display** the
+user's own data and **state impersonal facts**, but its AI must not generate a
+tailored recommendation or suitability judgment. This does **not** make the
+whole service read-only: permission-gated SnapTrade routes can place real orders.
+The public Terms must describe that fact, regardless of the output tiers below.
+
+## Trading and Case Lab are separate questions (4 October 2026)
+
+`src/components/MizanApp.jsx` shows Trade when `/api/user/features` returns
+`trading_bot`; the server's `canUseTradingBot` allows root or a profile with
+`trading_bot_enabled`. `POST /api/snaptrade/trade/place` and approved bot
+signals can submit **real** brokerage orders. `POST /api/alpaca/order` is
+paper-only. `canUseFullAuto` checks the independent `full_auto_enabled` profile
+allowlist, and a separate per-account switch is also required: **the server
+gate is not root-only**, even though the current Trade UI shows the full-auto
+layer only to root. Do not broaden or equate those permissions on the basis of
+copy alone. Submitting an order is not a verified fill; paper P&L is not live P&L.
+The full legal implications of any execution mode, especially compensated or
+non-owner autonomous trading, remain **unreviewed**. A disclaimer, consent
+click, or this engineering policy is not legal clearance.
+
+The proposed business-Zakat **Case Lab is not shipped or for sale**. Testing a
+human-delivered pilot is a separate founder experiment, not an extension of
+`/api/advisor` or the trading routes. Do not advertise scholar review until a
+qualified reviewer has accepted a defined scope. Set methodology, provenance,
+assumptions, reviewer sign-off, secure document transfer, retention, reuse
+rights, case limitations, direct costs, payment and separate service terms
+before accepting client records or fees. Default reuse rights to **none**.
+Do not present estimated purification factors as verified or use clients'
+financial documents as AI input without an approved handling policy. This
+section neither authorizes a new feature nor decides legal or religious status.
 
 ## The three tiers
 
@@ -70,6 +98,26 @@ transactions (`src/components/charts/holdingsOverlay.js`).
 - The server loader that would surface this data is correctly user-scoped (it *is*
   their data); the chart-data routes above are the ones that must never be
   user-scoped.
+
+## Trade Lab surfaces added 2026-10-08/09 (owner/beta only)
+
+- **The strategy explainer is ACCOUNT_SERVICING** (`src/lib/strategyExplainer.js`). It
+  restates the user's OWN strategy rules in plain English, generated from the params the
+  engine runs on. "What it tests" names the one rule a strategy differs from a sibling
+  by. It never says whether to run, keep or change a strategy, and never ranks one as
+  better.
+- **The ticket's Sharia line is IMPERSONAL** (one symbol in, one verdict out, from
+  `/api/screen`). It replaced a static green "SHARIA PRE-CHECK" that checked nothing.
+- **Hand orders are held to AAOIFI** server-side (`handOrderGate`). This is a
+  Sharia-compliance gate on the user's own instruction, not a recommendation: it
+  refuses a failing BUY and never suggests an alternative.
+- **The Research panel stays operator-only** (`isOperatorAccount`, never
+  `canUseTradingBot`). Its directional verdicts are T2, permissible only because the
+  sole viewer is the operator. The Desk and the Journal read the same feed, and a
+  non-operator gets "operator's accounts only".
+- **/api/advisor now decides cost server-side.** It pins the model, caps replies and
+  refuses tools. The browser can no longer ask the advisor to web-search prices, so no
+  surface can present an LLM's guess as a market fact.
 
 ## The advisor boundary (the AI)
 
