@@ -136,14 +136,24 @@ test.describe("Trade Lab cockpit", () => {
     expect(await ink(), "light ink on the dark theme").toBeGreaterThan(500);
   });
 
-  test("the console speaks in the monospace face, and no longer loads Newsreader", async ({ page }) => {
+  test("the lab's heading uses the newspaper face, its labels the monospace", async ({ page }) => {
     await gotoLab(page);
-    const ff = await page.locator(".mz-cbar-crumb").evaluate(el => getComputedStyle(el).fontFamily);
-    expect(ff).toMatch(/IBM Plex Mono/);
-    // The broadsheet's serif was dropped with the console (2026-10-11); a
-    // leftover import would make every visitor download a face nothing uses.
-    const css = await page.locator("style").evaluateAll(els => els.map(e => e.textContent).join(""));
-    expect(css).not.toMatch(/Newsreader/);
+    const face = (sel) => page.locator(sel).first().evaluate(el => getComputedStyle(el).fontFamily);
+    expect(await face(".mz-cbar-crumb b")).toMatch(/Newsreader/);
+    expect(await face(".mz-cbar-meta")).toMatch(/IBM Plex Mono/);
+    // Only the lab: the rest of Mizan keeps its fixed stack.
+    expect(await face("body")).not.toMatch(/Newsreader/);
+  });
+
+  test("the console accent is defined for BOTH themes and stays readable on each", async ({ page }) => {
+    const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--mz-signal").trim());
+    await gotoLab(page, { theme: "light" });
+    const light = await accent();
+    await gotoLab(page, { theme: "dark" });
+    const dark = await accent();
+    expect(light).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(dark).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(light).not.toBe(dark);
   });
 
   test("downloads the closed-trades tax & Zakat sheet at the rates the user set", async ({ page }) => {

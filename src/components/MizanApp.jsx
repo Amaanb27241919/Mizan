@@ -96,7 +96,7 @@ const T = {
   rSm:"var(--r-sm)", rMd:"var(--r-md)", rLg:"var(--r-lg)",
 };
 const THEME_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap');
 
   :root, :root[data-theme="light"] {
     /* Paper-canvas light theme — primary brand face */
@@ -104,6 +104,9 @@ const THEME_CSS = `
     --mz-border: #e8e2d6; --mz-borderHi: #d2cabb;
     --mz-text: #44413b; --mz-textHi: #1c1b19;
     --mz-muted: #87827a; --mz-dim: #efebe3;
+    /* The Trade Lab console's accent (owner, 2026-10-11): burnt orange, 4.9:1 on
+       the paper, white text on it 5.2:1. Distinct from gold (Zakat/warnings). */
+    --mz-signal: #c2410c; --mz-onSignal: #ffffff;
     --mz-gainBg: #e7f3ec; --mz-lossBg: #fbeceb;
     --mz-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 6px 20px rgba(28,27,25,0.06);
     /* Glass material — light theme variants */
@@ -129,6 +132,8 @@ const THEME_CSS = `
     --mz-border: #2b3a57; --mz-borderHi: #3d4f70;
     --mz-text: #bcc4d4; --mz-textHi: #f4f2ec;
     --mz-muted: #828ca0; --mz-dim: #2b3a57;
+    /* Console accent, lifted for the navy: 7.2:1 on the page, navy text on it. */
+    --mz-signal: #f2884a; --mz-onSignal: #0e1626;
     --mz-gainBg: #0f2b1e; --mz-lossBg: #2c1622;
     --mz-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 28px rgba(0,0,0,0.55);
     /* Glass material — chrome elements only (nav, modals, overlays) */
@@ -8257,8 +8262,8 @@ function WorkingOrders({desk}){
    charts before numbers, status as a coloured mark inside a sentence.
 
    On 2026-10-11 the owner moved the lab to a CONSOLE (a monitoring screen:
-   top bar, rail with layers, one large stage, a dock of panels). The
-   newspaper serif went with it; the lab now speaks in IBM Plex Mono.
+   top bar, rail with layers, one large stage, a dock of panels), keeping
+   Newsreader as its display face and adding an orange accent (--mz-signal).
 
    Twelve proposal sections (§23) became eight: Desk · Strategies · Portfolio
    · Orders · Research · Compliance & Risk · Performance · Journal. The ids are
@@ -8266,10 +8271,10 @@ function WorkingOrders({desk}){
    compliance → Compliance & Risk) so nav_usage counters and stored state
    carry over. Nothing was removed; see the Index board of the design canvas.
    ═══════════════════════════════════════════════════════════════════════════ */
-// The lab's display face. Newsreader (the broadsheet, 2026-10-08) gave way to
-// the console (2026-10-11): one monospace face for labels, figures and heads,
-// as on an instrument panel. FN stays a name so the lab can change face in one place.
-const FN=FM;
+// The lab's display face: Newsreader, a typeface designed for news (owner
+// exception, Trade only). In the console (2026-10-11) it sets the heading,
+// section heads and big figures; panel labels stay in IBM Plex Mono.
+const FN="'Newsreader','Georgia','Times New Roman',serif";
 
 /** Section identity colours — owner-approved with the hybrid mockup. They
  *  mark WHERE you are (a square in the nav, a rule under the heading) and
@@ -15446,16 +15451,17 @@ export default function Mizan(){
       .mz-lab .bento-tile--click:active{transform:none!important;}
       /* ── Trade Lab console (owner, 2026-10-11) ─────────────────────────────
          Drawn after a monitoring screen: panels on the paper, hairlines, one
-         monospace face, corner marks, and ONE accent (--mz-signal = T.gold, the
-         app's warning colour) for whatever wants attention. Strategy colours
+         monospace face, corner marks, and ONE accent (--mz-signal, a burnt
+         orange defined per theme) for whatever wants attention. Strategy colours
          stay identity only. */
-      .mz-console{--mz-signal:${T.gold}; font-family:${FM};}
+      .mz-console{font-family:${FM};}
       .mz-cbar{display:flex; align-items:center; gap:var(--s-3) var(--s-5); flex-wrap:wrap; padding:var(--s-2) var(--s-4);
         background:var(--mz-surface); border:1px solid var(--mz-border); font-size:var(--fs-xs); color:var(--mz-text);}
       .mz-cbar-crumb{margin:0; display:flex; gap:7px; align-items:baseline; min-width:0; font-family:${FM}; font-size:var(--fs-sm);
         font-weight:400; color:var(--mz-muted); letter-spacing:.02em;}
       .mz-cbar-crumb i{font-style:normal; color:var(--mz-borderHi);}
-      .mz-cbar-crumb b{color:var(--mz-textHi); font-weight:600;}
+      .mz-cbar-crumb b{color:var(--mz-textHi); font-weight:600; font-family:${FN}; font-size:var(--fs-lg); letter-spacing:0;}
+      .mz-cbar-crumb > span:first-child{font-family:${FN}; font-size:var(--fs-lg); color:var(--mz-textHi); letter-spacing:0;}
       .mz-cbar-meta{display:flex; gap:var(--s-2) var(--s-5); margin-left:auto; flex-wrap:wrap; text-transform:uppercase; letter-spacing:.06em;
         color:var(--mz-muted); font-variant-numeric:tabular-nums;}
       .mz-cbar-find{position:relative;}
@@ -15467,7 +15473,7 @@ export default function Mizan(){
       .mz-cbar-alerts{font-family:${FM}; font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.08em; padding:8px 14px; cursor:pointer;
         border:1px solid var(--mz-border); background:transparent; color:var(--mz-text); border-radius:0;}
       .mz-cbar-alerts b{margin-left:8px; font-weight:600;}
-      .mz-cbar-alerts.warn{background:var(--mz-signal); border-color:var(--mz-signal); color:#fff;}
+      .mz-cbar-alerts.warn{background:var(--mz-signal); border-color:var(--mz-signal); color:var(--mz-onSignal);}
       .mz-cbar-alerts.crit{background:${T.loss}; border-color:${T.loss}; color:#fff;}
       .mz-cbar-alerts:focus-visible{outline:2px solid var(--mz-textHi); outline-offset:2px;}
       @media (max-width:640px){ .mz-cbar-meta{margin-left:0;} .mz-cbar-find{flex:1 1 10rem;} .mz-cbar-find input{width:100%;} }
@@ -15498,7 +15504,7 @@ export default function Mizan(){
       .mz-layer-ret[aria-pressed="true"]{border-color:var(--mz-signal);}
       .mz-readout{padding-top:var(--s-4); background:repeating-linear-gradient(135deg, var(--mz-border) 0 1px, transparent 1px 5px) top/100% 9px no-repeat;}
       .mz-readout-top{display:flex; gap:var(--s-3); align-items:center; margin:var(--s-3) 0 var(--s-2);}
-      .mz-readout-code{font-size:var(--fs-lg); color:var(--mz-textHi); border:1px solid; padding:2px 8px; min-width:2.6rem; text-align:center; flex:0 0 auto;}
+      .mz-readout-code{font-family:${FN}; font-size:var(--fs-xl); color:var(--mz-textHi); border:1px solid; padding:2px 8px; min-width:2.6rem; text-align:center; flex:0 0 auto;}
       .mz-readout-name{font-size:var(--fs-xs); color:var(--mz-textHi); overflow-wrap:anywhere;}
       .mz-readout-sub{font-family:${FP}; font-size:var(--fs-2xs); color:var(--mz-muted); line-height:1.4; margin-top:2px;}
       .mz-readout svg{display:block; width:100%; height:96px; overflow:visible;
@@ -15522,7 +15528,7 @@ export default function Mizan(){
       .mz-stage{background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4); position:relative; min-width:0;}
       .mz-console .mz-stage .mz-figs{padding:0 0 var(--s-4);}
       .mz-console .mz-stage .mz-fig-l{font-family:${FM}; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.08em;}
-      .mz-console .mz-fig-v{font-family:${FM}; font-weight:300; letter-spacing:-.02em;}
+      .mz-console .mz-fig-v{font-family:${FN}; font-weight:500; letter-spacing:-.01em;}
       .mz-stage-plot{position:relative; height:clamp(15rem, 38vw, 26rem); margin:var(--s-5) 0 var(--s-8) 3.2rem;
         background:radial-gradient(circle, color-mix(in srgb, var(--mz-muted) 38%, transparent) 0.9px, transparent 1.3px) 0 0/9px 9px;}
       .mz-stage-plot svg{position:absolute; inset:0; width:100%; height:100%; overflow:visible;}
@@ -15585,7 +15591,7 @@ export default function Mizan(){
       .mz-spec > div:first-child{grid-column:1 / -1;}
       .mz-qfigs{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--s-2);}
       .mz-qfigs > div{display:flex; flex-direction:column; min-width:0;}
-      .mz-qfigs b{font-size:var(--fs-3xl); font-weight:300; line-height:1.1; color:var(--mz-textHi); font-variant-numeric:tabular-nums;}
+      .mz-qfigs b{font-family:${FN}; font-size:var(--fs-3xl); font-weight:500; line-height:1.1; color:var(--mz-textHi); font-variant-numeric:tabular-nums;}
       .mz-qfigs b.hot{color:var(--mz-signal);}
       .mz-qfigs span{font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.04em; color:var(--mz-text); white-space:nowrap;}
       .mz-qfigs small{white-space:nowrap;}
@@ -15618,14 +15624,13 @@ export default function Mizan(){
 
       /* Every other section in the console look: mono heads, panels, hairlines. */
       .mz-console .mz-lab-head{border-bottom:1px solid var(--mz-border);}
-      .mz-console .mz-lab-head h2{font-size:var(--fs-sm); font-weight:500; text-transform:uppercase; letter-spacing:.08em;}
+      .mz-console .mz-lab-head h2{font-size:var(--fs-2xl); font-weight:600; letter-spacing:-.01em;}
       .mz-console .mz-lab-head p{font-family:${FP};}
       .mz-console .mz-pipe{font-family:${FM}; font-size:var(--fs-xs); background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-2) var(--s-3); margin-bottom:var(--s-4);}
       .mz-console .mz-multis{gap:var(--s-3); border-top:0;}
       .mz-console .mz-mult{background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-3) var(--s-4);}
       .mz-console .mz-mult header{font-family:${FM}; font-size:var(--fs-sm);}
       .mz-console .mz-cols > *{background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4);}
-      .mz-console .mz-col h3,.mz-console .mz-day h3,.mz-console .mz-notes h3,.mz-console .mz-ticket-side h3{font-size:var(--fs-xs); font-weight:500; text-transform:uppercase; letter-spacing:.08em;}
       .mz-console .mz-news{font-family:${FM}; font-size:var(--fs-xs);}
 
       /* Weight bar — the only chart in the tape. Inline so it reads as part

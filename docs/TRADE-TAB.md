@@ -30,7 +30,7 @@ It is **gated** — Trade access needs root OR the `trading_bot_enabled` beta al
 > - **Desk stage:** every strategy against SPUS on one scale and one calendar, with a crosshair on the selected strategy's latest close.
 > - **Dock:** strategy inspector · order queue · alert feed (critical first; a filled order is a log line).
 > - The strategy tracks, latest orders, committee and A-vs-B panels remain below.
-> - One monospace face (FN now = FM; Newsreader dropped). One accent, `--mz-signal` = T.gold.
+> - Newsreader (`FN`) for the heading, section heads and big figures; IBM Plex Mono for labels. One accent, `--mz-signal`, defined per theme: burnt orange `#c2410c` on light (4.9:1), `#f2884a` on dark (7.2:1).
 > - Logic is pure and tested in `src/lib/labConsole.js`.
 
 - Top-level nav item **"Trade"**, rendered only for trading-enabled accounts (`isAdmin`
