@@ -3,6 +3,7 @@
  *
  *   npm run build && npx vite preview --port 4173 --strictPort &
  *   node scripts/generate-legal-pdfs.mjs
+ *   node scripts/generate-legal-pdfs.mjs --terms-only  # one revised document
  *
  * WHY THIS EXISTS: the PDFs and the web pages were maintained separately and
  * drifted. On 2026-08-18 the PDF (and the page) claimed bank transactions were
@@ -38,6 +39,8 @@ const DOCS = [
   { route: "/data-retention",  file: "DATA_RETENTION_POLICY.pdf" },
   { route: "/access-controls", file: "ACCESS_CONTROLS_POLICY.pdf" },
 ];
+const selectedDocs = process.argv.includes("--terms-only")
+  ? DOCS.filter((doc) => doc.route === "/terms") : DOCS;
 
 async function requirePreview() {
   try {
@@ -66,7 +69,7 @@ const run = async () => {
     serviceWorkers: "block",
   });
 
-  for (const { route, file } of DOCS) {
+  for (const { route, file } of selectedDocs) {
     const page = await ctx.newPage();
     await page.addInitScript(() => {
       try { localStorage.setItem("mizan_theme_mode", "light"); } catch { /* private mode */ }
@@ -98,7 +101,7 @@ const run = async () => {
 
   // Verify rather than trust: a PDF that renders an error page is still a PDF.
   let bad = 0;
-  for (const { file } of DOCS) {
+  for (const { file } of selectedDocs) {
     const p = path.join(OUT_PUBLIC, file);
     const head = fs.readFileSync(p).subarray(0, 5).toString("latin1");
     const size = fs.statSync(p).size;

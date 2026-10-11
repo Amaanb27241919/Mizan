@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-11
 
 ### Added
+- **trade-lab:** Eight sections become five, each reading like the Desk (`ca78408`)
 - **trade-lab:** Restore Newsreader; add an orange console accent for both themes (`01f2e7a`)
 - **trade-lab:** Console layout, drawn after a monitoring screen (`fb43152`)
 

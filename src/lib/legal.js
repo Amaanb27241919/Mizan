@@ -7,13 +7,17 @@
  * date cannot fall out of step with the document; a reminder on a separate
  * calendar always eventually does.
  *
- * Update LEGAL_LAST_UPDATED whenever a policy changes materially. The sweep
- * emails the owner once REVIEW_INTERVAL_DAYS have passed, so letting it go
- * stale is a visible event rather than a silent one.
+ * LEGAL_LAST_UPDATED is the shared review date for policies that have not been
+ * individually revised. Terms has its own date: changing only the Terms must
+ * not falsely redate Privacy, Security, or Data Retention. The daily sweep uses
+ * the oldest shared policy date, so a Terms-only revision does not reset it.
  */
 
 /** ISO date of the last substantive review of the legal documents. */
 export const LEGAL_LAST_UPDATED = "2026-08-18";
+
+/** Terms revised to describe the existing, permission-gated order routes. */
+export const TERMS_LAST_UPDATED = "2026-10-04";
 
 /** Owner decision 2026-08-18: quarterly cadence. */
 export const REVIEW_INTERVAL_DAYS = 90;

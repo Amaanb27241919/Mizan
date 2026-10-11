@@ -1,9 +1,9 @@
 import LegalLayout from "./LegalLayout.jsx";
-import { legalUpdatedLabel } from "../lib/legal.js";
+import { legalUpdatedLabel, TERMS_LAST_UPDATED } from "../lib/legal.js";
 
 export default function Terms() {
   return (
-    <LegalLayout title="Terms of Service" updated={legalUpdatedLabel()}>
+    <LegalLayout title="Terms of Service" updated={legalUpdatedLabel(TERMS_LAST_UPDATED)}>
       <p className="mz-lead">
         These Terms of Service ("Terms") govern your use of MĪZAN
         (the "Service"). By creating an account or otherwise using the
@@ -15,25 +15,42 @@ export default function Terms() {
       <p>
         MĪZAN is a personal finance dashboard that aggregates your bank
         accounts, brokerage holdings, transactions, and subscriptions
-        into a single read-only view. The Service relies on third-party
+        into a single view. Most account and research features display
+        information without placing orders. The Service relies on third-party
         providers (including Plaid and SnapTrade) to retrieve your
         financial data with your authorization.
       </p>
       <p>
-        MĪZAN is read-only. The Service does not initiate payments,
-        transfer money, place trades, or otherwise act on your accounts.
+        Trading tools are restricted to accounts granted trading access.
+        An eligible user can preview and submit orders through a connected
+        brokerage. Separately authorized strategies may submit orders without
+        approval of each individual trade when their execution settings permit
+        it. Those are real brokerage orders, not read-only activity. Alpaca
+        paper orders use simulated funds; paper results are not live results.
+        MĪZAN does not hold your securities, move money between your accounts,
+        or guarantee that an order submitted to a broker will fill or fill at
+        a particular price.
+      </p>
+      <p>
+        The proposed business-Zakat Case Lab is not an existing feature of
+        this Service or included under these Terms. Any future assessment
+        would require a separately agreed scope and terms before accepting
+        client records or payment.
       </p>
 
       <h2>2. Not financial advice</h2>
       <p>
-        MĪZAN is an informational and aggregation tool. It is not, and
-        should not be interpreted as, financial, tax, investment, legal,
-        or accounting advice. We are not a registered investment adviser,
-        broker-dealer, or financial planner. Any screening, charts,
-        comparisons, or computed values shown in the app are produced
-        algorithmically and are provided for your reference only. Always
-        consult a qualified professional before making financial
-        decisions.
+        MĪZAN provides account-aggregation and research tools alongside
+        the restricted trading capability described above. The Service is
+        not, and should not be interpreted as, financial, tax, investment,
+        legal, or accounting advice. We are not a registered investment adviser,
+        broker-dealer, or financial planner. Trading access is not a
+        recommendation to buy, sell, or hold a security. Any screening,
+        charts, comparisons, or computed values shown in the app are
+        produced algorithmically and are provided for your reference only.
+        Trading involves risk of loss, including loss of your invested
+        capital. Always consult a qualified professional before making
+        financial decisions.
       </p>
 
       <h2>3. Your account</h2>
@@ -52,8 +69,9 @@ export default function Terms() {
       <p>
         Linking your bank or brokerage requires you to authenticate
         through that institution's own login flow (typically via Plaid
-        or SnapTrade). Your use of those flows is subject to those
-        providers' own terms and privacy notices, including:
+        or SnapTrade). Trading-enabled users may also connect an Alpaca
+        paper account for simulated orders. Your use of those flows is
+        subject to the providers' own terms and privacy notices, including:
       </p>
       <ul>
         <li><a href="https://plaid.com/legal/" target="_blank" rel="noreferrer">Plaid End User Privacy Policy</a></li>

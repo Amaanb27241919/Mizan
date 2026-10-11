@@ -6133,8 +6133,9 @@ function StrategyTable({strategies,loading,onRefresh,layers,layerOf,requestLayer
 
 function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,isRoot=false,consented=false,snapAccounts=[],demoMode=false,onNav}){
   const showStrat=view==="strategies";
-  // Beta (non-root) users get Manual/Semi only — full-auto is owner-only. The
-  // server rejects layer="full" for them too; this keeps the UI honest.
+  // Current UI shows Full only to root. The server instead checks the separate
+  // full_auto_enabled profile allowlist + per-account switch, which can include
+  // a specifically authorized non-root account. UI visibility is not the gate.
   const LAYERS=isRoot?["manual","semi","full"]:["manual","semi"];
   // First-use consent gate (non-root only). Local flip after Accept avoids a refetch.
   const[consentedLocal,setConsentedLocal]=useState(consented);
@@ -6509,7 +6510,7 @@ function TradingBotPanel({view="strategies",isAdmin=false,fullAutoEnabled=false,
     {showStrat&&needsConsent&&<BentoTile accent={T.gold} style={{background:`linear-gradient(135deg, ${T.gold}10, transparent 60%), ${T.card}`}}>
       <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>BEFORE YOU START · BETA</div>
       <p style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.7,margin:`0 0 ${T.s3}`}}>
-        Trade is an <strong>experimental beta</strong>. <strong>Mizan is not a registered investment adviser (RIA)</strong> and this is <strong>not financial advice</strong>. You build your own strategies and they run only on <strong>your own connected brokerage</strong> — <strong>you approve every trade yourself</strong> (no autonomous execution). Trading carries real risk: <strong>you can lose money, up to your full allocated capital</strong>. Stop-loss, max-drawdown, the daily cap, and the Sharia gate stay enforced, but they don't guarantee against loss.
+        Trade is an <strong>experimental beta</strong>. <strong>Mizan is not a registered investment adviser (RIA)</strong> and this is <strong>not financial advice</strong>. Manual and semi-auto strategies require your approval for each order; a <strong>separately authorized full-auto strategy can submit orders without individual approval</strong>. Confirm your broker and execution mode before enabling any strategy. Trading carries real risk: <strong>you can lose money, up to your full allocated capital</strong>. Stop-loss, max-drawdown, the daily cap, and the Sharia gate do not guarantee against loss.
       </p>
       <button onClick={acceptConsent} disabled={consentBusy} className="btn-primary" style={{fontSize:"var(--fs-xs)",opacity:consentBusy?0.6:1}}>{consentBusy?"Saving…":"I understand — enable Trade for my account"}</button>
     </BentoTile>}
@@ -13794,9 +13795,9 @@ export default function Mizan(){
       return "overview";
     }catch{return"overview";}
   });
-  // Non-root users can never navigate to Trade. Every entry point (nav bar,
-  // command palette, keyboard, deep link) funnels through setNav, so this one
-  // guard hides the whole surface. The server also 403s /api/bot/* for them.
+  // Trade is hidden from accounts without trading_bot permission, not from
+  // all non-root users. Every entry point (nav bar, command palette, keyboard,
+  // deep link) funnels through setNav; the server repeats the authorization.
   const setNav=v=>{
     const t=(v==="trade"&&!isAdmin)?"overview":v;
     setNavState(t);

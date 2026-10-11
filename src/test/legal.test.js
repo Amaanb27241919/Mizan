@@ -11,7 +11,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  LEGAL_LAST_UPDATED, REVIEW_INTERVAL_DAYS, LEGAL_DOCUMENTS,
+  LEGAL_LAST_UPDATED, TERMS_LAST_UPDATED, REVIEW_INTERVAL_DAYS, LEGAL_DOCUMENTS,
   daysSinceLegalReview, isLegalReviewDue, legalUpdatedLabel,
 } from "../lib/legal.js";
 
@@ -60,9 +60,32 @@ describe("review cadence", () => {
   it("renders a human date for the page header", () => {
     expect(legalUpdatedLabel("2026-08-18")).toBe("August 18, 2026");
   });
+  it("dates the revised Terms without falsely redating unchanged policies", () => {
+    expect(TERMS_LAST_UPDATED).toBe("2026-10-04");
+    expect(LEGAL_LAST_UPDATED).toBe("2026-08-18");
+    expect(legalUpdatedLabel(TERMS_LAST_UPDATED)).toBe("October 4, 2026");
+  });
   it("lists every published document so the reminder can name them", () => {
     const ids = LEGAL_DOCUMENTS.map((d) => d.id);
     expect(ids).toEqual(expect.arrayContaining(["privacy", "terms", "security", "retention", "access"]));
+  });
+});
+
+describe("Terms reflect permission-gated trading routes", () => {
+  const terms = PAGES["Terms.jsx"].replace(/\s+/g, " ");
+  it("does not call the entire service read-only or deny broker orders", () => {
+    expect(terms).not.toMatch(/MĪZAN is read-only|does not (?:place|submit) trades/i);
+    expect(terms).toMatch(/Trading tools are restricted to accounts granted trading access/i);
+    expect(terms).toMatch(/submit orders through a connected brokerage/i);
+    expect(terms).toMatch(/submit orders without approval of each individual trade/i);
+    expect(terms).toMatch(/Alpaca paper orders use simulated funds/i);
+  });
+  it("does not promise a paid Case Lab product that is not built", () => {
+    expect(terms).toMatch(/Case Lab is not an existing feature/i);
+    expect(terms).toMatch(/separately agreed scope and terms/i);
+  });
+  it("shows its actual revision date, independently of Privacy and Security", () => {
+    expect(PAGES["Terms.jsx"]).toMatch(/updated=\{legalUpdatedLabel\(TERMS_LAST_UPDATED\)\}/);
   });
 });
 
@@ -136,6 +159,7 @@ describe("every legal page is a web page, current, and accurate", () => {
   it("takes its date from the shared constant — no page hardcodes one", () => {
     for (const [file, src] of Object.entries(PAGES)) {
       expect(src, `${file} hardcodes a date`).not.toMatch(/updated="[A-Z][a-z]+ \d/);
+      if (file === "Terms.jsx") continue; // its revision is newer than the other policies
       expect(src, `${file} does not use legalUpdatedLabel()`).toMatch(/updated=\{legalUpdatedLabel\(\)\}/);
     }
   });
