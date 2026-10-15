@@ -1354,6 +1354,28 @@ test.describe("Trade Lab console", () => {
     await expect(page.getByTestId("strategies-all")).toBeVisible();
   });
 
+  test("Desk has a View all too: every strategy in its own colour, and a card opens its console", async ({ page }) => {
+    await open(page);
+    await page.getByTestId("desk-view").getByRole("button", { name: "View all" }).click();
+    const key = page.getByTestId("strategy-colors").locator("li");
+    await expect(key).toHaveCount(2);
+    // The key's swatch and the card's top bar wear the SAME colour as the stage line, per strategy.
+    for (const name of ["Reference system + AI gate", "Reference system, no AI"]) {
+      const sw = await key.filter({ hasText: name }).locator(".mz-colorkey-sw").evaluate((el) => getComputedStyle(el).backgroundColor);
+      const bar = await page.getByTestId("strategy-card").filter({ hasText: name }).evaluate((el) => getComputedStyle(el).borderTopColor);
+      expect(bar).toBe(sw);
+      const width = await page.getByTestId("strategy-card").filter({ hasText: name }).evaluate((el) => parseFloat(getComputedStyle(el).borderTopWidth));
+      expect(width).toBeGreaterThanOrEqual(3);
+    }
+    const colors = await key.locator(".mz-colorkey-sw").evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
+    expect(new Set(colors).size).toBe(2);
+    await page.getByTestId("strategy-card").filter({ hasText: "Reference system, no AI" }).getByRole("button", { name: "Open console →" }).click();
+    await expect(page.getByTestId("strategy-console").getByRole("heading", { name: "Reference system, no AI" })).toBeVisible();
+    // Back on the Desk, the View all choice is remembered.
+    await labNav(page).getByRole("button", { name: "Desk", exact: true }).click();
+    await expect(page.getByTestId("strategies-all")).toBeVisible();
+  });
+
   test("Account holds positions, performance, compliance, risk and the stops; Journal holds the AI committee", async ({ page }) => {
     await open(page);
     await labNav(page).getByRole("button", { name: "Account", exact: true }).click();

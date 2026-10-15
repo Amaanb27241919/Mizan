@@ -8540,6 +8540,9 @@ function StrategiesAll({lab,book,onOpen,mask}){
   return<div className="mz-desk" data-testid="strategies-all">
     <section className="mz-stage">
       <h2 className="mz-all-h" style={{fontFamily:FN}}>Every strategy, side by side</h2>
+      <ul className="mz-colorkey" aria-label="Strategy colours" data-testid="strategy-colors">{lab.rows.map(r=><li key={r.id}>
+        <span className="mz-colorkey-sw" style={{background:r.color||T.slate}} aria-hidden="true"/><b>{r.name}</b>{r.code&&<span className="mz-news-dim"> {r.code}</span>}
+      </li>)}</ul>
       <div style={{overflowX:"auto"}}><table className="mz-news" data-testid="strategies-league">
         <thead><tr><th>#</th><th>Strategy</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Equity</th><th style={{textAlign:"right"}}>Return</th><th style={{textAlign:"right"}}>vs SPUS</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Holdings</th><th className="mz-narrow-hide">Status</th></tr></thead>
         <tbody>{league.map((r,i)=><tr key={r.id}>
@@ -8559,7 +8562,7 @@ function StrategiesAll({lab,book,onOpen,mask}){
       const live=r.traded&&r.returnPct!=null?{returnPct:r.returnPct,benchPct:r.benchPct}:null;
       const g=sparkPaths(pinToday(lab.curves.curves[r.id]?.points,today,live),{w:200,h:72,pad:6});
       const about=lab.abouts.get(r.id), o=lastOrder.get(r.id);
-      return<article key={r.id} className="mz-panel mz-allcard" data-testid="strategy-card">
+      return<article key={r.id} className="mz-panel mz-allcard" data-testid="strategy-card" style={{borderTopColor:r.color||T.slate}}>
         <div className="mz-readout-top" style={{marginTop:0}}>
           <span className="mz-readout-code" style={{borderColor:r.color||T.slate}}>{r.code||"—"}</span>
           <div style={{minWidth:0}}>
@@ -9306,6 +9309,9 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   // Strategies → One strategy | View all. Remembered per browser; storage can throw.
   const[stratView,setStratViewRaw]=useState(()=>{try{return localStorage.getItem("mizan_lab_strat_view")==="all"?"all":"one";}catch{return"one";}});
   const setStratView=v=>{setStratViewRaw(v);try{localStorage.setItem("mizan_lab_strat_view",v);}catch{}};
+  // Desk → Desk | View all, remembered the same way.
+  const[deskView,setDeskViewRaw]=useState(()=>{try{return localStorage.getItem("mizan_lab_desk_view")==="all"?"all":"desk";}catch{return"desk";}});
+  const setDeskView=v=>{setDeskViewRaw(v);try{localStorage.setItem("mizan_lab_desk_view",v);}catch{}};
   const[findMiss,setFindMiss]=useState(null);
   const lab=useMemo(()=>{
     const chips=chipMap(book.strategies);
@@ -9361,7 +9367,12 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
         selected={selectedId} onSelect={id=>{setSelected(id);if(sub!=="desk"&&sub!=="strategies")goSection("strategies");}} mask={labMask}
         curves={lab.curves.curves} today={nyToday()} about={lab.abouts.get(selectedId)}/>
       <div className="mz-lab-body">
-        {sub==="desk"&&<BroadsheetDesk desk={deskData} book={book} demoMode={demoMode} onGo={goSection} lab={lab} selected={selectedId} onSelect={setSelected}/>}
+        {sub==="desk"&&lab.rows.length>1&&<div className="mz-filter" role="group" aria-label="Desk view" style={{marginTop:0}} data-testid="desk-view">
+          {[["desk","Desk"],["all","View all"]].map(([k,l])=><button key={k} onClick={()=>setDeskView(k)} aria-pressed={deskView===k} className={deskView===k?"on mz-tap":"mz-tap"}>{l}</button>)}
+        </div>}
+        {sub==="desk"&&(deskView==="all"&&lab.rows.length>1
+          ?<StrategiesAll lab={lab} book={book} mask={labMask} onOpen={id=>{setSelected(id);setStratView("one");goSection("strategies");}}/>
+          :<BroadsheetDesk desk={deskData} book={book} demoMode={demoMode} onGo={goSection} lab={lab} selected={selectedId} onSelect={setSelected}/>)}
         {/* ACCOUNT = Positions + Performance + Compliance & Risk, the way the
             Desk reads: figures and the equity curve first, then panels. */}
         {sub==="positions"&&<div className="mz-lab-stack mz-console-stack" data-testid="account-console">
@@ -15803,6 +15814,11 @@ export default function Mizan(){
       .mz-all-name:hover b,.mz-all-name:focus-visible b{text-decoration:underline; text-underline-offset:3px;}
       .mz-allgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr)); gap:var(--s-4); margin-top:var(--s-4);}
       .mz-allcard{display:flex; flex-direction:column; gap:var(--s-2);}
+      .mz-panel.mz-allcard{border-top-width:4px;}
+      .mz-colorkey{list-style:none; margin:0 0 var(--s-3); padding:0; display:flex; flex-wrap:wrap; gap:var(--s-2) var(--s-4); font-family:${FM}; font-size:var(--fs-xs); color:var(--mz-text);}
+      .mz-colorkey li{display:inline-flex; align-items:center; gap:var(--s-1);}
+      .mz-colorkey b{color:var(--mz-textHi); font-weight:600;}
+      .mz-colorkey-sw{width:14px; height:14px; flex:0 0 auto; border:1px solid color-mix(in srgb, var(--mz-textHi) 20%, transparent);}
       .mz-allcard-name{margin:0; font-size:var(--fs-lg); font-weight:500; color:var(--mz-textHi); overflow-wrap:anywhere;}
       .mz-allfigs{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--s-2); margin:0;}
       .mz-allfigs dt{font-family:${FM}; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.06em; color:var(--mz-muted);}
