@@ -3,7 +3,7 @@
 // resolve to "review", never a false "halal" — a false halal is the single worst
 // output this product can produce. See lib/sharia.mjs.
 import { describe, it, expect } from "vitest";
-import { verdictFromFundamentals, evaluateAgainst, STANDARDS } from "../../lib/sharia.mjs";
+import { verdictFromFundamentals, evaluateAgainst, STANDARDS, impermissibleIncome } from "../../lib/sharia.mjs";
 
 // A clean, non-financial industry so the sector screen doesn't interfere — the
 // verdict is then driven purely by the ratios (which is what we're testing).
@@ -80,5 +80,68 @@ describe("evaluateAgainst — per-standard debt handling", () => {
     const r = evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, debt: 500 });
     expect(r.pass).toBe(false);
     expect(r.fails.some(t => t.rule.startsWith("Debt/"))).toBe(true);
+  });
+});
+
+// AAOIFI Shari'ah Standard No. 21, as AAOIFI's Secretary-General presents it:
+// interest-bearing debt and deposits each NOT EXCEEDING 30% of market value,
+// impermissible income not exceeding 5% of total income, and no receivables
+// limit. Corrected 2026-10-14 from 33% / 33% / 49% (the index providers').
+describe("AAOIFI — the limits are the standard's own", () => {
+  const ctx = { sector: "halal", cash: 0, recv: 0, mc: 1000, assets: 1000, debt: 0 };
+  const debtTest = (r) => r.tests.find((t) => t.rule.startsWith("Debt/"));
+  it("debt at exactly 30% passes (not exceeding); just over fails", () => {
+    expect(debtTest(evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, debt: 300 })).pass).toBe(true);
+    expect(debtTest(evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, debt: 301 })).pass).toBe(false);
+  });
+  it("cash at 30% passes; 32% fails AAOIFI but still passes Dow Jones (33%, less than)", () => {
+    expect(evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, cash: 300 }).pass).toBe(true);
+    expect(evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, cash: 320 }).pass).toBe(false);
+    expect(evaluateAgainst(STANDARDS.DOWJONES, { ...ctx, cash: 320 }).pass).toBe(true);
+    expect(evaluateAgainst(STANDARDS.DOWJONES, { ...ctx, cash: 330 }).pass).toBe(false);
+  });
+  it("AAOIFI runs no receivables test; S&P still does", () => {
+    const r = evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, recv: 900 });
+    expect(r.tests.some((t) => t.rule.startsWith("A/R"))).toBe(false);
+    expect(r.pass).toBe(true);
+    expect(evaluateAgainst(STANDARDS.SP_SHARIAH, { ...ctx, recv: 900 }).pass).toBe(false);
+  });
+  it("measured impermissible income over 5% fails; at 5% passes", () => {
+    expect(evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, nonPermPct: 5, nonPermBasis: "interest_income" }).pass).toBe(true);
+    const r = evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, nonPermPct: 6.2, nonPermBasis: "interest_income" });
+    expect(r.pass).toBe(false);
+    expect(r.fails[0].rule).toBe("Non-permissible income");
+  });
+  it("an ESTIMATE from other income may clear the test but never fails it — over the limit it is review", () => {
+    expect(evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, nonPermPct: 3.2, nonPermBasis: "other_income_estimate" }).pass).toBe(true);
+    const r = evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, nonPermPct: 8, nonPermBasis: "other_income_estimate" });
+    expect(r.pass).toBe(null);
+    expect(r.tests.at(-1).detail).toBe("≈8.0% (other income)");
+  });
+  it("not measurable → not evaluated, as before", () => {
+    const r = evaluateAgainst(STANDARDS.AAOIFI, { ...ctx, nonPermPct: undefined });
+    expect(r.tests.some((t) => t.rule === "Non-permissible income")).toBe(false);
+    expect(r.pass).toBe(true);
+  });
+});
+
+describe("impermissibleIncome — read from the income statement", () => {
+  const row = (concept, value) => ({ concept: `us-gaap_${concept}`, value });
+  it("measures reported interest income against revenue (NVDA-shaped)", () => {
+    expect(impermissibleIncome([row("Revenues", 215938e6), row("InvestmentIncomeInterest", 2300e6), row("NonoperatingIncomeExpense", 11063e6)]))
+      .toEqual({ nonPermPct: 1.07, nonPermBasis: "interest_income" });
+  });
+  it("estimates from positive other income when interest is not broken out (MSFT-shaped)", () => {
+    expect(impermissibleIncome([row("RevenueFromContractWithCustomerExcludingAssessedTax", 331839e6), row("NonoperatingIncomeExpense", 10697e6)]))
+      .toEqual({ nonPermPct: 3.22, nonPermBasis: "other_income_estimate" });
+  });
+  it("a negative other-income line tells us nothing → not measured (AAPL-shaped)", () => {
+    expect(impermissibleIncome([row("RevenueFromContractWithCustomerExcludingAssessedTax", 416161e6), row("NonoperatingIncomeExpense", -321e6)]))
+      .toEqual({ nonPermPct: null, nonPermBasis: null });
+  });
+  it("no revenue or malformed input → not measured", () => {
+    expect(impermissibleIncome([row("InvestmentIncomeInterest", 5)])).toEqual({ nonPermPct: null, nonPermBasis: null });
+    expect(impermissibleIncome(null)).toEqual({ nonPermPct: null, nonPermBasis: null });
+    expect(impermissibleIncome([null, { concept: 5 }])).toEqual({ nonPermPct: null, nonPermBasis: null });
   });
 });

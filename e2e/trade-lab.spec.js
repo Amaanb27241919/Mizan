@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { signedIn } from "./support/app.js";
+import { SCREEN_ENGINE_VERSION } from "../src/lib/shariaVerdict.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 // NOT __dirname: these specs are ESM, where it does not exist. Vitest provides
@@ -606,7 +607,7 @@ test.describe("Trade Lab strategy scoreboard", () => {
  * server marks "pending" is asked for again until it settles.
  */
 test.describe("Trade Lab compliance", () => {
-  const verdict = (tk, aaoifi = true) => ({ tk, status: "halal", asOf: new Date().toISOString().slice(0, 10), engine: 2,
+  const verdict = (tk, aaoifi = true) => ({ tk, status: "halal", asOf: new Date().toISOString().slice(0, 10), engine: SCREEN_ENGINE_VERSION,
     byStandard: { AAOIFI: { pass: aaoifi }, DJIM: { pass: true }, SP_SHARIAH: { pass: true }, FTSE_SHARIAH: { pass: true },
       MSCI_ISLAMIC: { pass: true }, SC_MALAYSIA: { pass: true }, IFSB: { pass: true } } });
   const positions = ["STX", "TER", "MU"].map((symbol) => ({ symbol, qty: "1", avg_entry_price: "1",
@@ -1167,7 +1168,7 @@ test("Research lists reviews newest first and claims no evidence for a screened-
 
 // Compliance & Risk (broadsheet pass, 2026-10-09).
 test("a halal fund reads as covered by its issuer, not as missing data", async ({ page }) => {
-  const pass = { tk: "MU", status: "halal", engine: 2, asOf: new Date().toISOString().slice(0, 10),
+  const pass = { tk: "MU", status: "halal", engine: SCREEN_ENGINE_VERSION, asOf: new Date().toISOString().slice(0, 10),
     byStandard: { AAOIFI: { pass: true }, DOWJONES: { pass: true }, SP_SHARIAH: { pass: true }, FTSE_SHARIAH: { pass: true }, MSCI_ISLAMIC: { pass: true }, SC_MALAYSIA: { pass: true }, IFSB: { pass: true } } };
   await gotoLab(page, { fixtures: {
     "/api/alpaca/positions": ["MU", "SPUS"].map((symbol) => ({ symbol, qty: "1", avg_entry_price: "1", current_price: "1", market_value: "1000", unrealized_pl: "0", unrealized_plpc: "0" })),
@@ -1352,6 +1353,29 @@ test.describe("Trade Lab console", () => {
     await page.reload();
     await labNav(page).getByRole("button", { name: "Strategies", exact: true }).click();
     await expect(page.getByTestId("strategies-all")).toBeVisible();
+  });
+
+  test("the Desk itself shows every strategy's colour: a key that selects, and coloured track cards", async ({ page }) => {
+    await open(page);
+    const key = page.getByTestId("desk-colors").locator("li");
+    await expect(key).toHaveCount(2);
+    for (const name of ["Reference system + AI gate", "Reference system, no AI"]) {
+      const sw = await key.filter({ hasText: name }).locator(".mz-colorkey-sw").evaluate((el) => getComputedStyle(el).backgroundColor);
+      const card = page.getByTestId("strategy-multiple").filter({ hasText: name });
+      expect(await card.evaluate((el) => getComputedStyle(el).borderTopColor)).toBe(sw);
+      expect(await card.evaluate((el) => parseFloat(getComputedStyle(el).borderTopWidth))).toBeGreaterThanOrEqual(3);
+      expect(await card.locator(".mz-mult-line").evaluate((el) => getComputedStyle(el).stroke)).toBe(sw);
+    }
+    // On the stage EVERY line wears its strategy's colour, not only the selected one.
+    const strokes = await page.getByTestId("console-stage").locator(".mz-stage-line").evaluateAll((els) => els.map((el) => getComputedStyle(el).stroke));
+    const swatches = await key.locator(".mz-colorkey-sw").evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
+    expect([...strokes].sort()).toEqual([...swatches].sort());
+    const tagEdges = await page.getByTestId("console-stage").locator(".mz-stage-tag").evaluateAll((els) => els.map((el) => getComputedStyle(el).borderLeftColor));
+    expect([...tagEdges].sort()).toEqual([...swatches].sort());
+    // The key selects: the inspector follows it.
+    await key.filter({ hasText: "Reference system, no AI" }).getByRole("button").click();
+    await expect(page.getByTestId("console-inspector")).toContainText("Reference system, no AI");
+    await expect(key.filter({ hasText: "Reference system, no AI" }).getByRole("button")).toHaveAttribute("aria-pressed", "true");
   });
 
   test("Desk has a View all too: every strategy in its own colour, and a card opens its console", async ({ page }) => {

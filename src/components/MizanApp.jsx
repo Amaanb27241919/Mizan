@@ -2328,10 +2328,11 @@ function Overview({live,snapAccounts=[],allAccounts=[],plaidAccounts=[],disabled
 //   1) Sector screen — exclude prohibited industries (banking, alcohol,
 //      tobacco, gambling, pork, weapons, adult entertainment, conventional
 //      insurance/financials, interest-based businesses).
-//   2) Total interest-bearing debt / 12-mo avg market cap < 33%
-//   3) Cash + interest-bearing securities / 12-mo avg market cap < 33%
-//   4) Accounts receivable / market cap < 49% (DJIM); some bodies use 70%.
-//   5) Non-permissible income / total revenue < 5% — purification required.
+//   2) Interest-bearing debt / market value ≤ 30%
+//   3) Interest-bearing deposits & investments / market value ≤ 30%
+//   4) Non-permissible income / total income ≤ 5% — purification required.
+//   AAOIFI has NO receivables limit; Dow Jones / S&P / FTSE / MSCI do.
+//   (Corrected 2026-10-14 from 33% / 33% / 49%, the index providers' numbers.)
 // Free Finnhub /stock/profile2 + /stock/metric provide enough to compute 1–4.
 // Approximations: we use total debt (close to interest-bearing for most cos).
 const PROHIBITED_INDUSTRIES = [
@@ -2360,9 +2361,9 @@ function classifyIndustry(industry){
 const STANDARDS = {
   AAOIFI: {
     name:"AAOIFI", region:"Bahrain (international)",
-    denominator:"marketCap",      // 12-mo avg mkt cap (we approximate w/ current)
-    debtMax:33, cashMax:33, recvMax:49, nonPermMax:5,
-    notes:"Most conservative; widely used by Islamic banks.",
+    denominator:"marketCap",      // market value (current market cap)
+    debtMax:30, cashMax:30, recvMax:null, nonPermMax:5, inclusive:true,
+    notes:"Shari'ah Standard No. 21: debt and interest-bearing deposits each ≤ 30% of market value; no receivables limit.",
   },
   DOWJONES: {
     name:"Dow Jones Islamic", region:"International index methodology",
@@ -2395,6 +2396,11 @@ const STANDARDS = {
     notes:"Prudential standard; defers to local board for retail screening.",
   },
 };
+/** "≤ 30%" / "< 33%" for a standard's limit; null when the standard has no such test. */
+const stdLimit=(s,k)=>s&&Number.isFinite(s[k])?`${s.inclusive?"≤":"<"} ${s[k]}%`:null;
+/** One line of a standard's limits, as the Screener and methodology state them. */
+const stdLimitsLine=s=>[["Debt","debtMax"],["Cash","cashMax"],["A/R","recvMax"],["Non-perm","nonPermMax"]]
+  .map(([l,k])=>stdLimit(s,k)&&`${l} ${stdLimit(s,k)}`).filter(Boolean).join(" · ");
 // NOTE: The ratio engine (debt/cash/receivables + non-permissible income) now
 // runs server-side in lib/sharia.mjs so a single provider (Finnhub now, Zoya
 // when keyed) governs every surface. STANDARDS above is kept here only for the
@@ -2744,13 +2750,13 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
       </div>
 
       {/* The chosen standard's own limits — this is what actually differs
-          between frameworks (AAOIFI allows 49% receivables, Dow Jones 33%). */}
+          between frameworks (AAOIFI caps debt at 30% and sets no receivables limit; Dow Jones uses 33% and caps receivables). */}
       <div style={{padding:`${T.s2} ${T.s4}`,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.rMd,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.6,letterSpacing:"0.02em"}}>
         {STANDARDS[primary].region}
-        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Debt/{STANDARDS[primary].denominator==="totalAssets"?"Assets":"MC"} &lt; {STANDARDS[primary].debtMax}%
-        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Cash &lt; {STANDARDS[primary].cashMax}%
-        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>A/R &lt; {STANDARDS[primary].recvMax}%
-        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>Non-perm &lt; {STANDARDS[primary].nonPermMax}% <span style={{color:T.dim,fontStyle:"italic"}}>(sector check applies)</span>
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>{STANDARDS[primary].denominator==="totalAssets"?"vs total assets":"vs market value"}
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>{stdLimitsLine(STANDARDS[primary])}
+        {!Number.isFinite(STANDARDS[primary].recvMax)&&<><span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span>no receivables limit</>}
+        <span style={{margin:`0 ${T.s2}`,color:T.dim}}>·</span><span style={{color:T.dim,fontStyle:"italic"}}>income test uses reported interest income where the filing shows it</span>
       </div>
 
       {/* Verdict freshness. Restored after I dropped it while moving the picker
@@ -2961,7 +2967,7 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
               <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",fontWeight:500,color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
             </div>
             <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
-              Debt &lt; {s.debtMax}% · Cash &lt; {s.cashMax}% · A/R &lt; {s.recvMax}% · Non-perm &lt; {s.nonPermMax}% <span style={{fontStyle:"italic",color:T.dim}}>(not evaluated — sector check applies)</span>
+              {stdLimitsLine(s)} <span style={{fontStyle:"italic",color:T.dim}}>(income test where interest income is reported)</span>
             </div>
           </div>)}
         </div>
@@ -2991,9 +2997,9 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
       const bsP=sc.byStandard?.[primary];
       const sectorExcluded=classifyIndustry(sc.industry)==="haram"||/prohibited sector/i.test(sc.reason||"");
       const tests=bsP?.tests||(sc.debtR!=null?[
-        {rule:`Debt/${isA?"Assets":"MC"}`,pass:sc.debtR<std.debtMax,detail:`${sc.debtR.toFixed(1)}%`,limit:std.debtMax},
-        {rule:`Cash/${isA?"Assets":"MC"}`,pass:sc.cashR<std.cashMax,detail:`${sc.cashR.toFixed(1)}%`,limit:std.cashMax},
-        {rule:`A/R/${isA?"Assets":"MC"}`,pass:sc.recvR===0||sc.recvR<std.recvMax,detail:sc.recvR?`${sc.recvR.toFixed(1)}%`:"n/a",limit:std.recvMax},
+        {rule:`Debt/${isA?"Assets":"MC"}`,pass:std.inclusive?sc.debtR<=std.debtMax:sc.debtR<std.debtMax,detail:`${sc.debtR.toFixed(1)}%`,limit:std.debtMax},
+        {rule:`Cash/${isA?"Assets":"MC"}`,pass:std.inclusive?sc.cashR<=std.cashMax:sc.cashR<std.cashMax,detail:`${sc.cashR.toFixed(1)}%`,limit:std.cashMax},
+        ...(Number.isFinite(std.recvMax)?[{rule:`A/R/${isA?"Assets":"MC"}`,pass:sc.recvR===0||sc.recvR<std.recvMax,detail:sc.recvR?`${sc.recvR.toFixed(1)}%`:"n/a",limit:std.recvMax}]:[]),
       ]:[]);
       const statusColor=sc.status==="halal"?T.gain:sc.status==="haram"?T.loss:sc.status==="review"?T.gold:T.muted;
       return<div onClick={()=>setDetail(null)} style={{position:"fixed",inset:0,zIndex:1001,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(20px) saturate(160%)",WebkitBackdropFilter:"blur(20px) saturate(160%)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -8525,6 +8531,17 @@ function FundShelf({curves,mask}){
   </section>;
 }
 
+/** Every strategy's colour, name and code — the key to the stage, the rail and
+ *  the cards. With onSelect each entry selects its strategy. */
+function ColorKey({rows,selected,onSelect,testid="strategy-colors"}){
+  return<ul className="mz-colorkey" aria-label="Strategy colours" data-testid={testid}>{rows.map(r=><li key={r.id}>
+    {onSelect
+      ?<button className="mz-colorkey-btn mz-tap" onClick={()=>onSelect(r.id)} aria-pressed={selected===r.id} title={`Select ${r.name}`}>
+        <span className="mz-colorkey-sw" style={{background:r.color||T.slate}} aria-hidden="true"/><b>{r.name}</b>{r.code&&<span className="mz-news-dim"> {r.code}</span>}</button>
+      :<><span className="mz-colorkey-sw" style={{background:r.color||T.slate}} aria-hidden="true"/><b>{r.name}</b>{r.code&&<span className="mz-news-dim"> {r.code}</span>}</>}
+  </li>)}</ul>;
+}
+
 /** Strategies → View all: every strategy on this account at once — a league
  *  table, then one small console per strategy. The single console stays the
  *  deep view; a card opens it. */
@@ -8540,9 +8557,7 @@ function StrategiesAll({lab,book,onOpen,mask}){
   return<div className="mz-desk" data-testid="strategies-all">
     <section className="mz-stage">
       <h2 className="mz-all-h" style={{fontFamily:FN}}>Every strategy, side by side</h2>
-      <ul className="mz-colorkey" aria-label="Strategy colours" data-testid="strategy-colors">{lab.rows.map(r=><li key={r.id}>
-        <span className="mz-colorkey-sw" style={{background:r.color||T.slate}} aria-hidden="true"/><b>{r.name}</b>{r.code&&<span className="mz-news-dim"> {r.code}</span>}
-      </li>)}</ul>
+      <ColorKey rows={lab.rows}/>
       <div style={{overflowX:"auto"}}><table className="mz-news" data-testid="strategies-league">
         <thead><tr><th>#</th><th>Strategy</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Equity</th><th style={{textAlign:"right"}}>Return</th><th style={{textAlign:"right"}}>vs SPUS</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Holdings</th><th className="mz-narrow-hide">Status</th></tr></thead>
         <tbody>{league.map((r,i)=><tr key={r.id}>
@@ -8616,7 +8631,7 @@ function ConsoleStage({geo,selected,onSelect,mask,head}){
         </g>)}
       </svg>
       <div className="mz-stage-scale" aria-hidden="true">{geo.ticks.map(t=><span key={t.v} style={{top:top(t.y)}}>{t.v>0?"+":t.v<0?"−":""}{Math.abs(t.v)}%</span>)}</div>
-      {geo.lines.map(l=>l.last&&<button key={l.id} className={`mz-stage-tag${l.id===selected?" sel":""}`} style={{left:left(l.last[0]),top:top(tagY.get(l.id)??l.last[1])}}
+      {geo.lines.map(l=>l.last&&<button key={l.id} className={`mz-stage-tag${l.id===selected?" sel":""}`} style={{left:left(l.last[0]),top:top(tagY.get(l.id)??l.last[1]),"--strat":l.color||undefined}}
         onClick={()=>onSelect(l.id)} title={`Inspect ${l.code}`}>{l.code}</button>)}
       {sel?.last&&<>
         <div className="mz-cross mz-cross-h" style={{top:top(sel.last[1])}} aria-hidden="true"/>
@@ -8629,7 +8644,7 @@ function ConsoleStage({geo,selected,onSelect,mask,head}){
         <span>{geo.days[geo.days.length-1]}</span>
       </div>
     </div>}
-    <p className="mz-stage-key"><span className="mz-key mz-key-bench" aria-hidden="true"/> SPUS over the same days · dotted lines are strategies · select a line or a layer to inspect it</p>
+    <p className="mz-stage-key"><span className="mz-key mz-key-bench" aria-hidden="true"/> SPUS over the same days · each strategy in its own colour, the selected one bold · select a line or a layer to inspect it</p>
   </section>;
 }
 
@@ -8919,7 +8934,8 @@ function BroadsheetDesk({desk,book,demoMode,onGo,lab,selected,onSelect}){
       <b style={{color:T.gold}} aria-hidden="true">◐</b> {pending} signal{pending===1?"":"s"} awaiting your approval <span>Review →</span>
     </button>}
     <ConsoleStage geo={geo} selected={selected} onSelect={onSelect} mask={mask}
-      head={<DeskFigures account={desk.account} pending={pending} mask={mask} state={desk.state}/>}/>
+      head={<><DeskFigures account={desk.account} pending={pending} mask={mask} state={desk.state}/>
+        {rows.length>0&&<ColorKey rows={rows} selected={selected} onSelect={onSelect} testid="desk-colors"/>}</>}/>
     <div className="mz-dock">
       <ConsoleInspector row={selRow} strat={selStrat} about={abouts.get(selected)} mask={mask}/>
       <ConsoleQueue queue={queue} onMore={()=>onGo("signals")}/>
@@ -10251,10 +10267,9 @@ function ShariaMethodology(){
   const excluded=["Conventional banks & financial services","Insurance (conventional)","Mortgage & consumer finance","Alcohol & breweries","Tobacco","Gambling & casinos","Weapons & defense","Pork products","Adult entertainment"];
   const review=["Hotels, resorts & leisure","Media & entertainment","Restaurants","Broadcasting"];
   const ratios=[
-    {t:"Debt / market cap",lim:"< 33%",d:"Total interest-bearing debt over market cap."},
-    {t:"Cash & interest-bearing securities / market cap",lim:"< 33%",d:"Caps interest-earning assets."},
-    {t:"Accounts receivable / market cap",lim:"< 49%",d:"Limits illiquid / credit exposure."},
-    {t:"Non-permissible income / revenue",lim:"< 5%",d:"Impure income must be purified."},
+    {t:"Debt / market value",lim:"≤ 30%",d:"Interest-bearing debt over market capitalisation. Mizan counts ALL debt, which is stricter."},
+    {t:"Interest-bearing deposits & investments / market value",lim:"≤ 30%",d:"Mizan counts all cash and short-term investments, which is stricter."},
+    {t:"Non-permissible income / total income",lim:"≤ 5%",d:"Measured from reported interest income where the filing shows it; otherwise estimated from other income (an estimate can clear the test, never fail it). Impure income must be purified."},
   ];
   const chip=(label,color)=><span key={label} style={{fontFamily:FM,fontSize:"var(--fs-xs)",fontWeight:600,color,background:`${color}14`,border:`1px solid ${color}33`,borderRadius:999,padding:`4px ${T.s3}`}}>{label}</span>;
   return<div style={{display:"flex",flexDirection:"column",gap:T.s4}}>
@@ -10307,7 +10322,7 @@ function ShariaMethodology(){
             <span style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.04em"}}>{s.region}</span>
           </div>
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,lineHeight:1.5,letterSpacing:"0.02em"}}>
-            {s.denominator==="totalAssets"?"vs total assets":"vs market cap"} · Debt &lt; {s.debtMax}% · Cash &lt; {s.cashMax}% · A/R &lt; {s.recvMax}% · Non-perm &lt; {s.nonPermMax}%
+            {s.denominator==="totalAssets"?"vs total assets":"vs market value"} · {stdLimitsLine(s)}{!Number.isFinite(s.recvMax)&&" · no receivables limit"}
           </div>
         </div>)}
       </div>
@@ -15775,16 +15790,16 @@ export default function Mizan(){
       .mz-stage-plot svg{position:absolute; inset:0; width:100%; height:100%; overflow:visible;}
       .mz-stage-zero{stroke:var(--mz-borderHi); stroke-width:1; vector-effect:non-scaling-stroke;}
       .mz-stage-bench{fill:none; stroke:var(--mz-muted); stroke-width:1.5; stroke-dasharray:7 5; vector-effect:non-scaling-stroke;}
-      .mz-stage-line{fill:none; stroke:var(--mz-text); stroke-opacity:.6; stroke-width:3.2; stroke-linecap:round; stroke-linejoin:round;
-        stroke-dasharray:0 6; vector-effect:non-scaling-stroke; pointer-events:none;}
-      .mz-stage-plot g.sel .mz-stage-line{stroke:var(--strat); stroke-opacity:1; stroke-width:2.5; stroke-dasharray:none;}
+      .mz-stage-line{fill:none; stroke:var(--strat, var(--mz-text)); stroke-opacity:.55; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round;
+        vector-effect:non-scaling-stroke; pointer-events:none;}
+      .mz-stage-plot g.sel .mz-stage-line{stroke-opacity:1; stroke-width:3;}
       .mz-stage-hit{fill:none; stroke:transparent; stroke-width:18; vector-effect:non-scaling-stroke; cursor:pointer; pointer-events:stroke;}
       .mz-stage-scale{position:absolute; top:0; bottom:0; left:-3.2rem; width:2.8rem; pointer-events:none;}
       .mz-stage-scale span{position:absolute; right:0; transform:translateY(-50%); font-size:var(--fs-2xs); color:var(--mz-muted); font-variant-numeric:tabular-nums;}
       .mz-stage-scale span::after{content:""; position:absolute; left:calc(100% + 4px); top:50%; width:10px; height:1px; background:var(--mz-borderHi);}
       .mz-stage-tag{position:absolute; transform:translate(10px,-50%); font-family:${FM}; font-size:var(--fs-2xs); white-space:nowrap; cursor:pointer;
-        background:var(--mz-surface); border:1px solid var(--mz-border); color:var(--mz-text); padding:1px 6px; border-radius:0;}
-      .mz-stage-tag.sel{border-color:var(--mz-signal); color:var(--mz-textHi); z-index:2;}
+        background:var(--mz-surface); border:1px solid var(--mz-border); border-left:3px solid var(--strat, var(--mz-border)); color:var(--mz-text); padding:1px 6px; border-radius:0;}
+      .mz-stage-tag.sel{border-color:var(--mz-signal); border-left-color:var(--strat, var(--mz-signal)); color:var(--mz-textHi); z-index:2;}
       .mz-cross{position:absolute; pointer-events:none; background:color-mix(in srgb, var(--mz-textHi) 30%, transparent);}
       .mz-cross-h{left:0; right:0; height:1px;}
       .mz-cross-v{top:0; bottom:0; width:1px;}
@@ -15819,6 +15834,10 @@ export default function Mizan(){
       .mz-colorkey li{display:inline-flex; align-items:center; gap:var(--s-1);}
       .mz-colorkey b{color:var(--mz-textHi); font-weight:600;}
       .mz-colorkey-sw{width:14px; height:14px; flex:0 0 auto; border:1px solid color-mix(in srgb, var(--mz-textHi) 20%, transparent);}
+      .mz-colorkey-btn{display:inline-flex; align-items:center; gap:var(--s-1); background:none; border:0; border-bottom:2px solid transparent; padding:2px 0; cursor:pointer; font:inherit; color:inherit;}
+      .mz-colorkey-btn[aria-pressed="true"]{border-bottom-color:var(--mz-signal);}
+      .mz-colorkey-btn:hover b,.mz-colorkey-btn:focus-visible b{text-decoration:underline; text-underline-offset:3px;}
+      .mz-console .mz-multis .mz-mult{border-top:4px solid var(--strat, var(--mz-border));}
       .mz-allcard-name{margin:0; font-size:var(--fs-lg); font-weight:500; color:var(--mz-textHi); overflow-wrap:anywhere;}
       .mz-allfigs{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--s-2); margin:0;}
       .mz-allfigs dt{font-family:${FM}; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.06em; color:var(--mz-muted);}

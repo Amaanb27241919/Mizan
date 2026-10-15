@@ -60,7 +60,7 @@ export function statusMapForStandard(results = {}, standard = DEFAULT_STANDARD) 
  * v2 (2026-10-07): before it, a Finnhub 429 degraded a verdict to "review"
  * (or a blank standard) that LOOKED settled and was cached for the day.
  */
-export const SCREEN_ENGINE_VERSION = 2;
+export const SCREEN_ENGINE_VERSION = 3; // 3: AAOIFI corrected to 30% (≤), no receivables rule, the 5% income test (2026-10-14)
 
 /** A verdict that came from a completed screen (not a throttle, outage or "pending"). */
 export function isSettledVerdict(v) {

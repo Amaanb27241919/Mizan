@@ -10,7 +10,8 @@
  * the badges, not the filter counts, not Overview's COMPLIANCE %.
  *
  * That is wrong on its own terms. Standards genuinely disagree — AAOIFI caps
- * receivables at 49% where Dow Jones caps them at 33% — and a user who picks the
+ * debt at 30% of market value where Dow Jones allows 33%, and Dow Jones caps
+ * receivables where AAOIFI sets no limit — and a user who picks the
  * stricter madhhab-aligned framework is asking to be judged by it. A vote across
  * seven of them is nobody's methodology.
  *

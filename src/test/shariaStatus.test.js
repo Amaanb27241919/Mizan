@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { statusForStandard, statusMapForStandard, DEFAULT_STANDARD } from "../lib/shariaStatus.js";
 
-/** A holding that clears AAOIFI's 49% receivables cap but fails Dow Jones' 33%. */
+/** A holding with high receivables: AAOIFI sets no receivables limit; Dow Jones caps them at 33%. */
 const splitVerdict = {
   tk: "ACME",
   status: "halal",                 // the old vote said halal
