@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { openPosition, bracketLegsFor, bracketExitState } from '../../lib/trading/position.mjs'
+import { openPosition, bracketLegsFor, bracketExitState, combineBracketStates, orderInFlight } from '../../lib/trading/position.mjs'
 
 const row = (side, qty, price, at, ticker = 'AAPL', paper = true) =>
   ({ side, qty: String(qty), suggested_price: String(price), executed_at: at, ticker, paper })
@@ -107,6 +107,45 @@ describe('bracketExitState', () => {
   })
 })
 
+describe('orderInFlight', () => {
+  it('a placed but unreconciled order counts as in flight (Experiment D, CRM, 2026-10-13)', () => {
+    expect(orderInFlight([{ status: 'submitted' }])).toBe(true)
+    expect(orderInFlight([{ status: 'pending' }])).toBe(true)
+    expect(orderInFlight([{ status: 'approved' }])).toBe(true)
+  })
+  it('finished orders do not', () => {
+    expect(orderInFlight([{ status: 'executed' }, { status: 'rejected' }, { status: 'expired' }, { status: 'shadow' }])).toBe(false)
+    expect(orderInFlight([])).toBe(false)
+    expect(orderInFlight(null)).toBe(false)
+    expect(orderInFlight({ status: 'submitted' })).toBe(false)
+  })
+})
+
+describe('combineBracketStates', () => {
+  const resting = { filled: null, openLegIds: ['tp1', 'sl1'], brokerOwnsExits: true }
+  const bare = { filled: null, openLegIds: [], brokerOwnsExits: false }
+  const stopFill = { filled: { legId: 'sl1', kind: 'stop', qty: 622, price: 233.6, at: 't' }, openLegIds: [], brokerOwnsExits: false }
+
+  it('a later buy without legs does not hide the first bracket', () => {
+    // Newest first, as read: the 6-share top-up, then the 622-share bracket.
+    expect(combineBracketStates([bare, resting], [])).toEqual({ filled: null, openLegIds: ['tp1', 'sl1'], brokerOwnsExits: true })
+  })
+
+  it('reports a leg fill the ledger does not have yet', () => {
+    expect(combineBracketStates([bare, stopFill], []).filled).toMatchObject({ legId: 'sl1', qty: 622 })
+  })
+
+  it('a leg fill already recorded is not reported again, so a remainder goes back to polling', () => {
+    expect(combineBracketStates([bare, stopFill], ['sl1'])).toEqual({ filled: null, openLegIds: [], brokerOwnsExits: false })
+    expect(combineBracketStates([bare, stopFill], new Set(['sl1'])).filled).toBe(null)
+  })
+
+  it('survives malformed input', () => {
+    expect(combineBracketStates(null, null)).toEqual({ filled: null, openLegIds: [], brokerOwnsExits: false })
+    expect(combineBracketStates([null, { openLegIds: 'x' }], undefined)).toEqual({ filled: null, openLegIds: [], brokerOwnsExits: false })
+  })
+})
+
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -132,6 +171,22 @@ describe('swing broker-exit wiring', () => {
     const trail = SRC.slice(SRC.indexOf('} else if (hitTrail) {'), SRC.indexOf('await exitClose("bot.strategy.trailing_stop"'))
     expect(horizon).toMatch(/if \(!\(await clearBracket\(\)\)\) continue;/)
     expect(trail).toMatch(/if \(!\(await clearBracket\(\)\)\) continue;/)
+  })
+
+  it('waits while any of the strategy orders is in flight, before the exit or entry engine', () => {
+    const wait = SRC.indexOf('if (orderInFlight(flight)) { info("bot.inflight.wait"')
+    const pos = SRC.indexOf('const pos = await botPositionFromSignals(strat.id);\n\n        // An order still in flight')
+    expect(pos).toBeGreaterThan(-1)
+    expect(wait).toBeGreaterThan(pos)
+    expect(wait).toBeLessThan(SRC.indexOf('// ── EXIT ENGINE (runs first)'))
+    expect(SRC).toMatch(/if \(flightErr\) \{ warn\("bot\.inflight\.read_failed"[^}]*\}\); continue; \}/)
+  })
+
+  it('reads every bracket on the open position, not only the newest buy', () => {
+    const fn = SRC.slice(SRC.indexOf('async function readBracketExits('), SRC.indexOf('async function cancelBracketLegs('))
+    expect(fn).toMatch(/q = q\.gte\("executed_at", pos\.openedAt\)/)
+    expect(fn).toMatch(/combineBracketStates\(states, recordedLegs\)/)
+    expect(fn).not.toMatch(/entry\?\.\[0\]\?\.order_id/)
   })
 
   it('an unreadable broker means doing nothing that tick', () => {

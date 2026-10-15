@@ -17,6 +17,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Fixed
 - **legal:** Terms and trading disclosures state what the trading routes actually do (`1ab5cf8`)
 
+### Docs
+- Q4 2026 handoff, compliance boundaries, and the Trade Lab console (`efcd583`)
+
 ## 2026-10-09
 
 ### Added
