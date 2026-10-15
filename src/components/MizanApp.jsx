@@ -9736,7 +9736,7 @@ Activity rows on file: ${activities.length}.`;
               <span style={{color:T.textHi,fontWeight:500}}>{p.q}</span>
             </button>)}
           </div>
-          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,textAlign:"center",letterSpacing:"0.04em"}}>Not financial advice. Always consult a licensed professional + qualified scholar.</div>
+          <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,textAlign:"center",letterSpacing:"0.04em"}}>Not financial advice. Always consult a licensed professional + qualified scholar.</div>
         </div>}
 
         {msgs.map((m,i)=>{
