@@ -94,7 +94,7 @@ export function blotterRows(strategies, now = new Date()) {
       unpriced,
       status: strategyStatus(st, now),
       mode: strategyMode(st),
-      top: arr(pr.top_holdings).filter((h) => obj(h) && h.symbol).map((h) => ({ symbol: String(h.symbol), value: num(h.value), weight: num(h.weight) })).slice(0, 5),
+      top: arr(pr.top_holdings).filter((h) => obj(h) && h.symbol).map((h) => ({ symbol: String(h.symbol), value: num(h.value), weight: num(h.weight) })).slice(0, 10),
     };
   }).sort((a, b) => codeOrder(a.code).localeCompare(codeOrder(b.code)) || a.name.localeCompare(b.name));
 }

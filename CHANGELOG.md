@@ -20,6 +20,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade-lab:** A swing strategy waits for its own order to fill (`f1662e1`)
 
 ### Docs
+- F19 shipped (`b67e256`)
 - Experiments G–J and the star names in the Trade Lab notes (`dafdfe2`)
 
 ## 2026-10-11

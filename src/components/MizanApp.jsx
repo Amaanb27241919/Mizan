@@ -2983,7 +2983,7 @@ function AAOIFIScreener({holdings=[],onNotify,demoMode=false}){
         <div style={{marginTop:T.s4,padding:`${T.s3} ${T.s4}`,background:`linear-gradient(135deg, ${T.gold}10, transparent 70%), ${T.surface}`,borderRadius:T.rMd,border:`1px solid ${T.gold}30`}}>
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.gold,letterSpacing:"0.14em",fontWeight:600,marginBottom:T.s1}}>EXIT GUIDANCE</div>
           <div style={{fontFamily:FP,fontSize:"var(--fs-md)",color:T.text,lineHeight:1.55,letterSpacing:"-0.005em"}}>
-            For Non-Compliant positions: sell at the next reasonable opportunity, donate any gains realized after purification to charity, and replace with a Sharia-screened equivalent (SPUS / HLAL / UMMA / SPSK).
+            For a holding that becomes Non-Compliant, scholars commonly advise selling within a reasonable time and purifying (giving to charity) any gain from the period after it became non-compliant. What you do with the proceeds is your decision.
           </div>
         </div>
       </BentoTile>
@@ -3914,6 +3914,10 @@ function PurificationPanel({ demoMode = false, onPurified }) {
   });
   const [editOverride, setEditOverride] = useState(null); // { ticker, value }
   const [busy, setBusy]           = useState({}); // { [fingerprint]: true }
+  // Demo mode: "Mark Purified" works for the session so the demo shows the real
+  // flow, but nothing is saved — no localStorage, no synced state, no Sadaqah row.
+  const [demoLog, setDemoLog]     = useState({});
+  const doneLog = demoMode ? demoLog : log;
 
   const fmtUSD = v => `$${(+v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtPct = v => `${(+v || 0).toFixed(2)}%`;
@@ -3946,7 +3950,8 @@ function PurificationPanel({ demoMode = false, onPurified }) {
   };
 
   const markPurified = (item, bulk = false) => {
-    if (demoMode || log[item.fingerprint]) return;
+    if (doneLog[item.fingerprint]) return;
+    if (demoMode) { setDemoLog(d => ({ ...d, [item.fingerprint]: { purified_at: new Date().toISOString(), ticker: item.ticker } })); return; }
     setBusy(b => ({ ...b, [item.fingerprint]: true }));
     const purifiedAt = new Date().toISOString();
     const sadaqahEntry = {
@@ -3971,7 +3976,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
   };
 
   const purifyAll = () => {
-    const pending = items.filter(it => !log[it.fingerprint]);
+    const pending = items.filter(it => !doneLog[it.fingerprint]);
     pending.forEach(it => markPurified(it, true));
   };
 
@@ -3992,8 +3997,8 @@ function PurificationPanel({ demoMode = false, onPurified }) {
   const thisYear = String(new Date().getFullYear());
   const years    = [thisYear, String(+thisYear - 1), String(+thisYear - 2)];
 
-  const pending       = items.filter(it => !log[it.fingerprint]);
-  const purified      = items.filter(it =>  log[it.fingerprint]);
+  const pending       = items.filter(it => !doneLog[it.fingerprint]);
+  const purified      = items.filter(it =>  doneLog[it.fingerprint]);
   const totalOwed     = pending.reduce((s, it) => s + it.purificationOwed, 0);
   const totalPurified = purified.reduce((s, it) => s + it.purificationOwed, 0);
   const hasPending    = pending.length > 0;
@@ -4044,7 +4049,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
             }}>{y}</button>
           ))}
         </div>
-        {hasPending && !demoMode && (
+        {hasPending && (
           <button
             onClick={purifyAll}
             style={{
@@ -4091,7 +4096,7 @@ function PurificationPanel({ demoMode = false, onPurified }) {
               </thead>
               <tbody>
                 {items.map((it, i) => {
-                  const done = !!log[it.fingerprint];
+                  const done = !!doneLog[it.fingerprint];
                   const isEditing = editOverride?.ticker === it.ticker;
                   return (
                     <tr key={it.fingerprint} className="trow" style={{ borderBottom: `1px solid ${T.border}`, opacity: done ? 0.62 : 1 }}>
@@ -4156,12 +4161,12 @@ function PurificationPanel({ demoMode = false, onPurified }) {
                         ) : (
                           <button
                             onClick={() => markPurified(it)}
-                            disabled={!!busy[it.fingerprint] || demoMode}
+                            disabled={!!busy[it.fingerprint]}
                             style={{
                               padding: `4px ${T.s3}`, borderRadius: T.rSm,
                               fontFamily: FM, fontSize:"var(--fs-2xs)", fontWeight: 600, letterSpacing: "0.04em",
                               background: `${T.gain}18`, border: `1px solid ${T.gain}40`, color: T.gain,
-                              cursor: busy[it.fingerprint] || demoMode ? "not-allowed" : "pointer",
+                              cursor: busy[it.fingerprint] ? "not-allowed" : "pointer",
                               opacity: busy[it.fingerprint] ? 0.6 : 1,
                               whiteSpace: "nowrap",
                             }}
@@ -4443,7 +4448,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
           ? (liveNisab.status==="loading"?"Checking live gold & silver prices…":"Nisab unavailable — can't determine whether Zakat is due")
           : aboveNisab?"● Above Nisab — Zakat obligatory":"Below Nisab — no Zakat owed"
       }</div>
-      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.dim,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and {demoMode?"a frozen sample nisab":"live nisab"}. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
+      <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,marginTop:T.s2,lineHeight:1.5,letterSpacing:"0.02em",maxWidth:460}}>An estimate using AAOIFI-aligned rules and {demoMode?"a frozen sample nisab":"live nisab"}. Zakat rulings vary by madhhab (hawl timing, asset treatment) — confirm your final amount with a qualified scholar.</div>
       <div style={{marginTop:T.s5,display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))",gap:T.s3}}>
         {[
           ["Total zakatable assets",mask(fmtUSD(assetsTotal))],
@@ -4531,8 +4536,8 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
           <div style={{fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.16em",fontWeight:600,marginBottom:T.s2}}>INVESTMENT ZAKAT METHOD</div>
           <div style={{display:"flex",gap:T.s2,flexWrap:"wrap"}}>
             {[
-              {k:"full",       label:"Full market value",    note:"Default · scholar consensus"},
-              {k:"longterm_30",label:"Long-term (30% rule)",note:"AAOIFI · buy & hold"},
+              {k:"full",       label:"Trading intent · full value",   note:"Default · shares held to sell"},
+              {k:"longterm_30",label:"Long-term intent · 30% rule",note:"AAOIFI / FCNA · buy & hold"},
             ].map(o=>(
               <button key={o.k}
                 onClick={()=>!demoMode&&saveZakatSettings({...settings,investmentMethod:o.k})}
@@ -4556,7 +4561,7 @@ function ZakatSadaqah({accounts=[],plaidAccounts=[],demoMode=false,bankBalance=0
         </div>
       </div>
       <div style={{marginTop:T.s3,fontFamily:FM,fontSize:"var(--fs-xs)",color:T.muted,lineHeight:1.5}}>
-        Silver nisab is more inclusive (lower threshold); gold is the majority view. <strong style={{color:T.text}}>Full market value</strong> is the default — it matches the scholar-designed calculators Mizan follows, which count shares and retirement at full resale/vested value. The optional <strong style={{color:T.text}}>30% rule</strong> treats public-equity holdings as ~30% zakatable (approximating the cash/receivables/inventory share of company assets vs. exempt fixed assets) — a lighter basis some fatwa councils allow for long-term buy-and-hold investors.
+        Silver nisab is more inclusive (lower threshold); gold is the majority view. <strong style={{color:T.text}}>Full market value</strong> is the default — it matches the scholar-designed calculators Mizan follows, which count shares and retirement at full resale/vested value. The optional <strong style={{color:T.text}}>30% rule</strong> treats public-equity holdings as ~30% zakatable (approximating the cash/receivables/inventory share of company assets vs. exempt fixed assets) — a lighter basis some fatwa councils allow for long-term buy-and-hold investors. <strong style={{color:T.text}}>Choose by your intent when you bought</strong> (to sell, or to hold), not by which method gives the smaller number — FCNA's guidance on Zakat on stocks.
       </div>
       <div style={{marginTop:T.s2,fontFamily:FM,fontSize:"var(--fs-2xs)",color:T.muted,letterSpacing:"0.05em"}}>
         {liveNisab.source==="sample"
@@ -8549,6 +8554,9 @@ function StrategiesAll({lab,book,onOpen,mask}){
   const tone=v=>v==null?undefined:v>0?T.gain:v<0?T.loss:undefined;
   const ret=r=>r.unpriced?"n/a":!r.traded||r.returnPct==null?"—":mask(fp(r.returnPct));
   const alpha=r=>r.alphaPct==null?"—":mask(`${r.alphaPct>0?"+":""}${r.alphaPct.toFixed(2)}`);
+  // Concentration (Amal Invest's main criticism of halal ETFs): the share of the
+  // book in its 10 largest names. SPUS's own figure sits on the fund shelf below.
+  const top10=r=>r.top?.length?`${Math.round(r.top.slice(0,10).reduce((t,h)=>t+(h.weight||0),0)*100)}%`:"—";
   const lastOrder=useMemo(()=>{const m=new Map();for(const o of tapeRows(lab.feed.items,book.strategies,500))if(!m.has(o.strategyId))m.set(o.strategyId,o);return m;},[lab.feed.items,book.strategies]);
   const league=useMemo(()=>[...lab.rows].sort((a,b)=>(b.alphaPct??-Infinity)-(a.alphaPct??-Infinity)||String(a.code).localeCompare(String(b.code))),[lab.rows]);
   const today=nyToday();
@@ -8559,7 +8567,7 @@ function StrategiesAll({lab,book,onOpen,mask}){
       <h2 className="mz-all-h" style={{fontFamily:FN}}>Every strategy, side by side</h2>
       <ColorKey rows={lab.rows}/>
       <div style={{overflowX:"auto"}}><table className="mz-news" data-testid="strategies-league">
-        <thead><tr><th>#</th><th>Strategy</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Equity</th><th style={{textAlign:"right"}}>Return</th><th style={{textAlign:"right"}}>vs SPUS</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Holdings</th><th className="mz-narrow-hide">Status</th></tr></thead>
+        <thead><tr><th>#</th><th>Strategy</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Equity</th><th style={{textAlign:"right"}}>Return</th><th style={{textAlign:"right"}}>vs SPUS</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Holdings</th><th style={{textAlign:"right"}} className="mz-narrow-hide" title="Share of the book in its 10 largest holdings">Top 10</th><th className="mz-narrow-hide">Status</th></tr></thead>
         <tbody>{league.map((r,i)=><tr key={r.id}>
           <td className="mz-news-dim">{r.alphaPct==null?"—":i+1}</td>
           <td><button className="mz-all-name mz-tap" onClick={()=>onOpen(r.id)} title={`Open ${r.name}`}>
@@ -8568,10 +8576,11 @@ function StrategiesAll({lab,book,onOpen,mask}){
           <td style={{textAlign:"right",color:tone(r.returnPct)}}>{ret(r)}</td>
           <td style={{textAlign:"right",color:tone(r.alphaPct)}}>{alpha(r)}</td>
           <td style={{textAlign:"right"}} className="mz-narrow-hide">{r.holdings||0}</td>
+          <td style={{textAlign:"right"}} className="mz-narrow-hide">{top10(r)}</td>
           <td className="mz-news-dim mz-narrow-hide">{r.status?.text||""}</td>
         </tr>)}</tbody>
       </table></div>
-      <p className="mz-panel-note">Ranked by points ahead of SPUS over each strategy's own window — strategies that started on different days are not measured over the same days.</p>
+      <p className="mz-panel-note">Ranked by points ahead of SPUS over each strategy's own window — strategies that started on different days are not measured over the same days. Top 10 is the share of each book in its ten largest holdings (SPUS: 56.5%, as reported by Amal Invest).</p>
     </section>
     <div className="mz-allgrid">{lab.rows.map(r=>{
       const live=r.traded&&r.returnPct!=null?{returnPct:r.returnPct,benchPct:r.benchPct}:null;
@@ -8595,7 +8604,7 @@ function StrategiesAll({lab,book,onOpen,mask}){
           <div><dt>Return</dt><dd style={{color:tone(r.returnPct)}}>{ret(r)}</dd></div>
           <div><dt>vs SPUS</dt><dd style={{color:tone(r.alphaPct)}}>{alpha(r)}</dd></div>
         </dl>
-        <p className="mz-allhold">{r.top?.length?r.top.map((h,i)=><React.Fragment key={h.symbol}>{i>0&&" · "}<b>{h.symbol}</b> {mask(`${Math.round(h.weight*100)}%`)}</React.Fragment>)
+        <p className="mz-allhold">{r.top?.length?r.top.slice(0,5).map((h,i)=><React.Fragment key={h.symbol}>{i>0&&" · "}<b>{h.symbol}</b> {mask(`${Math.round(h.weight*100)}%`)}</React.Fragment>)
           :<span className="mz-news-dim">{r.holdings>0?`${r.holdings} holding${r.holdings===1?"":"s"}`:"No holdings"}</span>}</p>
         <p className="mz-allhold mz-news-dim">{o?`${nyStamp(o.at)} · ${o.side==="sell"?"Sell":"Buy"} ${o.ticker} · ${o.status}`:"No orders yet"}</p>
         <button className="mz-more mz-tap" onClick={()=>onOpen(r.id)}>Open console →</button>

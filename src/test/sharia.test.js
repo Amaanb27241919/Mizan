@@ -3,7 +3,7 @@
 // resolve to "review", never a false "halal" — a false halal is the single worst
 // output this product can produce. See lib/sharia.mjs.
 import { describe, it, expect } from "vitest";
-import { verdictFromFundamentals, evaluateAgainst, STANDARDS, impermissibleIncome } from "../../lib/sharia.mjs";
+import { verdictFromFundamentals, evaluateAgainst, STANDARDS, impermissibleIncome, ACTIVITY_EXCLUSIONS, activityExclusion } from "../../lib/sharia.mjs";
 
 // A clean, non-financial industry so the sector screen doesn't interfere — the
 // verdict is then driven purely by the ratios (which is what we're testing).
@@ -143,5 +143,34 @@ describe("impermissibleIncome — read from the income statement", () => {
     expect(impermissibleIncome([row("InvestmentIncomeInterest", 5)])).toEqual({ nonPermPct: null, nonPermBasis: null });
     expect(impermissibleIncome(null)).toEqual({ nonPermPct: null, nonPermBasis: null });
     expect(impermissibleIncome([null, { concept: 5 }])).toEqual({ nonPermPct: null, nonPermBasis: null });
+  });
+});
+
+// Finnhub files every drinks company as "Beverages" and casinos under "Hotels,
+// Restaurants & Leisure", so the label screen never caught them. A debt-free
+// brewer with clean ratios must still be haram (2026-10-15).
+describe("business activity by company", () => {
+  const clean = { industry: "Beverages", mc: 1000, assets: 1000, cash: 50, recv: 0, debt: 0, source: "test" };
+  it("a low-debt brewer labelled 'Beverages' is haram, with the activity named", () => {
+    const v = verdictFromFundamentals("SAM", clean);
+    expect(v.status).toBe("haram");
+    expect(v.reason).toBe("Prohibited sector: Alcohol (brewer)");
+    expect(Object.values(v.byStandard).every((b) => b.pass === false)).toBe(true);
+  });
+  it("casinos and sportsbooks are haram, not 'review'", () => {
+    expect(verdictFromFundamentals("DKNG", { ...clean, industry: "Hotels, Restaurants & Leisure" }).status).toBe("haram");
+    expect(verdictFromFundamentals("LVS", { ...clean, industry: "Hotels, Restaurants & Leisure" }).reason).toMatch(/Gambling/);
+  });
+  it("Coca-Cola and Pepsi — same 'Beverages' label — are judged on their ratios as before", () => {
+    expect(verdictFromFundamentals("KO", clean).status).toBe("halal");
+    expect(verdictFromFundamentals("PEP", clean).status).toBe("halal");
+  });
+  it("is case-insensitive, and every entry names an activity", () => {
+    expect(activityExclusion("bud")).toBe("Alcohol (brewer)");
+    expect(activityExclusion("AAPL")).toBeNull();
+    for (const [tk, why] of Object.entries(ACTIVITY_EXCLUSIONS)) {
+      expect(tk).toMatch(/^[A-Z]{1,5}(\.[A-Z])?$/);
+      expect(why).toMatch(/^(Alcohol|Gambling|Pork)/);
+    }
   });
 });
