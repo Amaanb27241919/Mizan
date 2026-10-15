@@ -541,6 +541,9 @@ Building these is the treadmill the owner is stepping off. Build only on an expl
 
 ### N30 — Ideas from Amal Invest (reviewed 2026-10-14)
 
+- **Shipped 2026-10-14/15:** AAOIFI corrected (F19, `5bb2206`); halal fund shelf + Top 10 concentration in Trade Lab View all (`a048830`, `36f993c`); Zakat method labels by intent + FCNA note; purify-gains-after-non-compliance guidance, and the exit copy no longer names funds to buy (`36f993c`); Screener "Why →" already shows each ratio against its limit. Also found while checking the video: brewers/casinos/pork processors slipped the label screen — fixed by company (`36f993c`).
+- **Still open:** (a) doubtful switch — deliberately not built: our "review" never buys, which is stricter than Amal's default; (b) failed-holding grace ("wait for the next report") — needs care in the basket path so a held failing name is never topped up during the grace period; (c) BDS exclusion-cost comparison; (e) company zakatable-asset % per holding instead of the 30% proxy.
+
 - **Status:** parked · **Autonomous:** no. Source: amalinvest.com halal-investing series and help pages; their numbers are internally inconsistent across pages, so re-check before quoting.
 - **Trade Lab:** (a) a "doubtful allowed / blocked" switch per strategy, mapping our `review` verdict; (b) a failed-holding policy per strategy — sell now / wait for the next report / notify only — so a one-quarter debt spike does not force a sale; (c) an exclusion-cost comparison: a book with and without the ethical overlay's names; (d) top-10 concentration beside each strategy and SPUS (the View-all fund shelf shows the funds' figures).
 - **Zakat:** the FCNA intent toggle — trading intent = market value × 2.5%; long-term = value × the company's zakatable-asset share × 2.5% — with the method and date recorded. Amal's nisab is 85 g gold; ours is 87.48 g (both are cited in the literature).
