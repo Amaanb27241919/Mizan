@@ -7,7 +7,7 @@
 // Pure module on purpose — this decides where money goes, so it must be
 // testable without a broker, a clock, or a network.
 import { describe, it, expect } from 'vitest'
-import { momentum, volatility, rankUniverse, rebalancePlan, inverseVolWeights }
+import { momentum, volatility, rankUniverse, rebalancePlan, inverseVolWeights, returnCorrelation, correlationClusters }
   from '../../lib/trading/rank.mjs'
 
 // Deterministic synthetic series: constant drift plus a bounded oscillation.
@@ -258,5 +258,95 @@ describe('rebalancePlan — forceSell (holdings that fail the Sharia standard)',
     expect(p.sell).toEqual(['A'])
     expect(p.keep).toEqual(['B'])
     expect(p.buy).toEqual(['C'])
+  })
+})
+
+describe('rebalancePlan — the "moves together" cap', () => {
+  // Ranked S1..S8 then O1..O6. Every S name moves with every other S name;
+  // nothing else is correlated. Cap: at most 2 that move together.
+  const syms = ['S1', 'S2', 'S3', 'S4', 'O1', 'S5', 'O2', 'O3', 'O4', 'O5', 'O6']
+  const ranked = syms.map((symbol, i) => ({ symbol, momentum: 1 - i / 100, volatility: 0.3 }))
+  const correlated = (a, b) => (a[0] === 'S' && b[0] === 'S' ? 0.9 : 0.1)
+  const corrCap = { correlated, max: 2, min: 0.7 }
+
+  it('admits at most `max` names that move together, refilling from the hold zone', () => {
+    const p = rebalancePlan({ ranked, held: [], buyTop: 5, holdZone: 9, corrCap })
+    expect(p.target).toEqual(['S1', 'S2', 'O1', 'O2', 'O3'])
+    expect(p.capped).toEqual(['S3', 'S4', 'S5'])
+    expect(p.target.length).toBe(rebalancePlan({ ranked, held: [], buyTop: 5, holdZone: 9 }).target.length)
+  })
+
+  it('judges holdings first, and sells a holding over the cap', () => {
+    const p = rebalancePlan({ ranked, held: ['S2', 'S3', 'S4'], buyTop: 5, holdZone: 9, corrCap })
+    expect(p.keep).toEqual(['S2', 'S3'])
+    expect(p.sell).toEqual(['S4'])
+    expect(p.buy).toEqual(['O1', 'O2', 'O3'])
+  })
+
+  it('never refills past the hold zone (only the zone is screened)', () => {
+    const p = rebalancePlan({ ranked, held: [], buyTop: 5, holdZone: 6, corrCap })
+    expect(p.target).toEqual(['S1', 'S2', 'O1'])
+  })
+
+  it('refills around blocked and failing names', () => {
+    const p = rebalancePlan({ ranked, held: [], buyTop: 5, holdZone: 9, excluded: ['O1'], forceSell: ['O2'], corrCap })
+    expect(p.target).toEqual(['S1', 'S2', 'O3', 'O4'])
+  })
+
+  it('an unmeasurable pair is not treated as correlated', () => {
+    const p = rebalancePlan({ ranked, held: [], buyTop: 3, holdZone: 9, corrCap: { correlated: () => null, max: 1 } })
+    expect(p.target).toEqual(['S1', 'S2', 'S3'])
+  })
+
+  it('a chain of names that move together is one cluster, even when the ends do not', () => {
+    // The AI-hardware book of 2026-10-14: pairs sat around 0.6-0.75, so a
+    // pairwise neighbour count let 11 of 15 through. Linked by any chain = one group.
+    const pair = { 'A|B': 0.8, 'B|C': 0.8, 'A|C': 0.5, 'C|D': 0.75 }
+    const corr = (a, b) => pair[[a, b].sort().join('|')] ?? 0
+    const c = correlationClusters(['A', 'B', 'C', 'D', 'E'], corr, 0.7)
+    expect(new Set(['A', 'B', 'C', 'D'].map((s) => c.get(s))).size).toBe(1)
+    expect(c.get('E')).not.toBe(c.get('A'))
+    const ranked = ['A', 'B', 'C', 'D', 'E', 'F'].map((symbol, i) => ({ symbol, momentum: 1 - i / 10, volatility: 0.3 }))
+    const p = rebalancePlan({ ranked, held: [], buyTop: 4, holdZone: 6, corrCap: { correlated: corr, max: 2, min: 0.7 } })
+    expect(p.target).toEqual(['A', 'B', 'E', 'F'])
+  })
+
+  it('without a cap the plan is unchanged', () => {
+    const p = rebalancePlan({ ranked, held: [], buyTop: 5, holdZone: 9 })
+    expect(p.target).toEqual(['S1', 'S2', 'S3', 'S4', 'O1'])
+    expect(p.capped).toBeUndefined()
+  })
+})
+
+describe('returnCorrelation', () => {
+  const day = (i) => new Date(Date.UTC(2026, 6, 1) + i * 86400000).toISOString()
+  const bars = (f, n = 40) => { let p = 100; return Array.from({ length: n }, (_, i) => { p *= 1 + f(i); return { t: day(i), c: p } }) }
+  const wave = (i) => Math.sin(i * 1.7) * 0.02
+
+  it('is ~1 for names that move together and ~-1 for opposites', () => {
+    expect(returnCorrelation(bars(wave), bars((i) => wave(i) * 2))).toBeCloseTo(1, 6)
+    expect(returnCorrelation(bars(wave), bars((i) => -wave(i)))).toBeCloseTo(-1, 6)
+  })
+
+  it('matches on date, not position', () => {
+    const a = bars(wave)
+    const b = bars(wave).slice(5)
+    expect(returnCorrelation(a, b)).toBeCloseTo(1, 6)
+  })
+
+  it('null when there is too little shared history or a flat line', () => {
+    expect(returnCorrelation(bars(wave, 10), bars(wave, 10))).toBeNull()
+    expect(returnCorrelation(bars(wave), bars(() => 0))).toBeNull()
+    expect(returnCorrelation(null, undefined)).toBeNull()
+  })
+})
+
+describe('the cap is wired into every plan the rank strategy draws', () => {
+  const H = readFileSync(path.resolve(__dirname, '../../lib/handlers.mjs'), 'utf8')
+  it('prepareRankPlan and the AI gate both pass corrCap, and the zone is screened when it is on', () => {
+    const plans = H.match(/rebalancePlan\(\{[^}]*\}\)/g) || []
+    expect(plans.length).toBeGreaterThanOrEqual(2)
+    for (const call of plans) expect(call).toMatch(/corrCap/)
+    expect(H).toMatch(/candidates: \(corrCap \? zone : zone\.slice\(0, buyTop\)\)/)
   })
 })

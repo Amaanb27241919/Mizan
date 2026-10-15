@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-14
+
+### Fixed
+- **trade-lab:** A swing strategy waits for its own order to fill (`f1662e1`)
+
 ## 2026-10-11
 
 ### Added
