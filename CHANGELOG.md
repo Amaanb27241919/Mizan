@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-14
 
 ### Added
+- **trade-lab:** View all strategies, a halal fund shelf, and star names (`a048830`)
 - **trade-lab:** "moves together" cap for rank strategies (params.corr_cap) (`a5106bc`)
 
 ### Fixed

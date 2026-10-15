@@ -207,9 +207,17 @@ describe('buildPanel', () => {
     // The UI must be able to say "not configured" instead of silently running
     // fewer analysts than the experiment claims.
     const panel = buildPanel({ ANTHROPIC_KEY: 'k' })
-    expect(panel.map(p => p.provider).sort()).toEqual(['anthropic', 'google', 'openrouter'])
+    expect(panel.map(p => p.provider).sort()).toEqual(['anthropic', 'google', 'mistral', 'openrouter'])
     expect(panel.find(p => p.provider === 'anthropic').available).toBe(true)
     expect(panel.find(p => p.provider === 'google').available).toBe(false)
+  })
+
+  it('runs Mistral as its own analyst on the OpenRouter key, and can be switched off', async () => {
+    const panel = buildPanel({ OPENROUTER_API_KEY: 'k' })
+    expect(panel.find(p => p.provider === 'mistral')).toMatchObject({ model: 'mistralai/mistral-large-4-0', available: true })
+    expect(buildPanel({ OPENROUTER_API_KEY: 'k', MISTRAL_RESEARCH_MODEL: 'mistralai/x' }).find(p => p.provider === 'mistral').model).toBe('mistralai/x')
+    expect(buildPanel({ OPENROUTER_API_KEY: 'k', MISTRAL_RESEARCH_MODEL: 'off' }).map(p => p.provider)).not.toContain('mistral')
+    expect(await buildPanel({}).find(p => p.provider === 'mistral').analyze('x')).toMatchObject({ ok: false, provider: 'mistral', code: 'not_configured' })
   })
 
   it('honours model overrides from env', () => {

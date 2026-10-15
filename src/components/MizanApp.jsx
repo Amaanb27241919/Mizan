@@ -7773,7 +7773,7 @@ function AiCommittee({demoMode,book}){
   const codes=useMemo(()=>[...new Set(rows.map(r=>codeOf.get(r.strategy_id)||"—"))],[rows,codeOf]);
   const shown=only==="all"?rows:rows.filter(r=>(codeOf.get(r.strategy_id)||"—")===only);
   const stats=useMemo(()=>committeeStats(shown,providers),[shown,providers]);
-  const ANALYST={anthropic:"Claude",google:"Gemini",openrouter:"DeepSeek"};
+  const ANALYST={anthropic:"Claude",google:"Gemini",openrouter:"DeepSeek",mistral:"Mistral"};
   const nameOf=p=>ANALYST[p]||String(p).toUpperCase();
 
   const verb=a=>{const x=String(a||"").toUpperCase();return x==="INSUFFICIENT_DATA"?"Not enough data":x.charAt(0)+x.slice(1).toLowerCase();};
@@ -8416,7 +8416,7 @@ function ConsoleFigs({items,testid}){
   </div>)}</div>;
 }
 
-const REVIEW_ANALYST={anthropic:"Claude",google:"Gemini",openrouter:"DeepSeek"};
+const REVIEW_ANALYST={anthropic:"Claude",google:"Gemini",openrouter:"DeepSeek",mistral:"Mistral"};
 /** Strategies, top: ONE strategy's console — the one selected in the rail. */
 function StrategyConsole({lab,book,selected,onGo,mask}){
   const row=lab.rows.find(r=>r.id===selected)||null;
@@ -8858,7 +8858,7 @@ function LatestOrders({items,strategies,state,onMore}){
   </section>;
 }
 
-const ANALYST_NAME={anthropic:"Claude",google:"Gemini",openrouter:"DeepSeek"};
+const ANALYST_NAME={anthropic:"Claude",google:"Gemini",openrouter:"DeepSeek",mistral:"Mistral"};
 /** The last three research rounds, one column per analyst. */
 function CommitteeLatest({feed,onMore}){
   const providers=feed.providers.filter(p=>p?.available);

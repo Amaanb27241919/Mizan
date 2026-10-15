@@ -26,6 +26,7 @@ function cadence(days) {
   if (d <= 1) return "every trading day";
   if (d === 7) return "once a week";
   if (d >= 28 && d <= 31) return "once a month";
+  if (d >= 89 && d <= 92) return "once a quarter";
   return `every ${d} days`;
 }
 function lookback(days) {
@@ -49,10 +50,12 @@ function universeOf(p) {
 /** Params that are bookkeeping, not rules — ignored when pairing strategies. */
 const BOOKKEEPING = new Set(["experiment", "experiment_group", "last_rebalance", "universe_source", "high_water", "notes",
   "last_dca_date", "ai_gate_cutoff_et", "last_screen", "benchmark", "broker", "dca_waiting_for_funds", "universe", "executed_as",
-  "detailed_rules", "entry_rules", "exit_rules", "universe_tickers"]);
+  "detailed_rules", "entry_rules", "exit_rules", "universe_tickers", "display_name", "day_done", "day_done_why"]);
 const RULE_NAME = {
   ai_gate: "the AI gate", protective_stop_pct: "the protective stop", whole_shares: "whole shares only",
   min_relative_volume: "the volume check", cash_sweep: "the SPSK cash sweep", earnings_filter_days: "the earnings filter",
+  require_news_hours: "the news requirement", green_day: "the green-day rule", premarket_entries: "pre-market entries",
+  corr_cap: "the moves-together cap",
 };
 
 function code(s) {
@@ -77,7 +80,17 @@ function soleDifference(a, b) {
   return diff.length === 1 ? diff[0] : null;
 }
 
+function basketRules(s, p) {
+  const w = obj(p.fixed_weights) || {};
+  const n = Object.keys(w).length;
+  return [
+    `Holds a fixed basket of ${n} halal dividend payers${p.basket_source ? ` (${p.basket_source})` : ""} at the basket's own weights; a name that fails the screen is left out and the rest are re-weighted.`,
+    `Rebalances ${cadence(p.rebalance_days) || "on a schedule"}. No ranking and no momentum — it is the calm book the others are measured against.`,
+  ];
+}
+
 function rankRules(s, p) {
+  if (obj(p.fixed_weights)) return basketRules(s, p);
   const u = universeOf(p);
   const top = num(p.buy_top), hold = num(p.hold_zone);
   const pool = u.count ? `the ${u.count} halal stocks in ${u.fund || "its list"}` : `the halal stocks in ${u.fund || "its list"}`;
@@ -87,7 +100,9 @@ function rankRules(s, p) {
   ];
   if (p.whole_shares) out.push(`Buys whole shares only${top ? `, each priced at most ${usd((num(s.capital_allocated) || 0) / top)} (its money ÷ ${top} slots)` : ""} — the way a small E*TRADE account has to.`);
   if (num(p.earnings_filter_days)) out.push(`Skips any stock reporting earnings within ${num(p.earnings_filter_days)} days.`);
-  if (p.ai_gate) out.push(`Before buying, an AI panel (Claude, Gemini, DeepSeek) reviews each name's news. A name the panel agrees to sell is skipped; one it has not reviewed by ${p.ai_gate_cutoff_et || "the cutoff"} ET goes through.`);
+  const cap = obj(p.corr_cap);
+  if (cap) out.push(`No more than ${num(cap.max) ?? 4} holdings that move together (daily-return correlation of ${num(cap.min) ?? 0.7} or more, chained); the freed slots go to the next names in the top ${hold ?? "zone"}.`);
+  if (p.ai_gate) out.push(`Before buying, an AI panel (Claude, Gemini, DeepSeek, Mistral) reviews each name's news. A name the panel agrees to sell is skipped; one it has not reviewed by ${p.ai_gate_cutoff_et || "the cutoff"} ET goes through.`);
   if (p.cash_sweep) out.push(`Parks idle cash in ${p.cash_sweep} (a sukuk fund) rather than leaving it uninvested.`);
   if (num(p.protective_stop_pct)) out.push(`Keeps a sell-stop ${pct(p.protective_stop_pct)} below what it paid for each holding.`);
   return out;
@@ -96,10 +111,14 @@ function rankRules(s, p) {
 function swingRules(s, p) {
   const n = arr(p.universe_tickers).length;
   const out = [
-    `Watches ${n > 1 ? `${n} large halal stocks` : "a list of halal stocks"} and buys the strongest one once it is up ${pct(p.entry_threshold_pct ?? 1)} on the day${num(p.min_relative_volume) ? ` and trading at least ${num(p.min_relative_volume)}× its usual volume` : ""}.`,
+    `Watches ${n > 1 ? `${n} large halal stocks` : "a list of halal stocks"} and buys the strongest one once it is up ${pct(p.entry_threshold_pct ?? 1)} on the day${num(p.min_relative_volume) ? ` and trading at least ${num(p.min_relative_volume)}× its usual volume` : ""}${num(p.require_news_hours) ? `, but only if the company had news in the last ${num(p.require_news_hours)} hours` : ""}.`,
     `Holds one position at a time. Sells at +${pct(s.profit_target_pct ?? 0)}, at a ${pct(s.stop_loss_pct ?? 0)} loss${num(p.trail_pct) ? `, or if it falls ${pct(p.trail_pct)} from its high once it is up ${pct(p.trail_activate_pct ?? p.trail_pct)}` : ""}.`,
   ];
   if (p.broker_exits) out.push("The exit orders are placed at the broker the moment it buys, so they work even between checks.");
+  else out.push("Its exits are checked every 15 minutes while the market is open.");
+  if (p.premarket_entries) out.push("Can also buy before the open, from 7:00 ET, with a limit order a little above the last pre-market trade.");
+  const gd = obj(p.green_day);
+  if (gd) out.push(`Green-day rule: once it is up ${pct(gd.goal_pct)} on the day it sells and stops for the day${num(gd.loss_limit_pct) ? `; down ${pct(gd.loss_limit_pct)}, the same` : ""}.`);
   return out;
 }
 
@@ -138,13 +157,17 @@ export function explainStrategy(strat, all) {
   } else if (s.strategy_type === "rank_rebalance") {
     rules = rankRules(s, p);
     // The distinguishing facts, so cards that share an engine read differently.
-    const cad = { "once a week": "weekly", "once a month": "monthly", "every trading day": "daily" }[cadence(p.rebalance_days)] || cadence(p.rebalance_days);
+    const cad = { "once a week": "weekly", "once a month": "monthly", "once a quarter": "quarterly", "every trading day": "daily" }[cadence(p.rebalance_days)] || cadence(p.rebalance_days);
     const extras = [p.ai_gate && "an AI check before each buy", num(p.protective_stop_pct) && `a ${pct(p.protective_stop_pct)} stop`,
       p.whole_shares && "whole shares only"].filter(Boolean);
-    oneLine = `The ${num(p.buy_top) ?? ""} strongest halal stocks${cad ? `, rebalanced ${cad}` : ""}${extras.length ? `, with ${extras.join(" and ")}` : ""}.`.replace("The  ", "The ");
+    oneLine = obj(p.fixed_weights) ? `A fixed basket of ${Object.keys(obj(p.fixed_weights)).length} halal dividend stocks${cad ? `, rebalanced ${cad}` : ""}.`
+      : `The ${num(p.buy_top) ?? ""} strongest halal stocks${cad ? `, rebalanced ${cad}` : ""}${extras.length ? `, with ${extras.join(" and ")}` : ""}.`.replace("The  ", "The ");
   } else if (s.strategy_type === "breakout" || s.strategy_type === "momentum") {
     rules = swingRules(s, p);
-    oneLine = "Short swing trades in one strong halal stock at a time.";
+    oneLine = p.premarket_entries ? "News-driven swing trades that can start before the open."
+      : num(p.require_news_hours) ? "Swing trades in a halal stock with fresh news and a strong move."
+      : obj(p.green_day) ? `Swing trades that bank a green day at +${pct(obj(p.green_day).goal_pct)}.`
+      : "Short swing trades in one strong halal stock at a time.";
   } else {
     rules = [String(s.nl_description || "A custom strategy.").split(/(?<=\.)\s/)[0]];
     oneLine = rules[0];
