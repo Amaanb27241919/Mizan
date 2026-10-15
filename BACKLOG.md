@@ -245,6 +245,8 @@ The "something is wrong" bucket. Aligned with maintenance mode.
 
 ### F19 — "AAOIFI" debt and cash limits are 33%; AAOIFI Standard 21 says 30%
 
+- **✅ SHIPPED 2026-10-14 (`5bb2206`, owner approved):** AAOIFI is now 30% / 30% (≤), no receivables test, and the 5% income test runs from reported interest income (estimate from other income may only clear it). `SCREEN_ENGINE_VERSION` 3. Landing copy corrected (`mizan-landing` `73c0604`). A scholar's confirmation of the reading is still worth having.
+
 - **Effort:** S (one constant + `SCREEN_ENGINE_VERSION` bump) · **User value:** high (accuracy of the core product) · **Autonomous:** no — it changes verdicts app-wide AND every strategy's trade gate (screenGate screens by AAOIFI), so it needs the owner's call and ideally the reviewer's
 - **Evidence:** `lib/sharia.mjs` `STANDARDS.AAOIFI = { debtMax: 33, cashMax: 33, recvMax: 49 }`. AAOIFI Shari'ah Standard 21 is commonly cited as interest-bearing debt < 30% of market cap and interest-bearing deposits < 30%; 33% is the S&P / Dow Jones convention. Amal Invest applies 30% (found while reviewing amalinvest.com, 2026-10-14). The 49% receivables limit is also S&P's, not AAOIFI's.
 - **Effect if changed:** names with debt 30–33% of market cap flip from pass to fail under AAOIFI; strategies would sell any such holding at their next rebalance. Measure the flip list before shipping.
