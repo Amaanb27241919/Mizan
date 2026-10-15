@@ -9,6 +9,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 
 ## 2026-10-14
 
+### Added
+- **trade-lab:** "moves together" cap for rank strategies (params.corr_cap) (`a5106bc`)
+
 ### Fixed
 - **trade-lab:** A swing strategy waits for its own order to fill (`f1662e1`)
 

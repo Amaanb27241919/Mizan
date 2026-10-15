@@ -14,6 +14,11 @@ describe('strategyLabel — every strategy has a name a person can read', () => 
     expect(strategyLabel(strat())).toEqual({ code: 'A', name: 'Reference system + AI gate' })
     expect(strategyLabel(strat({ params: { experiment: 'E · core: A + C combined, whole shares' } }))).toEqual({ code: 'E·core', name: 'A + C combined, whole shares' })
   })
+  it('a display name replaces the descriptive name; the code letter stays', () => {
+    expect(strategyLabel(strat({ params: { experiment: 'A: reference system + AI gate', display_name: 'Altair' } }))).toEqual({ code: 'A', name: 'Altair' })
+    expect(strategyLabel(strat({ params: { display_name: '  Mizar ' }, nl_description: 'Halal momentum' }))).toEqual({ code: '', name: 'Mizar' })
+    expect(strategyLabel(strat({ params: { experiment: 'B: no AI', display_name: 42 } })).name).toBe('No AI')
+  })
   it('falls back to the first clause of the description', () => {
     expect(strategyLabel(strat({ params: {}, nl_description: 'Halal momentum, top 25 of the SPUS universe' }))).toEqual({ code: '', name: 'Halal momentum' })
     expect(strategyLabel({ strategy_type: 'dca', params: {} })).toEqual({ code: '', name: 'dca' })
@@ -127,3 +132,12 @@ describe("strategyMode", () => {
     expect(strategyMode(null)).toBe("semi");
   });
 });
+
+describe('blotterRows — top holdings for the View all cards', () => {
+  it('passes the largest holdings through, and tolerates junk', () => {
+    const rows = blotterRows([strat({ progress: { top_holdings: [{ symbol: 'SNDK', value: 9000, weight: 0.09 }, null, { value: 1 }, 'x'] } })])
+    expect(rows[0].top).toEqual([{ symbol: 'SNDK', value: 9000, weight: 0.09 }])
+    expect(blotterRows([strat({ progress: { top_holdings: 'nope' } })])[0].top).toEqual([])
+    expect(blotterRows([strat({ progress: null })])[0].top).toEqual([])
+  })
+})

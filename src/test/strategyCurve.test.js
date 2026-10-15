@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { strategyCurve, closeOn } from "../../lib/trading/curve.mjs";
+import { strategyCurve, closeOn, fundReturns } from "../../lib/trading/curve.mjs";
 
 const days = ["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08"];
 const closes = {
@@ -54,5 +54,20 @@ describe("strategyCurve", () => {
     expect(strategyCurve(null)).toEqual({ startedOn: null, points: [] });
     expect(strategyCurve({ capital: "x", ledger: {}, closes: null, days: "no" }).points).toEqual([]);
     expect(closeOn(null, "A", "2026-10-08")).toBeNull();
+  });
+});
+
+describe("fundReturns — the halal funds over the account's window", () => {
+  const closes = { SPUS: { "2026-10-05": 50, "2026-10-06": 51, "2026-10-08": 49.5 }, HLAL: { "2026-10-08": 60 }, MNZL: {} };
+  it("measures from the last close BEFORE the first fill to the latest close", () => {
+    expect(fundReturns(closes, ["SPUS"], "2026-10-06")).toEqual({ SPUS: { returnPct: -1, fromDay: "2026-10-05", toDay: "2026-10-08" } });
+  });
+  it("a fund with no close on either end is null, never 0", () => {
+    const r = fundReturns(closes, ["HLAL", "MNZL", "NOPE"], "2026-10-06");
+    expect(r).toEqual({ HLAL: null, MNZL: null, NOPE: null });
+  });
+  it("survives malformed input", () => {
+    expect(fundReturns(null, ["SPUS"], "2026-10-06")).toEqual({ SPUS: null });
+    expect(fundReturns(closes, "SPUS", "2026-10-06")).toEqual({});
   });
 });

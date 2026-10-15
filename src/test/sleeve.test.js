@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  sleeveCash, rankDeployBudget, earningsExclusions, withCashSweep, aiGateDecision,
+  sleeveCash, rankDeployBudget, earningsExclusions, withCashSweep, aiGateDecision, topHoldings,
 } from '../../lib/trading/sleeve.mjs'
 
 const sig = (side, qty, price, status = 'executed') => ({ side, qty: String(qty), suggested_price: String(price), status })
@@ -277,5 +277,19 @@ describe('progress pricing wiring (handlers.mjs)', () => {
   })
   it('passes priced:false to the score when anything is unpriced', () => {
     expect(f).toMatch(/strategyScore\(\{[^}]*priced \}\)/)
+  })
+})
+
+describe('topHoldings', () => {
+  it('largest first by market value, with each one\'s share of the priced book', () => {
+    const t = topHoldings({ AAA: 10, BBB: 1, CCC: 5 }, { AAA: 10, BBB: 300, CCC: 10 }, 2)
+    expect(t).toEqual([{ symbol: 'BBB', value: 300, weight: 0.6667 }, { symbol: 'AAA', value: 100, weight: 0.2222 }])
+  })
+  it('leaves unpriced and empty positions out rather than showing $0', () => {
+    expect(topHoldings({ AAA: 10, BBB: 5, CCC: 0 }, { AAA: 10 })).toEqual([{ symbol: 'AAA', value: 100, weight: 1 }])
+  })
+  it('survives malformed input', () => {
+    expect(topHoldings(null, null)).toEqual([])
+    expect(topHoldings([1, 2], 'x')).toEqual([])
   })
 })

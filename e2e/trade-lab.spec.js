@@ -1323,6 +1323,37 @@ test.describe("Trade Lab console", () => {
     await expect(orders).toContainText("potential wash trade detected");
   });
 
+  test("View all: every strategy side by side, ranked against SPUS, with the halal funds over the same window", async ({ page }) => {
+    const withTop = STRATS.map((x, i) => ({ ...x, params: { ...x.params, display_name: i ? "Vega" : "Altair" },
+      progress: { ...x.progress, top_holdings: i ? [{ symbol: "MU", value: 500, weight: 0.5 }] : [{ symbol: "AMAT", value: 600, weight: 0.6 }] } }));
+    await open(page, { "/api/bot/strategies": { strategies: withTop },
+      "/api/bot/curves": { ...CURVES, fundsFrom: "2026-10-06", funds: { SPUS: { returnPct: -0.1 }, HLAL: { returnPct: 0.4 }, MNZL: null } } });
+    await labNav(page).getByRole("button", { name: "Strategies", exact: true }).click();
+    await page.getByTestId("strategies-view").getByRole("button", { name: "View all" }).click();
+    const all = page.getByTestId("strategies-all");
+    // Ranked by points ahead of SPUS: A (+1.12) above B (+0.71). Star names, code letters kept.
+    await expect(page.getByTestId("strategies-league").locator("tbody tr")).toHaveCount(2);
+    await expect(page.getByTestId("strategies-league").locator("tbody tr").first()).toContainText("Altair");
+    await expect(page.getByTestId("strategies-league").locator("tbody tr").nth(1)).toContainText("Vega");
+    const cards = all.getByTestId("strategy-card");
+    await expect(cards).toHaveCount(2);
+    await expect(cards.filter({ hasText: "Altair" })).toContainText("AMAT 60%");
+    await expect(cards.filter({ hasText: "Vega" })).toContainText("MU");
+    // The fund shelf: Mizan's return over the account's window, never a ranking.
+    const shelf = page.getByTestId("fund-shelf");
+    await expect(shelf).toContainText("since 2026-10-06");
+    await expect(shelf.locator("tr", { hasText: "HLAL" })).toContainText("+0.50");
+    await expect(shelf.locator("tr", { hasText: "MNZL" })).toContainText("—");
+    await expect(shelf.locator("tr", { hasText: "ISDW" })).toContainText("not US-listed");
+    // A card opens that strategy's own console, and the choice is remembered.
+    await cards.filter({ hasText: "Vega" }).getByRole("button", { name: "Open console →" }).click();
+    await expect(page.getByTestId("strategy-console").getByRole("heading", { name: "Vega" })).toBeVisible();
+    await page.getByTestId("strategies-view").getByRole("button", { name: "View all" }).click();
+    await page.reload();
+    await labNav(page).getByRole("button", { name: "Strategies", exact: true }).click();
+    await expect(page.getByTestId("strategies-all")).toBeVisible();
+  });
+
   test("Account holds positions, performance, compliance, risk and the stops; Journal holds the AI committee", async ({ page }) => {
     await open(page);
     await labNav(page).getByRole("button", { name: "Account", exact: true }).click();

@@ -8486,6 +8486,106 @@ function StrategyConsole({lab,book,selected,onGo,mask}){
   </div>;
 }
 
+/** The halal equity funds Amal Invest compares (halal-etfs-compared, figures
+ *  dated August 2026), as reported there — fees and top-10 weight are the
+ *  page's, not ours. The returns beside them are Mizan's own, from SIP closes
+ *  over this account's window. Listed by ticker, never ranked: a sorted shelf
+ *  of funds is a buy list. */
+const HALAL_FUND_SHELF=[
+  {t:"SPUS",name:"SP Funds S&P 500 Sharia",index:"S&P 500 Shariah",fee:0.45,top10:56.5,us:true},
+  {t:"HLAL",name:"Wahed FTSE USA Shariah",index:"FTSE Shariah USA",fee:0.50,top10:58.2,us:true},
+  {t:"MNZL",name:"Manzil Halal USA",index:"Russell 1000, IdealRatings + AFSC screen",fee:0.40,top10:40.2,us:true},
+  {t:"UMMA",name:"Wahed Dow Jones Islamic World",index:"Dow Jones Islamic World",fee:0.51,top10:41.7,us:true},
+  {t:"SPSK",name:"SP Funds Global Sukuk",index:"Dow Jones Global Sukuk",fee:0.79,top10:15.2,us:true},
+  {t:"SPRE",name:"SP Funds Global REIT Sharia",index:"S&P Global REIT Sharia",fee:0.59,top10:76.8,us:true},
+  {t:"IGDA",name:"Invesco DJ Islamic Developed",index:"UCITS, London",fee:0.40,top10:38.6,us:false},
+  {t:"ISDU",name:"iShares MSCI USA Islamic",index:"UCITS, London",fee:0.30,top10:50.9,us:false},
+  {t:"ISDW",name:"iShares MSCI World Islamic",index:"UCITS, London",fee:0.30,top10:36.4,us:false},
+  {t:"ISDE",name:"iShares MSCI EM Islamic",index:"UCITS, London",fee:0.35,top10:44.3,us:false},
+  {t:"WSHR",name:"Wealthsimple Shariah World",index:"NEO, Canada",fee:0.50,top10:9.3,us:false},
+];
+function FundShelf({curves,mask}){
+  const tone=v=>v==null?undefined:v>0?T.gain:v<0?T.loss:undefined;
+  const funds=curves.funds||{};
+  const spus=funds.SPUS?.returnPct;
+  return<section className="mz-panel mz-wide" data-testid="fund-shelf" style={{marginTop:T.s4}}>
+    <h3 className="mz-panel-h">Halal funds, same window <span>{curves.fundsFrom?`since ${curves.fundsFrom}, this account's first trade`:""}</span></h3>
+    <div style={{overflowX:"auto"}}><table className="mz-news">
+      <thead><tr><th>Fund</th><th className="mz-narrow-hide">Tracks</th><th style={{textAlign:"right"}}>Fee</th><th style={{textAlign:"right"}}>Top 10</th><th style={{textAlign:"right"}}>Return</th><th style={{textAlign:"right"}}>vs SPUS</th></tr></thead>
+      <tbody>{HALAL_FUND_SHELF.map(f=>{const r=funds[f.t]?.returnPct;const a=r!=null&&spus!=null&&f.t!=="SPUS"?r-spus:null;return<tr key={f.t}>
+        <td><b>{f.t}</b> <span className="mz-news-dim mz-narrow-hide">{f.name}</span></td>
+        <td className="mz-news-dim mz-narrow-hide">{f.index}</td>
+        <td style={{textAlign:"right"}}>{f.fee.toFixed(2)}%</td>
+        <td style={{textAlign:"right"}}>{f.top10.toFixed(1)}%</td>
+        <td style={{textAlign:"right",color:tone(r)}}>{!f.us?<span className="mz-news-dim">not US-listed</span>:r==null?"—":mask(fp(r))}</td>
+        <td style={{textAlign:"right",color:tone(a)}}>{a==null?"—":mask(`${a>0?"+":""}${a.toFixed(2)}`)}</td>
+      </tr>;})}</tbody>
+    </table></div>
+    <p className="mz-panel-note">Fees and top-10 weights as reported by Amal Invest (Halal ETFs Compared, August 2026); returns are Mizan's, from adjusted daily closes. Information, not a recommendation — listed by ticker, not ranked.</p>
+  </section>;
+}
+
+/** Strategies → View all: every strategy on this account at once — a league
+ *  table, then one small console per strategy. The single console stays the
+ *  deep view; a card opens it. */
+function StrategiesAll({lab,book,onOpen,mask}){
+  const tone=v=>v==null?undefined:v>0?T.gain:v<0?T.loss:undefined;
+  const ret=r=>r.unpriced?"n/a":!r.traded||r.returnPct==null?"—":mask(fp(r.returnPct));
+  const alpha=r=>r.alphaPct==null?"—":mask(`${r.alphaPct>0?"+":""}${r.alphaPct.toFixed(2)}`);
+  const lastOrder=useMemo(()=>{const m=new Map();for(const o of tapeRows(lab.feed.items,book.strategies,500))if(!m.has(o.strategyId))m.set(o.strategyId,o);return m;},[lab.feed.items,book.strategies]);
+  const league=useMemo(()=>[...lab.rows].sort((a,b)=>(b.alphaPct??-Infinity)-(a.alphaPct??-Infinity)||String(a.code).localeCompare(String(b.code))),[lab.rows]);
+  const today=nyToday();
+  if(!lab.rows.length)return<section className="mz-panel" data-testid="strategies-all"><h3 className="mz-panel-h">All strategies</h3>
+    <p className="mz-col-empty">{book.state==="loading"?"Loading strategies…":"No strategy yet. Build one below."}</p></section>;
+  return<div className="mz-desk" data-testid="strategies-all">
+    <section className="mz-stage">
+      <h2 className="mz-all-h" style={{fontFamily:FN}}>Every strategy, side by side</h2>
+      <div style={{overflowX:"auto"}}><table className="mz-news" data-testid="strategies-league">
+        <thead><tr><th>#</th><th>Strategy</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Equity</th><th style={{textAlign:"right"}}>Return</th><th style={{textAlign:"right"}}>vs SPUS</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Holdings</th><th className="mz-narrow-hide">Status</th></tr></thead>
+        <tbody>{league.map((r,i)=><tr key={r.id}>
+          <td className="mz-news-dim">{r.alphaPct==null?"—":i+1}</td>
+          <td><button className="mz-all-name mz-tap" onClick={()=>onOpen(r.id)} title={`Open ${r.name}`}>
+            <span className="mz-swatch" style={{background:r.color||T.slate}} aria-hidden="true"/><b>{r.name}</b>{r.code&&<span className="mz-news-dim"> {r.code}</span>}</button></td>
+          <td style={{textAlign:"right"}} className="mz-narrow-hide">{r.equity==null?"—":mask(f$(r.equity,0))}</td>
+          <td style={{textAlign:"right",color:tone(r.returnPct)}}>{ret(r)}</td>
+          <td style={{textAlign:"right",color:tone(r.alphaPct)}}>{alpha(r)}</td>
+          <td style={{textAlign:"right"}} className="mz-narrow-hide">{r.holdings||0}</td>
+          <td className="mz-news-dim mz-narrow-hide">{r.status?.text||""}</td>
+        </tr>)}</tbody>
+      </table></div>
+      <p className="mz-panel-note">Ranked by points ahead of SPUS over each strategy's own window — strategies that started on different days are not measured over the same days.</p>
+    </section>
+    <div className="mz-allgrid">{lab.rows.map(r=>{
+      const live=r.traded&&r.returnPct!=null?{returnPct:r.returnPct,benchPct:r.benchPct}:null;
+      const g=sparkPaths(pinToday(lab.curves.curves[r.id]?.points,today,live),{w:200,h:72,pad:6});
+      const about=lab.abouts.get(r.id), o=lastOrder.get(r.id);
+      return<article key={r.id} className="mz-panel mz-allcard" data-testid="strategy-card">
+        <div className="mz-readout-top" style={{marginTop:0}}>
+          <span className="mz-readout-code" style={{borderColor:r.color||T.slate}}>{r.code||"—"}</span>
+          <div style={{minWidth:0}}>
+            <h3 className="mz-allcard-name" style={{fontFamily:FN}}>{r.name}</h3>
+            <div className="mz-readout-sub">{about?.oneLine||r.status?.text||""}</div>
+          </div>
+        </div>
+        <div className="mz-readout mz-allspark">{g?<svg viewBox={`0 0 ${g.w} ${g.h}`} preserveAspectRatio="none" role="img" aria-label={`${r.name} against SPUS`} style={{height:72}}>
+            <line x1="0" x2={g.w} y1={g.zeroY} y2={g.zeroY} className="mz-mult-zero"/>
+            {g.bench&&<polyline points={g.bench} className="mz-readout-bench"/>}
+            {g.strategy&&<polyline points={g.strategy} className="mz-readout-line" style={{stroke:r.color||undefined}}/>}
+          </svg>:<div className="mz-mult-empty" style={{height:72}}>{r.traded?"needs a second close":"no fills yet"}</div>}</div>
+        <dl className="mz-allfigs">
+          <div><dt>Equity</dt><dd>{r.equity==null?"—":mask(f$(r.equity,0))}</dd></div>
+          <div><dt>Return</dt><dd style={{color:tone(r.returnPct)}}>{ret(r)}</dd></div>
+          <div><dt>vs SPUS</dt><dd style={{color:tone(r.alphaPct)}}>{alpha(r)}</dd></div>
+        </dl>
+        <p className="mz-allhold">{r.top?.length?r.top.map((h,i)=><React.Fragment key={h.symbol}>{i>0&&" · "}<b>{h.symbol}</b> {mask(`${Math.round(h.weight*100)}%`)}</React.Fragment>)
+          :<span className="mz-news-dim">{r.holdings>0?`${r.holdings} holding${r.holdings===1?"":"s"}`:"No holdings"}</span>}</p>
+        <p className="mz-allhold mz-news-dim">{o?`${nyStamp(o.at)} · ${o.side==="sell"?"Sell":"Buy"} ${o.ticker} · ${o.status}`:"No orders yet"}</p>
+        <button className="mz-more mz-tap" onClick={()=>onOpen(r.id)}>Open console →</button>
+      </article>;})}</div>
+    {lab.curves.state==="ready"&&<FundShelf curves={lab.curves} mask={mask}/>}
+  </div>;
+}
+
 const ptsOf=xy=>xy.map(([x,y])=>`${x},${y}`).join(" ");
 /** The stage: every switched-on strategy against SPUS on one scale and one
  *  calendar, with a crosshair on the selected strategy's latest close. */
@@ -8656,7 +8756,8 @@ function useStrategyCurves(enabled){
         const r=await apiFetch("/api/bot/curves");
         const d=r.ok?await r.json().catch(()=>null):null;
         const c=d&&typeof d.curves==="object"&&d.curves&&!Array.isArray(d.curves)?d.curves:null;
-        if(!cancelled)setRes(c?{state:"ready",curves:c}:{state:"unavailable",curves:{}});
+        const f=d&&d.funds&&typeof d.funds==="object"&&!Array.isArray(d.funds)?d.funds:{};
+        if(!cancelled)setRes(c?{state:"ready",curves:c,funds:f,fundsFrom:typeof d.fundsFrom==="string"?d.fundsFrom:null}:{state:"unavailable",curves:{}});
       }catch{if(!cancelled)setRes({state:"unavailable",curves:{}});}
     })();
     return()=>{cancelled=true;};
@@ -9202,6 +9303,9 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
   },[labOn]);
   const[hidden,toggleLayer]=useLabLayers();
   const[selected,setSelected]=useState(null);
+  // Strategies → One strategy | View all. Remembered per browser; storage can throw.
+  const[stratView,setStratViewRaw]=useState(()=>{try{return localStorage.getItem("mizan_lab_strat_view")==="all"?"all":"one";}catch{return"one";}});
+  const setStratView=v=>{setStratViewRaw(v);try{localStorage.setItem("mizan_lab_strat_view",v);}catch{}};
   const[findMiss,setFindMiss]=useState(null);
   const lab=useMemo(()=>{
     const chips=chipMap(book.strategies);
@@ -9290,7 +9394,12 @@ function TradeBot({currentNW=0,ytdContrib=0,accounts=[],live=[],mapPosition,onOr
           <AiCommittee demoMode={demoMode} book={book}/>
         </div>}
         {/* STRATEGIES = the selected strategy's console, then settings for all. */}
-        {sub==="strategies"&&<StrategyConsole lab={lab} book={book} selected={selectedId} onGo={goSection} mask={labMask}/>}
+        {sub==="strategies"&&lab.rows.length>1&&<div className="mz-filter" role="group" aria-label="How many strategies" style={{marginTop:0}} data-testid="strategies-view">
+          {[["one","One strategy"],["all","View all"]].map(([k,l])=><button key={k} onClick={()=>setStratView(k)} aria-pressed={stratView===k} className={stratView===k?"on mz-tap":"mz-tap"}>{l}</button>)}
+        </div>}
+        {sub==="strategies"&&(stratView==="all"&&lab.rows.length>1
+          ?<StrategiesAll lab={lab} book={book} mask={labMask} onOpen={id=>{setSelected(id);setStratView("one");}}/>
+          :<StrategyConsole lab={lab} book={book} selected={selectedId} onGo={goSection} mask={labMask}/>)}
         {sub==="strategies"&&<div className="mz-lab-stack mz-console-stack" style={{marginTop:T.s4}}><StrategyGuide book={book}/></div>}
         {sub==="signals"&&<section className="mz-stage" style={{marginBottom:T.s4}}>
           <ConsoleFigs testid="orders-figures" items={[
@@ -15643,7 +15752,7 @@ export default function Mizan(){
         .mz-console .mz-rail .mz-labnav > button.on{border-bottom-color:var(--mz-signal);}
         .mz-layers{flex-direction:row; flex-wrap:wrap; gap:2px var(--s-4); padding-top:var(--s-3);}
         .mz-layers legend{padding-top:var(--s-3);}
-        .mz-readout{display:none;}
+        .mz-readout:not(.mz-allspark){display:none;}
       }
 
       .mz-stage{background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4); position:relative; min-width:0;}
@@ -15689,6 +15798,17 @@ export default function Mizan(){
       @media (max-width:640px){ .mz-stage{padding:var(--s-3);} .mz-stage-plot{margin-left:2.6rem;} .mz-stage-scale{left:-2.6rem; width:2.3rem;} .mz-reticle{width:40px; height:40px;} .mz-reticle::after{inset:10px;} }
 
       .mz-dock{display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr); gap:var(--s-4); margin-top:var(--s-4);}
+      .mz-all-h{margin:0 0 var(--s-3); font-size:var(--fs-xl); font-weight:500; color:var(--mz-textHi);}
+      .mz-all-name{display:inline-flex; align-items:center; gap:var(--s-2); background:none; border:0; padding:0; cursor:pointer; color:inherit; font:inherit; text-align:left;}
+      .mz-all-name:hover b,.mz-all-name:focus-visible b{text-decoration:underline; text-underline-offset:3px;}
+      .mz-allgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr)); gap:var(--s-4); margin-top:var(--s-4);}
+      .mz-allcard{display:flex; flex-direction:column; gap:var(--s-2);}
+      .mz-allcard-name{margin:0; font-size:var(--fs-lg); font-weight:500; color:var(--mz-textHi); overflow-wrap:anywhere;}
+      .mz-allfigs{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--s-2); margin:0;}
+      .mz-allfigs dt{font-family:${FM}; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.06em; color:var(--mz-muted);}
+      .mz-allfigs dd{margin:2px 0 0; font-family:${FN}; font-size:var(--fs-lg); color:var(--mz-textHi); font-variant-numeric:tabular-nums;}
+      @media (max-width:720px){ .mz-narrow-hide{display:none;} }
+      .mz-allhold{margin:0; font-family:${FM}; font-size:var(--fs-xs); color:var(--mz-text); line-height:1.5; overflow-wrap:anywhere; font-variant-numeric:tabular-nums;}
       @media (max-width:1180px){ .mz-dock{grid-template-columns:minmax(0,1fr) minmax(0,1fr);} .mz-dock > :first-child{grid-column:1 / -1;} }
       @media (max-width:720px){ .mz-dock{grid-template-columns:minmax(0,1fr);} }
       .mz-panel{position:relative; min-width:0; background:var(--mz-surface); border:1px solid var(--mz-border); padding:var(--s-4);}

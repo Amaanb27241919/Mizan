@@ -243,6 +243,12 @@ The "something is wrong" bucket. Aligned with maintenance mode.
 - **Note this is only half a Canada problem:** `zakatConnectedAccounts` classifies **every** SnapTrade account as `kind:"brokerage"` regardless of type, so a US 401k linked via SnapTrade is equally misclassified. Fixing the regex alone does not fix the SnapTrade path — that needs account-type data from SnapTrade's `/accounts`.
 - **Blocked on a fiqh call before it can be finished** — see O25. Classifying an RRSP is useless until we know how it is treated for Zakat.
 
+### F19 — "AAOIFI" debt and cash limits are 33%; AAOIFI Standard 21 says 30%
+
+- **Effort:** S (one constant + `SCREEN_ENGINE_VERSION` bump) · **User value:** high (accuracy of the core product) · **Autonomous:** no — it changes verdicts app-wide AND every strategy's trade gate (screenGate screens by AAOIFI), so it needs the owner's call and ideally the reviewer's
+- **Evidence:** `lib/sharia.mjs` `STANDARDS.AAOIFI = { debtMax: 33, cashMax: 33, recvMax: 49 }`. AAOIFI Shari'ah Standard 21 is commonly cited as interest-bearing debt < 30% of market cap and interest-bearing deposits < 30%; 33% is the S&P / Dow Jones convention. Amal Invest applies 30% (found while reviewing amalinvest.com, 2026-10-14). The 49% receivables limit is also S&P's, not AAOIFI's.
+- **Effect if changed:** names with debt 30–33% of market cap flip from pass to fail under AAOIFI; strategies would sell any such holding at their next rebalance. Measure the flip list before shipping.
+
 ### F13 — Purification ratios cover US-listed funds only
 
 - **Effort:** S (data) · **User value:** medium · Extends [F3](#f3--purification_ratios-table-needs-an-ongoing-maintenance-path)
@@ -530,6 +536,17 @@ Building these is the treadmill the owner is stepping off. Build only on an expl
 - **Evidence:** In-code compliance boundary shipped + deployed 2026-07-15: `lib/compliance/policy.mjs` (three data tiers IMPERSONAL / ACCOUNT_SERVICING / PROHIBITED), `lib/compliance/advisor-prompt.mjs` (hardened advisor prompt), `lib/compliance/advisor-filter.mjs` (post-generation filter). Read-only line drawn at personalization of advice. Refs: `docs/COMPLIANCE.md`, memory `compliance-boundary-and-price-chart`.
 
 ---
+
+### N30 — Ideas from Amal Invest (reviewed 2026-10-14)
+
+- **Status:** parked · **Autonomous:** no. Source: amalinvest.com halal-investing series and help pages; their numbers are internally inconsistent across pages, so re-check before quoting.
+- **Trade Lab:** (a) a "doubtful allowed / blocked" switch per strategy, mapping our `review` verdict; (b) a failed-holding policy per strategy — sell now / wait for the next report / notify only — so a one-quarter debt spike does not force a sale; (c) an exclusion-cost comparison: a book with and without the ethical overlay's names; (d) top-10 concentration beside each strategy and SPUS (the View-all fund shelf shows the funds' figures).
+- **Zakat:** the FCNA intent toggle — trading intent = market value × 2.5%; long-term = value × the company's zakatable-asset share × 2.5% — with the method and date recorded. Amal's nisab is 85 g gold; ours is 87.48 g (both are cited in the literature).
+- **Purification:** a note on purifying gains from a period a holding was non-compliant (Amal mentions it, gives no method).
+- **Screener:** show which ratio failed and by how much (already in the verdict's `fails`; surface it).
+- **Ethical overlay:** a graduated scope (BDS list → defence/settlement suppliers → wider boycott lists), each step attributed to its listing body.
+- **Not to copy:** their "Top 10 halal / dividend / REIT stocks" lists, "best halal ETF" ranking and "Grow vs Save — pick Grow if…" guidance are curated picks or suitability advice (CLAUDE.md §1).
+- **Their SPUS filter (Oct 9 holdings) drops 20 of 216 names** (ORCL, LOW, UPS, BDX, VYLR, OXY, FERG, ROP, EXPE, GEHC, OTIS, EL, CDW, TSCO, GPC, BBY, IT, GDDY, WY, MKC). All 20 are in our rank universe; our screen gates them only when they reach the hold zone. None is held by a strategy as of 2026-10-14.
 
 ### N27 — Broker-level kill switch (Trade Lab §14)
 

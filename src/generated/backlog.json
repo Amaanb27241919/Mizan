@@ -91,14 +91,19 @@
           "done": false
         },
         {
+          "id": "F19",
+          "title": "\"AAOIFI\" debt and cash limits are 33%; AAOIFI Standard 21 says 30%",
+          "done": false
+        },
+        {
           "id": "F13",
           "title": "Purification ratios cover US-listed funds only",
           "done": false
         }
       ],
       "archive": false,
-      "open": 9,
-      "total": 18
+      "open": 10,
+      "total": 19
     },
     {
       "key": "G",
@@ -279,6 +284,11 @@
           "done": true
         },
         {
+          "id": "N30",
+          "title": "Ideas from Amal Invest (reviewed 2026-10-14)",
+          "done": false
+        },
+        {
           "id": "N27",
           "title": "Broker-level kill switch (Trade Lab §14)",
           "done": false
@@ -295,8 +305,8 @@
         }
       ],
       "archive": false,
-      "open": 26,
-      "total": 29
+      "open": 27,
+      "total": 30
     },
     {
       "key": "M",

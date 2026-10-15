@@ -15,15 +15,19 @@ const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinit
 /** "A: reference system + AI gate" → { code: "A", name: "Reference system + AI gate" }. */
 export function strategyLabel(strat) {
   const s = obj(strat) || {}, p = obj(s.params) || {};
+  // params.display_name: the strategy's own name (owner, 2026-10-14 — star
+  // names). It replaces the descriptive name; the code letter stays, since
+  // experiments are compared by it (A vs B).
+  const display = typeof p.display_name === "string" ? p.display_name.trim().slice(0, 32) : "";
   const exp = typeof p.experiment === "string" ? p.experiment.trim() : "";
   const m = exp.match(/^([A-Z])(?:\s*·\s*([a-z]+))?\s*:\s*(.+)$/);
   if (m) {
     const name = m[3].trim();
-    return { code: m[2] ? `${m[1]}·${m[2]}` : m[1], name: name.charAt(0).toUpperCase() + name.slice(1) };
+    return { code: m[2] ? `${m[1]}·${m[2]}` : m[1], name: display || name.charAt(0).toUpperCase() + name.slice(1) };
   }
   const nl = String(s.nl_description || "").trim();
   const first = nl.split(/ — | - |[.:,]/)[0].trim();
-  return { code: "", name: (first || s.strategy_type || "strategy").slice(0, 48) };
+  return { code: "", name: display || (first || s.strategy_type || "strategy").slice(0, 48) };
 }
 
 const DAY = 86400000;
@@ -90,6 +94,7 @@ export function blotterRows(strategies, now = new Date()) {
       unpriced,
       status: strategyStatus(st, now),
       mode: strategyMode(st),
+      top: arr(pr.top_holdings).filter((h) => obj(h) && h.symbol).map((h) => ({ symbol: String(h.symbol), value: num(h.value), weight: num(h.weight) })).slice(0, 5),
     };
   }).sort((a, b) => codeOrder(a.code).localeCompare(codeOrder(b.code)) || a.name.localeCompare(b.name));
 }
