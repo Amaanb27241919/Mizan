@@ -9639,13 +9639,17 @@ Activity rows on file: ${activities.length}.`;
   const totalPos=accounts.reduce((s,a)=>s+(a.positions?.length||0),0);
 
   // Suggested prompts presented as accent-colored bento cards. Each ties
-  // to a different topic so the user can scan by domain.
+  // to a different topic so the user can scan by domain. Every one must be a
+  // question the advisor can ANSWER inside the compliance boundary — facts
+  // about the user's own data, or how something works. "Recommend 3 ETFs"
+  // and "Should I tax-loss harvest?" asked for personalized advice the
+  // advisor is built to refuse (replaced 2026-10-15).
   const prompts=[
     {q:"What's my biggest concentration risk?",            cat:"Risk",       icon:"warning",color:T.loss},
-    {q:"Recommend 3 Sharia-compliant ETFs to diversify",   cat:"Allocation", icon:"◆",  color:T.blue},
-    {q:"Should I tax-loss harvest any positions?",         cat:"Tax",        icon:"$",  color:T.gold},
+    {q:"How is my portfolio split across sectors?",          cat:"Allocation", icon:"◆",  color:T.blue},
+    {q:"How does tax-loss harvesting work, and which of my positions are at a loss?",cat:"Tax",icon:"$",color:T.gold},
     {q:"What's my projected Zakat for the year?",          cat:"Zakat",      icon:"scale",color:T.gold},
-    {q:"How do I exit non-compliant positions efficiently?",cat:"Compliance",icon:"check",color:T.gain},
+    {q:"Which of my holdings fail the Sharia screen, and why?",cat:"Compliance",icon:"check",color:T.gain},
     {q:"Summarize my last 30 days of activity",            cat:"Activity",   icon:"≡",  color:T.blue},
   ];
 

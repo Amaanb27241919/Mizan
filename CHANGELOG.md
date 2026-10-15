@@ -21,6 +21,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade-lab:** A swing strategy waits for its own order to fill (`f1662e1`)
 
 ### Docs
+- N30 — what shipped from the Amal review and what is still open (`1baa8b2`)
 - F19 shipped (`b67e256`)
 - Experiments G–J and the star names in the Trade Lab notes (`dafdfe2`)
 
