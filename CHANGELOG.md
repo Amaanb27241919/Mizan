@@ -12,6 +12,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ### Added
 - **trade-lab:** Deflated Sharpe — stop ranking 14 strategies as if the winner were skill (`54adfcd`)
 
+### Fixed
+- **sharia:** 40 of 111 names read "review" because the newest filing has an empty balance sheet (`42ef2b2`)
+
 ### Docs
 - A real state-of-app audit — seven material errors corrected (`7b0fde6`)
 
