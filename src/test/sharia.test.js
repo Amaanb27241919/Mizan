@@ -3,7 +3,7 @@
 // resolve to "review", never a false "halal" — a false halal is the single worst
 // output this product can produce. See lib/sharia.mjs.
 import { describe, it, expect } from "vitest";
-import { verdictFromFundamentals, evaluateAgainst, STANDARDS, impermissibleIncome, ACTIVITY_EXCLUSIONS, activityExclusion } from "../../lib/sharia.mjs";
+import { verdictFromFundamentals, evaluateAgainst, STANDARDS, impermissibleIncome, ACTIVITY_EXCLUSIONS, activityExclusion, pickReportWithBalanceSheet } from "../../lib/sharia.mjs";
 
 // A clean, non-financial industry so the sector screen doesn't interfere — the
 // verdict is then driven purely by the ratios (which is what we're testing).
@@ -172,5 +172,40 @@ describe("business activity by company", () => {
       expect(tk).toMatch(/^[A-Z]{1,5}(\.[A-Z])?$/);
       expect(why).toMatch(/^(Alcohol|Gambling|Pork)/);
     }
+  });
+});
+
+// Finnhub's NEWEST annual filing often has `report.bs` present but EMPTY while
+// `report.ic` is populated. Reading only data[0] and giving up sent 40 of 111
+// screened names to "review" — MSFT, PG, CSCO and ORCL among them, verified
+// live on 2026-10-16. Walk back to the last filing that has one.
+describe("pickReportWithBalanceSheet", () => {
+  const rep = (year, bsLen, icLen = 20) => ({
+    year,
+    report: { bs: Array.from({ length: bsLen }, (_, i) => ({ concept: `c${i}` })), ic: Array.from({ length: icLen }, () => ({})) },
+  });
+
+  it("skips an empty newest filing and takes the next one that has a balance sheet", () => {
+    const picked = pickReportWithBalanceSheet([rep(2026, 0), rep(2025, 34), rep(2024, 34)]);
+    expect(picked.year).toBe(2025);
+    expect(picked.report.bs).toHaveLength(34);
+  });
+
+  it("prefers the newest populated filing", () => {
+    expect(pickReportWithBalanceSheet([rep(2026, 31), rep(2025, 34)]).year).toBe(2026);
+  });
+
+  it("gives up rather than using a stale balance sheet — fail closed", () => {
+    // Four empty filings in a row: returning null means "review", which is the
+    // honest answer. A 5-year-old balance sheet is not a leverage test.
+    expect(pickReportWithBalanceSheet([rep(2026, 0), rep(2025, 0), rep(2024, 0), rep(2023, 0), rep(2022, 34)])).toBeNull();
+    // ...but it does look past three empties within the cap.
+    expect(pickReportWithBalanceSheet([rep(2026, 0), rep(2025, 0), rep(2024, 0), rep(2023, 34)]).year).toBe(2023);
+  });
+
+  it("survives malformed input", () => {
+    expect(pickReportWithBalanceSheet(null)).toBeNull();
+    expect(pickReportWithBalanceSheet([])).toBeNull();
+    expect(pickReportWithBalanceSheet([null, { report: null }, { report: { bs: "nope" } }])).toBeNull();
   });
 });
