@@ -20,6 +20,9 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **ai:** Record what actually leaves Mizan in a research packet (`297a746`)
 - A real state-of-app audit — seven material errors corrected (`7b0fde6`)
 
+### Maintenance
+- **sharia:** Validate the AAOIFI engine against a third-party labelled set (`4f60e5a`)
+
 ## 2026-10-14
 
 ### Added

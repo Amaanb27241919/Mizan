@@ -326,6 +326,30 @@ lib/market/symbolSearch.mjs    — Pure (no I/O): query validation + Finnhub /se
                                  works. **Never attach halal verdicts to the suggestion
                                  list** — a dropdown of names each stamped "Halal ✓" is a
                                  curated buy list, not a lookup. Tested: symbolSearch.test.js.
+lib/market/secFacts.mjs        — Pure (no I/O): SEC XBRL company facts → the fundamentals the
+                                 Sharia screen needs. The FALLBACK when Finnhub has no balance
+                                 sheet (free, keyless, no vendor; every figure cites its filing).
+                                 **THE SAFETY RULE: never understate debt.** The XBRL tag space is
+                                 open-ended — Oracle tags long-term debt `LongTermNotesPayable`
+                                 ($122bn), Coca-Cola and GE Vernova only publish the
+                                 `...AndCapitalLeaseObligations` variant, Palo Alto's is
+                                 convertible — so a missed tag returns a plausible small number
+                                 that would WRONGLY PASS a leveraged company. It therefore requires
+                                 a long-term component, caps the total at total liabilities, and
+                                 otherwise returns null → "review" (fail closed, as the debt test
+                                 always has). Over-stating is tolerated; under-stating is not.
+                                 Operating leases are excluded — rent is not riba. Two traps, both
+                                 measured live: an ABANDONED tag keeps answering forever (P&G's
+                                 newest cash row is from 2019), hence the recency floor; and
+                                 `LongTermDebt` already contains the current portion while
+                                 `DebtCurrent` is broader than `LongTermDebtCurrent` (Cisco
+                                 $10.2bn vs $3.5bn), hence noncurrent + all-current. Fetching and
+                                 pacing live in lib/sharia.mjs (`secFundamentals`, ≤5 req/s,
+                                 contact User-Agent REQUIRED or SEC 403s) and FAIL SOFT: every
+                                 error returns null and the verdict stays exactly where it was.
+                                 `SEC_FALLBACK=0` disables it. Tested: secFacts.test.js (pure) +
+                                 secFallback.test.js (the wiring — the live sample resolved
+                                 through Finnhub, so only a stubbed test proves this path runs).
 lib/compliance/policy.mjs      — The compliance boundary, in code. Three data tiers
                                  (IMPERSONAL / ACCOUNT_SERVICING / PROHIBITED), the prohibited-pattern
                                  list, and assertImpersonal(). Single source of truth for docs/COMPLIANCE.md.
@@ -887,6 +911,7 @@ These are documented constraints, not undiscovered issues:
 | Finnhub | News, earnings, profile, dividends, quote (incl. `/api/market/quote` chart live-line), **Sharia screening fundamentals** | `FINNHUB_KEY` / `VITE_FINNHUB_KEY` | 60 req/min free tier — screening costs 3 calls/symbol, paced at 50/min in `lib/sharia.mjs` (a cold 27-holding screen ≈ 100s; the shared verdict cache makes it once a day). **No `/stock/candle`** on free tier → the price chart uses Polygon for OHLC |
 | Zoya | Sharia screening (optional provider — overrides Finnhub when keyed) | `ZOYA_API_KEY`, `ZOYA_API_BASE` (opt) | NOT yet provisioned. When set, `lib/sharia.mjs` routes screening to Zoya (adds non-permissible-income test + direct verdict); falls back to Finnhub on any error. Adapter response-mapping must be verified against the live API. |
 | Polygon | OHLC bars — backtester (`/api/polygon/bars`) **+ holdings price chart** (`/api/market/candles`, auth-gated + IMPERSONAL); both share `getPolygonBars()` (24h `polygon_cache` + backoff + stale-on-failure) | `POLYGON_KEY` | 5 req/min free, 2yr history |
+| SEC XBRL | Sharia-screening fundamentals **fallback** (`data.sec.gov` companyfacts) | None — keyless; `SEC_USER_AGENT` (contact address) | **Free, public domain, commercial use permitted** — unlike every market-data vendor here. Added 2026-10-16 because 41% of 111 screened names were returning "review" and 89% of those were data failures. Measured on the 26 stuck names: **20 full ratio inputs, 5 debt-unknown (correctly refused, not guessed), 1 none** (TSM — foreign private issuers file 20-F with IFRS tags, which SEC's us-gaap facts do not cover). Also roughly doubles how often the 5% impermissible-income test can be MEASURED. ≤10 req/s allowed, paced at 5. A contact User-Agent is mandatory. Fails soft → `SEC_FALLBACK=0` to disable. |
 | Alpha Vantage | ETF constituent holdings (ETF Overlap Analyzer) | `ALPHAVANTAGE_KEY` | **LIVE (set in Vercel 2026-07-05, verified — HLAL returned 210 holdings).** Free tier **25 req/day** → fetch server-side ONLY + cache ~24h in `etf_holdings_cache` (7 halal ETFs = 7 calls/day). The overlap route fetches symbols **sequentially** (concurrent bursts get throttled → curated fallback). `ETF_PROFILE` returns full holdings + weights + sectors. **ETF-only** (Amana mutual funds use curated snapshots in `lib/etfHoldings.mjs`; all 7 ETFs also curated-seeded as fallback). Stored **Sensitive**, so `vercel env pull` shows it empty — verify via `etf_holdings_cache.source`. |
 | Alpaca | Paper trading **+ market data (IEX)** | `ALPACA_KEY_ID`, `ALPACA_SECRET` | ✅ **BOTH KEYS SET IN PRODUCTION 2026-09-19** (Encrypted, verifiable). Paper account `PA3ME4FKSILU` confirmed live. All seven halal ETFs return `fractionable:true`; **AMAGX is NOT on Alpaca at all** (no mutual funds), so Amana can never be in an Alpaca basket. Notional/fractional orders supported — see `lib/market/orders.mjs`. The strategy engine reaches Alpaca paper via `lib/trading/broker.mjs`. Only ROOT may fall back to the shared env pair; any other user without their own keys gets no Alpaca (`59e64c7`) — the shared pair is the live control strategy's account. Paper strategies run full-auto for every trading-enabled user (`44dce95`); live money keeps its three gates. Paper only — `ALPACA_BASE` is `paper-api.alpaca.markets`, so no real money is reachable. Routes gated on `canUseTradingBot` (the `trading_bot_enabled` beta allowlist). **Per-user paper credentials shipped 2026-08-20 (migration 029)** — `getAlpacaCreds(user)` resolves the user's own encrypted pair first and falls back to the shared env pair **for root only**, exposing `source: "user" \| "shared"` so a tester always knows whose blotter they are on. It **fails closed** on a decrypt error rather than dropping the user onto the shared account. **Data tier:** free/Basic = **IEX feed only, ~2% of market volume**; extended-hours coverage specifically improves on the paid SIP plan ($99/mo Algo Trader Plus). Surface that limitation in-UI rather than presenting an IEX pre-market print as *the* price. Market clock + extended-hours order rules live in `lib/market/sessions.mjs`. |
 | Supabase | DB + Auth | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Paid plan |
