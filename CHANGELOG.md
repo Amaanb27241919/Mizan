@@ -16,6 +16,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **sharia:** 40 of 111 names read "review" because the newest filing has an empty balance sheet (`42ef2b2`)
 
 ### Docs
+- **ai:** Record what actually leaves Mizan in a research packet (`297a746`)
 - A real state-of-app audit — seven material errors corrected (`7b0fde6`)
 
 ## 2026-10-14
