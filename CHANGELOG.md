@@ -10,6 +10,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 ## 2026-10-16
 
 ### Added
+- **sharia:** SEC XBRL as the fundamentals fallback when Finnhub has no balance sheet (`413ea5a`)
 - **trade-lab:** Deflated Sharpe — stop ranking 14 strategies as if the winner were skill (`54adfcd`)
 
 ### Fixed
