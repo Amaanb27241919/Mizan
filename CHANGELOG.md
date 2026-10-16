@@ -17,6 +17,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **sharia:** 40 of 111 names read "review" because the newest filing has an empty balance sheet (`42ef2b2`)
 
 ### Docs
+- **trade-lab:** Credits restored and verified; A-vs-B re-baselines from today (`5b14957`)
 - **trade-lab:** The AI gate has never run the intended panel (`6148f57`)
 - **ai:** Record what actually leaves Mizan in a research packet (`297a746`)
 - A real state-of-app audit — seven material errors corrected (`7b0fde6`)
