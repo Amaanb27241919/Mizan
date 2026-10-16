@@ -17,6 +17,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **sharia:** 40 of 111 names read "review" because the newest filing has an empty balance sheet (`42ef2b2`)
 
 ### Docs
+- **ai:** The Gemini key is on the free tier — the unpaid-services terms are live (`5b82858`)
 - **trade-lab:** Credits restored and verified; A-vs-B re-baselines from today (`5b14957`)
 - **trade-lab:** The AI gate has never run the intended panel (`6148f57`)
 - **ai:** Record what actually leaves Mizan in a research packet (`297a746`)

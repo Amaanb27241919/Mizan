@@ -55,3 +55,4 @@ bento-audit-shots/
 /test-results/
 /playwright-report/
 /blob-report/
+.backtest/
