@@ -1378,6 +1378,40 @@ test.describe("Trade Lab console", () => {
     await expect(key.filter({ hasText: "Reference system, no AI" }).getByRole("button")).toHaveAttribute("aria-pressed", "true");
   });
 
+  test("the league table will not call a winner until a record beats the luckiest of N", async ({ page }) => {
+    // A long, strong record vs a long, flat one. Deflated Sharpe decides
+    // whether either is distinguishable from the best of N coin flips.
+    const walk = (n, step) => { const pts = []; let cum = 0;
+      for (let i = 0; i < n; i++) { cum += step * (1 + 0.3 * Math.sin(i * 1.7)); pts.push({ day: `2026-08-${String((i % 28) + 1).padStart(2, "0")}-${i}`, returnPct: cum, benchPct: cum * 0.1 }); }
+      return { startedOn: "2026-08-01", points: pts }; };
+    await open(page, { "/api/bot/curves": { curves: {
+      [STRATS[0].id]: walk(40, 0.45),   // strong and steady
+      [STRATS[1].id]: walk(40, 0.01),   // flat
+    } } });
+    await labNav(page).getByRole("button", { name: "Strategies", exact: true }).click();
+    await page.getByTestId("strategies-view").getByRole("button", { name: "View all" }).click();
+
+    const note = page.getByTestId("selection-check");
+    await expect(note).toContainText("luck alone would produce an annualised Sharpe near");
+    await expect(note).toContainText("2 comparable strategies over 39 trading days");
+    // Every row carries a verdict mark, and it is one of the three honest ones.
+    const marks = await page.getByTestId("strategies-league").locator("tbody tr td:nth-child(6)").allInnerTexts();
+    expect(marks).toHaveLength(2);
+    for (const m of marks) expect(["●", "○", "—"]).toContain(m.trim());
+  });
+
+  test("a strategy with too few days is never marked as beating luck", async ({ page }) => {
+    // The default fixture is 3 points — 2 daily returns, far below the floor.
+    await open(page);
+    await labNav(page).getByRole("button", { name: "Strategies", exact: true }).click();
+    await page.getByTestId("strategies-view").getByRole("button", { name: "View all" }).click();
+    const note = page.getByTestId("selection-check");
+    await expect(note).toContainText("Not enough measured days yet");
+    const marks = await page.getByTestId("strategies-league").locator("tbody tr td:nth-child(6)").allInnerTexts();
+    for (const m of marks) expect(m.trim()).toBe("—");
+    await expect(note).not.toContainText("●");
+  });
+
   test("Desk has a View all too: every strategy in its own colour, and a card opens its console", async ({ page }) => {
     await open(page);
     await page.getByTestId("desk-view").getByRole("button", { name: "View all" }).click();

@@ -539,6 +539,18 @@ Building these is the treadmill the owner is stepping off. Build only on an expl
 
 ---
 
+### N31 — Wire the bull/bear debate into the AI panel (built 2026-10-16, not wired)
+
+- **Status:** parked · **Effort:** M · **Autonomous:** no — it adds an LLM stage to the order path
+- `lib/ai/debate.mjs` is built and tested (21 tests, mutation-checked): role assignment, side prompts that demand evidence ids and falsifiers, outcome aggregation, and `applyDebate`, which can only ever tighten the gate. What remains is `runResearchPanel`: a second pass that shows the bull the bear's claims, a response schema for the claim shape, a per-round cost budget, and the journal fields (§18 — model ids, both cases, what went unanswered).
+- **Do it when the debate is turned on as its own experiment**, so the param and the record are designed together. Until Altair vs Vega resolves whether the AI gate adds anything at all, more AI machinery is building on an unproven base.
+
+### N32 — Deflated Sharpe on the owner brief and the Performance panel (partially shipped)
+
+- **Status:** parked · **Effort:** S · **Autonomous:** yes (read-only surfaces)
+- Shipped: the View-all league table's **Beats luck** column and the note beneath it (`src/lib/deflatedSharpe.js`).
+- Remaining: the same figure on the account's "Risk-adjusted" block, and a line in the owner's morning brief — "no strategy is yet distinguishable from the luckiest of N" is exactly the sort of thing the brief should say before any real money moves.
+
 ### N30 — Ideas from Amal Invest (reviewed 2026-10-14)
 
 - **Shipped 2026-10-14/15:** AAOIFI corrected (F19, `5bb2206`); halal fund shelf + Top 10 concentration in Trade Lab View all (`a048830`, `36f993c`); Zakat method labels by intent + FCNA note; purify-gains-after-non-compliance guidance, and the exit copy no longer names funds to buy (`36f993c`); Screener "Why →" already shows each ratio against its limit. Also found while checking the video: brewers/casinos/pork processors slipped the label screen — fixed by company (`36f993c`).

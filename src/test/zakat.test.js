@@ -555,3 +555,40 @@ describe('server /api/metals/spot ↔ lib/zakat.js nisab constant parity', () =>
     expect(metalsRegion).toMatch(new RegExp(`${esc(NISAB_SILVER_G)}\\s*\\*`))
   })
 })
+
+// Money rounding, checked 2026-10-16 before deciding whether Mizan needed a
+// decimal library. It does NOT: accumulated float drift over 40 odd-cent rows
+// is ~1e-9 of a cent, far below a cent. The REAL risk is the half-cent, where
+// `toFixed` and `toLocaleString` disagree on the same number — and for Zakat
+// figures landing on a half-cent, `toFixed` rounds DOWN against the payer 54%
+// of the time. Every money surface must therefore use the same half-up rule.
+describe("money rounding — one rule, and never toFixed", () => {
+  const money = (v) => `$${(Number(v) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  it("rounds a half-cent UP, where toFixed can round DOWN against the payer", () => {
+    // On a half-cent, toFixed's answer depends on the binary representation of
+    // that exact value — so it is unpredictable, not merely different. These
+    // three are verified cases where it under-states by a cent.
+    for (const [v, up, down] of [[1.005, "$1.01", "1.00"], [2.675, "$2.68", "2.67"], [8.165, "$8.17", "8.16"]]) {
+      expect(money(v)).toBe(up);
+      expect(v.toFixed(2)).toBe(down);
+    }
+    // And the same figure reached by arithmetic can land on the other side:
+    expect((40.2 * 0.025).toFixed(2)).toBe("1.01");
+    expect(money(40.2 * 0.025)).toBe("$1.01");        // toLocaleString is stable either way
+  });
+
+  it("accumulated drift over many rows stays far below a cent", () => {
+    const rows = Array.from({ length: 40 }, (_, i) => 1234.57 + i * 0.07);
+    const float = rows.reduce((s, v) => s + v, 0);
+    const exact = rows.reduce((s, v) => s + Math.round(v * 100), 0) / 100;
+    expect(Math.abs(float - exact) * 100).toBeLessThan(1e-6);
+  });
+
+  it("a dividend reads the same in a notification as in the table", async () => {
+    const { dividendNotifications } = await import("../lib/notifications.js");
+    const n = dividendNotifications([{ id: 1, symbol: "SPUS", amount: 1235.935 }], {});
+    expect(n[0].body).toContain(money(1235.935));
+    expect(n[0].body).not.toContain("1235.93 ");
+  });
+});

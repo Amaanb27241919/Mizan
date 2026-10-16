@@ -16,6 +16,7 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 - **trade-lab:** "moves together" cap for rank strategies (params.corr_cap) (`a5106bc`)
 
 ### Fixed
+- **assistant:** The not-financial-advice line is legible (T.dim to T.muted) (`cf494cc`)
 - **assistant:** Suggested questions the advisor can actually answer (`e2c2e28`)
 - **sharia:** Exclude alcohol, gambling and pork by company; app matches the launch video (`36f993c`)
 - **sharia:** AAOIFI is 30% of market value, no receivables rule, and the 5% income test (`5bb2206`)

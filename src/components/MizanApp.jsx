@@ -22,6 +22,7 @@ import { explainStrategy } from "../lib/strategyExplainer.js";
 import { pendingRows, historyRows, ticketScreenLine } from "../lib/orderQueue.js";
 import { killSwitchRows } from "../lib/killSwitches.js";
 import { riskFromPoints, winRate, MIN_RISK_DAYS } from "../lib/labMetrics.js";
+import { assessAll } from "../lib/deflatedSharpe.js";
 import { journalLog } from "../lib/journalLog.js";
 import { HALAL_FUNDS } from "../../lib/trading/screenGate.mjs";
 import { committeeStats, failureCode } from "../lib/committee.js";
@@ -8557,8 +8558,27 @@ function StrategiesAll({lab,book,onOpen,mask}){
   // Concentration (Amal Invest's main criticism of halal ETFs): the share of the
   // book in its 10 largest names. SPUS's own figure sits on the fund shelf below.
   const top10=r=>r.top?.length?`${Math.round(r.top.slice(0,10).reduce((t,h)=>t+(h.weight||0),0)*100)}%`:"—";
+  // ● clears the luck bar · ○ not yet · — not enough days to ask.
+  const verdict=r=>{const a=assess[r.id];
+    if(!a||!a.ready)return{mark:"—",color:T.muted,title:a?`${a.n} of ${a.needed} trading days measured`:"no measured days yet"};
+    if(a.dsr==null)return{mark:"—",color:T.muted,title:"needs at least two comparable strategies"};
+    const pct=`${(a.dsr*100).toFixed(0)}%`;
+    return a.decidable
+      ?{mark:"●",color:T.gain,title:`Deflated Sharpe ${pct} — clears the best-of-${a.trials} luck bar`}
+      :{mark:"○",color:T.muted,title:`Deflated Sharpe ${pct} — not yet distinguishable from the luckiest of ${a.trials}${a.shortfallDays?`; ~${a.shortfallDays} more trading days needed`:""}`};};
   const lastOrder=useMemo(()=>{const m=new Map();for(const o of tapeRows(lab.feed.items,book.strategies,500))if(!m.has(o.strategyId))m.set(o.strategyId,o);return m;},[lab.feed.items,book.strategies]);
   const league=useMemo(()=>[...lab.rows].sort((a,b)=>(b.alphaPct??-Infinity)-(a.alphaPct??-Infinity)||String(a.code).localeCompare(String(b.code))),[lab.rows]);
+  // SELECTION CHECK (src/lib/deflatedSharpe.js). Ranking N strategies and
+  // taking the top one flatters it even if none of them has any skill — the
+  // winner is the luckiest draw. Deflated Sharpe asks whether a record beats
+  // the luckiest of N; until it does, the ranking above is not evidence.
+  const assess=useMemo(()=>assessAll(lab.curves.curves),[lab.curves.curves]);
+  const luck=useMemo(()=>{
+    const ready=Object.values(assess).filter(a=>a?.ready&&a.benchmarkSharpeAnnual!=null);
+    if(!ready.length)return null;
+    return{bar:ready[0].benchmarkSharpeAnnual,trials:ready[0].trials,
+      days:Math.max(...ready.map(a=>a.n)),any:ready.some(a=>a.decidable)};
+  },[assess]);
   const today=nyToday();
   if(!lab.rows.length)return<section className="mz-panel" data-testid="strategies-all"><h3 className="mz-panel-h">All strategies</h3>
     <p className="mz-col-empty">{book.state==="loading"?"Loading strategies…":"No strategy yet. Build one below."}</p></section>;
@@ -8567,7 +8587,7 @@ function StrategiesAll({lab,book,onOpen,mask}){
       <h2 className="mz-all-h" style={{fontFamily:FN}}>Every strategy, side by side</h2>
       <ColorKey rows={lab.rows}/>
       <div style={{overflowX:"auto"}}><table className="mz-news" data-testid="strategies-league">
-        <thead><tr><th>#</th><th>Strategy</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Equity</th><th style={{textAlign:"right"}}>Return</th><th style={{textAlign:"right"}}>vs SPUS</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Holdings</th><th style={{textAlign:"right"}} className="mz-narrow-hide" title="Share of the book in its 10 largest holdings">Top 10</th><th className="mz-narrow-hide">Status</th></tr></thead>
+        <thead><tr><th>#</th><th>Strategy</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Equity</th><th style={{textAlign:"right"}}>Return</th><th style={{textAlign:"right"}}>vs SPUS</th><th style={{textAlign:"center"}} title="Deflated Sharpe: does this record beat the luckiest of the strategies being compared?">Beats luck</th><th style={{textAlign:"right"}} className="mz-narrow-hide">Holdings</th><th style={{textAlign:"right"}} className="mz-narrow-hide" title="Share of the book in its 10 largest holdings">Top 10</th><th className="mz-narrow-hide">Status</th></tr></thead>
         <tbody>{league.map((r,i)=><tr key={r.id}>
           <td className="mz-news-dim">{r.alphaPct==null?"—":i+1}</td>
           <td><button className="mz-all-name mz-tap" onClick={()=>onOpen(r.id)} title={`Open ${r.name}`}>
@@ -8575,12 +8595,18 @@ function StrategiesAll({lab,book,onOpen,mask}){
           <td style={{textAlign:"right"}} className="mz-narrow-hide">{r.equity==null?"—":mask(f$(r.equity,0))}</td>
           <td style={{textAlign:"right",color:tone(r.returnPct)}}>{ret(r)}</td>
           <td style={{textAlign:"right",color:tone(r.alphaPct)}}>{alpha(r)}</td>
+          {(()=>{const v=verdict(r);return<td style={{textAlign:"center",color:v.color}} title={v.title}>{v.mark}</td>;})()}
           <td style={{textAlign:"right"}} className="mz-narrow-hide">{r.holdings||0}</td>
           <td style={{textAlign:"right"}} className="mz-narrow-hide">{top10(r)}</td>
           <td className="mz-news-dim mz-narrow-hide">{r.status?.text||""}</td>
         </tr>)}</tbody>
       </table></div>
       <p className="mz-panel-note">Ranked by points ahead of SPUS over each strategy's own window — strategies that started on different days are not measured over the same days. Top 10 is the share of each book in its ten largest holdings (SPUS: 56.5%, as reported by Amal Invest).</p>
+      <p className="mz-panel-note" data-testid="selection-check">
+        <b>Beats luck.</b> Picking the best of several strategies flatters it even when none of them has any skill — the winner is the luckiest draw, not the best system.
+        {luck?<> Across {luck.trials} comparable strateg{luck.trials===1?"y":"ies"} over {luck.days} trading days, luck alone would produce an annualised Sharpe near <b>{luck.bar.toFixed(1)}</b>. <b style={{color:T.gain}} aria-hidden="true">●</b> clears that bar (Deflated Sharpe at least 95%); <b aria-hidden="true">○</b> does not yet.{!luck.any&&<> <b>None of them clears it yet</b>, so this ranking is not yet evidence about which strategy is better.</>}</>
+        :<> Not enough measured days yet to say what luck alone would produce, so no strategy can be called better than another.</>}
+      </p>
     </section>
     <div className="mz-allgrid">{lab.rows.map(r=>{
       const live=r.traded&&r.returnPct!=null?{returnPct:r.returnPct,benchPct:r.benchPct}:null;

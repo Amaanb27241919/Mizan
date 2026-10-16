@@ -284,6 +284,16 @@
           "done": true
         },
         {
+          "id": "N31",
+          "title": "Wire the bull/bear debate into the AI panel (built 2026-10-16, not wired)",
+          "done": false
+        },
+        {
+          "id": "N32",
+          "title": "Deflated Sharpe on the owner brief and the Performance panel (partially shipped)",
+          "done": false
+        },
+        {
           "id": "N30",
           "title": "Ideas from Amal Invest (reviewed 2026-10-14)",
           "done": false
@@ -305,8 +315,8 @@
         }
       ],
       "archive": false,
-      "open": 27,
-      "total": 30
+      "open": 29,
+      "total": 32
     },
     {
       "key": "M",

@@ -128,6 +128,14 @@ export function relativeTime(ts, now = Date.now()) {
 // never describe different things.
 
 /** Sharia verdict changes worth telling someone about: into or out of haram. */
+/**
+ * Money for a notification body. `toFixed` and `toLocaleString` DISAGREE on a
+ * half-cent (1235.935 -> "1235.93" vs "1,235.94"), so a dividend shown in a
+ * toast could differ by a cent from the same dividend in the purification
+ * table. One rule everywhere: the same half-up rounding the app formats with.
+ */
+const money = (v) => `$${(Number(v) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 export function shariaChangeNotifications(baseline = {}, current = {}, asOf = "") {
   const out = [];
   for (const [ticker, res] of Object.entries(current || {})) {
@@ -170,7 +178,7 @@ export function dividendNotifications(fresh = [], { max = 5 } = {}) {
       id: `dividend:${d.id}`,
       kind: "dividend",
       title: `${ticker} dividend received`,
-      body: `+$${amount.toFixed(2)}${d.trade_date ? ` on ${d.trade_date}` : ""}. Check whether any of it needs purifying.`,
+      body: `+${money(amount)}${d.trade_date ? ` on ${d.trade_date}` : ""}. Check whether any of it needs purifying.`,
       ts: d.trade_date ? new Date(d.trade_date).toISOString() : undefined,
       meta: { ticker, amount },
     });
