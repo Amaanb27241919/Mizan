@@ -1,7 +1,25 @@
 # MĪZAN — State-of-App Audit
 
 > **Living document.** Re-run every few weeks to track drift between what's built and what's deployed.
-> Last audited: 2026-10-11 (updated) · All findings from direct file reads, no guessing.
+> Last audited: **2026-10-16** — a real re-verification, not a date bump. Checked directly against the repo, the live Supabase schema, `vercel.json` and a fresh build. **Sections 1, 4 and 7 had drifted materially and are corrected below;** Sections 2, 3, 5 and 6 were spot-checked only and are marked where unverified.
+>
+> **What this pass found wrong** (all corrected in place):
+> | Claimed | Actual |
+> |---|---|
+> | `handlers.mjs` ~6,070 lines | **10,523** |
+> | 26 migrations | **34** |
+> | Encryption env `APP_ENCRYPTION_KEY` | **`ENCRYPTION_KEY`** — the documented name would not have worked |
+> | Plaintext `snaptrade_user_secret` "dropped by mig 017" | **column still exists** (0 non-null values, so no secret is exposed) |
+> | 4 anomaly detectors | **6**, plus 2 review reminders |
+> | SnapTrade 5xx detector "⚠️ in-memory" | **DB-backed** since 2026-07-05 (`increment_security_event`) |
+> | Initial bundle ~361 KB gz | **518 KB gz** — a 44% overrun nobody was tracking |
+> | §7 palette: dark forest-green, gold accent | **light paper `#faf8f4` + navy `#1e4e8c`** since the 2026-06-24 rebrand; dark is midnight-navy `#0e1626` |
+>
+> **Current era (2026-10-11 → 16), which this document predated.** The Trade Lab is the **CONSOLE**, not the broadsheet: a top bar, a left rail with sections + LAYERS, one stage of every strategy vs SPUS, and a dock of inspector / queue / alerts. **Eight sections became five** (Desk · Strategies · Account · Orders · Journal), and both Desk and Strategies gained a **View all** (league table, per-strategy cards, colour key, halal fund shelf). 14 strategies now run, named after Arabic-origin stars.
+> - **AAOIFI corrected (`5bb2206`):** 30% of market value (≤) for debt and interest-bearing cash, **no receivables test** (the 49% was S&P's), and the 5% impermissible-income test now runs. `SCREEN_ENGINE_VERSION` 4.
+> - **Business-activity exclusions by company (`36f993c`):** Finnhub labels every brewer "Beverages" and every casino "Hotels, Restaurants & Leisure", so a debt-free brewer screened HALAL. 26 companies now excluded by named activity.
+> - **Deflated Sharpe (`54adfcd`):** the lab compares 14 strategies and had no correction for having run 14. Nothing is decidable under 20 trading days; today every strategy reads "—".
+> - Experiments G–J (dividend basket, news catalyst, green-day rule, pre-market entries) and Mistral as a 4th analyst.
 >
 > **2026-10-08/09 (Trade Lab broadsheet; AI committee; Anthropic spend; hand orders; E·core; e2e)** — all deployed, `70074c2`…`8d401bf`.
 >
@@ -266,33 +284,37 @@
 
 **Bundle (from last `npm run build`):**
 
+Measured 2026-10-16 from a fresh build. **The main chunk has more than doubled since this table was last written.**
+
 | Chunk | Uncompressed | Gzip |
 |-------|-------------|------|
-| `index-*.js` (main app) | 543 KB | ~153 KB |
-| `charts-*.js` (recharts) | 547 KB | ~155 KB |
-| `lightweight-charts.production-*.js` (async — loads only when a holding chart mounts) | 197 KB | ~63 KB |
-| `supabase-*.js` | 207 KB | ~53 KB |
+| `index-*.js` (main app) | **1,155 KB** | **~316 KB** (was 543 KB / ~153 KB) |
+| `charts-*.js` (recharts) | 535 KB | ~150 KB |
+| `supabase-*.js` | 202 KB | ~52 KB |
+| `lightweight-charts.production-*.js` (async — not in the initial load) | 193 KB | ~61 KB |
 | `vendor-*.js` (react/react-dom) | 0.03 KB | ~0.05 KB |
-| **Total (initial load; lightweight-charts is deferred)** | **~1.30 MB** | **~361 KB** |
+| **Total (initial load; lightweight-charts deferred)** | **~1.89 MB** | **~518 KB** |
+
+⚠️ **Budget overrun.** CLAUDE.md §8 gates new dependencies on "the bundle is already 360KB gzipped" — that figure is now 44% low, so every past judgement made against it was made against the wrong number. The growth is the monolith itself (`MizanApp.jsx` is 16,466 lines), not a new package. Worth a deliberate decision: either re-baseline the stated budget or split a chunk out.
 
 ### Backend
 - **Runtime**: Node.js (ESM modules)
-- **Dev server**: `server.js` (285 lines) — unified Vite middleware + API handler on port 3000
+- **Dev server**: `server.js` (291 lines) — unified Vite middleware + API handler on port 3000
 - **Production**: `api/[...path].mjs` — single Vercel catch-all serverless function (Hobby plan, `runtime: "nodejs"`)
-- **Route logic**: `lib/handlers.mjs` (~6,070 lines — **see Section 7**)
+- **Route logic**: `lib/handlers.mjs` (**10,523 lines** as of 2026-10-16 — it has grown ~73% since this line last read 6,070)
 - **Support libs**: `lib/alerts.mjs`, `lib/anomaly.mjs`, `lib/crypto.mjs`, `lib/fetchWithRetry.mjs`, `lib/logger.mjs`, `lib/notify.mjs`, `lib/rateLimit.mjs`, `lib/sentry.mjs`, `lib/sharia.mjs`, `lib/etfHoldings.mjs`
 - **Market data (pure)**: `lib/market/candles.mjs` — validation (symbol regex, resolution whitelist, bounded window) + Polygon→chart normalization for the price chart; unit-tested, no I/O
 - **Compliance**: `lib/compliance/policy.mjs` (three data tiers + prohibited-pattern list + `assertImpersonal`), `lib/compliance/advisor-prompt.mjs` (hardened `/api/advisor` system prefix — imported by the route + `/api/advisor/count`), `lib/compliance/advisor-filter.mjs` (deterministic post-generation backstop that rewrites personalized-advice output to the compliant redirect). See `docs/COMPLIANCE.md`.
 
 ### Database (Supabase / PostgreSQL)
-26 migrations — all sequential (011 gap was patched; note two files share the `023` prefix — `023_bot_strategy_type_dca` + `023_email_digest`). Bot tables (020–022) added in the 2026-06-24/25 sessions; `023_bot_strategy_type_dca` (allows `strategy_type='dca'`) added 2026-06-30; `024_etf_holdings_cache` (service-role-only holdings cache for the ETF Overlap Analyzer) added 2026-07-05; `025_messages` 2026-07-20; `026_user_names` (profiles.first_name/last_name) 2026-07-22:
+**34 migrations** (2026-10-16) — all sequential (011 gap was patched; note two files share the `023` prefix — `023_bot_strategy_type_dca` + `023_email_digest`). Bot tables (020–022) added in the 2026-06-24/25 sessions; `023_bot_strategy_type_dca` (allows `strategy_type='dca'`) added 2026-06-30; `024_etf_holdings_cache` (service-role-only holdings cache for the ETF Overlap Analyzer) added 2026-07-05; `025_messages` 2026-07-20; `026_user_names` (profiles.first_name/last_name) 2026-07-22:
 
 | Table | Key Columns | RLS | Notes |
 |-------|-------------|-----|-------|
 | `audit_log` | id, user_id, action, target, metadata, ip, user_agent, created_at | ✅ SELECT own | Append-only, service-role writes |
-| `user_snaptrade` | user_id (PK), snaptrade_user_id, snaptrade_user_secret_enc, snaptrade_user_secret_nonce | ✅ Full CRUD | **AES-256-GCM encrypted** (plaintext column dropped by mig 017) |
+| `user_snaptrade` | user_id (PK), snaptrade_user_id, snaptrade_user_secret_enc, snaptrade_user_secret_nonce | ✅ Full CRUD | **AES-256-GCM encrypted.** ⚠️ Corrected 2026-10-16: the plaintext `snaptrade_user_secret` column **still exists** — mig 017 did not drop it. Verified 0 non-null values, so no secret is exposed; dropping it is low-priority hygiene needing a ciphertext-only code change first. |
 | `user_state` | (user_id, key) PK, value jsonb, updated_at | ✅ Full CRUD | Generic key/value store |
-| `user_keys` | user_id (PK), finnhub_key, polygon_key, encrypted boolean | ✅ Full CRUD | `encrypted` column now `true` — keys AES-256-GCM encrypted at application layer |
+| `user_keys` | user_id (PK), finnhub_key, polygon_key, encrypted boolean, **+9 Alpaca columns** (mig 029: ciphertext triples for both halves, `alpaca_key_last4`, `alpaca_paper`) | ✅ Full CRUD | `encrypted` column now `true` — keys AES-256-GCM encrypted at application layer |
 | `plaid_tokens` | id, user_id, access_token, item_id, institution_name, transactions_cursor | ✅ **No client policy** | access_token server-only (intentional) |
 | `plaid_accounts` | id, user_id, item_id, account_id, name, type, subtype, balances | ✅ SELECT own | |
 | `plaid_transactions` | id, user_id, item_id, account_id, transaction_id, amount, category_primary/detailed, date, pending, raw_data | ✅ SELECT own | Cursor-based sync |
@@ -456,7 +478,7 @@
 | Data | Where | Notes |
 |------|-------|-------|
 | Plaid `access_token` | `plaid_tokens` table (server-only) | No RLS client policy by design — only accessible via service-role key. Never reaches browser. |
-| SnapTrade `userSecret` | `user_snaptrade.snaptrade_user_secret_enc` + `_nonce` | **AES-256-GCM encrypted at application layer** (mig 016 added enc columns; mig 017 dropped plaintext column). Key from `APP_ENCRYPTION_KEY` env. |
+| SnapTrade `userSecret` | `user_snaptrade.snaptrade_user_secret_enc` + `_nonce` | **AES-256-GCM encrypted at application layer** (mig 016 added enc columns). Key from **`ENCRYPTION_KEY`** env — corrected 2026-10-16, this said `APP_ENCRYPTION_KEY`, which does not exist. ⚠️ mig 017 did NOT drop the plaintext column (verified; 0 non-null values). |
 | Plaid transactions | `plaid_transactions` | RLS SELECT own. Written server-side only. |
 | User preferences, watchlist, Zakat settings | `user_state` + localStorage | Supabase-backed with localStorage mirror |
 | Per-user API keys (Finnhub, Polygon) | `user_keys` | RLS CRUD own. `encrypted = true` — AES-256-GCM encrypted at application layer |
@@ -465,12 +487,12 @@
 | IP blocks | `security_events` | **DB-backed** — persists across cold starts and Vercel instances |
 
 ### Encryption
-`lib/crypto.mjs` provides `encryptField(plaintext)` / `decryptField(enc, nonce)` using Node `crypto.createCipheriv('aes-256-gcm', ...)`. Key is `Buffer.from(APP_ENCRYPTION_KEY, 'hex')` — 32-byte hex string from env. Migration `016_encrypt_secrets.sql` added `_enc`/`_nonce` columns; migration `017_drop_plaintext_secrets.sql` dropped plaintext columns.
+`lib/crypto.mjs` provides `encryptField(plaintext)` / `decryptField(enc, nonce)` using Node `crypto.createCipheriv('aes-256-gcm', ...)`. Key is **`ENCRYPTION_KEY`** (32-byte hex from env) — **corrected 2026-10-16: this section said `APP_ENCRYPTION_KEY`, which is not the variable the code reads** (`lib/crypto.mjs` reads `process.env.ENCRYPTION_KEY`). Anyone configuring the documented name would have shipped an app that silently refused to encrypt. Migration `016_encrypt_secrets.sql` added `_enc`/`_nonce`; **`017_drop_plaintext_secrets.sql` did NOT drop `snaptrade_user_secret`** — the column is still present with 0 non-null values (verified against the live schema).
 
 ### Rate Limiting
 - **Mechanism**: Supabase DB-backed atomic `increment_rate_limit` RPC (survives cold starts, shared across Vercel instances)
 - **Anonymous fallback**: In-memory Map keyed by IP
-- **Limits** (per-hour): snaptrade.login: 30, anthropic: 60, plaid: 120, plaid.sync: 10, auth: 20, export: 20, feedback: 10, default: 6000, anon: 300
+- **Limits** (per-hour, verified 2026-10-16): snaptrade.login: 30, anthropic: 60, plaid: 120, plaid.sync: 10, auth: 20, export: 20, feedback: 10, **marketdata: 150, marketdata.ticket: 240, marketdata.search: 240**, default: 6000, anon: 300 (the three `marketdata` buckets were undocumented here)
 - **Root bypass**: Admin users skip all rate limits
 
 ### Audit Logging
@@ -487,13 +509,19 @@ Migration `015_rls_audit_and_select_policies.sql` performed a pre-launch audit a
 - MFA is **not mandatory** globally — only for bank linking
 - Full session revocation (individual + "all others") via SQL RPCs
 
-### Anomaly Detection (4 detectors in `lib/anomaly.mjs`)
+### Anomaly Detection (**6 detectors** in `lib/anomaly.mjs`, + 2 review reminders)
+Corrected 2026-10-16 — this said 4, and marked the SnapTrade detector in-memory when it has been DB-backed since 2026-07-05. All six run daily from `/api/cron/cleanup` and surface in Admin → db-status.
+
 | Detector | Trigger | Action | Persistence |
 |----------|---------|--------|-------------|
-| Brute force | 5 auth failures from same IP in 60s | 24h IP block + Resend alert | ✅ **DB-backed** (`security_events` table — survives cold starts) |
-| SnapTrade 5xx spike | 10 upstream 5xx in 5 min | Resend alert | ⚠️ In-memory |
-| Cron staleness | >25h since last cron.sync or cleanup | Resend alert | DB-backed (reads audit_log) |
-| New device sign-in | (IP, UA hash) not in last 20 logins | Resend alert | DB-backed (reads audit_log) |
+| Brute force (`trackAuthFailure` / `isIpBlocked`) | 10 auth failures from an IP (scoped to `/api/auth/*`) | 30m IP block + Resend alert | ✅ DB-backed (`security_events`) |
+| SnapTrade 5xx spike (`trackSnapTradeError`) | upstream 5xx run | Resend alert | ✅ **DB-backed** (`increment_security_event` RPC) — *not* in-memory |
+| Cron staleness (`checkCronStaleness`) | fleet-wide; bot-signals stale after 60h (clears the weekend) | Resend alert | DB-backed (`cron_jobs`) |
+| New device sign-in (`checkNewDevice`) | (IP, UA hash) not in recent logins | Resend alert | DB-backed (reads audit_log) |
+| **Data feeds** (`checkDataFeeds`) | an upstream source dying quietly | Resend alert | DB-backed |
+| **Config preflight** (`checkConfig`) | ALERT_FROM on an unverified domain, out-of-credits Anthropic account, unset CRON_SECRET | Resend alert | Live checks against Resend `/domains` + one Anthropic token |
+
+Plus two scheduled reminders, not detectors: `checkLegalReview` (quarterly policy review) and `checkEthicalListReview` (180-day BDS/OHCHR list reconciliation).
 
 ### CSP Headers (vercel.json)
 Present and reasonably strict. Uses `'unsafe-inline'` for `script-src` (Plaid Link requires it) and `style-src` — not nonce-based. `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`. HSTS with preload (2-year max-age).
@@ -528,6 +556,8 @@ A believable ~$435k demo persona (rescaled 2026-07-15 from ~$55M, `107763e`) liv
 ---
 
 ## ═══ SECTION 6 — FEATURE GAP CHECK ═══
+
+> **Re-verified 2026-10-16.** Items 2, 6, 7 and 9 confirmed still absent by direct search (the only "hawl" hit is a disclaimer string, not an implementation). Items 5 and 8 had drifted and are corrected below. Items 1, 3 and 4 spot-checked as still true.
 
 ### 1. Dividend Purification Automation
 **Status**: ✅ **BUILT + DEPLOYED** (completed 2026-06-16)
@@ -564,7 +594,7 @@ Expandable accordion row on each holding in the Holdings table. News tab shows 3
 ---
 
 ### 5. Manual Monthly Budget Tracker
-**Status**: ✅ Substantially built — Muslim categories are the gap
+**Status**: ✅ **BUILT + DEPLOYED** — rebuilt **top-down** on 2026-08-30 (owner's call after "the budgeting UI doesn't make sense"): one monthly number + category limits + "Everything else". The zero-based envelope model (To Budget, per-category carryover) was RETIRED and its chain functions deleted — do not reintroduce them. `src/components/Budgeting.jsx` + the pure `src/lib/budgetPlan.js` / `budgetCategories.js`. Muslim-specific categories remain the gap.
 
 What exists: `Budgeting.jsx` (425 lines), `/api/budgets` CRUD, `budgets` table, per-category monthly caps with progress bars, actual spend pulled from Plaid transaction categories.
 
@@ -599,13 +629,14 @@ Reusable: Sharia screener logic in MizanApp.jsx (AAOIFI categories), Finnhub pro
 ---
 
 ### 8. Risk-Adjusted Return Metrics (Sharpe, drawdown, volatility vs SPUS)
-**Status**: ❌ Not present
+**Status**: ✅ **BUILT + DEPLOYED** — corrected 2026-10-16, this still read "❌ Not present".
 
-Activity tab shows total return and YTD P&L. Backtest shows strategy return vs buy-and-hold. No Sharpe ratio, max drawdown, volatility, or benchmark comparison.
+- `src/lib/performance.js` — XIRR/money-weighted return, realized/unrealized split, `sharpeRatio`, `annualizedVolatility`, `maxDrawdown`. Powers the Overview RETURN & RISK panel.
+- `src/lib/labMetrics.js` — the Trade Lab's Sharpe/Sortino/volatility/drawdown, **withheld until 20 trading days** (`MIN_RISK_DAYS`) because a ratio from a handful of days is noise.
+- Benchmark comparison is live: the Performance panel shows the account against **SPUS and HLAL** over the same window, in percentage points.
+- `src/lib/deflatedSharpe.js` (2026-10-16) — Probabilistic and **Deflated** Sharpe, correcting for having selected the best of 14 strategies.
 
-Reusable: SnapTrade activities data, Polygon OHLC bars endpoint, backtester data pipeline.
-
-**Effort: M**
+**Remaining:** none of this is surfaced for the consumer app's own portfolio beyond the RETURN & RISK panel; the deflated figure is Trade-Lab-only (BACKLOG N32 would add it to the owner brief).
 
 ---
 
@@ -629,27 +660,33 @@ Reusable: Would need opt-in consent + aggregate query views on `user_state`/bala
 | Body | IBM Plex Sans | All body text, labels, form inputs, descriptions (fontSize 11–15) |
 | Mono | IBM Plex Mono | Tickers, chips, pills, code-style labels, buttons |
 
-Loaded via Google Fonts with `display=swap`. `FU` constant = Fraunces, `FP` = IBM Plex Sans, `FM` = IBM Plex Mono.
+Loaded via Google Fonts with `display=swap`. `FU` = Fraunces, `FP` = IBM Plex Sans, `FM` = IBM Plex Mono.
 
-### Color Palette (dark theme — `data-theme="dark"`)
-| Token | Value | Semantic Role |
+**`FN` = Newsreader — Trade Lab only** (owner exception to CLAUDE.md §8, 2026-10-08, kept through the console redesign). The lab's heading, section heads and big figures; its labels stay IBM Plex Mono. Nowhere else in the app. Added to this document 2026-10-16 — it had been missing since the exception was granted.
+
+**Type scale:** never a bare px font size. The `--fs-*` tokens in THEME_CSS are `clamp()` ranges in **rem**, so type adapts to the reader's OS text size as well as the viewport. The floor is 11px (`--fs-2xs`); `e2e/responsive.spec.js` fails if anything renders below 10.9px. One deliberate exception: the iOS focus-zoom rule keeps a literal `16px`.
+
+### Colour Palette — **corrected 2026-10-16**
+
+This section described a dark forest-green theme with a **gold** primary accent. That palette was replaced by the **2026-06-24 rebrand** (navy accent) and the **2026-06-28** dark-base change (midnight navy), and the document never caught up. Verified against `const T` and THEME_CSS in `MizanApp.jsx`:
+
+**Light is the default and primary face** (`data-theme="light"`, new users start here):
+
+| Token | Value | Semantic role |
 |-------|-------|---------------|
-| `--mz-bg` | `#0d1311` | Page background (forest-green ink) |
-| `--mz-surface` | `#111a17` | Elevated surface |
-| `--mz-card` | `#15201c` | Card / tile background |
-| `--mz-border` | `#2a3a33` | Default border |
-| `--mz-borderHi` | `#3a4f45` | Hovered border |
-| `--mz-text` | `#b7b3a6` | Body text |
-| `--mz-textHi` | `#e9e4d6` | High-emphasis text / paper |
-| `T.blue` | `#c9a24b` | Gold — primary accent, buttons, links |
-| `T.blueDim` | `#9a7a35` | Gold dim — gradient end for buttons |
-| `T.gold` | `#cf9e54` | Amber — warnings, Zakat amounts |
-| `T.gain` | `#6fae8e` | Jade — halal / healthy / gain |
-| `T.loss` | `#c46a52` | Rust — haram / error / loss |
-| `T.slate` | `#7b94a6` | Unscreened holdings |
-| `T.violet` | `#9d86b8` | Crypto / alternative assets |
+| `--mz-bg` | `#faf8f4` | Paper canvas |
+| text | `#1c1b19` | Ink |
+| `T.blue` | **`#1e4e8c`** | **Navy — primary accent, CTAs, links, active states** (was documented as gold `#c9a24b`) |
+| `T.gold` | `#b8842a` | Amber — **Zakat, Sadaqah and warnings only**, no longer the brand accent |
+| `T.gain` | `#117a52` | Green — halal / compliant / gain |
+| `T.loss` | `#b23a3d` | Red — haram / error / loss |
+| `T.slate` | `#6b7b88` | Unscreened / neutral / pending |
+| `T.violet` | `#7e6ba8` | Crypto / alternative assets |
+| `--mz-signal` | `#c2410c` light · `#f2884a` dark | **Trade Lab only** — burnt orange, defined per theme (owner-approved, 2026-10-11) |
 
-Light theme (`data-theme="light"`) uses warm paper `#f5f2eb` background with matching surface/border adjustments.
+**Dark** (`data-theme="dark"`) is `--mz-bg: #0e1626` — midnight navy, the cool inverse of the warm paper, with warm-ivory `#f4f2ec` text. It replaced the old warm ink base on 2026-06-28.
+
+⚠️ Known weak spot, unchanged: `T.blue`/`T.gold`/`T.gain`/`T.loss` are hex **literals** (opacity is composed as `${T.blue}40`), so they are tuned for the light theme; navy as small text on the navy dark theme is still the soft point. Fixing it properly means making the accents per-theme CSS vars.
 
 ### Bento Layout
 - `BentoTile` component: 2px top accent bar, 1px tinted left border, hover lift (`translateY(-1px)`), click lift (`translateY(-2px) scale(1.003)`), `box-shadow` from `--sh-md/lg/sm`

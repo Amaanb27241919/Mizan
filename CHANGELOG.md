@@ -7,6 +7,11 @@ All notable changes to **MĪZAN**, generated from the git history ([Conventional
 > Regenerate with `node scripts/gen-changelog.mjs`. Curated release notes with more narrative live in `MIZAN-STATE-AUDIT.md`.
 
 
+## 2026-10-16
+
+### Added
+- **trade-lab:** Deflated Sharpe — stop ranking 14 strategies as if the winner were skill (`54adfcd`)
+
 ## 2026-10-14
 
 ### Added
